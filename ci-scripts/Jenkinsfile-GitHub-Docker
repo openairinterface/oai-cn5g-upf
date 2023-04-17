@@ -1,0 +1,536 @@
+#!/bin/groovy
+/*
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this file
+ * except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
+ */
+
+//-------------------------------------------------------------------------------
+// Abstraction function to send social media messages:
+// like on Slack or Mattermost
+def sendSocialMediaMessage(pipeChannel, pipeColor, pipeMessage) {
+  if (params.pipelineUsesSlack != null) {
+    if (params.pipelineUsesSlack) {
+      slackSend channel: pipeChannel, color: pipeColor, message: pipeMessage
+    }
+  }
+}
+
+// Location of the CN executor node
+// Its main purpose is the Ubuntu Build
+ubuntuNode = params.UbuntuBuildNode
+ubuntuBuildResource = params.UbuntuBuildResource
+
+// Location of the RHEL CN executor
+rhelNode = params.RhelBuildNode
+rhelResource = params.RhelBuildResource
+
+// Location of the CPPCHECK executor
+cppcheckNode = params.CppCheckNode
+cppcheckResource = params.CppCheckResource
+
+// Location of the CLANG-FORMAT-CHECK executor
+formatCheckNode = params.FormatCheckNode
+formatCheckResource = params.FormatCheckResource
+
+// Variables to pass to the test jobs
+def spgwu_tag = 'develop'
+def spgwu_branch = 'develop'
+
+// Docker Hub account to push to
+DH_Account = "oaisoftwarealliance"
+
+// Private Local Registry URL
+PrivateRegistryURL = 'selfix.sboai.cs.eurecom.fr'
+
+//-------------------------------------------------------------------------------
+// Pipeline start
+pipeline {
+  agent {
+    label ubuntuNode
+  }
+  options {
+    disableConcurrentBuilds()
+    timestamps()
+    ansiColor('xterm')
+  }
+
+  stages {
+    stage ('Verify Parameters') {
+      steps {
+        script {
+          echo '\u2705 \u001B[32mVerify Parameters\u001B[0m'
+
+          JOB_TIMESTAMP = sh returnStdout: true, script: 'date --utc --rfc-3339=seconds | sed -e "s#+00:00##"'
+          JOB_TIMESTAMP = JOB_TIMESTAMP.trim()
+
+          if (params.DockerHubCredentials == null) {
+            echo '\u26D4 \u001B[31mNo Credentials to push to DockerHub!\u001B[0m'
+            error "Stopping pipeline!"
+          }
+        }
+      }
+    }
+    stage ('Prepare Source Code') {
+      steps {
+        script {
+          removeGitHubInfo()
+          if (env.ghprbPullId != null) {
+            shortenShaOne = sh returnStdout: true, script: 'git log -1 --pretty=format:"%h" --abbrev=8 ' + env.ghprbActualCommit
+            shortenShaOne = shortenShaOne.trim()
+            spgwu_tag = 'ci-temp-pr-' + env.ghprbPullId + '-' + shortenShaOne
+            spgwu_branch = env.ghprbSourceBranch
+
+            echo "======= THIS IS A PULL REQUEST ======"
+            echo "PR ID      is ${env.ghprbPullId}"
+            echo "PR LINK    is ${env.ghprbPullLink}"
+            echo "PR TITLE   is ${env.ghprbPullTitle}"
+            echo "PR TAG     is ${spgwu_tag}"
+          } else {
+            shortenShaOne = sh returnStdout: true, script: 'git log -1 --pretty=format:"%h" --abbrev=8 ' + env.GIT_COMMIT
+            shortenShaOne = shortenShaOne.trim()
+            spgwu_tag = 'develop-' + shortenShaOne
+
+            echo "======= THIS IS A PUSH EVENT ======"
+            echo "Git Branch      is ${GIT_BRANCH}"
+            echo "Git Commit      is ${GIT_COMMIT}"
+            echo "CI Develop TAG  is ${spgwu_tag}"
+
+            // Prevention when developing a new version of this pipeline
+            if ((env.GIT_BRANCH != 'develop') && (env.GIT_BRANCH != 'origin/develop')) {
+              error "Stopping pipeline because not the develop branch"
+            }
+          }
+          prepareWorkspaceMergeCase()
+        }
+      }
+    }
+    stage('Build Core Network Function') {
+      parallel {
+        stage ('Build Ubuntu UPF Image') {
+          steps {
+            // Now it is only locked during this build stage and not for the whole pipeline
+            lock(ubuntuBuildResource) {
+              script {
+                sh "docker image rm oai-upf:${spgwu_tag} || true"
+                sh "docker image prune --force"
+                if (env.ghprbPullId != null) {
+                  dockerBuildOptions = ''
+                } else {
+                  dockerBuildOptions = '--no-cache '
+                }
+                sh "docker buildx build ${dockerBuildOptions} --target oai-upf --tag oai-upf:${spgwu_tag} --file docker/Dockerfile.ubuntu . > archives/spgwu_docker_image_build.log 2>&1"
+                // Putting a place holder to try out on the flattening of image.
+                // If not satisfactory, we can remove it.
+                sh "python3 ./ci-scripts/flatten_image.py --tag oai-upf:${spgwu_tag}"
+                sh "docker image prune --force"
+                sh "docker image ls | egrep --color=never 'spgwu-tiny|REPOSITORY' >> archives/spgwu_docker_image_build.log"
+                // Pushing to local private registry for testing purpose
+                sh "docker login -u oaicicd -p oaicicd ${PrivateRegistryURL}"
+                sh "docker image tag oai-upf:${spgwu_tag} ${PrivateRegistryURL}/oai-upf:${spgwu_tag}"
+                sh "docker push ${PrivateRegistryURL}/oai-upf:${spgwu_tag}"
+                // Remove all images locally
+                sh "docker rmi oai-upf:${spgwu_tag} ${PrivateRegistryURL}/oai-upf:${spgwu_tag}"
+                sh "docker logout ${PrivateRegistryURL}"
+              }
+            }
+          }
+          post {
+            success {
+              sh "echo 'OAI-UPF DOCKER IMAGE BUILD: OK' >> archives/spgwu_docker_image_build.log"
+            }
+            unsuccessful {
+              sh "echo 'OAI-UPF DOCKER IMAGE BUILD: KO' >> archives/spgwu_docker_image_build.log"
+            }
+          }
+        }
+        stage ('Build RHEL8 UPF Image') {
+          agent { label rhelNode }
+          steps {
+            lock (rhelResource) {
+              script {
+                // It's a different agent from main one.
+                prepareWorkspaceMergeCase()
+                sh "sudo podman image rm oai-upf:${spgwu_tag} || true"
+                sh "sudo podman image prune --force"
+                // Copy the RHEL Host certificates for building
+                sh "mkdir -p ./etc-pki-entitlement ./rhsm-conf ./rhsm-ca"
+                sh "cp /etc/pki/entitlement/*pem ./etc-pki-entitlement"
+                sh "sudo cp /etc/rhsm/rhsm.conf ./rhsm-conf"
+                sh "sudo cp /etc/rhsm/ca/*pem ./rhsm-ca"
+                // Building
+                sh "sudo podman build --no-cache --squash --target oai-upf --tag oai-upf:${spgwu_tag} --file docker/Dockerfile.rhel8 --format docker . > archives/spgwu_podman_image_build.log 2>&1"
+                sh "sudo podman image prune --force"
+                sh "sudo podman image ls | egrep --color=never 'spgwu-tiny|REPOSITORY' >> archives/spgwu_podman_image_build.log"
+              }
+            }
+          }
+          post {
+            success {
+              script {
+                sh "echo 'OAI-UPF PODMAN RHEL8 IMAGE BUILD: OK' >> archives/spgwu_podman_image_build.log"
+              }
+            }
+            unsuccessful {
+              sh "echo 'OAI-UPF PODMAN RHEL8 IMAGE BUILD: KO' >> archives/spgwu_podman_image_build.log"
+            }
+            cleanup {
+              script {
+                sh "sudo podman image prune --force"
+                sh "rm -Rf ./etc-pki-entitlement ./rhsm-conf ./rhsm-ca"
+                stash includes: 'archives/spgwu_podman_image_build.log', name: 'podmanBuildLog'
+              }
+            }
+          }
+        }
+        // Running CPPCHECK in parallel to gain time
+        stage ('Static Code Analysis') {
+          agent { label cppcheckNode }
+          steps {
+            lock (cppcheckResource) {
+              script {
+                // It's a different agent from main one.
+                prepareWorkspaceMergeCase()
+                // Moving to focal and cppcheck 1.90 and a dockerfile approach
+                sh 'docker build --target spgwu-cppcheck --tag spgwu-cppcheck:test --file ci-scripts/docker/Dockerfile.ci.cppcheck . > archives/cppcheck_install.log 2>&1'
+                sh 'docker run --name spgwu-ci-cppcheck --entrypoint /bin/true spgwu-cppcheck:test'
+                sh 'docker cp spgwu-ci-cppcheck:/home/cppcheck.xml archives'
+                sh 'docker cp spgwu-ci-cppcheck:/home/cppcheck_build.log archives'
+                sh 'docker rm -f spgwu-ci-cppcheck'
+                sh 'docker rmi spgwu-cppcheck:test'
+              }
+            }
+          }
+          post {
+            success {
+              sh "echo 'CPPCHECK: OK' >> archives/cppcheck_install.log"
+            }
+            unsuccessful {
+              sh "echo 'CPPCHECK: KO' >> archives/cppcheck_install.log"
+            }
+            cleanup {
+              script {
+                stash includes: 'archives/cppcheck*.*', name: 'cppcheckLogs'
+                // no need to keep the cppcheck container
+                sh 'docker rm -f spgwu-ci-cppcheck || true'
+                sh 'docker rmi spgwu-cppcheck:test || true'
+              }
+            }
+          }
+        }
+        // Running CLANG-FORMATTING check in parallel to gain time
+        stage ('Code Formatting Checker') {
+          agent { label formatCheckNode }
+          steps {
+            lock (formatCheckResource) {
+              script {
+                // It's a different agent from main one.
+                prepareWorkspaceMergeCase()
+                if (env.ghprbPullId != null) {
+                  sh 'docker build --target spgwu-clang-format-check --tag spgwu-clang-format-check:test --file ci-scripts/docker/Dockerfile.ci.clang-format --build-arg MERGE_REQUEST_CHECK=True --build-arg SOURCE_BRANCH=' + env.ghprbSourceBranch + ' --build-arg TARGET_BRANCH=' + env.ghprbTargetBranch + ' . > archives/clang_format_install.log 2>&1'
+                } else {
+                  sh 'docker build --target spgwu-clang-format-check --tag spgwu-clang-format-check:test --file ci-scripts/docker/Dockerfile.ci.clang-format . > archives/clang_format_install.log 2>&1'
+                }
+                sh 'docker run --name spgwu-ci-clang-format --entrypoint /bin/true spgwu-clang-format-check:test'
+                sh 'docker cp spgwu-ci-clang-format:/home/src/oai_rules_result.txt src'
+                sh 'docker cp spgwu-ci-clang-format:/home/src/oai_rules_result_list.txt src || true'
+                sh 'docker rm -f spgwu-ci-clang-format'
+                sh 'docker rmi spgwu-clang-format-check:test'
+                // The check is done now here
+                sh 'grep -L "NB_FILES_FAILING_CHECK=0" src/oai_rules_result.txt'
+              }
+            }
+          }
+          post {
+            cleanup {
+              script {
+                stash includes: 'src/oai_rules_result*.txt', name: 'formatCheckLogs'
+                sh 'docker rm -f spgwu-ci-clang-format || true'
+                sh 'docker rmi spgwu-clang-format-check:test || true'
+              }
+            }
+          }
+        }
+      }
+      post {
+        always {
+          script {
+            unstash 'podmanBuildLog'
+            unstash 'cppcheckLogs'
+            unstash 'formatCheckLogs'
+          }
+        }
+      }
+    }
+    stage ('Testing Images') {
+      parallel {
+        stage ('Ubuntu 4G-LTE Sanity Check Deployment') {
+          steps {
+            script {
+              localStatus = build job: params.CN_EPC_FED_PipelineName,
+                parameters: [
+                  string(name: 'SPGWU_TAG', value: String.valueOf(spgwu_tag)),
+                  string(name: 'SPGWU_BRANCH', value: String.valueOf(spgwu_branch))
+                ], propagate: false
+              localResult = localStatus.getResult()
+
+              if (localStatus.resultIsBetterOrEqualTo('SUCCESS')) {
+                echo "Federation Test Job is OK"
+              } else {
+                echo "Federation Test Job is KO"
+                sh "ci-scripts/fail.sh"
+              }
+            }
+          }
+          post {
+            always {
+              script {
+                copyArtifacts(projectName: params.CN_EPC_FED_PipelineName,
+                              filter: 'test_results*.html',
+                              selector: lastCompleted())
+              }
+            }
+          }
+        }
+        stage ('RHEL8 4G-LTE Sanity Check Deployment') {
+          steps {
+            script {
+              localStatus = build job: params.RHEL8_SanityCheck_PipelineName,
+                parameters: [
+                  string(name: 'SPGWU_TAG', value: String.valueOf(spgwu_tag)),
+                  string(name: 'SPGWU_BRANCH', value: String.valueOf(spgwu_branch))
+                ], propagate: false
+              localResult = localStatus.getResult()
+
+              if (localStatus.resultIsBetterOrEqualTo('SUCCESS')) {
+                echo "RHEL8 Sanity Check Deployment Test Job is OK"
+              } else {
+                echo "RHEL8 Sanity Check Deployment Test Job is KO"
+                sh "ci-scripts/fail.sh"
+              }
+            }
+          }
+          post {
+            always {
+              script {
+                copyArtifacts(projectName: params.RHEL8_SanityCheck_PipelineName,
+                              filter: 'test_results*.html',
+                              selector: lastCompleted())
+              }
+            }
+          }
+        }
+        stage ('Testing the 5GCN tutorials') {
+          steps {
+            script {
+              gitlabCommitStatus(name: "Test 5GCN tutorials") {
+                localStatus = build job: 'OAI-CN5G-Tutorials-Check',
+                  parameters: [
+                    string(name: 'SPGWU_TAG', value: String.valueOf(spgwu_tag)),
+                    string(name: 'SPGWU_BRANCH', value: String.valueOf(spgwu_branch))
+                  ], propagate: false
+                localResult = localStatus.getResult()
+
+                if (localStatus.resultIsBetterOrEqualTo('SUCCESS')) {
+                  echo "Tutorials Test Job is OK"
+                } else {
+                  echo "Tutorials Test Job is KO"
+                  sh "ci-scripts/fail.sh"
+                }
+              }
+            }
+          }
+          post {
+            always {
+              script {
+                copyArtifacts(projectName: 'OAI-CN5G-Tutorials-Check',
+                              filter: '*_results_oai_cn5g*.html',
+                              selector: lastCompleted())
+              }
+            }
+          }
+        }
+      }
+    }
+    // We are only publishing the Ubuntu image to Docker-Hub
+    // For Post-Merge events.
+    // Temporary Images from Merge-Request Runs are kept in local private registry
+    stage ('Pushing Image to Official Registry') {
+      steps {
+        script {
+          // Only in case of push to target branch!
+          if (env.ghprbPullId == null) {
+            withCredentials([
+              [$class: 'UsernamePasswordMultiBinding', credentialsId: "${params.DockerHubCredentials}", usernameVariable: 'DH_Username', passwordVariable: 'DH_Password']
+            ]) {
+              sh "echo ${DH_Password} | docker login --username ${DH_Username} --password-stdin"
+            }
+            sh "docker login -u oaicicd -p oaicicd ${PrivateRegistryURL}"
+            sh "docker pull ${PrivateRegistryURL}/oai-upf:${spgwu_tag}"
+            sh "docker image tag ${PrivateRegistryURL}/oai-upf:${spgwu_tag} ${DH_Account}/oai-upf:develop"
+            sh "docker push ${DH_Account}/oai-upf:develop"
+            sh "docker rmi ${DH_Account}/oai-upf:develop ${PrivateRegistryURL}/oai-upf:${spgwu_tag}"
+            sh "docker logout ${PrivateRegistryURL}"
+            sh "docker logout"
+          }
+        }
+      }
+    }
+  }
+  post {
+    success {
+      script {
+        def message = "Build job #" + BUILD_ID + " completed"
+        updateGithubCommitStatus(currentBuild, message)
+        def socialMessage = "OAI " + JOB_NAME + " build (" + BUILD_ID + "): passed (" + BUILD_URL + ")"
+        sendSocialMediaMessage('ci-epc', 'good', socialMessage)
+      }
+    }
+    failure {
+      script {
+        def message = "Build job #" + BUILD_ID + " : One step of job failed"
+        updateGithubCommitStatus(currentBuild, message)
+        def socialMessage = "OAI " + JOB_NAME + " build (" + BUILD_ID + "): failed (" + BUILD_URL + ")"
+        sendSocialMediaMessage('ci-epc', 'danger', socialMessage)
+      }
+    }
+    unstable {
+      script {
+        def message = "Build job #" + BUILD_ID + " : One step of job is unstable"
+        updateGithubCommitStatus(currentBuild, message)
+        def socialMessage = "OAI " + JOB_NAME + " build (" + BUILD_ID + "): unstable (" + BUILD_URL + ")"
+        sendSocialMediaMessage('ci-epc', 'danger', socialMessage)
+      }
+    }
+    aborted {
+      script {
+        def message = "Build job #" + BUILD_ID + " aborted: pipeline script issue?"
+        updateGithubCommitStatus(currentBuild, message)
+        def socialMessage = "OAI " + JOB_NAME + " build (" + BUILD_ID + "): aborted (" + BUILD_URL + ")"
+        sendSocialMediaMessage('ci-epc', 'danger', socialMessage)
+      }
+    }
+    cleanup {
+      script {
+        // Zipping all archived log files
+        sh "zip -r -qq docker_logs.zip archives"
+        if (fileExists('docker_logs.zip')) {
+          archiveArtifacts artifacts: 'docker_logs.zip'
+        }
+        // Generating the HTML report
+        if (env.ghprbPullId != null) {
+          sh "python3 ci-scripts/generateHtmlReport.py --job_name=${JOB_NAME} --job_id=${BUILD_ID} --job_url=${BUILD_URL} --git_url=${GIT_URL} --git_src_branch=${env.ghprbSourceBranch} --git_src_commit=${env.ghprbActualCommit} --git_pull_request=True --git_target_branch=${env.ghprbTargetBranch} --git_target_commit=${GIT_COMMIT}"
+        } else {
+          sh "python3 ci-scripts/generateHtmlReport.py --job_name=${JOB_NAME} --job_id=${BUILD_ID} --job_url=${BUILD_URL} --git_url=${GIT_URL} --git_src_branch=${GIT_BRANCH} --git_src_commit=${GIT_COMMIT}"
+        }
+        listOfFiles = sh returnStdout: true, script: 'ls test_results*.html'
+        String[] htmlFiles = listOfFiles.split("\\n")
+        for (htmlFile in htmlFiles) {
+          if (env.ghprbPullId != null) {
+            sh "sed -i -e 's#TEMPLATE_PULL_REQUEST_LINK#${env.ghprbPullLink}#g' ${htmlFile}"
+            sh "sed -i -e 's#TEMPLATE_PULL_REQUEST_TEMPLATE#${env.ghprbPullTitle}#' ${htmlFile}"
+          }
+          sh "sed -i -e 's#TEMPLATE_TIME#${JOB_TIMESTAMP}#' ${htmlFile}"
+          archiveArtifacts artifacts: htmlFile
+        }
+        // Sending an email to the last committer. Maybe not the Pull Request's author.
+        if (params.sendToCommitterEmail != null) {
+          if (params.sendToCommitterEmail) {
+            def emailTo = getCommitterEmail()
+            emailext attachmentsPattern: '*results*.html',
+              body: '''Hi,
+Here are attached HTML report files for $PROJECT_NAME - Build # $BUILD_NUMBER - $BUILD_STATUS!
+
+Regards,
+OAI CI Team''',
+              replyTo: 'no-reply@openairinterface.org',
+              subject: '$PROJECT_NAME - Build # $BUILD_NUMBER - $BUILD_STATUS!',
+              to: emailTo
+          }
+        }
+      }
+    }
+  }
+}
+
+// Removing all info -- do not know if git clean command removes them
+def removeGitHubInfo() {
+  if (fileExists('.git/remote-url')) {
+    sh "rm -f .git/remote-url"
+  }
+  if (fileExists('.git/current-commit')) {
+    sh "rm -f .git/current-commit"
+  }
+  if (fileExists('.git/commit-email')) {
+    sh "rm -f .git/commit-email"
+  }
+}
+
+// GitHub retrieve email of last committer
+def getCommitterEmail() {
+  if (!fileExists('.git/commit-email')) {
+    sh "git log -1 --pretty=format:\"%ce\" > .git/commit-email"
+    // Workaround for issue when merge to develop from the Pull Request GitHub webpage
+    // Click on merge button creates a commit with an email address in noreply@github.com
+    sh "if [ `egrep -c \"noreply@github.com\" .git/commit-email` -eq 1 ]; then echo \"raphael.defosseux@openairinterface.org\" > .git/commit-email; fi"
+  }
+  return readFile(".git/commit-email").trim()
+}
+
+// Github commit update functions
+def getRepoURL() {
+  if (!fileExists('.git/remote-url')) {
+    sh "git config --get remote.origin.url > .git/remote-url"
+  }
+  return readFile(".git/remote-url").trim()
+}
+
+def getCommitSha() {
+  if (!fileExists('.git/current-commit')) {
+    sh "git rev-parse HEAD > .git/current-commit"
+  }
+  return readFile(".git/current-commit").trim()
+}
+
+def updateGithubCommitStatus(build, jobMessage) {
+  // workaround https://issues.jenkins-ci.org/browse/JENKINS-38674
+  repoUrl = getRepoURL()
+  commitSha = getCommitSha()
+
+  step([
+    $class: 'GitHubCommitStatusSetter',
+    reposSource: [$class: "ManuallyEnteredRepositorySource", url: repoUrl],
+    commitShaSource: [$class: "ManuallyEnteredShaSource", sha: commitSha],
+    errorHandlers: [[$class: 'ShallowAnyErrorHandler']],
+    statusResultSource: [
+      $class: 'ConditionalStatusResultSource',
+      results: [
+        [$class: 'AnyBuildResult', state: build.currentResult, message: jobMessage]
+      ]
+    ]
+  ])
+}
+
+def prepareWorkspaceMergeCase () {
+  sh "git clean -x -d -f > /dev/null 2>&1"
+  if (env.ghprbPullId != null) {
+    sh "./ci-scripts/doGitHubPullRequestTempMerge.sh --src-branch ${env.ghprbSourceBranch} --src-commit ${env.ghprbActualCommit} --target-branch ${env.ghprbTargetBranch} --target-commit ${GIT_COMMIT}"
+  }
+  sh "git submodule update --init --recursive"
+  sh "mkdir -p archives"
+}

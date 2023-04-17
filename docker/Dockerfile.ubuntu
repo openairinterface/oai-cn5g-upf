@@ -1,0 +1,149 @@
+#/*
+# * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+# * contributor license agreements.  See the NOTICE file distributed with
+# * this work for additional information regarding copyright ownership.
+# * The OpenAirInterface Software Alliance licenses this file to You under
+# * the OAI Public License, Version 1.1  (the "License"); you may not use this file
+# * except in compliance with the License.
+# * You may obtain a copy of the License at
+# *
+# *      http://www.openairinterface.org/?page_id=698
+# *
+# * Unless required by applicable law or agreed to in writing, software
+# * distributed under the License is distributed on an "AS IS" BASIS,
+# * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# * See the License for the specific language governing permissions and
+# * limitations under the License.
+# *-------------------------------------------------------------------------------
+# * For more information about the OpenAirInterface (OAI) Software Alliance:
+# *      contact@openairinterface.org
+# */
+#---------------------------------------------------------------------
+#
+# Dockerfile for the Open-Air-Interface UPF service
+#   Valid for Ubuntu-20.04 (focal)
+#             Ubuntu-22.04 (jammy)
+#
+#---------------------------------------------------------------------
+
+#---------------------------------------------------------------------
+# BASE IMAGE
+#---------------------------------------------------------------------
+ARG BASE_IMAGE=ubuntu:focal
+FROM $BASE_IMAGE as oai-upf-base
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Europe/Paris
+ENV IS_DOCKERFILE=1
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade --yes && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --yes \
+      psmisc \
+      git \
+  && rm -rf /var/lib/apt/lists/*
+
+# Some GIT configuration commands quite useful
+RUN git config --global https.postBuffer 123289600 && \
+    git config --global http.sslverify false
+
+# Copy installation scripts
+WORKDIR /oai-upf
+COPY ./build/scripts /oai-upf/build/scripts/
+COPY ./build/upf/CMakeLists.txt /oai-upf/build/upf/CMakeLists.txt
+COPY ./build/cmake_modules /oai-upf/cmake_modules/
+
+# Installing all the needed libraries/packages to build and run UPF
+WORKDIR /oai-upf/build/scripts
+RUN ./build_upf --install-deps --force
+
+#---------------------------------------------------------------------
+# BUILDER IMAGE
+#---------------------------------------------------------------------
+FROM oai-upf-base as oai-upf-builder
+# Copy the rest of source code
+COPY . /oai-upf
+# Building UPF
+WORKDIR /oai-upf/build/scripts
+RUN ./build_upf --clean --build-type Release --jobs --Verbose && \
+    ldd /oai-upf/build/upf/build/upf && \
+    mv /oai-upf/build/upf/build/upf /oai-upf/build/upf/build/oai_upf
+
+#---------------------------------------------------------------------
+# TARGET IMAGE
+#---------------------------------------------------------------------
+FROM $BASE_IMAGE as oai-upf
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Europe/Paris
+# We install some debug tools for the moment in addition of mandatory libraries
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade --yes && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --yes \
+      python3 \
+      python3-jinja2 \
+      tzdata \
+      psmisc \
+      net-tools \
+      iproute2 \
+      ethtool \
+      iptables \
+      netbase \
+      libgssapi-krb5-2 \
+# Ubuntu 18/20 --> libldap-2.4-2
+      libldap-2.4-2 \
+      libgoogle-glog0v5 \
+# Ubuntu 18 --> libdouble-conversion1
+# Ubuntu 20 --> libdouble-conversion3
+      libdouble-conversion? \
+      libconfig++9v5 \
+      librtmp1 \
+      libpsl5 \
+      libnghttp2-14 \
+      libcurl?-gnutls \
+# Ubuntu 18 --> boost62/65 -> will remove both
+# Ubuntu 20 --> boost67/71 -> will remove 67
+      libboost-thread1.??.0 \
+  && rm -rf /var/lib/apt/lists/* \
+       /lib/x86_64-linux-gnu/libboost_system.so.1.6*.0 \
+       /lib/x86_64-linux-gnu/libboost_thread.so.1.6*.0
+
+# Copying executable and generated libraries
+WORKDIR /oai-upf/bin
+COPY --from=oai-upf-builder \
+    /oai-upf/build/upf/build/oai_upf \
+    /oai-upf/scripts/entrypoint.py \
+    /oai-upf/scripts/healthcheck.sh \
+    ./
+
+WORKDIR /usr/local/lib
+COPY --from=oai-upf-builder \
+# I need a dummy even if I already installed it.
+# Once Ubuntu18 support is dropped, we can remove whole copy section
+    /usr/lib/x86_64-linux-gnu/libpsl.so.5 \
+# Ubuntu 18 --> boost 67 will be copied
+    /usr/lib/libboost_system.so.1.6*.0 \
+    ./
+
+RUN ldconfig && \
+    ldd /oai-upf/bin/oai_upf
+
+# Copying template configuration files
+# The configuration folder will be flat
+WORKDIR /oai-upf/etc
+COPY --from=oai-upf-builder /oai-upf/etc/upf.conf .
+
+WORKDIR /oai-upf
+
+# use these labels for CI purpose
+LABEL support-multi-sgwu-instances="true"
+LABEL support-nrf-fdqn="true"
+
+# expose ports
+EXPOSE 2152/udp 8805/udp
+# healthcheck
+HEALTHCHECK --interval=10s \
+            --timeout=15s \
+            --retries=6 \
+    CMD /oai-upf/bin/healthcheck.sh
+
+CMD ["/oai-upf/bin/oai_upf", "-c", "/oai-upf/etc/upf.conf", "-o"]
+ENTRYPOINT ["python3", "/oai-upf/bin/entrypoint.py"]

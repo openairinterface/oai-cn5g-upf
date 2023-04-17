@@ -1,0 +1,483 @@
+################################################################################
+# Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The OpenAirInterface Software Alliance licenses this file to You under
+# the OAI Public License, Version 1.1  (the "License"); you may not use this file
+# except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.openairinterface.org/?page_id=698
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#-------------------------------------------------------------------------------
+# For more information about the OpenAirInterface (OAI) Software Alliance:
+#      contact@openairinterface.org
+################################################################################
+
+# file build_helper.spgw
+# brief
+# author Laurent Thomas, Lionel GAUTHIER
+#
+#######################################
+################################
+# include helper functions
+################################
+SCRIPT=$(readlink -f ${BASH_SOURCE})
+THIS_SCRIPT_PATH=`dirname $SCRIPT`
+source $THIS_SCRIPT_PATH/build_helper
+source $THIS_SCRIPT_PATH/build_helper.fb_folly
+
+#-------------------------------------------------------------------------------
+#arg1 is force (0 or 1) (no interactive script)
+#arg2 is debug (0 or 1) (install debug libraries)
+install_libyaml_cpp_from_git() {
+  # For Ubuntu 2x and RHEL we should install from repo.
+  echo "Starting to install libyaml_cpp"
+  if [ $1 -eq 0 ]; then
+    read -p "Do you want to install yaml_cpp ? <y/N> " prompt
+    OPTION=""
+  else
+    prompt='y'
+    OPTION="-y"
+  fi
+  if [ $2 -eq 0 ]; then
+    debug=0
+  else
+    debug=1
+  fi
+
+
+  if [[ $prompt =~ [yY](es)* ]]
+  then
+    GIT_URL=https://github.com/jbeder/yaml-cpp.git
+    echo "Install yaml-cpp from $GIT_URL"
+    pushd $OPENAIRCN_DIR/build/ext
+    echo "Downloading yaml-cpp"
+    if [[ $OPTION =~ -[yY](es)* ]]
+    then
+      $SUDO rm -rf yaml-cpp
+    fi
+
+    git clone $GIT_URL
+    cd yaml-cpp && git checkout master
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    mkdir _build && cd _build
+    $CMAKE -G "Unix Makefiles" -DYAML_BUILD_SHARED_LIBS=on -DYAML_CPP_BUILD_TESTS=off ..
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    make
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    $SUDO make install
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    popd
+    rm -Rf $OPENAIRCN_DIR/build/ext/yaml-cpp/_build
+  fi
+  echo "yaml-cpp installation complete"
+  return 0
+}
+
+#-------------------------------------------------------------------------------
+install_libbpf_from_git() {
+  echo_info "Starting to install libbpf from source"
+  if [ $1 -eq 0 ]; then
+    read -p "Do you want to install spdlog ? <y/N> " prompt
+    OPTION=""
+  else
+    prompt='y'
+    OPTION="-y"
+  fi
+  if [ $2 -eq 0 ]; then
+    debug=0
+  else
+    debug=1
+  fi
+
+  if [[ $prompt =~ [yY](es)* ]]
+  then
+    GIT_URL=https://github.com/libbpf/libbpf.git
+    echo "Install libbpf from $GIT_URL"
+    pushd $OPENAIRCN_DIR/build/ext
+    echo "Downloading libbpf"
+    if [[ $OPTION =~ -[yY](es)* ]]
+    then
+      $SUDO rm -rf libbpf
+    fi
+
+    git clone $GIT_URL
+    $SUDO apt install -y make gcc binutils-dev libbpf-dev \
+						cmake clang libelf-dev libpcap-dev \
+	 					zlib1g-dev llvm libcap-dev python3-docutils
+    cd libbpf && git checkout 051a4009f94d5633a8f734ca4235f0a78ee90469
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    cd src && make -j $(nproc) 
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    $SUDO make install
+    popd
+  fi
+  echo_success "End of libbpf installation"
+  return 0
+}
+
+#-------------------------------------------------------------------------------
+install_bpftool_from_git() {
+  echo_info "Starting to install bpftool from source"
+  if [ $1 -eq 0 ]; then
+    read -p "Do you want to install bpftool ? <y/N> " prompt
+    OPTION=""
+  else
+    prompt='y'
+    OPTION="-y"
+  fi
+  if [ $2 -eq 0 ]; then
+    debug=0
+  else
+    debug=1
+  fi
+
+  if [[ $prompt =~ [yY](es)* ]]
+  then
+    #GIT_URL=https://github.com/libbpf/bpftool.git
+    GIT_URL=https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/snapshot/linux-5.7.tar.gz
+    echo "Install bpftool from $GIT_URL"
+    pushd $OPENAIRCN_DIR/build/ext
+    echo "Downloading bpftool"
+    if [[ $OPTION =~ -[yY](es)* ]]
+    then
+      $SUDO rm -rf bpftool
+    fi
+
+    #wget --recursive --no-parent $GIT_URL ./bpftool
+    $SUDO apt install -y wget gcc-multilib
+    wget $GIT_URL && tar -xvf linux-5.7.tar.gz && rm -rf linux-5.7.tar.gz
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    cd linux-5.7/tools/bpf/bpftool && make -j $(nproc)
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    $SUDO make install
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    popd
+  fi
+  echo_success "End of bpftool installation"
+  return 0
+}
+#-------------------------------------------------------------------------------
+#arg1 is force (0 or 1) (no interactive script)
+#arg2 is debug (0 or 1) (install debug libraries)
+install_spdlog_from_git() {
+  echo_info "Starting to install spdlog from source"
+  if [ $1 -eq 0 ]; then
+    read -p "Do you want to install spdlog ? <y/N> " prompt
+    OPTION=""
+  else
+    prompt='y'
+    OPTION="-y"
+  fi
+  if [ $2 -eq 0 ]; then
+    debug=0
+  else
+    debug=1
+  fi
+
+
+  if [[ $prompt =~ [yY](es)* ]]
+  then
+    GIT_URL=https://github.com/gabime/spdlog.git
+    echo "Install spdlog from $GIT_URL"
+    pushd $OPENAIRCN_DIR/build/ext
+    echo "Downloading spdlog"
+    if [[ $OPTION =~ -[yY](es)* ]]
+    then
+      $SUDO rm -rf spdlog
+    fi
+
+    git clone $GIT_URL
+    cd spdlog && git checkout master
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    # enable syslog, Useless (defined in SPGW code)
+    sed -i '/#define SPDLOG_ENABLE_SYSLOG/s/^\/\///g' include/spdlog/tweakme.h
+    popd
+  fi
+  echo_success "End of spdlog installation"
+  return 0
+}
+
+#-------------------------------------------------------------------------------
+#arg1 is force (0 or 1) (no interactive script)
+#arg2 is debug (0 or 1) (install debug libraries)
+install_nlohmann_from_git() {
+  echo_info "Starting to install Nlohmann Json"
+  if [ $1 -eq 0 ]; then
+    read -p "Do you want to install Nlohmann Json ? <y/N> " prompt
+    OPTION=""
+  else
+    prompt='y'
+    OPTION="-y"
+  fi
+  if [ $2 -eq 0 ]; then
+    debug=0
+  else
+    debug=1
+  fi
+
+
+  if [[ $prompt =~ [yY](es)* ]]
+  then
+    GIT_URL=https://github.com/nlohmann/json.git
+    echo "Install Nlohmann Json from $GIT_URL"
+    pushd $OPENAIRCN_DIR/build/ext
+    echo "Downloading Nlohmann"
+    if [[ $OPTION =~ -[yY](es)* ]]
+    then
+      $SUDO rm -rf json
+    fi
+
+    git clone $GIT_URL
+    cd json && git checkout -f v3.10.3
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    mkdir _build && cd _build
+    $CMAKE -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DJSON_BuildTests=OFF ..
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    make -j $(nproc)
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    $SUDO make install
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    popd
+    rm -Rf $OPENAIRCN_DIR/build/ext/json/_build
+  fi
+  echo_success "Nlohmann Json installation complete"
+  return 0
+}
+
+
+#-------------------------------------------------------------------------------
+#arg1 is force (0 or 1) (no interactive script)
+#arg2 is debug (0 or 1) (install debug libraries)
+check_install_spgwu_deps() {
+
+  if [ $1 -gt 0 ]; then
+    OPTION="-y"
+  else
+    OPTION=""
+  fi
+  if [ $2 -eq 0 ]; then
+    debug=0
+  else
+    debug=1
+  fi
+
+  echo "Check supported distribution"
+  check_supported_distribution
+  [[ $? -ne 0 ]] && return $?
+
+  # prevent lock on /var/lib/dpkg/lock
+  if [[ $OS_DISTRO == "ubuntu" ]]; then
+    #$SUDO systemctl mask apt-daily.service
+    #$SUDO systemctl mask apt-daily.timer
+    #$SUDO systemctl mask apt-daily-upgrade.service
+    #$SUDO systemctl mask apt-daily-upgrade.timer
+    if [ $IS_CONTAINER -eq 0 ]; then
+      $SUDO sed -i 's/1/0/g' /etc/apt/apt.conf.d/10periodic
+    fi
+  fi
+
+  update_package_db
+
+  check_enable_epel_repos
+
+  # Compilers, generators, ...
+  if [[ $OS_DISTRO == "ubuntu" ]]; then
+    PACKAGE_LIST="\
+      autoconf \
+      automake \
+      build-essential \
+      $CMAKE \
+      git"
+  elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
+    PACKAGE_LIST="\
+      autoconf \
+      automake \
+      gcc-c++ \
+      $CMAKE \
+      make \
+      git"
+  else
+    echo_fatal "$OS_DISTRO is not a supported distribution."
+  fi
+  echo "Install build tools"
+  $SUDO $INSTALLER install $OPTION $PACKAGE_LIST
+  ret=$?;[[ $ret -ne 0 ]] && return $ret
+
+  # Libraries
+  if [[ $OS_DISTRO == "ubuntu" ]]; then
+    case "$(get_distribution_release)" in
+      "ubuntu18.04")
+        # Currently Ubuntu18.04 has boost 1.65 as the latest
+        # We need at least 1.66
+        # PPA has 1.67
+        $SUDO $INSTALLER install $OPTION software-properties-common
+        $SUDO add-apt-repository ppa:mhier/libboost-latest --yes
+        $SUDO $INSTALLER update
+        specific_packages="libconfig++-dev libasio-dev libboost-all-dev libasan4"
+        ;;
+      "ubuntu20.04")
+        specific_packages="libconfig++-dev libasio-dev libboost-all-dev libasan5"
+        ;;
+      *)
+        specific_packages="libconfig++-dev libasio-dev libboost-all-dev libasan?"
+        ;;
+    esac
+    # removed libspdlog-dev
+    PACKAGE_LIST="\
+      $specific_packages \
+      libcurl4 \
+      libcurl4-gnutls-dev \
+      libevent-dev \
+      libgmp-dev \
+      libhogweed? \
+      libidn2-0-dev \
+      libidn11-dev \
+      libssl-dev \
+      libtool \
+      openssl \
+      nettle-dev \
+      net-tools \
+      pkg-config \
+      ninja-build"
+  elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
+    PACKAGE_LIST="\
+      boost-devel \
+      libconfig-devel \
+      libgcrypt-devel \
+      gmp-devel \
+      libidn-devel \
+      openssl-devel \
+      libtool \
+      openssl \
+      check \
+      nettle-devel \
+      libcurl-devel \
+      python2 \
+      pkgconfig \
+      ninja-build \
+      libasan"
+  else
+    echo_fatal "$OS_DISTRO is not a supported distribution."
+  fi
+  echo "Install distro libs"
+  $SUDO $INSTALLER install $OPTION $PACKAGE_LIST
+  ret=$?;[[ $ret -ne 0 ]] && return $ret
+
+  # fix issue with libboost in U18 for a bare metal deployment
+  if [[ $OS_DISTRO == "ubuntu" ]]; then
+    case "$(get_distribution_release)" in
+      "ubuntu18.04")
+        $SUDO $INSTALLER remove $OPTION libboost1.65-dev || true
+        $SUDO $INSTALLER autoremove $OPTION || true
+        $SUDO $INSTALLER install $OPTION libboost1.67-dev
+        ;;
+    esac
+  fi
+
+  echo_info "Packages and Libraries installation finished!"
+
+  install_libbpf_from_git $1 $2
+  ret=$?;[[ $ret -ne 0 ]] && return $ret
+
+  install_bpftool_from_git $1 $2
+  ret=$?;[[ $ret -ne 0 ]] && return $ret
+
+  install_fb_folly_from_source $1 $2
+  ret=$?;[[ $ret -ne 0 ]] && return $ret
+
+  install_spdlog_from_git $1 $2
+  ret=$?;[[ $ret -ne 0 ]] && return $ret
+
+  install_nlohmann_from_git $1 $2
+  ret=$?;[[ $ret -ne 0 ]] && return $ret
+
+  if [[ $OS_DISTRO == "ubuntu" ]]; then
+    case "$(get_distribution_release)" in
+      "ubuntu20.04")
+        $SUDO $INSTALLER install $OPTION libyaml-cpp0.6 libyaml-cpp-dev
+        ;;
+      "ubuntu22.04")
+        $SUDO $INSTALLER install $OPTION libyaml-cpp0.7 libyaml-cpp-dev
+        ;;
+    esac
+  elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
+    $SUDO $INSTALLER install $OPTION yaml-cpp yaml-cpp-devel
+  fi
+  return 0
+}
+#-------------------------------------------------------------------------------
+#arg1 is force (0 or 1) (no interactive script)
+#arg2 is debug (0 or 1) (install debug libraries)
+check_install_spgwu_min_deps() {
+
+  if [ $1 -gt 0 ]; then
+    OPTION="-y"
+  else
+    OPTION=""
+  fi
+
+  echo "Check supported distribution"
+  check_supported_distribution
+  [[ $? -ne 0 ]] && return $?
+
+  # prevent lock on /var/lib/dpkg/lock
+  if [[ $OS_DISTRO == "ubuntu" ]]; then
+    #$SUDO systemctl mask apt-daily.service
+    #$SUDO systemctl mask apt-daily.timer
+    #$SUDO systemctl mask apt-daily-upgrade.service
+    #$SUDO systemctl mask apt-daily-upgrade.timer
+    $SUDO sed -i 's/1/0/g' /etc/apt/apt.conf.d/10periodic
+  fi
+
+  update_package_db
+
+  check_enable_epel_repos
+
+  # Compilers, generators, ...
+  if [[ $OS_DISTRO == "ubuntu" ]]; then
+    PACKAGE_LIST="\
+      gdb "
+  elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
+    PACKAGE_LIST="\
+      gdb "
+  else
+    echo_fatal "$OS_DISTRO is not a supported distribution."
+  fi
+  echo "Install build tools"
+  $SUDO $INSTALLER install $OPTION $PACKAGE_LIST
+  ret=$?;[[ $ret -ne 0 ]] && return $ret
+
+
+  # Networking
+  if [[ $OS_DISTRO == "ubuntu" ]]; then
+    case "$(get_distribution_release)" in
+  "ubuntu18.04")
+      specific_packages="iproute2"
+      ;;
+    esac
+    PACKAGE_LIST="\
+      $specific_packages \
+      ethtool \
+      iptables \
+      vlan"
+  elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
+    PACKAGE_LIST="\
+      ethtool \
+      iproute \
+      vconfig"
+  else
+    echo_fatal "$OS_DISTRO is not a supported distribution."
+  fi
+  echo "Install networking tools"
+  $SUDO $INSTALLER install $OPTION $PACKAGE_LIST
+  ret=$?;[[ $ret -ne 0 ]] && return $ret
+
+  return 0
+}
