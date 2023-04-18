@@ -1,9 +1,10 @@
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/toolchain.cmake)
 add_subdirectory(bpf)
-add_subdirectory(oai)
 add_subdirectory(utils)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf/pfcp)
+include_directories(${SRC_TOP_DIR}/upf_app/bpf/bpf_pfcp)
+include_directories(${SRC_TOP_DIR}/spgwu/simpleswitch)
+include_directories(${SRC_TOP_DIR}/pfcp)
 include_directories(${SRC_TOP_DIR}/common)
 include_directories(${SRC_TOP_DIR}/common/msg)
 include_directories(${SRC_TOP_DIR}/common/utils)
@@ -35,7 +36,6 @@ link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src)
 target_link_libraries(UPF_XDP
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.a
   ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.so
-  PUBLIC oai
   PUBLIC upfutils
   # PRIVATE spdlog::spdlog
   PRIVATE elf
