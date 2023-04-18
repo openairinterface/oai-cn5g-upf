@@ -31,7 +31,7 @@ spec:
         ENV TZ=Europe/Paris
           
         WORKDIR /
-        RUN git clone -b develop https://github.com/lionelgo/openair-spgwu-tiny.git
+        RUN git clone -b develop https://github.com/lionelgo/oai-upf.git
         
         WORKDIR /oai-upf/build/ext
         RUN ln -s /spdlog /oai-upf/build/ext/spdlog \
@@ -50,7 +50,7 @@ spec:
         RUN ldconfig && \
           ldd /oai-upf/bin/oai_upf
       
-        WORKDIR /openair-spgwu-tiny
+        WORKDIR /oai-upf
       
         # expose ports
         EXPOSE 2152/udp 8805/udp

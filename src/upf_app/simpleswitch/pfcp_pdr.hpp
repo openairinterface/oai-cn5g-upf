@@ -201,6 +201,6 @@ class pfcp_pdr {
 };
 }  // namespace pfcp
 
-#include "../../spgwu/simpleswitch/pfcp_session.hpp"
+#include "pfcp_session.hpp"
 
 #endif

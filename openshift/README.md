@@ -28,8 +28,8 @@ Note that the project name is currently hard-coded to `oai`.
 **TODO: pass as env variables: branch name, image tag and project name**
 
 ```bash
-git clone https://github.com/OPENAIRINTERFACE/openair-spgwu-tiny.git
-cd openair-spgwu-tiny
+git clone https://github.com/OPENAIRINTERFACE/oai-upf.git
+cd oai-upf
 git checkout develop
 oc apply -f openshift/oai-upf-image-stream.yml
 oc apply -f openshift/oai-upf-build-config.yml

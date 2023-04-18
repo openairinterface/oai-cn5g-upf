@@ -70,7 +70,7 @@ spec:
             WORKDIR /oai-upf/etc
             COPY --from=oai-upf-dev /oai-upf/etc/upf.conf .
             
-            WORKDIR /openair-spgwu-tiny
+            WORKDIR /oai-upf
             
             # expose ports
             EXPOSE 2152/udp 8805/udp

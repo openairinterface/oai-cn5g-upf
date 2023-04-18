@@ -53,8 +53,8 @@ RUN rm /etc/rhsm-host && \
        git
 
 # Copy the workspace as is
-WORKDIR /openair-spgwu-tiny
-COPY . /openair-spgwu-tiny
+WORKDIR /oai-upf
+COPY . /oai-upf
 
 # Installing and Building UPF-TINY
 WORKDIR /oai-upf/build/scripts
@@ -127,7 +127,7 @@ RUN ldconfig && \
 WORKDIR /oai-upf/etc
 COPY --from=oai-upf-builder /oai-upf/etc/upf.conf .
 
-WORKDIR /openair-spgwu-tiny
+WORKDIR /oai-upf
 
 # expose ports
 EXPOSE 2152/udp 8805/udp
