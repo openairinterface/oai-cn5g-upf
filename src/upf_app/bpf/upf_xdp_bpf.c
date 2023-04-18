@@ -27,6 +27,8 @@
 #include "xdp_stats_kern.h"
 #include "xdp_stats_kern_user.h"
 
+
+//---------------------------------------------------------------------------------------------------------------------
 static u32 tail_call_next_prog(struct xdp_md *p_ctx, teid_t_ teid, u8 source_value, u32 ipv4_address)
 {
   struct next_rule_prog_index_key map_key;
@@ -37,16 +39,28 @@ static u32 tail_call_next_prog(struct xdp_md *p_ctx, teid_t_ teid, u8 source_val
   map_key.teid = teid;
   map_key.source_value = source_value;
   map_key.ipv4_address = ipv4_address;
+  
   bpf_debug("map key teid: %d, source: %d, ip: %d \n", map_key.teid, map_key.source_value, map_key.ipv4_address);
+  
   index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
-
-  if(index_prog){
-    bpf_debug("BPF tail call to %d key\n", *index_prog);
+  
+  /**/
+  /**/
+  //bpf_debug("INDEX_PROG = %d \n", index_prog);
+  /**/
+  /**/
+  
+  //if(index_prog){
+    //bpf_debug("BPF tail call to %d key\n", *index_prog);
     bpf_tail_call(p_ctx, &m_next_rule_prog, *index_prog);
     bpf_debug("BPF tail call was not executed!\n");
-  }
+  //}
+  bpf_debug("==========================BPF tail call was not executed!=================\n");
   return 0;
 }
+
+//---------------------------------------------------------------------------------------------------------------------
+
 /**
  * GTP SECTION.
  */
@@ -81,11 +95,21 @@ static u32 gtp_handle(struct xdp_md *p_ctx, struct gtpuhdr *p_gtpuh, u32 src_ue_
   }
 
   // Jump to session context.
+  
+  /**/
+  /**/
+  bpf_debug("TEID = %d, INTERFACE_ACCESS = %d, SRC_UE_IP = %d \n", p_gtpuh->teid, INTERFACE_VALUE_ACCESS, src_ue_ip);
+  /**/
+  /**/
+
   tail_call_next_prog(p_ctx, p_gtpuh->teid, INTERFACE_VALUE_ACCESS, src_ue_ip);
   bpf_debug("BPF tail call was not executed! teid %d\n", htonl(p_gtpuh->teid));
 
   return XDP_PASS;
 }
+
+//---------------------------------------------------------------------------------------------------------------------
+
 
 /**
  * UDP SECTION.
@@ -126,6 +150,9 @@ static u32 udp_handle(struct xdp_md *p_ctx, struct udphdr *udph, u32 src_ip, u32
   }
 }
 
+//---------------------------------------------------------------------------------------------------------------------
+
+
 /**
  * IP SECTION.
  */
@@ -163,6 +190,9 @@ static u32 ipv4_handle(struct xdp_md *p_ctx, struct iphdr *iph)
   }
 }
 
+//---------------------------------------------------------------------------------------------------------------------
+
+
 /**
  * @brief Check if inner IP header is IPv4.
  *
@@ -191,6 +221,9 @@ struct vlan_hdr {
   __be16 h_vlan_TCI;
   __be16 h_vlan_encapsulated_proto;
 };
+
+//---------------------------------------------------------------------------------------------------------------------
+
 
 /**
  *
@@ -238,6 +271,9 @@ static u32 eth_handle(struct xdp_md *p_ctx, struct ethhdr *ethh)
     return XDP_PASS;
   }
 }
+
+//---------------------------------------------------------------------------------------------------------------------
+
 
 SEC("xdp_entry_point")
 int entry_point(struct xdp_md *p_ctx)

@@ -8,8 +8,8 @@
 
 // Values get from enviroment variable GTP_INTERFACE and UDP_INTERFACE
 // Consider to update these variables with you want to update the default values.
-std::string Configuration::sGTPInterface = "";
-std::string Configuration::sUDPInterface = "";
+std::string Configuration::sGTPInterface = "enp6s0";
+std::string Configuration::sUDPInterface = "enp7s0";
 unsigned char Configuration::sIsSocketBufferEnabled = 0;
 
 Configuration::Configuration(int argc, char **argv)

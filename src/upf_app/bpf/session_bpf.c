@@ -278,8 +278,7 @@ static u32 pfcp_pdr_match_pdi_access(struct xdp_md *p_ctx, pfcp_pdr_t_ *p_pdr, s
   if(p_pdr->outer_header_removal.outer_header_removal_description != OUTER_HEADER_REMOVAL_GTPU_UDP_IPV4
       || p_pdr->pdi.source_interface.interface_value != INTERFACE_VALUE_ACCESS
       || p_pdr->pdi.fteid.teid != teid
-      // FIXME navarrothiago
-      // || p_pdr->pdi.ue_ip_address.ipv4_address != p_iph->saddr
+      || p_pdr->pdi.ue_ip_address.ipv4_address != p_iph->saddr
     ){
         bpf_debug("Not match:");
         bpf_debug("OHRD: %d", OUTER_HEADER_REMOVAL_GTPU_UDP_IPV4 );

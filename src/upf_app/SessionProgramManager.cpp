@@ -13,6 +13,8 @@
 #include <utils/LogDefines.h>
 #include <wrappers/BPFMap.hpp>
 
+#include <arpa/inet.h>
+
 #define EMPTY_SLOT -1l
 
 //  TODO navarrothiago - encapsulate in order file.
@@ -50,7 +52,12 @@ void SessionProgramManager::createPipeline(uint32_t seid, uint32_t teid, uint8_t
   struct next_rule_prog_index_key key = {.teid = teid, .source_value = sourceInterface, .ipv4_address = ueIpAddress};
   u32 id;
   s32 fd;
+  
+  struct in_addr ip_addr;
+  ip_addr.s_addr = ueIpAddress;
   LOG_DBG("teid: {}, source interface: {}, ue ip: {}", teid, sourceInterface, ueIpAddress);
+  LOG_DBG("teid: {}, source interface: {}, ue ip: {}", htonl(teid), sourceInterface, inet_ntoa(ip_addr));
+  LOG_DBG("map key teid:{}, source: {}, ip: {} \n", key.teid, key.source_value, key.ipv4_address);
 
   LOG_DBG("Instantiate a new FARProgram");
   // Instantiate a new FARProgram
