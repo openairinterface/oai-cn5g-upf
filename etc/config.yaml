@@ -30,56 +30,63 @@
 
 # Log level for all the NFs
 log_level:
-  ebpf-upf: debug
+  upf: debug
+
+# If "on": Register to NRF, DEFAULT= off
+register_nf:
+  upf: yes
 
 ############## SBI Interfaces
 ### Each NF takes its local SBI interfaces and remote interfaces from here, unless it gets them using NRF discovery mechanisms
 nfs:
   smf:
     host: oai-smf
-    port: 8805
-    interface_name: eth0
-
   nrf:
     host: oai-nrf
-    port: 80
-    interface_name: eth0
-    api_version: v1
-    http_version: 1
+  upf:
+    host: oai-upf
+    sbi:
+      port_http1: 80
+      api_version: v1
+      interface_name: eth0
 
-oai-upf:
-  fqdn: oai-upf
-  enable_nat: yes  
-  register_nrf: yes
-  use_dns_fqdn: yes
-  enable_bpf_datapath: yes
-  upf_info:
-    sNssaiList:
-      - sNssai:
-          sst: 1
-          sd: 0xFFFFFF
-          dnnist:
-            - dnn: oai
-	      pdu_session_type: "IPv4"
-	      ipv4_pool: "12.1.1.0/24"
-	      ipv6_prefix: "2001:1:2::/64"
-    interfaceList:
-      - interfaceType: "N4"
-        interface: eth0
-        ipv4EndpointAddresses:
-          - "read"
-      - interfaceType: "N3"
-        networkInstance: "oai.n3.org"
-        interface: eth0
-        ipv4EndpointAddresses:
-          - "read"
-      - interfaceType: "N6"
-        networkInstance: "oai.n6.org"
-        interface: eth0
-        ipv4EndpointAddresses:
-          - "read"
-      - interfaceType: "N9"
-        networkInstance: "oai.n9.org"
-        interface: eth0
-        ipv4EndpointAddresses:
-          - "read"
+##### Options to enable/disable #####
+upf:
+  support_features:
+    # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
+    enable_bpf_datapath: no
+    # If "on": Source natting is done for UE, DEFAULT= off
+    enable_snat: yes
+    # If "on": Enable usage monitoring and reposrting with default URR, DEFAULT= off
+    enable_usage_reporting: no
+    # If "2": Send only HTTP/2 requests, DEFAULT=1 (HTTP1)
+    client_http_version: 1
+  sNssaiList:
+    - sNssai:
+        sst: 1
+        sd: 0xFFFFFF
+        dnnList:
+          - dnn: oai
+      pdu_session_type: IPv4
+      ipv4_pool: 12.1.1.0/24
+      ipv6_prefix: 2001:1:2::/64
+  interfaceList:
+    - interfaceType: "N4"
+      interface: eth0
+      ipv4EndpointAddresses:
+        - "read"
+    - interfaceType: "N3"
+      networkInstance: "oai.n3.org"
+      interface: eth0
+      ipv4EndpointAddresses:
+        - "read"
+    - interfaceType: "N6"
+      networkInstance: "oai.n6.org"
+      interface: eth0
+      ipv4EndpointAddresses:
+        - "read"
+    - interfaceType: "N9"
+      networkInstance: "oai.n9.org"
+      interface: eth0
+      ipv4EndpointAddresses:
+        - "read"
