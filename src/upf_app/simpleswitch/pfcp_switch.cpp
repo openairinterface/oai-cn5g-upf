@@ -49,6 +49,11 @@
 #include <stdexcept>
 #include <net/ethernet.h>
 
+#include <SessionManager.h>
+
+static std::shared_ptr<SessionManager> spSessionManager;
+
+
 using namespace pfcp;
 using namespace gtpv1u;
 using namespace upf;
@@ -605,6 +610,10 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
     pfcp_session* session = nullptr;
     if (not exist) {
       session = new pfcp_session(fseid, generate_seid());
+      LOG_INF("\n");
+      LOG_INF("===============");
+      LOG_INF("ADDING FARs");
+      LOG_INF("===============");
 
       for (auto it : req->pfcp_ies.create_fars) {
         create_far& cr_far = it;
@@ -616,6 +625,10 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
       }
 
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+        LOG_INF("\n");
+        LOG_INF("===============");
+        LOG_INF("ADDING PDRs");
+        LOG_INF("===============");
         //--------------------------------
         // Process PDR to be created
         cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
@@ -659,6 +672,10 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
           resp->pfcp_ies.set(created_pdr);
         }
       }
+
+      std::shared_ptr<pfcp::pfcp_session> pSession = std::make_shared<pfcp::pfcp_session>(*session);
+      spSessionManager = UserPlaneComponent::getInstance().getSessionManager();
+      spSessionManager->createBPFSession(pSession);  
 
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         s = std::shared_ptr<pfcp_session>(session);

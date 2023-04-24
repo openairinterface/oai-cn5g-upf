@@ -260,15 +260,15 @@ else(STATIC_LINKING)
     SET(BUILD_SHARED_LIBS ON)
 endif(STATIC_LINKING)
 
-ADD_SUBDIRECTORY(${CMAKE_CURRENT_SOURCE_DIR}/../../src/common ${CMAKE_CURRENT_BINARY_DIR}/common)
-ADD_SUBDIRECTORY(${CMAKE_CURRENT_SOURCE_DIR}/../../src/common/utils ${CMAKE_CURRENT_BINARY_DIR}/utils)
-ADD_SUBDIRECTORY(${CMAKE_CURRENT_SOURCE_DIR}/../../src/pfcp ${CMAKE_CURRENT_BINARY_DIR}/pfcp)
-ADD_SUBDIRECTORY(${CMAKE_CURRENT_SOURCE_DIR}/../../src/upf_app ${CMAKE_CURRENT_BINARY_DIR}/upf_app)
-ADD_SUBDIRECTORY(${CMAKE_CURRENT_SOURCE_DIR}/../../src/upf_app/app ${CMAKE_CURRENT_BINARY_DIR}/app)
-ADD_SUBDIRECTORY(${CMAKE_CURRENT_SOURCE_DIR}/../../src/upf_app/simpleswitch ${CMAKE_CURRENT_BINARY_DIR}/simpleswitch)
-ADD_SUBDIRECTORY(${CMAKE_CURRENT_SOURCE_DIR}/../../src/gtpv1u ${CMAKE_CURRENT_BINARY_DIR}/gtpv1u)
-ADD_SUBDIRECTORY(${CMAKE_CURRENT_SOURCE_DIR}/../../src/udp ${CMAKE_CURRENT_BINARY_DIR}/udp)
-
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/common ${CMAKE_CURRENT_BINARY_DIR}/common)
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/common/utils ${CMAKE_CURRENT_BINARY_DIR}/utils)
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/pfcp ${CMAKE_CURRENT_BINARY_DIR}/pfcp)
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app ${CMAKE_CURRENT_BINARY_DIR}/upf_app)
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/app ${CMAKE_CURRENT_BINARY_DIR}/app)
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/simpleswitch ${CMAKE_CURRENT_BINARY_DIR}/simpleswitch)
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/gtpv1u ${CMAKE_CURRENT_BINARY_DIR}/gtpv1u)
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/udp ${CMAKE_CURRENT_BINARY_DIR}/udp)
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/interfaces ${CMAKE_CURRENT_BINARY_DIR}/interfaces)
 ################################################################################
 # Specific part for oai_upf folder
 
@@ -285,6 +285,7 @@ include_directories(${SRC_TOP_DIR}/udp)
 include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
+include_directories(${SRC_TOP_DIR}/upf_app/interfaces)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/../build/ext/spdlog/include)
 include_directories(${SRC_TOP_DIR}/../build/ext/libbpf)
@@ -297,7 +298,32 @@ add_executable(upf
   ${SRC_TOP_DIR}/itti/itti_msg.cpp
   )
 
+  IF(STATIC_LINKING)
+  SET(CMAKE_EXE_LINKER_FLAGS "-static")
+  SET_TARGET_PROPERTIES(spgwc PROPERTIES LINK_SEARCH_END_STATIC 1)
+  # asan do not support static linking
+  SET(ASAN)
+ENDIF(STATIC_LINKING)
+
 # folly glog dl double-conversion for FB folly library
-target_link_libraries (upf ${ASAN}  -Wl,--start-group CN_UTILS ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.so APP SIMPLE_SWITCH UDP GTPV1U PFCP 3GPP_COMMON_TYPES far_bpf session_bpf upfutils upf_xdp_bpf  UPF_XDP gflags glog dl double-conversion folly -Wl,--end-group
-pthread m rt config++  event boost_system curl)
+target_link_libraries (upf 
+${ASAN}  -Wl,--start-group CN_UTILS 
+${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so 
+APP
+SIMPLE_SWITCH
+asan
+interfaces
+UDP
+GTPV1U
+PFCP
+3GPP_COMMON_TYPES
+far_bpf
+session_bpf
+upfutils
+upf_xdp_bpf
+UPF_XDP
+gflags glog dl double-conversion folly -Wl,--end-group
+pthread m rt config++
+event boost_system curl
+)
 

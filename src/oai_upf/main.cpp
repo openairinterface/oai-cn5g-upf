@@ -36,6 +36,13 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/split.hpp>
 
+#include <RulesUtilitiesImpl.h>
+#include <SessionManager.h>
+#include <SessionProgramManager.h>
+#include <UserPlaneComponent.h>
+
+static std::shared_ptr<SessionManager> spSessionManager;
+
 using namespace upf;
 using namespace util;
 using namespace std;
@@ -101,6 +108,22 @@ int my_check_redundant_process(char* exec_name) {
   return result;
 }
 //------------------------------------------------------------------------------
+void setup()
+{
+  LOG_FUNC();
+  std::shared_ptr<RulesUtilities> mpRulesFactory;
+  mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
+
+  LOG_WARN("TODO: remove the encoded interfaces");
+  
+  string sGTPInterface = "enp6s0";
+  string sUDPInterface = "enp7s0";
+  LOG_DBG("GTP interface: {}", sGTPInterface);
+  LOG_DBG("UDP interface: {}", sUDPInterface);
+  UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface);
+  //spSessionManager = UserPlaneComponent::getInstance().getSessionManager();
+}
+//------------------------------------------------------------------------------
 int main(int argc, char** argv) {
   // Checking if another instance of UPF is running
   int nb_processes = my_check_redundant_process(argv[0]);
@@ -155,6 +178,7 @@ int main(int argc, char** argv) {
   fflush(fp);
   fclose(fp);
 
+  setup();
   // once all udp servers initialized
   io_service.run();
 

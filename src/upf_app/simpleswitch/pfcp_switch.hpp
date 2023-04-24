@@ -138,6 +138,8 @@ class pfcp_switch {
 
   teid_t generate_teid_s1u() { return teid_s1u_generator_.get_uid(); };
 
+  void setup();
+
  public:
   pfcp_switch();
   pfcp_switch(pfcp_switch const&) = delete;
