@@ -329,7 +329,7 @@ void pfcp_switch::setup_pdn_interfaces() {
       //}
     }
     // even if we do nat, we can receive ue ip destinated IP packet
-    // but do not forget to set routes outside SPGWu
+    // but do not forget to set routes outside UPF
     cmd = fmt::format(
         "/sbin/sysctl -w net.ipv4.conf.{}.rp_filter=0",
         upf_cfg.n6.if_name.c_str());

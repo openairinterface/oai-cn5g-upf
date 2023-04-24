@@ -41,7 +41,7 @@ class spgwuConfigGen():
 		spgwuFile.write('#!/bin/bash\n')
 		spgwuFile.write('\n')
 		if self.fromDockerFile:
-			spgwuFile.write('cd /openair-spgwu-tiny\n')
+			spgwuFile.write('cd /oai-upf\n')
 		else:
 			spgwuFile.write('cd /home\n')
 		spgwuFile.write('\n')

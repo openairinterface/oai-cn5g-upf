@@ -149,7 +149,7 @@ int main(int argc, char** argv) {
   }
 
   FILE* fp             = NULL;
-  std::string filename = fmt::format("/tmp/spgwu_{}.status", getpid());
+  std::string filename = fmt::format("/tmp/upf_{}.status", getpid());
   fp                   = fopen(filename.c_str(), "w+");
   fprintf(fp, "STARTED\n");
   fflush(fp);

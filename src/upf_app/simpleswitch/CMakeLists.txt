@@ -24,20 +24,20 @@ include_directories(${SRC_TOP_DIR}/common/utils)
 include_directories(${SRC_TOP_DIR}/itti)
 include_directories(${SRC_TOP_DIR}/gtpv1u)
 include_directories(${SRC_TOP_DIR}/oai_upf)
+include_directories(${SRC_TOP_DIR}/upf_app/app)
+include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/pfcp)
-include_directories(${SRC_TOP_DIR}/spgwu)
-include_directories(${SRC_TOP_DIR}/spgwu/simpleswitch)
 include_directories(${SRC_TOP_DIR}/udp)
 include_directories(${SRC_TOP_DIR}/../build/ext/spdlog/include)
 
 
-add_library (SPGWU STATIC
-  upf_pfcp_association.cpp
-  upf_app.cpp
-  upf_config.cpp
-  upf_n4.cpp
-  upf_profile.cpp
-  upf_nrf.cpp
-  )
+#find_library(FOLLY folly)
 
+add_library (SIMPLE_SWITCH STATIC
+  pfcp_far.cpp
+  pfcp_pdr.cpp
+  pfcp_session.cpp
+  pfcp_switch.cpp
+  simple_switch.cpp
+  )
   

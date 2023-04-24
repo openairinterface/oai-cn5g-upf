@@ -74,7 +74,7 @@ def perform_flattening(tag):
       cmd += ' --change "ENV PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" '
     else:
       cmd += ' --change "ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" '
-    cmd += ' --change "WORKDIR /openair-spgwu-tiny" '
+    cmd += ' --change "WORKDIR /oai-upf" '
     cmd += ' --change "EXPOSE 2152/udp" '
     cmd += ' --change "EXPOSE 8805/udp" '
     cmd += ' --change "LABEL support-multi-sgwu-instances=\\"true\\"" '

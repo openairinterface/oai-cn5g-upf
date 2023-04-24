@@ -30,4 +30,4 @@ set (SRC_TOP_DIR     $ENV{OPENAIRCN_DIR}/src)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/../../src/oai_upf/CMakeLists.txt)
 
-ADD_SUBDIRECTORY(${CMAKE_CURRENT_SOURCE_DIR}/../../src/spgwu ${CMAKE_CURRENT_BINARY_DIR}/spgw_u)
+#ADD_SUBDIRECTORY(${CMAKE_CURRENT_SOURCE_DIR}/../../src/spgwu ${CMAKE_CURRENT_BINARY_DIR}/spgw_u)

@@ -29,7 +29,7 @@ bool Options::m_log_stdout;
 
 void Options::help() {
   std::cout << std::endl
-            << "Usage:  spgwu  [OPTIONS]..." << std::endl
+            << "Usage:  upf  [OPTIONS]..." << std::endl
             << "  -h, --help                   Print help and exit" << std::endl
             << "  -c, --libconfigcfg filename  Read the application "
                "configuration from this file."

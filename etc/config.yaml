@@ -1,0 +1,92 @@
+################################################################################
+# Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The OpenAirInterface Software Alliance licenses this file to You under
+# the OAI Public License, Version 1.1  (the "License"); you may not use this file
+# except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.openairinterface.org/?page_id=698
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#-------------------------------------------------------------------------------
+# For more information about the OpenAirInterface (OAI) Software Alliance:
+#      contact@openairinterface.org
+################################################################################
+
+# OAI CN Configuration File
+### This file can be used by all OAI NFs
+### Some fields are specific to an NF and will be ignored by other NFs
+### The {{ env['ENV_NAME'] }} syntax lets you define these values in a docker-compose file
+### If you intend to mount this file or use a bare-metal deployment, please refer to README.md
+### The README.md also defines default values and allowed values for each configuration parameter
+
+############# Common configuration
+
+# Log level for all the NFs
+log_level:
+  upf: debug
+
+# If "on": Register to NRF, DEFAULT= off
+register_nf:
+  upf: yes
+
+############## SBI Interfaces
+### Each NF takes its local SBI interfaces and remote interfaces from here, unless it gets them using NRF discovery mechanisms
+nfs:
+  smf:
+    host: oai-smf
+  nrf:
+    host: oai-nrf
+  upf:
+    host: oai-upf
+    sbi:
+      port_http1: 80
+      api_version: v1
+      interface_name: eth0
+
+##### Options to enable/disable #####
+upf:
+  support_features:
+    # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
+    enable_bpf_datapath: no
+    # If "on": Source natting is done for UE, DEFAULT= off
+    enable_snat: yes
+    # If "on": Enable usage monitoring and reposrting with default URR, DEFAULT= off
+    enable_usage_reporting: no
+    # If "2": Send only HTTP/2 requests, DEFAULT=1 (HTTP1)
+    client_http_version: 1
+  sNssaiList:
+    - sNssai:
+        sst: 1
+        sd: 0xFFFFFF
+        dnnList:
+          - dnn: oai
+      pdu_session_type: IPv4
+      ipv4_pool: 12.1.1.0/24
+      ipv6_prefix: 2001:1:2::/64
+  interfaceList:
+    - interfaceType: "N4"
+      interface: eth0
+      ipv4EndpointAddresses:
+        - "read"
+    - interfaceType: "N3"
+      networkInstance: "oai.n3.org"
+      interface: eth0
+      ipv4EndpointAddresses:
+        - "read"
+    - interfaceType: "N6"
+      networkInstance: "oai.n6.org"
+      interface: eth0
+      ipv4EndpointAddresses:
+        - "read"
+    - interfaceType: "N9"
+      networkInstance: "oai.n9.org"
+      interface: eth0
+      ipv4EndpointAddresses:
+        - "read"

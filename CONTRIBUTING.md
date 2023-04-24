@@ -44,7 +44,7 @@ By contributing to OpenAirInterface, you agree that your contributions will be l
 
 ## Continuous Integration process ##
 
-1.  You push your modified code with the new branch onto our [official GitHub repository](https://github.com/OPENAIRINTERFACE/openair-spgwu-tiny).
+1.  You push your modified code with the new branch onto our [official GitHub repository](https://github.com/OPENAIRINTERFACE/oai-upf).
     -  Please make the name of the branch explicit and short.
 2.  You create a pull request from the [dedicated web page](https://github.com/OPENAIRINTERFACE/oai-upf/pulls).
     -  The `target` (`base` in the web-page) branch **SHALL be `develop`**.

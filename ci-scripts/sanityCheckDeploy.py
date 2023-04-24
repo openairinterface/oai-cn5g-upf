@@ -149,8 +149,8 @@ class deploySanityCheckTest():
             # SX to SPGWC will be on `eth1`
             subprocess_run_w_echo('docker network connect --ip ' + CI_UPF_N4N_ADDR + ' ci-sx ci-oai-spgwu')
             subprocess_run_w_echo('python3 ci-scripts/generateConfigFiles.py --kind=UPF --sxc_ip_addr=' + CI_SPGWC_SXN_ADDR + ' --sxu=eth1 --s1u=eth0 --from_docker_file')
-            subprocess_run_w_echo('docker cp ./spgwu-cfg.sh ci-oai-spgwu:/openair-spgwu-tiny')
-            subprocess_run_w_echo('docker exec ci-oai-spgwu /bin/bash -c "cd /openair-spgwu-tiny && chmod 777 spgwu-cfg.sh && ./spgwu-cfg.sh" >> archives/upf_config.log')
+            subprocess_run_w_echo('docker cp ./spgwu-cfg.sh ci-oai-spgwu:/oai-upf')
+            subprocess_run_w_echo('docker exec ci-oai-spgwu /bin/bash -c "cd /oai-upf && chmod 777 spgwu-cfg.sh && ./spgwu-cfg.sh" >> archives/upf_config.log')
 
     def startSPGWC(self):
         res = ''

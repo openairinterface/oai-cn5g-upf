@@ -912,7 +912,7 @@ class HtmlReport():
 def Usage():
 	print('----------------------------------------------------------------------------------------------------------------------')
 	print('generateHtmlReport.py')
-	print('   Generate an HTML report for the Jenkins pipeline on openair-spgwu-tiny.')
+	print('   Generate an HTML report for the Jenkins pipeline on oai-upf.')
 	print('----------------------------------------------------------------------------------------------------------------------')
 	print('Usage: python3 generateHtmlReport.py [options]')
 	print('  --help  Show this help.')
