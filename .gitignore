@@ -43,3 +43,6 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 src/upf_app/skel
+build/ext/
+build/log/
+build/upf/build/
