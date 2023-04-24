@@ -386,8 +386,8 @@ check_install_spgwu_deps() {
   install_libbpf_from_git $1 $2
   ret=$?;[[ $ret -ne 0 ]] && return $ret
 
-  install_bpftool_from_git $1 $2
-  ret=$?;[[ $ret -ne 0 ]] && return $ret
+  #install_bpftool_from_git $1 $2
+  #ret=$?;[[ $ret -ne 0 ]] && return $ret
 
   install_fb_folly_from_source $1 $2
   ret=$?;[[ $ret -ne 0 ]] && return $ret
