@@ -41,11 +41,35 @@
 #include <SessionProgramManager.h>
 #include <UserPlaneComponent.h>
 
+#include "upf_config.hpp"
+extern upf_config upf_cfg;
+
 static std::shared_ptr<SessionManager> spSessionManager;
 
 using namespace upf;
 using namespace util;
 using namespace std;
+
+#ifndef N3_IF_NAME
+#define N3_IF_NAME upf_cfg.n3.if_name
+#endif
+
+#ifndef N6_IF_NAME
+#define N6_IF_NAME upf_cfg.n6.if_name
+#endif
+
+// #ifndef LOCAL_IP
+// #define LOCAL_IP upf_cfg.n3.addr4
+// #endif
+
+// #ifndef LOCAL_MAC
+// #define LOCAL_MAC 0
+// #endif
+
+
+
+
+
 
 itti_mw* itti_inst                    = nullptr;
 async_shell_cmd* async_shell_cmd_inst = nullptr;
@@ -116,8 +140,8 @@ void setup()
 
   LOG_WARN("TODO: remove the encoded interfaces");
   
-  string sGTPInterface = "enp6s0";
-  string sUDPInterface = "enp7s0";
+  string sGTPInterface = N3_IF_NAME;
+  string sUDPInterface = N6_IF_NAME;
   LOG_DBG("GTP interface: {}", sGTPInterface);
   LOG_DBG("UDP interface: {}", sUDPInterface);
   UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface);

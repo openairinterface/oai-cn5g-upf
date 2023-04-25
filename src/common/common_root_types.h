@@ -30,7 +30,7 @@
 
 #include <stdint.h>
 #include <inttypes.h>
-#include <arpa/inet.h>
+//#include <arpa/inet.h>
 
 //------------------------------------------------------------------------------
 #define PRIORITY_LEVEL_MAX (15)

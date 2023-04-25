@@ -158,6 +158,7 @@ install_bpftool_from_git() {
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
     $SUDO make install
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    $SUDO rm -rf linux-5.7
     popd
   fi
   echo_success "End of bpftool installation"
