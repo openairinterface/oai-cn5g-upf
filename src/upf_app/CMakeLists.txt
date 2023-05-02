@@ -1,4 +1,4 @@
-#include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/toolchain.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/toolchain.cmake)
 add_subdirectory(bpf)
 add_subdirectory(utils)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/bpf_pfcp)

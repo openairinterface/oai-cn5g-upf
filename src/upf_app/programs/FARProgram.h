@@ -81,6 +81,14 @@ public:
    */
   std::shared_ptr<BPFMap> getArpTableMap() const;
 
+  /**
+   * @brief Get the Iface Table Map object.
+   *
+   * @return std::shared_ptr<BPFMap>  The Iface table map.
+   */
+  std::shared_ptr<BPFMap> getIfaceMap() const;
+
+
   int getFd() const;
 private:
   /**

@@ -86,6 +86,16 @@ public:
    */
   std::shared_ptr<BPFMap> getNextProgRuleIndexMap() const;
 
+  /**
+   * @brief Get the iface Map object.
+   *
+   * @return std::shared_ptr<BPFMap> The iface_name.
+   */
+  std::shared_ptr<BPFMap> UPFProgram::getIfaceMap() const;
+
+
+
+
 private:
   /**
    * @brief Initialize BPF wrappers maps.
@@ -120,6 +130,15 @@ private:
 
   // The UDP interface.
   std::string mUDPInterface;
+
+   // The iface map.
+  std::shared_ptr<BPFMap> mpIfaceMap;
+
+
+  struct interface gtp_interface, udp_interface;
+  
+
+
 };
 
 #endif // __BPFPROGRAMMANAGER_H__

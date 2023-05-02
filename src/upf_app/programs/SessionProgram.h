@@ -124,6 +124,9 @@ private:
   // The arp table map.
   std::shared_ptr<BPFMap> mpArpTableMap;
 
+  // The iface map.
+  std::shared_ptr<BPFMap> mpIfaceMap;
+
   // The BPF lifecycle program.
   std::shared_ptr<SessionProgramLifeCycle> mpLifeCycle;
 

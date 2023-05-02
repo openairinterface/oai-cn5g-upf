@@ -18,11 +18,9 @@
 #include <utils/logger.h>
 #include <utils/utils.h>
 
-#include "upf_config.hpp"
-extern upf_config upf_cfg;
 #ifndef LOCAL_IP
 // N3 interface
-#define LOCAL_IP upf_cfg.n3.addr4
+#define LOCAL_IP 14512345
 #endif
 #ifndef LOCAL_MAC
 #define LOCAL_MAC 0

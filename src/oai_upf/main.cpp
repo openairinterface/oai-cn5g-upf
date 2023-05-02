@@ -58,14 +58,6 @@ using namespace std;
 #define N6_IF_NAME upf_cfg.n6.if_name
 #endif
 
-// #ifndef LOCAL_IP
-// #define LOCAL_IP upf_cfg.n3.addr4
-// #endif
-
-// #ifndef LOCAL_MAC
-// #define LOCAL_MAC 0
-// #endif
-
 
 
 
@@ -138,7 +130,7 @@ void setup()
   std::shared_ptr<RulesUtilities> mpRulesFactory;
   mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
 
-  LOG_WARN("TODO: remove the encoded interfaces");
+  //LOG_WARN("TODO: remove the encoded interfaces");
   
   string sGTPInterface = N3_IF_NAME;
   string sUDPInterface = N6_IF_NAME;
