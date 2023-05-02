@@ -7,7 +7,7 @@
 #include <utils/LogDefines.h>
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
-#include "../interfaces.h"
+#include "interfaces.h"
 
 #include "upf_config.hpp"
 extern upf_config upf_cfg;
@@ -58,8 +58,6 @@ void UPFProgram::setup()
   mpIfaceMap->update(gtpInterfaceIndex, gtp_interface.ipv4_address, BPF_ANY);
   mpIfaceMap->update(udpInterfaceIndex, udp_interface.ipv4_address, BPF_ANY);
  
-  //index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
-
   spSkeleton = mpLifeCycle->open();
   initializeMaps();
   mpLifeCycle->load();

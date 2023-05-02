@@ -10,6 +10,8 @@
 #include <upf_xdp_bpf_skel.h>
 #include <wrappers/BPFMap.hpp>
 
+#include "interfaces.h"
+
 class BPFMaps;
 class BPFMap;
 class SessionManager;
@@ -91,7 +93,7 @@ public:
    *
    * @return std::shared_ptr<BPFMap> The iface_name.
    */
-  std::shared_ptr<BPFMap> UPFProgram::getIfaceMap() const;
+  std::shared_ptr<BPFMap> getIfaceMap() const;
 
 
 
