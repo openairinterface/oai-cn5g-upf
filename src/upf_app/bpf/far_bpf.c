@@ -21,10 +21,10 @@
 #include <upf_xdp_bpf_maps.h>
 
 
-#ifndef UDP_INTERFACE
-// // N6
-#define UDP_INTERFACE "N6"
-#endif
+// #ifndef UDP_INTERFACE
+// // // N6
+// #define UDP_INTERFACE "N6"
+// #endif
 
 // #ifndef LOCAL_IP
 // // 10.1.3.30

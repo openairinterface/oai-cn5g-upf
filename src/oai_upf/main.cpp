@@ -42,7 +42,7 @@
 #include <UserPlaneComponent.h>
 
 #include "upf_config.hpp"
-extern upf_config upf_cfg;
+extern upf::upf_config upf_cfg;
 
 static std::shared_ptr<SessionManager> spSessionManager;
 

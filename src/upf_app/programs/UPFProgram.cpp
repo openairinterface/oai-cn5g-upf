@@ -10,7 +10,7 @@
 #include "interfaces.h"
 
 #include "upf_config.hpp"
-extern upf_config upf_cfg;
+extern upf::upf_config upf_cfg;
 
 
 UPFProgram::UPFProgram(const std::string& gtpInterface, const std::string& udpInterface)
@@ -25,12 +25,9 @@ UPFProgram::UPFProgram(const std::string& gtpInterface, const std::string& udpIn
     LOG_ERROR("GTP and/or UDP interface(s) are not defined!");
     throw std::runtime_error("GTP and/or UDP interface(s) are not defined!");
   }
-
-  gtp_interface.if_name = gtpInterface;
-  gtp_interface.ipv4_address = upf_cfg.gtpInterface.addr4;
   
-  udp_interface.if_name = udpInterface;
-  udp_interface.ipv4_address = upf_cfg.udpInterface.addr4;
+  gtp_interface.ipv4_address = atoi((conv::toString(upf_cfg.n3.addr4)).c_str());
+  udp_interface.ipv4_address = atoi((conv::toString(upf_cfg.n6.addr4)).c_str());
 
   LOG_DBG("GTP Interface: %s, IF_NAME: %d, IPv4: %d \n", gtp_interface.if_name, gtp_interface.ipv4_address);
   LOG_DBG("UDP Interface: %s, IF_NAME: %d, IPv4: %d \n", udp_interface.if_name, udp_interface.ipv4_address);

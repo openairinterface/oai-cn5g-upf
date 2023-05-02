@@ -17,14 +17,18 @@
 #include <utils/csum.h>
 #include <utils/logger.h>
 #include <utils/utils.h>
+#include <upf_xdp_bpf_maps.h>
 
-#ifndef LOCAL_IP
-// N3 interface
-#define LOCAL_IP 14512345
-#endif
-#ifndef LOCAL_MAC
-#define LOCAL_MAC 0
-#endif
+
+
+
+// #ifndef LOCAL_IP
+// // N3 interface
+// #define LOCAL_IP 14512345
+// #endif
+// #ifndef LOCAL_MAC
+// #define LOCAL_MAC 0
+// #endif
 
 // TODO navarrothiago - Put dummy in test folder.
 /**
@@ -67,6 +71,9 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md *p_ctx, pfcp_far_t_ *p_fa
   void *p_data_end = (void *)(long)p_ctx->data_end;
   void *p_mac_address;
   struct bpf_fib_lookup fib_params = {};
+
+  u32 udp_interface_ipv4 = bpf_map_lookup_elem(&m_iface, 1);
+
 
   // KISS - Lets start using the first PDR (high priority).
   // Resize the header in order to put the GTP/UPD/IP headers.
@@ -113,7 +120,7 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md *p_ctx, pfcp_far_t_ *p_fa
   p_ip->ttl = 64;
   p_ip->protocol = IPPROTO_UDP;
   p_ip->check = 0;
-  p_ip->saddr = LOCAL_IP;
+  p_ip->saddr = udp_interface_ipv4;
   p_ip->daddr = p_far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
 
   // Add the UDP header
