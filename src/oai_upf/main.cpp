@@ -41,14 +41,22 @@
 #include <SessionProgramManager.h>
 #include <UserPlaneComponent.h>
 
-#include "upf_config.hpp"
-extern upf::upf_config upf_cfg;
-
-static std::shared_ptr<SessionManager> spSessionManager;
+//#include "upf_config.hpp"
+//extern upf::upf_config upf_cfg;
 
 using namespace upf;
 using namespace util;
 using namespace std;
+
+static std::shared_ptr<SessionManager> spSessionManager;
+
+itti_mw* itti_inst                    = nullptr;
+async_shell_cmd* async_shell_cmd_inst = nullptr;
+pfcp_switch* pfcp_switch_inst         = nullptr;
+upf_app* upf_app_inst                 = nullptr;
+upf_config upf_cfg;
+boost::asio::io_service io_service;
+
 
 #ifndef N3_IF_NAME
 #define N3_IF_NAME upf_cfg.n3.if_name
@@ -58,17 +66,6 @@ using namespace std;
 #define N6_IF_NAME upf_cfg.n6.if_name
 #endif
 
-
-
-
-
-
-itti_mw* itti_inst                    = nullptr;
-async_shell_cmd* async_shell_cmd_inst = nullptr;
-pfcp_switch* pfcp_switch_inst         = nullptr;
-upf_app* upf_app_inst                 = nullptr;
-upf_config upf_cfg;
-boost::asio::io_service io_service;
 
 //------------------------------------------------------------------------------
 void my_app_signal_handler(int s) {
@@ -142,13 +139,13 @@ void setup()
 //------------------------------------------------------------------------------
 int main(int argc, char** argv) {
   // Checking if another instance of UPF is running
-  int nb_processes = my_check_redundant_process(argv[0]);
-  if (nb_processes > 1) {
-    std::cout << "An instance of " << argv[0] << " is maybe already called!"
-              << std::endl;
-    std::cout << "  " << nb_processes << " were detected" << std::endl;
-    return -1;
-  }
+  // int nb_processes = my_check_redundant_process(argv[0]);
+  // if (nb_processes > 1) {
+  //   std::cout << "An instance of " << argv[0] << " is maybe already called!"
+  //             << std::endl;
+  //   std::cout << "  " << nb_processes << " were detected" << std::endl;
+  //   return -1;
+  // }
 
   // Command line options
   if (!Options::parse(argc, argv)) {

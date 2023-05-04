@@ -17,6 +17,7 @@ class BPFMap;
 class SessionManager;
 class RulesUtilities;
 
+
 using UPFProgramLifeCycle = ProgramLifeCycle<upf_xdp_bpf_c>;
 
 /**

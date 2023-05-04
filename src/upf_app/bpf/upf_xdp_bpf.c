@@ -50,11 +50,11 @@ static u32 tail_call_next_prog(struct xdp_md *p_ctx, teid_t_ teid, u8 source_val
   /**/
   /**/
   
-  //if(index_prog){
+  if(index_prog){
     //bpf_debug("BPF tail call to %d key\n", *index_prog);
     bpf_tail_call(p_ctx, &m_next_rule_prog, *index_prog);
     bpf_debug("BPF tail call was not executed!\n");
-  //}
+  }
   bpf_debug("==========================BPF tail call was not executed!=================\n");
   return 0;
 }
