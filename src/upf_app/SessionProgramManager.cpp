@@ -84,20 +84,30 @@ void SessionProgramManager::createPipeline(uint32_t seid, uint32_t teid, uint8_t
   pfcp_far_t_ far = {// FAR ID.
                      .far_id.far_id = pFar->far_id.far_id,
                      //  Fwd - Destination interface value
-                     .forwarding_parameters.destination_interface.interface_value =
-                         pFar->forwarding_parameters.second.destination_interface.second.interface_value,
-                     //  Fwd - teid
-                     .forwarding_parameters.outer_header_creation.teid =
-                         pFar->forwarding_parameters.second.outer_header_creation.second.teid,
-                     //  Fwd - port
-                     .forwarding_parameters.outer_header_creation.port_number =
-                         pFar->forwarding_parameters.second.outer_header_creation.second.port_number,
-                     //  Fwd - creation interface
-                     .forwarding_parameters.outer_header_creation.outer_header_creation_description =
-                         pFar->forwarding_parameters.second.outer_header_creation.second.outer_header_creation_description,
-                     // Fwd - ipv4
-                     .forwarding_parameters.outer_header_creation.ipv4_address.s_addr =
-                         pFar->forwarding_parameters.second.outer_header_creation.second.ipv4_address.s_addr};
+                     .forwarding_parameters.destination_interface.interface_value = 0,
+                     .forwarding_parameters.outer_header_creation.teid = 1212,
+                     .forwarding_parameters.outer_header_creation.port_number = 1234,
+                     .forwarding_parameters.outer_header_creation.outer_header_creation_description = 0x0400,
+                     //.forwarding_parameters.outer_header_creation.ipv4_address.s_addr = "192.168.60.1"
+                     };
+
+  // pfcp_far_t_ far = {// FAR ID.
+  //                    .far_id.far_id = pFar->far_id.far_id,
+  //                    //  Fwd - Destination interface value
+  //                    .forwarding_parameters.destination_interface.interface_value =
+  //                        pFar->forwarding_parameters.second.destination_interface.second.interface_value,
+  //                    //  Fwd - teid
+  //                    .forwarding_parameters.outer_header_creation.teid =
+  //                        pFar->forwarding_parameters.second.outer_header_creation.second.teid,
+  //                    //  Fwd - port
+  //                    .forwarding_parameters.outer_header_creation.port_number =
+  //                        pFar->forwarding_parameters.second.outer_header_creation.second.port_number,
+  //                    //  Fwd - creation interface
+  //                    .forwarding_parameters.outer_header_creation.outer_header_creation_description =
+  //                        pFar->forwarding_parameters.second.outer_header_creation.second.outer_header_creation_description,
+  //                    // Fwd - ipv4
+  //                    .forwarding_parameters.outer_header_creation.ipv4_address.s_addr =
+  //                        pFar->forwarding_parameters.second.outer_header_creation.second.ipv4_address.s_addr};
 
   // Fwd - actions
   memcpy(&far.apply_action, &pFar->apply_action, sizeof(apply_action_t_));

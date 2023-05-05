@@ -214,11 +214,15 @@ bool pfcp_session::create(
       // TODO if (local_fteid.choose_id) {
       allocated_fteid = pfcp_switch_inst->generate_fteid_s1u();
     } else {
-      cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
-      Logger::upf_n4().info(
+      //cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
+      allocated_fteid =  pdi.local_fteid.second;
+      /*Logger::spgwu_sx().info(
           "Do not support IE FTEID managed by CP entity! Rejecting "
           "PFCP_XXX_REQUEST");
-      return false;
+          */
+      Logger::upf_n4().info(
+          "TEID received from CP");    
+      //return false;
     }
     pfcp_pdr* pdr = new pfcp_pdr(cr_pdr);
     if (local_fteid.ch) {
