@@ -13,7 +13,7 @@
 using namespace upf;
 //upf_config upf_cfg;
 
-
+/*****************************************************************************************************************/
 UPFProgram::UPFProgram(const std::string& gtpInterface, const std::string& udpInterface)
  : mGTPInterface(gtpInterface), mUDPInterface(udpInterface)
 {
@@ -38,12 +38,13 @@ UPFProgram::UPFProgram(const std::string& gtpInterface, const std::string& udpIn
   mpLifeCycle = std::make_shared<UPFProgramLifeCycle>(upf_xdp_bpf_c__open, upf_xdp_bpf_c__load, upf_xdp_bpf_c__attach, upf_xdp_bpf_c__destroy);
 }
 
-
+/*****************************************************************************************************************/
 UPFProgram::~UPFProgram()
 {
   LOG_FUNC();
 }
 
+/*****************************************************************************************************************/
 void UPFProgram::setup()
 {
   LOG_FUNC();
@@ -73,12 +74,14 @@ void UPFProgram::setup()
   mpLifeCycle->link("xdp_entry_point", mGTPInterface.c_str());
 }
 
+/*****************************************************************************************************************/
 std::shared_ptr<BPFMaps> UPFProgram::getMaps()
 {
   LOG_FUNC();
   return mpMaps;
 }
 
+/*****************************************************************************************************************/
 // TODO navarrothiago - check when kill when running.
 // It was noted the infinity loop.
 void UPFProgram::tearDown()
@@ -87,12 +90,14 @@ void UPFProgram::tearDown()
   mpLifeCycle->tearDown();
 }
 
+/*****************************************************************************************************************/
 void UPFProgram::updateProgramMap(uint32_t key, uint32_t fd)
 {
   LOG_FUNC();
   mpTeidSessionMap->update(key, fd, BPF_ANY);
 }
 
+/*****************************************************************************************************************/
 void UPFProgram::removeProgramMap(uint32_t key)
 {
   LOG_FUNC();
@@ -103,37 +108,42 @@ void UPFProgram::removeProgramMap(uint32_t key)
   }
 }
 
+/*****************************************************************************************************************/
 std::shared_ptr<BPFMap> UPFProgram::getTeidSessionMap() const
 {
   LOG_FUNC();
   return mpTeidSessionMap;
 }
 
+/*****************************************************************************************************************/
 std::shared_ptr<BPFMap> UPFProgram::getUeIpSessionMap() const
 {
   LOG_FUNC();
   return mpUeIpSessionMap;
 }
 
+/*****************************************************************************************************************/
 std::shared_ptr<BPFMap> UPFProgram::getNextProgRuleMap() const
 {
   LOG_FUNC();
   return mpNextProgRuleMap;
 }
 
+/*****************************************************************************************************************/
 std::shared_ptr<BPFMap> UPFProgram::getNextProgRuleIndexMap() const
 {
   LOG_FUNC();
   return mpNextProgRuleIndexMap;
 }
 
+/*****************************************************************************************************************/
 // std::shared_ptr<BPFMap> UPFProgram::getIfaceMap() const
 // {
 //   LOG_FUNC();
 //   return mpIfaceMap;
 // }
 
-
+/*****************************************************************************************************************/
 void UPFProgram::initializeMaps()
 {
   LOG_FUNC();
@@ -147,3 +157,4 @@ void UPFProgram::initializeMaps()
   mpNextProgRuleIndexMap = std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_prog_index"));
   //mpIfaceMap = std::make_shared<BPFMap>(mpMaps->getMap("m_iface"));
 }
+/*****************************************************************************************************************/

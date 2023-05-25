@@ -8,6 +8,7 @@
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
 
+/*****************************************************************************************************************/
 FARProgram::FARProgram()
  : BPFProgram()
 {
@@ -15,11 +16,13 @@ FARProgram::FARProgram()
   mpLifeCycle = std::make_shared<FARProgramLifeCycle>(far_bpf_c__open, far_bpf_c__load, far_bpf_c__attach, far_bpf_c__destroy);
 }
 
+/*****************************************************************************************************************/
 FARProgram::~FARProgram()
 {
   LOG_FUNC();
 }
 
+/*****************************************************************************************************************/
 void FARProgram::setup()
 {
   LOG_FUNC();
@@ -40,12 +43,14 @@ void FARProgram::setup()
   mpEgressInterfaceMap->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
 }
 
+/*****************************************************************************************************************/
 std::shared_ptr<BPFMaps> FARProgram::getMaps()
 {
   LOG_FUNC();
   return mpMaps;
 }
 
+/*****************************************************************************************************************/
 // TODO navarrothiago - check when kill when running.
 // It was noted the infinity loop.
 void FARProgram::tearDown()
@@ -54,31 +59,35 @@ void FARProgram::tearDown()
   mpLifeCycle->tearDown();
 }
 
+/*****************************************************************************************************************/
 std::shared_ptr<BPFMap> FARProgram::getFARMap() const
 {
   LOG_FUNC();
   return mpFARMap;
 }
 
+/*****************************************************************************************************************/
 std::shared_ptr<BPFMap> FARProgram::getEgressInterfaceMap() const
 {
   LOG_FUNC();
   return mpEgressInterfaceMap;
 }
 
+/*****************************************************************************************************************/
 int FARProgram::getFd() const
 {
   LOG_FUNC();
   return bpf_program__fd(mpLifeCycle->getBPFSkeleton()->progs.far_entry_point);
 }
 
+/*****************************************************************************************************************/
 std::shared_ptr<BPFMap> FARProgram::getArpTableMap() const
 {
   LOG_FUNC();
   return mpArpTableMap;
 }
 
-
+/*****************************************************************************************************************/
 void FARProgram::initializeMaps()
 {
   LOG_FUNC();
@@ -90,3 +99,4 @@ void FARProgram::initializeMaps()
   mpArpTableMap = std::make_shared<BPFMap>(mpMaps->getMap("m_arp_table"));
   mpEgressInterfaceMap = std::make_shared<BPFMap>(mpMaps->getMap("m_redirect_interfaces"));
 }
+/*****************************************************************************************************************/

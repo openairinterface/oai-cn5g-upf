@@ -30,7 +30,7 @@
 
 
 
-
+/*****************************************************************************************************************/
 // u32 litToBigEndian(u32 x) {
 //   return (((x<<24) & 0xff000000) | ((x<<8) & 0x00ff0000) | ((x>>24) & 0x000000ff) | ((x>>8) & 0x0000ff00));
 // };
@@ -41,8 +41,8 @@
 
 
 
-//---------------------------------------------------------------------------------------------------------------------
-static u32 tail_call_next_prog(struct xdp_md *p_ctx, teid_t_ teid, u8 source_value, u32 ipv4_address)
+/*****************************************************************************************************************/
+static u32 tail_call_next_prog(struct xdp_md *p_ctx, teid_t_ teid, u32 ipv4_address, u8 source_value)
 {
   struct next_rule_prog_index_key map_key;
   u32 *index_prog;
@@ -50,13 +50,13 @@ static u32 tail_call_next_prog(struct xdp_md *p_ctx, teid_t_ teid, u8 source_val
   __builtin_memset(&map_key, 0, sizeof(struct next_rule_prog_index_key));
 
   map_key.teid = teid; //(((teid<<24) & 0xff000000) | ((teid<<8) & 0x00ff0000) | ((teid>>24) & 0x000000ff) | ((teid>>8) & 0x0000ff00));  
-  map_key.source_value = source_value;
   map_key.ipv4_address = ipv4_address;
+  map_key.source_value = source_value;
   //-1062716415 => NO
   // 1062716415 => NO
-
-  bpf_debug("This is the key teid: %d, source: %d, ip: %d \n", map_key.teid, map_key.source_value, map_key.ipv4_address);
-  //index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
+  
+  bpf_debug("This is the key teid: %d, ip: %d, source: %d\n", map_key.teid, map_key.ipv4_address, map_key.source_value);
+  index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
   bpf_tail_call(p_ctx, &m_next_rule_prog, 1);
 
   // if(index_prog){
@@ -68,8 +68,8 @@ static u32 tail_call_next_prog(struct xdp_md *p_ctx, teid_t_ teid, u8 source_val
   
   return 0;
 }
-//---------------------------------------------------------------------------------------------------------------------
 
+/*****************************************************************************************************************/
 /**
  * GTP SECTION.
  */
@@ -117,9 +117,8 @@ static u32 gtp_handle(struct xdp_md *p_ctx, struct gtpuhdr *p_gtpuh, u32 src_ue_
   return XDP_PASS;
 }
 
-//---------------------------------------------------------------------------------------------------------------------
 
-
+/*****************************************************************************************************************/
 /**
  * UDP SECTION.
  */
@@ -159,9 +158,8 @@ static u32 udp_handle(struct xdp_md *p_ctx, struct udphdr *udph, u32 src_ip, u32
   }
 }
 
-//---------------------------------------------------------------------------------------------------------------------
 
-
+/*****************************************************************************************************************/
 /**
  * IP SECTION.
  */
@@ -199,9 +197,7 @@ static u32 ipv4_handle(struct xdp_md *p_ctx, struct iphdr *iph)
   }
 }
 
-//---------------------------------------------------------------------------------------------------------------------
-
-
+/*****************************************************************************************************************/
 /**
  * @brief Check if inner IP header is IPv4.
  *
@@ -231,9 +227,8 @@ struct vlan_hdr {
   __be16 h_vlan_encapsulated_proto;
 };
 
-//---------------------------------------------------------------------------------------------------------------------
 
-
+/*****************************************************************************************************************/
 /**
  *
  * @brief Parse Ethernet layer 2, extract network layer 3 offset and protocol
@@ -281,9 +276,7 @@ static u32 eth_handle(struct xdp_md *p_ctx, struct ethhdr *ethh)
   }
 }
 
-//---------------------------------------------------------------------------------------------------------------------
-
-
+/*****************************************************************************************************************/
 SEC("xdp_entry_point")
 int entry_point(struct xdp_md *p_ctx)
 {
@@ -300,3 +293,4 @@ int entry_point(struct xdp_md *p_ctx)
 }
 
 char _license[] SEC("license") = "GPL";
+/*****************************************************************************************************************/

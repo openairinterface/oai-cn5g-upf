@@ -20,27 +20,31 @@
 //  TODO navarrothiago - encapsulate in order file.
 // Custom format for next_rule_prog_index_key.
 
+/*****************************************************************************************************************/
 u32 litToBigEndian(u32 x) {
   return (((x<<24) & 0xff000000) | ((x<<8) & 0x00ff0000) | ((x>>24) & 0x000000ff) | ((x>>8) & 0x0000ff00));
 };
 
+/*****************************************************************************************************************/
 u32 bigToLitEndian(u32 x) {
   return (((x>>24) & 0x000000ff) | ((x>>8) & 0x0000ff00) | ((x<<8) & 0x00ff0000) | ((x<<24) & 0xff000000));
 };
 
-
+/*****************************************************************************************************************/
 std::ostream &operator<<(std::ostream &Str, struct next_rule_prog_index_key const &v)
 {
   Str << "teid: " << v.teid << " source_interface: " << v.source_value << "ip: ", v.ipv4_address;
   return Str;
 }
 
+/*****************************************************************************************************************/
 SessionProgramManager::~SessionProgramManager()
 {
   LOG_FUNC();
   removeAll();
 }
 
+/*****************************************************************************************************************/
 SessionProgramManager &SessionProgramManager::getInstance()
 {
   LOG_FUNC();
@@ -48,12 +52,15 @@ SessionProgramManager &SessionProgramManager::getInstance()
   return sInstance;
 }
 
+/*****************************************************************************************************************/
 void SessionProgramManager::setTeidSessionMap(std::shared_ptr<BPFMap> pProgramsMaps)
 {
   LOG_FUNC();
   mpTeidSessionMap = pProgramsMaps;
 }
 
+
+/*****************************************************************************************************************/
 void SessionProgramManager::createPipeline(uint32_t seid, uint32_t teid, uint8_t sourceInterface, uint32_t ueIpAddress,
                                    std::shared_ptr<pfcp::pfcp_far> pFar)
 {
@@ -133,6 +140,7 @@ void SessionProgramManager::createPipeline(uint32_t seid, uint32_t teid, uint8_t
   mSessionProgramsMap[seid] = std::make_shared<SessionPrograms>(key, pFARProgram);
 }
 
+/*****************************************************************************************************************/
 void SessionProgramManager::removePipeline(uint32_t seid)
 {
   LOG_FUNC();
@@ -155,6 +163,7 @@ void SessionProgramManager::removePipeline(uint32_t seid)
   pUPFProgram->getNextProgRuleIndexMap()->remove(key);
 }
 
+/*****************************************************************************************************************/
 void SessionProgramManager::create(uint32_t seid)
 {
   LOG_FUNC();
@@ -185,6 +194,7 @@ void SessionProgramManager::create(uint32_t seid)
   mSessionProgramMap.insert(std::pair<uint32_t, std::shared_ptr<SessionProgram>>(seid, pSessionProgram));
 }
 
+/*****************************************************************************************************************/
 void SessionProgramManager::remove(uint32_t seid)
 {
   LOG_FUNC();
@@ -199,6 +209,7 @@ void SessionProgramManager::remove(uint32_t seid)
   // mpOnNewSessionProgramObserver->onDestroySessionProgram(seid);
 }
 
+/*****************************************************************************************************************/
 void SessionProgramManager::removeAll()
 {
   LOG_FUNC();
@@ -212,12 +223,14 @@ void SessionProgramManager::removeAll()
   mSessionProgramMap.clear();
 }
 
+/*****************************************************************************************************************/
 void SessionProgramManager::setOnNewSessionObserver(OnStateChangeSessionProgramObserver *pObserver)
 {
   LOG_FUNC();
   mpOnNewSessionProgramObserver = pObserver;
 }
 
+/*****************************************************************************************************************/
 std::shared_ptr<SessionProgram> SessionProgramManager::findSessionProgram(uint32_t seid)
 {
   LOG_FUNC();
@@ -230,6 +243,8 @@ std::shared_ptr<SessionProgram> SessionProgramManager::findSessionProgram(uint32
 
   return pSessionProgram;
 }
+
+/*****************************************************************************************************************/
 std::shared_ptr<SessionPrograms> SessionProgramManager::findSessionPrograms(uint32_t seid)
 {
   LOG_FUNC();
@@ -243,6 +258,7 @@ std::shared_ptr<SessionPrograms> SessionProgramManager::findSessionPrograms(uint
   return pSessionPrograms;
 }
 
+/*****************************************************************************************************************/
 SessionProgramManager::SessionProgramManager()
 {
   LOG_FUNC();
@@ -251,6 +267,8 @@ SessionProgramManager::SessionProgramManager()
   }
 }
 
+
+/*****************************************************************************************************************/
 int32_t SessionProgramManager::getEmptySlot()
 {
   LOG_FUNC();
@@ -264,3 +282,4 @@ int32_t SessionProgramManager::getEmptySlot()
     throw std::runtime_error("No space available");
   }
 }
+/*****************************************************************************************************************/
