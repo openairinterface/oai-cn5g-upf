@@ -30,6 +30,7 @@
 // #define LOCAL_MAC 0
 // #endif
 
+/*****************************************************************************************************************/
 // TODO navarrothiago - Put dummy in test folder.
 /**
  * WARNING: Redirect require an XDP bpf_prog loaded on the TX device.
@@ -42,6 +43,7 @@ int xdp_redirect_gtpu(struct xdp_md *p_ctx)
   return XDP_PASS;
 }
 
+/*****************************************************************************************************************/
 /**
  * @brief Update MAC address
  *
@@ -62,6 +64,8 @@ static u32 update_dst_mac_address(struct iphdr *p_ip, struct ethhdr *p_eth)
   return 0;
 }
 
+
+/*****************************************************************************************************************/
 static u32 create_outer_header_gtpu_ipv4(struct xdp_md *p_ctx, pfcp_far_t_ *p_far)
 {
   bpf_debug("create_outer_header_gtpu_ipv4");
@@ -169,6 +173,7 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md *p_ctx, pfcp_far_t_ *p_fa
   bpf_debug("GTPU header were pushed!");
 }
 
+/*****************************************************************************************************************/
 /**
  * @brief Apply forwarding action rules.
  *
@@ -267,6 +272,8 @@ static u32 pfcp_far_apply(struct xdp_md *p_ctx, pfcp_far_t_ *p_far, enum FlowDir
   return XDP_PASS;
 }
 
+/*****************************************************************************************************************/
+
 /**
  * @brief Match the PDRs attribuites for UL data flow.
  * - The TEID from GTP GPDU with the TEID stored in PDR.
@@ -308,6 +315,8 @@ static u32 pfcp_pdr_match_pdi_access(struct xdp_md *p_ctx, pfcp_pdr_t_ *p_pdr, s
   return 0;
 }
 
+
+/*****************************************************************************************************************/
 /**
  * @brief Match the PDRs attribuites for DL data flow.
  * - Destination IP from IP header with source address stored in PDI.
@@ -348,6 +357,8 @@ static u32 pfcp_pdr_match_pdi_downlink(pfcp_pdr_t_ *p_pdr, struct iphdr *p_iph)
   bpf_debug("All atrributes were matched!!");
   return 0;
 }
+
+/*****************************************************************************************************************/
 /**
  * @brief Lookup all PDRs based on teid.
  * After that, for each PDR, check the its attribuites with match with access way.
@@ -408,6 +419,8 @@ static u32 pfcp_pdr_lookup_uplink(struct xdp_md *p_ctx)
 
   return XDP_PASS;
 }
+
+/*****************************************************************************************************************/
 /**
  * @brief Lookup all PDRs based on IP.
  * After that, for each PDR, check the its attribuites with match with access way.
@@ -466,6 +479,8 @@ static u32 pfcp_pdr_lookup_downlink(struct xdp_md *p_ctx)
   return XDP_PASS;
 }
 
+
+/*****************************************************************************************************************/
 // Uplink entry point.
 SEC("xdp_uplink_entry_point")
 int uplink_entry_point(struct xdp_md *p_ctx)
@@ -486,3 +501,4 @@ int downlink_entry_point(struct xdp_md *p_ctx)
 
 // For printk.
 char _license[] SEC("license") = "GPL";
+/*****************************************************************************************************************/

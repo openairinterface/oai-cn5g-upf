@@ -34,6 +34,7 @@
 // #define LOCAL_MAC 0
 // #endif
 
+/*****************************************************************************************************************/
 // TODO navarrothiago - Put dummy in test folder.
 /**
  * WARNING: Redirect require an XDP bpf_prog loaded on the TX device.
@@ -46,6 +47,7 @@ int xdp_redirect_gtpu(struct xdp_md *p_ctx)
   return XDP_PASS;
 }
 
+/*****************************************************************************************************************/
 /**
  * @brief Update MAC address
  *
@@ -66,6 +68,8 @@ static u32 update_dst_mac_address(struct iphdr *p_ip, struct ethhdr *p_eth)
   return 0;
 }
 
+
+/*****************************************************************************************************************/
 static u32 create_outer_header_gtpu_ipv4(struct xdp_md *p_ctx, pfcp_far_t_ *p_far)
 {
   bpf_debug("create_outer_header_gtpu_ipv4");
@@ -179,6 +183,7 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md *p_ctx, pfcp_far_t_ *p_fa
   bpf_debug("GTPU header were pushed!");
 }
 
+/*****************************************************************************************************************/
 /**
  * @brief Apply forwarding action rules.
  *
@@ -219,7 +224,8 @@ static u32 pfcp_far_apply(struct xdp_md *p_ctx, pfcp_far_t_ *p_far)
     if(dest_interface == INTERFACE_VALUE_CORE) {
       // Redirect to data network.
       bpf_debug("Destination is to INTERFACE_VALUE_CORE\n");
-      bpf_debug("OUTER_HEADER_CREATION_UDP_IPV4\n");
+      bpf_debug("OUTER_HEADER_CREATION_UDP_IPV4, (@Franck: This message will be deleted. I kept it just for comparison with original repos upf-bpf)\n");
+      bpf_debug("Remove GTP Header\n");
       struct ethhdr *p_new_eth = p_data + GTP_ENCAPSULATED_SIZE;
 
       // Move eth header forward.
@@ -238,11 +244,13 @@ static u32 pfcp_far_apply(struct xdp_md *p_ctx, pfcp_far_t_ *p_far)
       if(update_dst_mac_address(p_ip, p_new_eth)) {
         return XDP_DROP;
       }
-
+      
       // Adjust head to the right.
       bpf_xdp_adjust_head(p_ctx, GTP_ENCAPSULATED_SIZE);
-
+      
+      bpf_debug("The Packet is redirected to socket for transmission to DN. \n");
       return bpf_redirect_map(&m_redirect_interfaces, UPLINK, 0);
+      
       bpf_debug("OUTER_HEADER_CREATION_UDP_IPV4 REDIRECT FAILED\n");
     } else if(dest_interface == INTERFACE_VALUE_ACCESS) {
       // Redirect to core network.
@@ -263,10 +271,11 @@ static u32 pfcp_far_apply(struct xdp_md *p_ctx, pfcp_far_t_ *p_far)
   } else {
     bpf_debug("Forward action unset");
   }
+
   return XDP_PASS;
 }
 
-/*********************************************************************************/
+/*****************************************************************************************************************/
 // static u32 pfcp_far_apply(struct xdp_md *p_ctx, pfcp_far_t_ *p_far)
 // {
 //   void *p_data = (void *)(long)p_ctx->data;
@@ -357,7 +366,7 @@ static u32 pfcp_far_apply(struct xdp_md *p_ctx, pfcp_far_t_ *p_far)
 //   return XDP_PASS;
 // }
 
-/*********************************************************************************/
+/*****************************************************************************************************************/
 SEC("xdp_far")
 int far_entry_point(struct xdp_md *p_ctx)
 {
@@ -374,3 +383,4 @@ int far_entry_point(struct xdp_md *p_ctx)
 
 // For printk.
 char _license[] SEC("license") = "GPL";
+/*****************************************************************************************************************/
