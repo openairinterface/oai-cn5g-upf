@@ -28,6 +28,19 @@
 #include "xdp_stats_kern_user.h"
 
 
+
+
+
+// u32 litToBigEndian(u32 x) {
+//   return (((x<<24) & 0xff000000) | ((x<<8) & 0x00ff0000) | ((x>>24) & 0x000000ff) | ((x>>8) & 0x0000ff00));
+// };
+
+// u32 bigToLitEndian(u32 x) {
+//   return (((x>>24) & 0x000000ff) | ((x>>8) & 0x0000ff00) | ((x<<8) & 0x00ff0000) | ((x<<24) & 0xff000000));
+// };
+
+
+
 //---------------------------------------------------------------------------------------------------------------------
 static u32 tail_call_next_prog(struct xdp_md *p_ctx, teid_t_ teid, u8 source_value, u32 ipv4_address)
 {
@@ -36,29 +49,25 @@ static u32 tail_call_next_prog(struct xdp_md *p_ctx, teid_t_ teid, u8 source_val
 
   __builtin_memset(&map_key, 0, sizeof(struct next_rule_prog_index_key));
 
-  map_key.teid = teid;
+  map_key.teid = teid; //(((teid<<24) & 0xff000000) | ((teid<<8) & 0x00ff0000) | ((teid>>24) & 0x000000ff) | ((teid>>8) & 0x0000ff00));  
   map_key.source_value = source_value;
   map_key.ipv4_address = ipv4_address;
+  //-1062716415 => NO
+  // 1062716415 => NO
+
+  bpf_debug("This is the key teid: %d, source: %d, ip: %d \n", map_key.teid, map_key.source_value, map_key.ipv4_address);
+  //index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
+  bpf_tail_call(p_ctx, &m_next_rule_prog, 1);
+
+  // if(index_prog){
+  //   bpf_debug("Value of the eBPF tail call, index_prog = %d\n", *index_prog);
+  //   bpf_tail_call(p_ctx, &m_next_rule_prog, *index_prog);
+  //   bpf_debug("BPF tail call was not executed!\n");
+  // }
+  // bpf_debug("BPF tail call was not executed for some reasons?????!\n");
   
-  bpf_debug("map key teid: %d, source: %d, ip: %d \n", map_key.teid, map_key.source_value, map_key.ipv4_address);
-  
-  index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
-  
-  /**/
-  /**/
-  //bpf_debug("INDEX_PROG = %d \n", index_prog);
-  /**/
-  /**/
-  
-  if(index_prog){
-    //bpf_debug("BPF tail call to %d key\n", *index_prog);
-    bpf_tail_call(p_ctx, &m_next_rule_prog, *index_prog);
-    bpf_debug("BPF tail call was not executed!\n");
-  }
-  bpf_debug("==========================BPF tail call was not executed!=================\n");
   return 0;
 }
-
 //---------------------------------------------------------------------------------------------------------------------
 
 /**
@@ -103,7 +112,7 @@ static u32 gtp_handle(struct xdp_md *p_ctx, struct gtpuhdr *p_gtpuh, u32 src_ue_
   /**/
 
   tail_call_next_prog(p_ctx, p_gtpuh->teid, INTERFACE_VALUE_ACCESS, src_ue_ip);
-  bpf_debug("BPF tail call was not executed! teid %d\n", htonl(p_gtpuh->teid));
+  bpf_debug("BPF tail call was not executed! teid %d\n", p_gtpuh->teid);
 
   return XDP_PASS;
 }
