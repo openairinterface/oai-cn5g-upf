@@ -42,29 +42,33 @@
 
 
 /*****************************************************************************************************************/
-static u32 tail_call_next_prog(struct xdp_md *p_ctx, teid_t_ teid, u32 ipv4_address, u8 source_value)
+static u32 tail_call_next_prog(struct xdp_md *p_ctx, teid_t_ teid, u8 source_value, u32 ipv4_address)
 {
   struct next_rule_prog_index_key map_key;
   u32 *index_prog;
 
   __builtin_memset(&map_key, 0, sizeof(struct next_rule_prog_index_key));
 
-  map_key.teid = teid; //(((teid<<24) & 0xff000000) | ((teid<<8) & 0x00ff0000) | ((teid>>24) & 0x000000ff) | ((teid>>8) & 0x0000ff00));  
-  map_key.ipv4_address = ipv4_address;
+  map_key.teid = (((teid<<24) & 0xff000000) | ((teid<<8) & 0x00ff0000) | ((teid>>24) & 0x000000ff) | ((teid>>8) & 0x0000ff00));  
   map_key.source_value = source_value;
-  //-1062716415 => NO
-  // 1062716415 => NO
+  map_key.ipv4_address = ipv4_address;
+  bpf_debug("This is the key teid: %d, source: %d, ip: %d\n", map_key.teid, map_key.source_value, map_key.ipv4_address);
   
-  bpf_debug("This is the key teid: %d, ip: %d, source: %d\n", map_key.teid, map_key.ipv4_address, map_key.source_value);
   index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
-  bpf_tail_call(p_ctx, &m_next_rule_prog, 1);
+  //bpf_tail_call(p_ctx, &m_next_rule_prog, 1);
 
-  // if(index_prog){
-  //   bpf_debug("Value of the eBPF tail call, index_prog = %d\n", *index_prog);
-  //   bpf_tail_call(p_ctx, &m_next_rule_prog, *index_prog);
-  //   bpf_debug("BPF tail call was not executed!\n");
-  // }
-  // bpf_debug("BPF tail call was not executed for some reasons?????!\n");
+  if(index_prog){
+    bpf_debug("Value of the eBPF tail call, index_prog = %d\n", *index_prog);
+    bpf_tail_call(p_ctx, &m_next_rule_prog, *index_prog);
+    bpf_debug("BPF tail call was not executed!\n");
+  }
+  bpf_debug("BPF tail call was not executed!\n");
+  bpf_debug("One reason could be:\n");
+  bpf_debug("1. Key values not matching hash key for map m_next_rule_prog!\n \
+             \t\t\t\t\t\t You have to compare the keys\n \
+             \t\t\t\t\t\t 2. Endianess problem!\n \
+             \t\t\t\t\t\t Map and Key values are saved in different endianess!\n\
+             \t\t\t\t\t\t Map Hash Key and Key not matching\n");
   
   return 0;
 }
@@ -104,13 +108,6 @@ static u32 gtp_handle(struct xdp_md *p_ctx, struct gtpuhdr *p_gtpuh, u32 src_ue_
   }
 
   // Jump to session context.
-  
-  /**/
-  /**/
-  bpf_debug("TEID = %d, INTERFACE_ACCESS = %d, SRC_UE_IP = %d \n", p_gtpuh->teid, INTERFACE_VALUE_ACCESS, src_ue_ip);
-  /**/
-  /**/
-
   tail_call_next_prog(p_ctx, p_gtpuh->teid, INTERFACE_VALUE_ACCESS, src_ue_ip);
   bpf_debug("BPF tail call was not executed! teid %d\n", p_gtpuh->teid);
 

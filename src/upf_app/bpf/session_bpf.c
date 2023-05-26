@@ -19,9 +19,7 @@
 #include <utils/utils.h>
 #include <upf_xdp_bpf_maps.h>
 
-
-
-
+/*****************************************************************************************************************/
 // #ifndef LOCAL_IP
 // // N3 interface
 // #define LOCAL_IP 14512345

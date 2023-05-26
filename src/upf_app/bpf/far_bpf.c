@@ -248,7 +248,7 @@ static u32 pfcp_far_apply(struct xdp_md *p_ctx, pfcp_far_t_ *p_far)
       // Adjust head to the right.
       bpf_xdp_adjust_head(p_ctx, GTP_ENCAPSULATED_SIZE);
       bpf_debug("GTP Header is removed\n");
-      bpf_debug("The Packet is redirected to socket for transmission to DN ... \n");
+      bpf_debug("The Packet is redirected to socket for transmission to DN ...\n");
       return bpf_redirect_map(&m_redirect_interfaces, UPLINK, 0);
       
       bpf_debug("OUTER_HEADER_CREATION_UDP_IPV4 REDIRECT FAILED\n");
