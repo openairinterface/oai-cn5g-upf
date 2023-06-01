@@ -11,8 +11,8 @@ set(CMAKE_CXX_COMPILER clang++)
 set(CMAKE_CXX_COMPILER_TARGET ${triple})
 
 # Flags used in src folder. For samples folder, the flags are hardcoded.
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -g -target bpf")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_ISYSTEM_DIRS} -fsanitize=address -ggdb -fno-omit-frame-pointer -fPIC " )
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -g -target bpf -Qunused-arguments -fcolor-diagnostics")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_ISYSTEM_DIRS} -fsanitize=address -ggdb -fno-omit-frame-pointer -fPIC -Qunused-arguments -fcolor-diagnostics" )
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall ${CXX_ISYSTEM_DIRS} -fsanitize=address -ggdb -fno-omit-frame-pointer -fPIC " )
 
 set(CMAKE_OBJCOPY llvm-objcopy CACHE INTERNAL "objcopy tool")
