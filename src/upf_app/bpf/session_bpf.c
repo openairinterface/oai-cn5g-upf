@@ -77,7 +77,7 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md *p_ctx, pfcp_far_t_ *p_fa
   void *p_mac_address;
   struct bpf_fib_lookup fib_params = {};
 
-  u32 udp_interface_ipv4 = bpf_map_lookup_elem(&m_iface, 1);
+  //u32 udp_interface_ipv4 = bpf_map_lookup_elem(&m_iface, 1);
 
 
   // KISS - Lets start using the first PDR (high priority).
@@ -125,7 +125,8 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md *p_ctx, pfcp_far_t_ *p_fa
   p_ip->ttl = 64;
   p_ip->protocol = IPPROTO_UDP;
   p_ip->check = 0;
-  p_ip->saddr = udp_interface_ipv4;
+  //p_ip->saddr = udp_interface_ipv4;
+  p_ip->saddr = 20352641;
   p_ip->daddr = p_far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
 
   // Add the UDP header
@@ -378,8 +379,10 @@ static u32 pfcp_pdr_lookup_uplink(struct xdp_md *p_ctx)
   teid_t_ teid;
   seid_t_ seid;
   u32 index = 0;
-  u32 i;
-
+  
+  //u32 i;
+  u32 i = 0;
+  
   void *p_data = (void *)(long)p_ctx->data;
   void *p_data_end = (void *)(long)p_ctx->data_end;
 
@@ -440,7 +443,8 @@ static u32 pfcp_pdr_lookup_downlink(struct xdp_md *p_ctx)
   u32 dest_ip;
   seid_t_ seid;
   u32 index = 0;
-  u32 i;
+  //u32 i;
+  u32 i =0;
 
   void *p_data = (void *)(long)p_ctx->data;
   void *p_data_end = (void *)(long)p_ctx->data_end;
