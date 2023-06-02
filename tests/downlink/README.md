@@ -141,3 +141,5 @@ After the PFCP session request creation, you have to create an ARP table for the
 $./create_arp_table_downlink.sh
 ```
 
+## 5. Generate downlink traffic
+From your DN VM, generate traffic with `scapy` using the python script `generate_traffic_downlink.py`
