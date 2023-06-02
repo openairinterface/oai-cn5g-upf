@@ -7,10 +7,14 @@
 
 #define GTP_ENCAPSULATED_SIZE (sizeof(struct iphdr) +      \
                                 sizeof(struct udphdr) +     \
-                                sizeof(struct gtpuhdr))
+                                sizeof(struct gtpuhdr) + \
+                                sizeof(struct gtpu_extn_pdu_session_container)) 
 
 #define GTP_UDP_PORT 2152u //!< TS 29 281
 #define GTP_FLAGS 0x30     //!< Version: GTPv1, Protocol Type: GTP, Others: 0 
+#define GTP_EXT_FLAGS 0x34     
+
+#define PDU_SESS_CONT 0x85     
 
 // TS 29 281 - Section 6 GTP-U Message Formats
 // Table 6.1-1: Messages in GTP-U
@@ -57,7 +61,26 @@ struct gtpuhdr
   uint32_t teid;
 
   /*The options start here. */
+  uint16_t sequence;
+  uint8_t pdu_number;
+  uint8_t next_ext_type;
+
+  /*The options start here. */
 } __attribute__((packed));
+
+struct gtpu_extn_pdu_session_container {
+  uint8_t message_length;
+  // PDU Type - This value indicates the structure of the PDU session UP frame.
+  // The field takes the value of the PDU Type it identifies; i.e. "0" for PDU
+  // Type 0. The PDU type is in bit 4 to bit 7 in the first octet of the frame.
+  uint8_t pdu_type;
+  // QoS Flow Identifier (QFI): This parameter indicates the QoS Flow Identifier
+  // of the QoS flow to which the transferred packet bel
+  uint8_t qfi;
+  // Next Extension Header Type - This field defines the type of Extension
+  // Header that follows this field in the GTP-PDU
+  uint8_t next_ext_type;
+};
 
 static u32 gtp_handle(struct xdp_md *p_ctx, struct gtpuhdr *p_gtpuh, u32 dest_ip);
 

@@ -148,7 +148,9 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md *p_ctx, pfcp_far_t_ *p_fa
 
   p_udp->source = htons(GTP_UDP_PORT);
   p_udp->dest = htons(p_far->forwarding_parameters.outer_header_creation.port_number);
-  p_udp->len = htons(ntohs(p_inner_ip->tot_len) + sizeof(*p_udp) + sizeof(struct gtpuhdr));
+  p_udp->len = htons(ntohs(p_inner_ip->tot_len) + sizeof(*p_udp) + \
+                            sizeof(struct gtpuhdr) + \
+                            sizeof(struct gtpu_extn_pdu_session_container));
   p_udp->check = 0;
 
   bpf_debug("Destination MAC:%x:%x:%x\n", p_eth->h_dest[0], p_eth->h_dest[1], p_eth->h_dest[2]);
@@ -170,11 +172,21 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md *p_ctx, pfcp_far_t_ *p_fa
     return XDP_DROP;
   }
 
-  u8 flags = GTP_FLAGS;
+  //u8 flags = GTP_FLAGS;
+  u8 flags = 0x34;
   memcpy(p_gtpuh, &flags, sizeof(u8));
   p_gtpuh->message_type = GTPU_G_PDU;
-  p_gtpuh->message_length = p_inner_ip->tot_len;
+  p_gtpuh->message_length = htons(ntohs(p_inner_ip->tot_len) + sizeof(struct gtpu_extn_pdu_session_container) + 4 );
   p_gtpuh->teid = p_far->forwarding_parameters.outer_header_creation.teid;
+  p_gtpuh->sequence = 0x00;
+  p_gtpuh->pdu_number = 0x00;
+  p_gtpuh->next_ext_type = 0x85;
+  
+  struct gtpu_extn_pdu_session_container* gtpu_ext_hdr =(void *)(p_gtpuh + 1);
+  gtpu_ext_hdr->message_length = 0x01;
+  gtpu_ext_hdr->pdu_type       = 0x00;
+  gtpu_ext_hdr->qfi            = 0x05;
+  gtpu_ext_hdr->next_ext_type  = 0x00;
 
   // Compute l3 checksum
   __wsum l3sum = pcn_csum_diff(0, 0, (__be32 *)p_ip, sizeof(*p_ip), 0);
