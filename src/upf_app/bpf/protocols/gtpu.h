@@ -10,11 +10,17 @@
                                 sizeof(struct gtpuhdr) + \
                                 sizeof(struct gtpu_extn_pdu_session_container)) 
 
-#define GTP_UDP_PORT 2152u //!< TS 29 281
-#define GTP_FLAGS 0x30     //!< Version: GTPv1, Protocol Type: GTP, Others: 0 
-#define GTP_EXT_FLAGS 0x34     
+#define GTP_UDP_PORT          2152u //!< TS 29 281
+#define GTP_FLAGS 0x30  //!< Version: GTPv1, Protocol Type: GTP, Others: 0 
+#define GTP_SEQ 0x00
+#define GTP_PDU_NUMBER 0x00
+#define GTP_NEXT_EXT_TYPE 0x85   
 
-#define PDU_SESS_CONT 0x85     
+#define GTP_EXT_FLAGS         0x34     
+#define GTP_EXT_MSG_LEN       0x01
+#define GTP_EXT_PDU_TYPE      0x00
+#define GTP_EXT_QFI           0x05
+#define GTP_EXT_NEXT_EXT_TYPE 0x00
 
 // TS 29 281 - Section 6 GTP-U Message Formats
 // Table 6.1-1: Messages in GTP-U
