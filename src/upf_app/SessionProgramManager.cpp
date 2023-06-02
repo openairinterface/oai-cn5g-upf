@@ -33,7 +33,7 @@ u32 bigToLitEndian(u32 x) {
 /*****************************************************************************************************************/
 std::ostream &operator<<(std::ostream &Str, struct next_rule_prog_index_key const &v)
 {
-  Str << "teid: " << v.teid << " source_interface: " << v.source_value << "ip: ", v.ipv4_address;
+  Str << "TEID: " << v.teid << " SOURCE INTERFACE: " << v.source_value << "IPv4 ADDRESS: " << v.ipv4_address;
   return Str;
 }
 
@@ -106,16 +106,6 @@ void SessionProgramManager::createPipeline(uint32_t seid, uint32_t teid, uint8_t
   pfcp_far_t_ far = {// FAR ID.
                      .far_id.far_id = pFar->far_id.far_id,
                      //  Fwd - Destination interface value
-                     .forwarding_parameters.destination_interface.interface_value = 0,
-                     .forwarding_parameters.outer_header_creation.teid = 100,
-                     .forwarding_parameters.outer_header_creation.port_number = 1234,
-                     .forwarding_parameters.outer_header_creation.outer_header_creation_description = 0x0400,
-                     //.forwarding_parameters.outer_header_creation.ipv4_address.s_addr = "192.168.60.1"
-                     };
-  */
-  pfcp_far_t_ far = {// FAR ID.
-                     .far_id.far_id = pFar->far_id.far_id,
-                     //  Fwd - Destination interface value
                      .forwarding_parameters.destination_interface.interface_value =
                          pFar->forwarding_parameters.second.destination_interface.second.interface_value,
                      //  Fwd - teid
@@ -130,8 +120,26 @@ void SessionProgramManager::createPipeline(uint32_t seid, uint32_t teid, uint8_t
                      // Fwd - ipv4
                      .forwarding_parameters.outer_header_creation.ipv4_address.s_addr =
                          pFar->forwarding_parameters.second.outer_header_creation.second.ipv4_address.s_addr};
-
-  // Fwd - actions
+  */ 
+  pfcp_far_t_ far;
+  // FAR ID
+  far.far_id.far_id = pFar->far_id.far_id;
+  // FORWARDING PARAMETERS INTERFACE VALUE
+  far.forwarding_parameters.destination_interface.interface_value =
+      pFar->forwarding_parameters.second.destination_interface.second.interface_value;
+  // FORWARDING PARAMETERS TEID
+  far.forwarding_parameters.outer_header_creation.teid =
+      pFar->forwarding_parameters.second.outer_header_creation.second.teid;
+  // FORWARDING PARAMETERS PORT NUMBER
+  far.forwarding_parameters.outer_header_creation.port_number =
+      pFar->forwarding_parameters.second.outer_header_creation.second.port_number;
+  // FORWARDING PARAMETERS HEADER CREATION
+  far.forwarding_parameters.outer_header_creation.outer_header_creation_description =
+      pFar->forwarding_parameters.second.outer_header_creation.second.outer_header_creation_description;
+  // FORWARDING PARAMETERS SOURCE IP ADDRESS
+  far.forwarding_parameters.outer_header_creation.ipv4_address.s_addr =
+      pFar->forwarding_parameters.second.outer_header_creation.second.ipv4_address.s_addr;  
+  // FORWARDING PARAMETERS ACTIONS
   memcpy(&far.apply_action, &pFar->apply_action, sizeof(apply_action_t_));
 
   pFARProgram->getFARMap()->update(index, far, BPF_ANY);
@@ -185,8 +193,10 @@ void SessionProgramManager::create(uint32_t seid)
   // Initialize key egress interface map.
   uint32_t udpInterfaceIndex = if_nametoindex(udpInterface.c_str());
   uint32_t gtpInterfaceIndex = if_nametoindex(gtpInterface.c_str());
+
   uint32_t uplinkId = static_cast<uint32_t>(FlowDirection::UPLINK);
   uint32_t downlinkId = static_cast<uint32_t>(FlowDirection::DOWNLINK);
+  
   pSessionProgram->getEgressInterfaceMap()->update(uplinkId, udpInterfaceIndex, BPF_ANY);
   pSessionProgram->getEgressInterfaceMap()->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
 
@@ -198,6 +208,7 @@ void SessionProgramManager::create(uint32_t seid)
 void SessionProgramManager::remove(uint32_t seid)
 {
   LOG_FUNC();
+
   auto sessionProgram = findSessionProgram(seid);
   if(!sessionProgram) {
     LOG_ERROR("The session {} does not exist. Cannot be removed", seid);
@@ -205,8 +216,6 @@ void SessionProgramManager::remove(uint32_t seid)
   }
   sessionProgram->tearDown();
   mSessionProgramMap.erase(seid);
-  // Notify observer that a SessionProgram was removed.
-  // mpOnNewSessionProgramObserver->onDestroySessionProgram(seid);
 }
 
 /*****************************************************************************************************************/
