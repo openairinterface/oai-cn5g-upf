@@ -30,7 +30,7 @@
 // #endif
 
 /*****************************************************************************************************************/
-// TODO navarrothiago - Put dummy in test folder.
+// TODO: Put dummy in test folder.
 /**
  * WARNING: Redirect require an XDP bpf_prog loaded on the TX device.
  */
@@ -263,7 +263,7 @@ static u32 pfcp_far_apply(struct xdp_md *p_ctx, pfcp_far_t_ *p_far, enum FlowDir
   dest_interface = p_far->forwarding_parameters.destination_interface.interface_value;
   outer_header_creation = p_far->forwarding_parameters.outer_header_creation.outer_header_creation_description;
 
-  // TODO navarrothiago - reorder the if's
+  // TODO: Reorder the if's
   if(p_far->apply_action.forw) {
     if(dest_interface == INTERFACE_VALUE_CORE) {
       // Redirect to data network.
@@ -299,7 +299,7 @@ static u32 pfcp_far_apply(struct xdp_md *p_ctx, pfcp_far_t_ *p_far, enum FlowDir
         break;
       case OUTER_HEADER_CREATION_UDP_IPV6:
         bpf_debug("OUTER_HEADER_CREATION_UDP_IPV6\n");
-        // TODO navarrothiago
+        // TODO
         break;
       default:
         bpf_debug("In destination to CORE - Invalid option: %d", outer_header_creation);
@@ -391,7 +391,7 @@ static u32 pfcp_pdr_match_pdi_downlink(pfcp_pdr_t_ *p_pdr, struct iphdr *p_iph)
   if(p_pdr->outer_header_removal.outer_header_removal_description != OUTER_HEADER_REMOVAL_UDP_IPV4
       || p_pdr->pdi.source_interface.interface_value != INTERFACE_VALUE_CORE
       // || p_pdr->pdi.fteid.teid != teid
-      // FIXME navarrothiago
+      // FIXME
       || p_pdr->pdi.ue_ip_address.ipv4_address != p_iph->daddr
     ){
         bpf_debug("Not match:");
@@ -455,7 +455,7 @@ static u32 pfcp_pdr_lookup_uplink(struct xdp_md *p_ctx)
   u8 *p_iph = (u8 *)p_gtpuh + GTPV1U_MSG_HEADER_MIN_SIZE;
 
   teid = htonl(p_gtpuh->teid);
-  bpf_debug("GTP GPDU teid %d with IPv4 payload received\n", teid);
+  bpf_debug("GTP GPDU TEID %d with IPv4 payload received\n", teid);
 
   p_pdr = bpf_map_lookup_elem(&m_teid_pdr, &teid);
 

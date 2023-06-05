@@ -17,7 +17,7 @@
 
 #define EMPTY_SLOT -1l
 
-//  TODO navarrothiago - encapsulate in order file.
+//  TODO: Encapsulate in order file.
 // Custom format for next_rule_prog_index_key.
 
 /*****************************************************************************************************************/
@@ -67,21 +67,20 @@ void SessionProgramManager::createPipeline(uint32_t seid, uint32_t teid, uint8_t
   LOG_FUNC();
   
   struct next_rule_prog_index_key key;
-  __builtin_memset(&key, 0, sizeof(struct next_rule_prog_index_key));
-  key = {.teid = teid, .source_value = sourceInterface, .ipv4_address = ueIpAddress};
- //key = {.teid = litToBigEndian(teid), .source_value = sourceInterface, .ipv4_address = litToBigEndian(ueIpAddress)};
-  //struct next_rule_prog_index_key key = {.teid = teid, .source_value = sourceInterface, .ipv4_address = ueIpAddress};
+  struct in_addr ip_addr;
   u32 id;
   s32 fd;
-  
-  struct in_addr ip_addr;
-  ip_addr.s_addr = ueIpAddress;
-  LOG_DBG("teid: {}, source interface: {}, ue ip: {}", teid, sourceInterface, ueIpAddress);
-  LOG_DBG("teid: {}, source interface: {}, ue ip: {}", htonl(teid), sourceInterface, inet_ntoa(ip_addr));
-  LOG_DBG("map key teid:{}, source: {}, ip: {} \n", key.teid, key.source_value, key.ipv4_address);
 
+  __builtin_memset(&key, 0, sizeof(struct next_rule_prog_index_key));
+  
+  key = {.teid = teid, .source_value = sourceInterface, .ipv4_address = ueIpAddress};
+  //key = {.teid = litToBigEndian(teid), .source_value = sourceInterface, .ipv4_address = litToBigEndian(ueIpAddress)};
+  
+  
+  ip_addr.s_addr = ueIpAddress;
+  LOG_DBG("TEID: {}, Source Interface: {}, UE IP: {}", htonl(teid), sourceInterface, inet_ntoa(ip_addr));
+  
   LOG_DBG("Instantiate a new FARProgram");
-  // Instantiate a new FARProgram
   std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
   pFARProgram->setup();
 
@@ -90,18 +89,13 @@ void SessionProgramManager::createPipeline(uint32_t seid, uint32_t teid, uint8_t
   id = pFARProgram->getId();
   fd = pFARProgram->getFd();
 
-  // TODO navarrothiago - This line got me crazy. If you uncomment it, the test does not pass.
-  // WHY????????????????????
-
-  // LOG_DBG("id {} and fd {}", id, fd);
-
-  // TODO navarrothiago - get the nextProgRule index from a pool of values.
+  // TODO: Get the nextProgRule index from a pool of values.
   pUPFProgram->getNextProgRuleIndexMap()->update(key, id, BPF_ANY);
   pUPFProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
 
   LOG_DBG("Store FAR in the FAR program");
   uint8_t index = 0;
-  // TODO navarrothiago - create a method to encapuslate.
+  // TODO: Create a method to encapuslate.
   /*
   pfcp_far_t_ far = {// FAR ID.
                      .far_id.far_id = pFar->far_id.far_id,
@@ -156,7 +150,7 @@ void SessionProgramManager::removePipeline(uint32_t seid)
   LOG_DBG("Remove FARProgram index from UPFProgram map");
   auto it = mSessionProgramsMap.find(seid);
   if(it == mSessionProgramsMap.end()){
-    LOG_ERROR("The session {} does not exist. Cannot be removed", seid);
+    LOG_ERROR("The PDU Session {} does not exist. Cannot be removed", seid);
     throw std::runtime_error("The session does not exist. Cannot be removed");
   }
 
@@ -166,7 +160,7 @@ void SessionProgramManager::removePipeline(uint32_t seid)
   it->second.reset();
   mSessionProgramsMap.erase(seid);
 
-  LOG_DBG("Clean session from the entry program's map");
+  LOG_DBG("Clean PDU Session from the entry program's map");
   auto pUPFProgram = UserPlaneComponent::getInstance().getUPFProgram();
   pUPFProgram->getNextProgRuleIndexMap()->remove(key);
 }
@@ -177,10 +171,10 @@ void SessionProgramManager::create(uint32_t seid)
   LOG_FUNC();
 
   // Check if there is a key with seid value.
-  // TODO navarrothiago - check if can be abstract the programMap.
+  // TODO: Check if can be abstract the programMap.
 
   if(mSessionProgramMap.find(seid) != mSessionProgramMap.end()) {
-    LOG_ERROR("Session {} already exists. Cannot create a new program with this key", seid);
+    LOG_ERROR("PDU Session {} already exists. Cannot create a new program with this key", seid);
     throw std::runtime_error("Cannot create a new program with key (seid)");
   }
 
@@ -211,7 +205,7 @@ void SessionProgramManager::remove(uint32_t seid)
 
   auto sessionProgram = findSessionProgram(seid);
   if(!sessionProgram) {
-    LOG_ERROR("The session {} does not exist. Cannot be removed", seid);
+    LOG_ERROR("The PDU session {} does not exist. Cannot be removed", seid);
     throw std::runtime_error("The session does not exist. Cannot be removed");
   }
   sessionProgram->tearDown();
@@ -284,7 +278,7 @@ int32_t SessionProgramManager::getEmptySlot()
   auto it = std::find(mProgramArray.begin(), mProgramArray.end(), EMPTY_SLOT);
   if(it != mProgramArray.end()) {
     auto index = it - mProgramArray.begin();
-    LOG_DBG("element with index {} is empty", index);
+    LOG_DBG("Element with index {} is empty", index);
     return index;
   } else {
     LOG_ERROR("No space available");

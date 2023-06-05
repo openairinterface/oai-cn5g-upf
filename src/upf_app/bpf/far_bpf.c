@@ -35,7 +35,7 @@
 // #endif
 
 /*****************************************************************************************************************/
-// TODO navarrothiago - Put dummy in test folder.
+// TODO: Put dummy in test folder.
 /**
  * WARNING: Redirect require an XDP bpf_prog loaded on the TX device.
  */
@@ -267,7 +267,7 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
   outer_header_creation = p_far->forwarding_parameters.outer_header_creation
                               .outer_header_creation_description;
 
-  // TODO navarrothiago - reorder the if's
+  // TODO: Reorder the if's
   if (p_far->apply_action.forw) {
     if (dest_interface == INTERFACE_VALUE_CORE) {
       // Redirect to data network.
@@ -359,7 +359,7 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
 //   outer_header_creation =
 //   p_far->forwarding_parameters.outer_header_creation.outer_header_creation_description;
 
-//   // TODO navarrothiago - reorder the if's
+//   // TODO: Reorder the if's
 //   if(p_far->apply_action.forw) {
 //     if(dest_interface == INTERFACE_VALUE_CORE) {
 //       // Redirect to data network.
@@ -395,7 +395,7 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
 //         break;
 //       case OUTER_HEADER_CREATION_UDP_IPV6:
 //         bpf_debug("OUTER_HEADER_CREATION_UDP_IPV6\n");
-//         // TODO navarrothiago
+//         // TODO
 //         break;
 //       default:
 //         bpf_debug("In destination to CORE - Invalid option: %d",

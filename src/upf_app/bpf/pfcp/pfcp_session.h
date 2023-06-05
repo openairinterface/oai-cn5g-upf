@@ -11,7 +11,7 @@
 typedef struct pfcp_session_s
 {
   seid_t_ seid;
-  // TODO navarrothiago - Turn to counter the iter variable.
+  // TODO: Turn to counter the iter variable.
   u32 pdrs_counter;
   pfcp_pdr_t_ pdrs[SESSION_PDRS_MAX_SIZE];
   u32 fars_counter;

@@ -61,7 +61,7 @@ public:
   std::string getName() const;
 
 private:
-  // TODO navarrothiago - Change to unique.
+  // TODO: Change to unique.
   // The bpf map.
   struct bpf_map *mpBPFMap;
 
@@ -92,7 +92,7 @@ int BPFMap::update(KeyType &key, ValueType &value, int flags)
   int updateReturn = bpf_map_update_elem(mapFd, &key, &value, flags);
 
   if(updateReturn != 0) {
-    // FIXME navarrothiago - Maybe Key is not support by fmt.
+    // FIXME: Maybe Key is not support by fmt.
     LOG_ERROR("{}. The key {} cannot be updated in map {}", strerror(updateReturn), key, mName);
     throw std::runtime_error("The BPF map cannot be updated");
   }else{

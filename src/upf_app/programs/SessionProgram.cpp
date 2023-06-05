@@ -24,7 +24,7 @@ SessionProgram::~SessionProgram()
 }
 
 /*****************************************************************************************************************/
-// TODO navarrothiago - Pass configuration throught args.
+// TODO: Pass configuration throught args.
 void SessionProgram::setup()
 {
   LOG_FUNC();

@@ -184,7 +184,7 @@ void ProgramLifeCycle<BPFSkeletonType>::link(std::string sectionName, std::strin
   int fd;
   std::string section;
 
-  // TODO navarrothiago - remove hardcoded.
+  // TODO: Remove hardcoded.
   if(!ifIndex) {
     perror("if_nametoindex");
     LOG_ERROR("Interface {} not found", interface);
@@ -274,7 +274,7 @@ void ProgramLifeCycle<BPFSkeletonType>::destroy()
   if(mState != IDLE) {
     mDestroyFunc(mpSkeleton);
   }
-  // TODO navarrothiago - check if it is necessary delete sessionManager here.
+  //TODO: Check if it is necessary delete sessionManager here.
   mState = IDLE;
 }
 

@@ -51,7 +51,7 @@ std::shared_ptr<BPFMaps> FARProgram::getMaps()
 }
 
 /*****************************************************************************************************************/
-// TODO navarrothiago - check when kill when running.
+// TODO: Check when kill when running.
 // It was noted the infinity loop.
 void FARProgram::tearDown()
 {

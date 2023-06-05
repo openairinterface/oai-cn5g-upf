@@ -19,21 +19,21 @@ UPFProgram::UPFProgram(const std::string& gtpInterface, const std::string& udpIn
 {
   LOG_FUNC();
 
-  // __builtin_memset(&gtp_interface, 0, sizeof(struct interface));
-  // __builtin_memset(&udp_interface, 0, sizeof(struct interface));
+ // // __builtin_memset(&gtp_interface, 0, sizeof(struct interface));
+ // // __builtin_memset(&udp_interface, 0, sizeof(struct interface));
 
-  // if(mUDPInterface.empty() || mGTPInterface.empty()){
-  //   LOG_ERROR("GTP and/or UDP interface(s) are not defined!");
-  //   throw std::runtime_error("GTP and/or UDP interface(s) are not defined!");
-  // }
+ // // if(mUDPInterface.empty() || mGTPInterface.empty()){
+ // //   LOG_ERROR("GTP and/or UDP interface(s) are not defined!");
+ // //   throw std::runtime_error("GTP and/or UDP interface(s) are not defined!");
+ // // }
   
-  // gtp_interface.ipv4_address = atoi((conv::toString(upf_cfg.n3.addr4)).c_str());
-  // LOG_DBG(".......................GTP Interface: %d\n", upf_cfg.n3.addr4.s_addr);
-  // LOG_DBG("    Interface ipv4.addr ........: %s", inet_ntoa(upf_cfg.n3.addr4));
-  // udp_interface.ipv4_address = atoi((conv::toString(upf_cfg.n6.addr4)).c_str());
+ // // gtp_interface.ipv4_address = atoi((conv::toString(upf_cfg.n3.addr4)).c_str());
+ // // LOG_DBG(".......................GTP Interface: %d\n", upf_cfg.n3.addr4.s_addr);
+ // // LOG_DBG("    Interface ipv4.addr ........: %s", inet_ntoa(upf_cfg.n3.addr4));
+ // // udp_interface.ipv4_address = atoi((conv::toString(upf_cfg.n6.addr4)).c_str());
 
-  // LOG_DBG("GTP Interface: %s, IF_NAME: %d, IPv4: %d \n", gtp_interface.if_name, gtp_interface.ipv4_address);
-  // LOG_DBG("UDP Interface: %s, IF_NAME: %d, IPv4: %d \n", udp_interface.if_name, udp_interface.ipv4_address);
+ // // LOG_DBG("GTP Interface: %s, IF_NAME: %d, IPv4: %d \n", gtp_interface.if_name, gtp_interface.ipv4_address);
+ // // LOG_DBG("UDP Interface: %s, IF_NAME: %d, IPv4: %d \n", udp_interface.if_name, udp_interface.ipv4_address);
   
   mpLifeCycle = std::make_shared<UPFProgramLifeCycle>(upf_xdp_bpf_c__open, upf_xdp_bpf_c__load, upf_xdp_bpf_c__attach, upf_xdp_bpf_c__destroy);
 }
@@ -49,15 +49,15 @@ void UPFProgram::setup()
 {
   LOG_FUNC();
 
-  // LOG_DBG("Saving Interfaces in Map");
-  // auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
-  // auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
+  LOG_DBG("Saving Interfaces in Map");
+  auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
+  auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
   
-  // uint32_t gtpInterfaceIndex = if_nametoindex(gtpInterface.c_str());
-  // uint32_t udpInterfaceIndex = if_nametoindex(udpInterface.c_str());
+  uint32_t gtpInterfaceIndex = if_nametoindex(gtpInterface.c_str());
+  uint32_t udpInterfaceIndex = if_nametoindex(udpInterface.c_str());
   
-  //mpIfaceMap->update(gtpInterfaceIndex, gtp_interface.ipv4_address, BPF_ANY);
-  //mpIfaceMap->update(udpInterfaceIndex, udp_interface.ipv4_address, BPF_ANY);
+  mpIfaceMap->update(gtpInterfaceIndex, gtp_interface.ipv4_address, BPF_ANY);
+  mpIfaceMap->update(udpInterfaceIndex, udp_interface.ipv4_address, BPF_ANY);
  
   spSkeleton = mpLifeCycle->open();
   initializeMaps();
@@ -82,7 +82,7 @@ std::shared_ptr<BPFMaps> UPFProgram::getMaps()
 }
 
 /*****************************************************************************************************************/
-// TODO navarrothiago - check when kill when running.
+// TODO: check when kill when running.
 // It was noted the infinity loop.
 void UPFProgram::tearDown()
 {
@@ -137,11 +137,11 @@ std::shared_ptr<BPFMap> UPFProgram::getNextProgRuleIndexMap() const
 }
 
 /*****************************************************************************************************************/
-// std::shared_ptr<BPFMap> UPFProgram::getIfaceMap() const
-// {
-//   LOG_FUNC();
-//   return mpIfaceMap;
-// }
+std::shared_ptr<BPFMap> UPFProgram::getIfaceMap() const
+{
+  LOG_FUNC();
+  return mpIfaceMap;
+}
 
 /*****************************************************************************************************************/
 void UPFProgram::initializeMaps()
@@ -155,6 +155,6 @@ void UPFProgram::initializeMaps()
   mpUeIpSessionMap = std::make_shared<BPFMap>(mpMaps->getMap("m_ueip_session"));
   mpNextProgRuleMap = std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_prog"));
   mpNextProgRuleIndexMap = std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_prog_index"));
-  //mpIfaceMap = std::make_shared<BPFMap>(mpMaps->getMap("m_iface"));
+  mpIfaceMap = std::make_shared<BPFMap>(mpMaps->getMap("m_iface"));
 }
 /*****************************************************************************************************************/

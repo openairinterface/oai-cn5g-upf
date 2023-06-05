@@ -40,7 +40,7 @@ void SessionManager::createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSessi
   // higher precedence values indicate lower precedence of the PDR when matching
   // a packet.
 
-  // TODO navarrothiago - create a list for DL and UL. There will be two
+  // TODO: Create a list for DL and UL. There will be two
   // deployment on the dataplane. One related to UL and other related to DL.
   // Today, we only deploy the highest priority. We dont take into account if it
   // is a DL or UP.
@@ -96,7 +96,7 @@ bool SessionManager::comparePDR(const std::shared_ptr<pfcp::pfcp_pdr> &pFirst,
 {
   LOG_FUNC();
   pfcp::precedence_t precedenceFirst, precedenceSecond;
-  // navarrothiago - Check if exists.
+  //TODO: Check if exists.
   pFirst->get(precedenceFirst);
   pSecond->get(precedenceSecond);
   return precedenceFirst.precedence < precedenceSecond.precedence;

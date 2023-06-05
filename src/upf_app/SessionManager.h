@@ -23,12 +23,12 @@ class ForwardingActionRules;
 class PacketDetectionRules;
 class SessionBpf;
 
-// FIXME navarrothiago - This class compose the UserPlaneComponent. When the program is deleted,
+// FIXME: This class compose the UserPlaneComponent. When the program is deleted,
 // this class must be updated.
 
-// TODO navarrothiago - SessionRequestHandler? SessionMessageHandler?
+// TODO: SessionRequestHandler? SessionMessageHandler?
 
-// TODO navarrothiago - Decouple PDR and FAR management.
+// TODO: Decouple PDR and FAR management.
 
 /**
  * @brief This class abstracts the communication to manager the session BPF maps.

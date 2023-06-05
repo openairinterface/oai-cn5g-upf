@@ -94,7 +94,7 @@ static u32 gtp_handle(struct xdp_md *p_ctx, struct gtpuhdr *p_gtpuh, u32 src_ue_
     return XDP_DROP;
   }
 
-  // TODO navarrothiago - handle other PDU.
+  // TODO: Handle other PDU.
   if(p_gtpuh->message_type != GTPU_G_PDU) {
     bpf_debug("Message type 0x%x is not GTPU GPDU(0x%x)", p_gtpuh->message_type, GTPU_G_PDU);
     return XDP_PASS;

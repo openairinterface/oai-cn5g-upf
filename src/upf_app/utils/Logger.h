@@ -58,7 +58,7 @@ public:
    */
   void doPrint(LOG_TYPE_T type, const std::string &out);
 
-  // TODO navarrothiago - exclude the return and the parameters.
+  // TODO: Exclude the return and the parameters.
   class FuncLogger
   {
   public:

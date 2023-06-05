@@ -8,7 +8,7 @@
 class ForwardingActionRules;
 class PacketDetectionRules;
 
-// TODO navarrothiago check if this class can be called by AbstractFactory.
+// TODO: Check if this class can be called by AbstractFactory.
 class RulesUtilities
 {
 public:
