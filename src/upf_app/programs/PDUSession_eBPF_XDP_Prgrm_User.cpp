@@ -1,5 +1,5 @@
-#include "SessionProgram.h"
-#include <UPFProgram.h>
+#include "PDUSession_eBPF_XDP_Prgrm_User.h"
+#include <UPFEntryPoint_eBPF_XDP_Prgrm_User.h>
 #include <bpf/bpf.h>          // bpf calls
 #include <bpf/libbpf.h>       // bpf wrappers
 #include <sys/resource.h>     // rlimit
@@ -118,8 +118,5 @@ void SessionProgram::initializeMaps()
   mpCounterMap = std::make_shared<BPFMap>(mpMaps->getMap("mc_stats"));
   mpEgressInterfaceMap = std::make_shared<BPFMap>(mpMaps->getMap("m_redirect_interfaces"));
   mpArpTableMap = std::make_shared<BPFMap>(mpMaps->getMap("m_arp_table"));
-
-  // 10.1.2.29 - 90:e2:ba:27:fd:3c
-  // 10.1.3.29 - 90:e2:ba:27:fd:3d
 }
 /*****************************************************************************************************************/

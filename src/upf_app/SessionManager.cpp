@@ -1,7 +1,7 @@
 #include "SessionManager.h"
-#include <SessionProgram.h>
+#include <PDUSession_eBPF_XDP_Prgrm_User.h>
 #include <SessionProgramManager.h>
-#include <UPFProgram.h>
+#include <UPFEntryPoint_eBPF_XDP_Prgrm_User.h>
 #include <bits/stdc++.h> //sort
 #include <interfaces/ForwardingActionRules.h>
 #include <interfaces/PacketDetectionRules.h>

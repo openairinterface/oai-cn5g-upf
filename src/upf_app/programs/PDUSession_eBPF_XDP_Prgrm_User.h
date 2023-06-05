@@ -1,5 +1,5 @@
-#ifndef __SESSIONPROGRAM_H__
-#define __SESSIONPROGRAM_H__
+#ifndef __PDUSESSION_EBPF_XDP_PRGRM_USER_H__
+#define __PDUSESSION_EBPF_XDP_PRGRM_USER_H__
 
 #include <memory>
 #include <map>
@@ -124,9 +124,6 @@ private:
   // The arp table map.
   std::shared_ptr<BPFMap> mpArpTableMap;
 
-  // The iface map.
-  std::shared_ptr<BPFMap> mpIfaceMap;
-
   // The BPF lifecycle program.
   std::shared_ptr<SessionProgramLifeCycle> mpLifeCycle;
 
@@ -136,4 +133,4 @@ private:
   // The UDP interface.
   std::string mUDPInterface;
 };
-#endif // __SESSIONPROGRAM_H__
+#endif // __PDUSESSION_EBPF_XDP_PRGRM_USER_H__

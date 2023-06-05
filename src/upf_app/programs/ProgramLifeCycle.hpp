@@ -103,7 +103,13 @@ private:
 };
 
 template <class BPFSkeletonType>
-ProgramLifeCycle<BPFSkeletonType>::ProgramLifeCycle(std::function<BPFSkeletonType *()> openFunc, std::function<int(BPFSkeletonType *)> loadFunc, std::function<int(BPFSkeletonType *)> attachFunc, std::function<void(BPFSkeletonType *)> destroyFunc)
+ProgramLifeCycle<BPFSkeletonType>::ProgramLifeCycle(
+                                    std::function<BPFSkeletonType *()> \
+                                    openFunc, std::function<int(BPFSkeletonType *)> \
+                                    loadFunc, std::function<int(BPFSkeletonType *)> \
+                                    attachFunc, std::function<void(BPFSkeletonType *)> \
+                                    destroyFunc
+                                    )
     : mOpenFunc(openFunc)
     , mLoadFunc(loadFunc)
     , mAttachFunc(attachFunc)

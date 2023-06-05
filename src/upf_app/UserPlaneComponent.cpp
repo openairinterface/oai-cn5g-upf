@@ -1,10 +1,10 @@
 #include "UserPlaneComponent.h"
 #include <RulesUtilities.h>
 #include <SessionManager.h>
-#include <SessionProgram.h>
+#include <PDUSession_eBPF_XDP_Prgrm_User.h>
 #include <SessionProgramManager.h>
 #include <SignalHandler.h>
-#include <UPFProgram.h>
+#include <UPFEntryPoint_eBPF_XDP_Prgrm_User.h>
 #include <utils/LogDefines.h>
 
 UserPlaneComponent::UserPlaneComponent()

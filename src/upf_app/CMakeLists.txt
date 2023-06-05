@@ -25,9 +25,9 @@ add_library(UPF_XDP STATIC
   SessionProgramManager.cpp
   SessionManager.cpp
   SessionPrograms.cpp
-  programs/UPFProgram.cpp
-  programs/SessionProgram.cpp
-  programs/FARProgram.cpp
+  programs/UPFEntryPoint_eBPF_XDP_Prgrm_User.cpp
+  programs/PDUSession_eBPF_XDP_Prgrm_User.cpp
+  programs/FAR_eBPF_XDP_Prgrm_User.cpp
   programs/BPFProgram.cpp
   wrappers/BPFMaps.cpp
   wrappers/BPFMap.cpp

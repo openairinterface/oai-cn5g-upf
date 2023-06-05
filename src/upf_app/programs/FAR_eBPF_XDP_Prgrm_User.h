@@ -1,5 +1,5 @@
-#ifndef __FARPROGRAM_H__
-#define __FARPROGRAM_H__
+#ifndef __FAR_EBPF_XDP_PRGRM_USER_H__
+#define __FAR_EBPF_XDP_PRGRM_USER_H__
 
 #include <ProgramLifeCycle.hpp>
 #include <atomic>
@@ -117,4 +117,4 @@ private:
   std::shared_ptr<FARProgramLifeCycle> mpLifeCycle;
 };
 
-#endif // __FARPROGRAM_H__
+#endif // __FAR_EBPF_XDP_PRGRM_USER_H__

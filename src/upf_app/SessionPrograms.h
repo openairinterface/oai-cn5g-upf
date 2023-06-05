@@ -2,7 +2,7 @@
 #define __SESSIONPROGRAMS_H__
 
 #include <memory>
-#include <FARProgram.h>
+#include <FAR_eBPF_XDP_Prgrm_User.h>
 #include <unistd.h>
 #include <next_prog_rule_key.h>
 

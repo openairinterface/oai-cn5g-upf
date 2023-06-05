@@ -8,7 +8,7 @@ BPFProgram::BPFProgram(/* args */)
 {
   LOG_FUNC();
   sIdCounter++;
-  LOG_INF("BPFProgram {} created!!!", mId);
+  LOG_INF("BPFProgram {} is created!!!", mId);
 }
 
 /*****************************************************************************************************************/

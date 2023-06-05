@@ -1,5 +1,5 @@
-#ifndef __UPFPROGRAMMANAGER_H__
-#define __UPFPROGRAMMANAGER_H__
+#ifndef __UPFENTRYPOINT_EBPF_XDP_PRGRM_USER_H__
+#define __UPFENTRYPOINT_EBPF_XDP_PRGRM_USER_H__
 
 #include <ProgramLifeCycle.hpp>
 #include <atomic>
@@ -144,4 +144,4 @@ private:
 
 };
 
-#endif // __BPFPROGRAMMANAGER_H__
+#endif // __UPFENTRYPOINT_EBPF_XDP_PRGRM_USER_H__
