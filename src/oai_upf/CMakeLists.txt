@@ -317,10 +317,10 @@ UDP
 GTPV1U
 PFCP
 3GPP_COMMON_TYPES
-far_bpf
-session_bpf
+far_ebpf_xdp
+pfcp_session_pdr_lookup_ebpf_xdp
 upfutils
-upf_xdp_bpf
+pfcp_session_lookup_ebpf_xdp
 UPF_XDP
 gflags glog dl double-conversion folly -Wl,--end-group
 pthread m rt config++

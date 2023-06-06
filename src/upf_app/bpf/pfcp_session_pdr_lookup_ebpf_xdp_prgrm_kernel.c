@@ -1,4 +1,4 @@
-#define KBUILD_MODNAME upf_xdp_bpf
+#define KBUILD_MODNAME pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel
 
 // clang-format off
 #include <types.h>

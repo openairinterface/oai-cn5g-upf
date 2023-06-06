@@ -1,4 +1,4 @@
-#include "UPFEntryPoint_eBPF_XDP_Prgrm_User.h"
+#include "pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h"
 #include <SessionManager.h>
 #include <bpf/bpf.h>       // bpf calls
 #include <bpf/libbpf.h>    // bpf wrappers
@@ -35,7 +35,12 @@ UPFProgram::UPFProgram(const std::string& gtpInterface, const std::string& udpIn
  // // LOG_DBG("GTP Interface: %s, IF_NAME: %d, IPv4: %d \n", gtp_interface.if_name, gtp_interface.ipv4_address);
  // // LOG_DBG("UDP Interface: %s, IF_NAME: %d, IPv4: %d \n", udp_interface.if_name, udp_interface.ipv4_address);
   
-  mpLifeCycle = std::make_shared<UPFProgramLifeCycle>(upf_xdp_bpf_c__open, upf_xdp_bpf_c__load, upf_xdp_bpf_c__attach, upf_xdp_bpf_c__destroy);
+  mpLifeCycle = std::make_shared<UPFProgramLifeCycle>(
+                                                      pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__open, \
+                                                      pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__load, \
+                                                      pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__attach, \
+                                                      pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__destroy
+                                                      );
 }
 
 /*****************************************************************************************************************/
@@ -49,15 +54,15 @@ void UPFProgram::setup()
 {
   LOG_FUNC();
 
-  LOG_DBG("Saving Interfaces in Map");
-  auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
-  auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
+  // LOG_DBG("Saving Interfaces in Map");
+  // auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
+  // auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
   
-  uint32_t gtpInterfaceIndex = if_nametoindex(gtpInterface.c_str());
-  uint32_t udpInterfaceIndex = if_nametoindex(udpInterface.c_str());
+  // uint32_t gtpInterfaceIndex = if_nametoindex(gtpInterface.c_str());
+  // uint32_t udpInterfaceIndex = if_nametoindex(udpInterface.c_str());
   
-  mpIfaceMap->update(gtpInterfaceIndex, gtp_interface.ipv4_address, BPF_ANY);
-  mpIfaceMap->update(udpInterfaceIndex, udp_interface.ipv4_address, BPF_ANY);
+  // mpIfaceMap->update(gtpInterfaceIndex, gtp_interface.ipv4_address, BPF_ANY);
+  // mpIfaceMap->update(udpInterfaceIndex, udp_interface.ipv4_address, BPF_ANY);
  
   spSkeleton = mpLifeCycle->open();
   initializeMaps();

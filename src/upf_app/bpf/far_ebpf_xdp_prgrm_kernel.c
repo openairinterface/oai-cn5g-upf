@@ -18,7 +18,7 @@
 #include <utils/logger.h>
 #include <utils/utils.h>
 #include <far_maps.h>
-#include <upf_xdp_bpf_maps.h>
+//#include <upf_xdp_bpf_maps.h>
 #include <string.h>   //Needed for memcpy
 
 // #ifndef UDP_INTERFACE

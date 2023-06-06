@@ -25,9 +25,9 @@ add_library(UPF_XDP STATIC
   SessionProgramManager.cpp
   SessionManager.cpp
   SessionPrograms.cpp
-  programs/UPFEntryPoint_eBPF_XDP_Prgrm_User.cpp
-  programs/PDUSession_eBPF_XDP_Prgrm_User.cpp
-  programs/FAR_eBPF_XDP_Prgrm_User.cpp
+  programs/pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.cpp
+  programs/pfcp_session_lookup_ebpf_xdp_prgrm_user.cpp
+  programs/far_ebpf_xdp_prgrm_user.cpp
   programs/BPFProgram.cpp
   wrappers/BPFMaps.cpp
   wrappers/BPFMap.cpp
@@ -55,7 +55,7 @@ target_include_directories(UPF_XDP PUBLIC
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/programs>
 )
 
-add_dependencies(UPF_XDP upf_xdp_bpf_all)
+add_dependencies(UPF_XDP upf_ebpf_xdp_all)
 
 # configure_file (
 #     ${PROJECT_SOURCE_DIR}/cmake/Configuration.h.in

@@ -1,8 +1,8 @@
 #include "SessionProgramManager.h"
-#include <FAR_eBPF_XDP_Prgrm_User.h>
-#include <PDUSession_eBPF_XDP_Prgrm_User.h>
+#include <far_ebpf_xdp_prgrm_user.h>
+#include <pfcp_session_lookup_ebpf_xdp_prgrm_user.h>
 #include <SessionPrograms.h>
-#include <UPFEntryPoint_eBPF_XDP_Prgrm_User.h>
+#include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h>
 #include <UserPlaneComponent.h>
 #include <net/if.h> // if_nametoindex
 #include <next_prog_rule_key.h>

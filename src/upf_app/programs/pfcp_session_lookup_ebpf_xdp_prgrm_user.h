@@ -1,12 +1,12 @@
-#ifndef __PDUSESSION_EBPF_XDP_PRGRM_USER_H__
-#define __PDUSESSION_EBPF_XDP_PRGRM_USER_H__
+#ifndef __PFCP_SESSION_LOOKUP_EBPF_XDP_PRGRM_USER_H__
+#define __PFCP_SESSION_LOOKUP_EBPF_XDP_PRGRM_USER_H__
 
 #include <memory>
 #include <map>
-#include <session_bpf_skel.h>
+#include <pfcp_session_lookup_ebpf_xdp_prgrm_kernel_skel.h>
 #include <ProgramLifeCycle.hpp>
 
-using SessionProgramLifeCycle = ProgramLifeCycle<session_bpf_c>;
+using SessionProgramLifeCycle = ProgramLifeCycle<pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c>;
 
 class BPFMaps;
 class BPFMap;
@@ -133,4 +133,4 @@ private:
   // The UDP interface.
   std::string mUDPInterface;
 };
-#endif // __PDUSESSION_EBPF_XDP_PRGRM_USER_H__
+#endif // __PFCP_SESSION_LOOKUP_EBPF_XDP_PRGRM_USER_H__

@@ -1,5 +1,5 @@
-#include "PDUSession_eBPF_XDP_Prgrm_User.h"
-#include <UPFEntryPoint_eBPF_XDP_Prgrm_User.h>
+#include "pfcp_session_lookup_ebpf_xdp_prgrm_user.h"
+#include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h>
 #include <bpf/bpf.h>          // bpf calls
 #include <bpf/libbpf.h>       // bpf wrappers
 #include <sys/resource.h>     // rlimit
@@ -14,7 +14,12 @@ SessionProgram::SessionProgram(const std::string& gtpInterface, const std::strin
   : mGTPInterface(gtpInterface), mUDPInterface(udpInterface)
 {
   LOG_FUNC();
-  mpLifeCycle = std::make_shared<SessionProgramLifeCycle>(session_bpf_c__open, session_bpf_c__load, session_bpf_c__attach, session_bpf_c__destroy);
+  mpLifeCycle = std::make_shared<SessionProgramLifeCycle>(
+                                                          pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__open, \
+                                                          pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__load, \
+                                                          pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__attach, \
+                                                          pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__destroy
+                                                          );
 }
 
 /*****************************************************************************************************************/
