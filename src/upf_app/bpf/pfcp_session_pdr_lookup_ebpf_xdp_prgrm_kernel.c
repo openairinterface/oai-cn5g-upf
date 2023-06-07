@@ -88,6 +88,7 @@ static u32 tail_call_next_prog(struct xdp_md *p_ctx, teid_t_ teid, u8 source_val
 static u32 gtp_handle(struct xdp_md *p_ctx, struct gtpuhdr *p_gtpuh, u32 src_ue_ip)
 {
   void *p_data_end = (void *)(long)p_ctx->data_end;
+  struct gtpu_extn_pdu_session_container* gtpu_ext_hdr =(void *)(p_gtpuh + 1);
 
   if((void *)p_gtpuh + sizeof(*p_gtpuh) > p_data_end) {
     bpf_debug("Invalid GTPU packet");
@@ -102,7 +103,7 @@ static u32 gtp_handle(struct xdp_md *p_ctx, struct gtpuhdr *p_gtpuh, u32 src_ue_
 
   bpf_debug("GTP GPDU received");
 
-  if(!ip_inner_check_ipv4(p_ctx, (struct iphdr *)(p_gtpuh + 1))) {
+  if(!ip_inner_check_ipv4(p_ctx, (struct iphdr *)(gtpu_ext_hdr + 1))) {
     bpf_debug("Invalid IP inner");
     return XDP_DROP;
   }
