@@ -106,23 +106,6 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md* p_ctx, pfcp_far_t_* p_fa
   }
 
   memcpy(p_eth, p_orig_eth, sizeof(*p_eth));
-
-  bpf_debug("Destination MAC:%x:%x:%x:",  p_eth->h_dest[0], p_eth->h_dest[1], p_eth->h_dest[2]);
-  bpf_debug(                "%x:%x:%x\n", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
-  
-  p_mac_address = bpf_map_lookup_elem(&m_arp_table, &p_ip->daddr);
-  if (!p_mac_address) {
-    bpf_debug("MAC address not found!!\n");
-    return XDP_DROP;
-  }
-
-  // swap_src_dst_mac(p_data);
-  memcpy(p_eth->h_dest, p_mac_address, sizeof(p_eth->h_dest));
-
-  bpf_debug("Destination MAC:%x:%x:%x:",  p_eth->h_dest[0], p_eth->h_dest[1], p_eth->h_dest[2]);
-  bpf_debug(                "%x:%x:%x\n", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
-  bpf_debug("Destination IP:%d, \t", p_ip->daddr);
-  bpf_debug("Port:%d\n", p_far->forwarding_parameters.outer_header_creation.port_number);
   
   /*
   |----------------------------------------------------------------|
@@ -187,6 +170,23 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md* p_ctx, pfcp_far_t_* p_fa
   |-------------------------- Add GTP header ----------------------|
   |----------------------------------------------------------------|
   */
+  bpf_debug("Destination MAC:%x:%x:%x:",  p_eth->h_dest[0], p_eth->h_dest[1], p_eth->h_dest[2]);
+  bpf_debug(                "%x:%x:%x\n", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
+  
+  p_mac_address = bpf_map_lookup_elem(&m_arp_table, &p_ip->daddr);
+  if (!p_mac_address) {
+    bpf_debug("MAC address not found!!\n");
+    return XDP_DROP;
+  }
+
+  // swap_src_dst_mac(p_data);
+  memcpy(p_eth->h_dest, p_mac_address, sizeof(p_eth->h_dest));
+
+  bpf_debug("Destination MAC:%x:%x:%x:",  p_eth->h_dest[0], p_eth->h_dest[1], p_eth->h_dest[2]);
+  bpf_debug(                "%x:%x:%x\n", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
+  bpf_debug("Destination IP:%d, \t", p_ip->daddr);
+  bpf_debug("Port:%d\n", p_far->forwarding_parameters.outer_header_creation.port_number);
+
   struct gtpuhdr* p_gtpuh = (void*) (p_udp + 1);
   if ((void*) (p_gtpuh + 1) > p_data_end) {
     return XDP_DROP;
