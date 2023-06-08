@@ -8,7 +8,7 @@
 class SessionManager;
 class RulesUtilities;
 class PFCP_Session_PDR_Lookup;
-class SessionProgram;
+class PFCP_Session_LookupProgram;
 
 /**
  * @brief User Plane component class to abstract the BPF Service Function Chain for mobile core network.
@@ -126,8 +126,8 @@ private:
   // The PFCP_Session_PDR_Lookup (BPF program entry point) reference.
   std::shared_ptr<PFCP_Session_PDR_Lookup> mpPFCP_Session_PDR_Lookup;
 
-  // The SessionProgram (BPF program for PFCP Session) reference.
-  std::shared_ptr<SessionProgram> mpSessionProgram;
+  // The PFCP_Session_LookupProgram (BPF program for PFCP Session) reference.
+  std::shared_ptr<PFCP_Session_LookupProgram> mpPFCP_Session_LookupProgram;
 
   // The GTP interface.
   std::string mGTPInterface;

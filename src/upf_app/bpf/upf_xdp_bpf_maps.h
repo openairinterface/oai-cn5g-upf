@@ -13,7 +13,7 @@
 #define MAX_LENGTH 10
 
 /*****************************************************************************************************************/
-// Maps TEID to SessionProgram
+// Maps TEID to PFCP_Session_LookupProgram
 struct bpf_map_def SEC("maps") m_teid_session = {
   .type        = BPF_MAP_TYPE_PROG_ARRAY,           //!< Must have the key and value with 4 bytes
 	.key_size    = sizeof(teid_t_),                   //!< program identifier.
@@ -24,7 +24,7 @@ struct bpf_map_def SEC("maps") m_teid_session = {
 };
 
 /*****************************************************************************************************************/
-// Maps UE IPv4 address to SessionProgram
+// Maps UE IPv4 address to PFCP_Session_LookupProgram
 // FIXME: Select a primary key. We could use a hash value of the IP as a key.
 struct bpf_map_def SEC("maps") m_ueip_session = {
 	.type        = BPF_MAP_TYPE_PROG_ARRAY,           //!< Must have the key and value with 4 bytes

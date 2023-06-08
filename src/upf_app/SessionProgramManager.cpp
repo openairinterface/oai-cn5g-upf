@@ -178,11 +178,11 @@ void SessionProgramManager::create(uint32_t seid)
     throw std::runtime_error("Cannot create a new program with key (seid)");
   }
 
-  // Instantiate a new SessionProgram
+  // Instantiate a new PFCP_Session_LookupProgram
   auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
   auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
-  std::shared_ptr<SessionProgram> pSessionProgram = std::make_shared<SessionProgram>(gtpInterface, udpInterface);
-  pSessionProgram->setup();
+  std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram = std::make_shared<PFCP_Session_LookupProgram>(gtpInterface, udpInterface);
+  pPFCP_Session_LookupProgram->setup();
 
   // Initialize key egress interface map.
   uint32_t udpInterfaceIndex = if_nametoindex(udpInterface.c_str());
@@ -191,11 +191,11 @@ void SessionProgramManager::create(uint32_t seid)
   uint32_t uplinkId = static_cast<uint32_t>(FlowDirection::UPLINK);
   uint32_t downlinkId = static_cast<uint32_t>(FlowDirection::DOWNLINK);
   
-  pSessionProgram->getEgressInterfaceMap()->update(uplinkId, udpInterfaceIndex, BPF_ANY);
-  pSessionProgram->getEgressInterfaceMap()->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
+  pPFCP_Session_LookupProgram->getEgressInterfaceMap()->update(uplinkId, udpInterfaceIndex, BPF_ANY);
+  pPFCP_Session_LookupProgram->getEgressInterfaceMap()->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
 
-  // Update the SessionProgram map.
-  mSessionProgramMap.insert(std::pair<uint32_t, std::shared_ptr<SessionProgram>>(seid, pSessionProgram));
+  // Update the PFCP_Session_LookupProgram map.
+  mSessionProgramMap.insert(std::pair<uint32_t, std::shared_ptr<PFCP_Session_LookupProgram>>(seid, pPFCP_Session_LookupProgram));
 }
 
 /*****************************************************************************************************************/
@@ -220,7 +220,7 @@ void SessionProgramManager::removeAll()
   for(auto pair : mSessionProgramMap) {
     pair.second->tearDown();
 
-    // Notify observer that a SessionProgram was removed.
+    // Notify observer that a PFCP_Session_LookupProgram was removed.
     mpOnNewSessionProgramObserver->onDestroySessionProgram(pair.first);
   }
   mSessionProgramMap.clear();
@@ -234,17 +234,17 @@ void SessionProgramManager::setOnNewSessionObserver(OnStateChangeSessionProgramO
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<SessionProgram> SessionProgramManager::findSessionProgram(uint32_t seid)
+std::shared_ptr<PFCP_Session_LookupProgram> SessionProgramManager::findSessionProgram(uint32_t seid)
 {
   LOG_FUNC();
-  std::shared_ptr<SessionProgram> pSessionProgram;
+  std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram;
 
   auto it = mSessionProgramMap.find(seid);
   if(it != mSessionProgramMap.end()) {
-    pSessionProgram = it->second;
+    pPFCP_Session_LookupProgram = it->second;
   }
 
-  return pSessionProgram;
+  return pPFCP_Session_LookupProgram;
 }
 
 /*****************************************************************************************************************/

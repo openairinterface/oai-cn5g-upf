@@ -10,11 +10,11 @@
 
 
 /*****************************************************************************************************************/
-SessionProgram::SessionProgram(const std::string& gtpInterface, const std::string& udpInterface)
+PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(const std::string& gtpInterface, const std::string& udpInterface)
   : mGTPInterface(gtpInterface), mUDPInterface(udpInterface)
 {
   LOG_FUNC();
-  mpLifeCycle = std::make_shared<SessionProgramLifeCycle>(
+  mpLifeCycle = std::make_shared<PFCP_Session_LookupProgramLifeCycle>(
                                                           pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__open, \
                                                           pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__load, \
                                                           pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__attach, \
@@ -23,14 +23,14 @@ SessionProgram::SessionProgram(const std::string& gtpInterface, const std::strin
 }
 
 /*****************************************************************************************************************/
-SessionProgram::~SessionProgram()
+PFCP_Session_LookupProgram::~PFCP_Session_LookupProgram()
 {
   LOG_FUNC();
 }
 
 /*****************************************************************************************************************/
 // TODO: Pass configuration throught args.
-void SessionProgram::setup()
+void PFCP_Session_LookupProgram::setup()
 {
   LOG_FUNC();
 
@@ -46,70 +46,70 @@ void SessionProgram::setup()
 }
 
 /*****************************************************************************************************************/
-void SessionProgram::tearDown()
+void PFCP_Session_LookupProgram::tearDown()
 {
   LOG_FUNC();
   mpLifeCycle->tearDown();
 }
 
 /*****************************************************************************************************************/
-int SessionProgram::getUplinkFileDescriptor() const
+int PFCP_Session_LookupProgram::getUplinkFileDescriptor() const
 {
   LOG_FUNC();
   return bpf_program__fd(mpLifeCycle->getBPFSkeleton()->progs.uplink_entry_point);
 }
 
 /*****************************************************************************************************************/
-int SessionProgram::getDownlinkFileDescriptor() const
+int PFCP_Session_LookupProgram::getDownlinkFileDescriptor() const
 {
   LOG_FUNC();
   return bpf_program__fd(mpLifeCycle->getBPFSkeleton()->progs.downlink_entry_point);
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> SessionProgram::getFARMap() const
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getFARMap() const
 {
   LOG_FUNC();
   return mpFARMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> SessionProgram::getUplinkPDRsMap() const
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getUplinkPDRsMap() const
 {
   LOG_FUNC();
   return mpUplinkPDRsMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> SessionProgram::getDownlinkPDRsMap() const
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getDownlinkPDRsMap() const
 {
   LOG_FUNC();
   return mpDownlinkPDRsMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> SessionProgram::getCounterMap() const
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getCounterMap() const
 {
   LOG_FUNC();
   return mpCounterMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> SessionProgram::getEgressInterfaceMap() const
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getEgressInterfaceMap() const
 {
   LOG_FUNC();
   return mpEgressInterfaceMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> SessionProgram::getArpTableMap() const
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getArpTableMap() const
 {
   LOG_FUNC();
   return mpArpTableMap;
 }
 
 /*****************************************************************************************************************/
-void SessionProgram::initializeMaps()
+void PFCP_Session_LookupProgram::initializeMaps()
 {
   LOG_FUNC();
   // Store all maps available in the program.
