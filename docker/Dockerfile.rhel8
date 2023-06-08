@@ -118,6 +118,8 @@ COPY --from=oai-upf-builder \
     /lib64/libgflags.so.2.1 \
     /lib64/libglog.so.0 \
     /lib64/libdouble-conversion.so.1 \
+    /usr/local/lib64/libspdlog.so \
+    /usr/local/lib64/libfmt.so \
     /lib64/
 RUN ldconfig && \
     ldd /oai-upf/bin/oai_upf

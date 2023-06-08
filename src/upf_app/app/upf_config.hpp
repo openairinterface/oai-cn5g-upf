@@ -41,6 +41,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string>
+#include "logger.hpp"
 
 namespace upf {
 
@@ -91,6 +92,7 @@ namespace upf {
 #define UPF_CONFIG_STRING_5G_FEATURES_DNN "DNN"
 #define UPF_CONFIG_STRING_5G_FEATURES_USE_FQDN_NRF "USE_FQDN_NRF"
 #define UPF_CONFIG_STRING_5G_FEATURES_UPF_INFO_DNN_LIST "DNN_LIST"
+#define UPF_CONFIG_STRING_LOG_LEVEL "LOG_LEVEL"
 
 #define UPF_ABORT_ON_ERROR true
 #define UPG_WARN_ON_ERROR false
@@ -141,6 +143,7 @@ class upf_config {
   std::string pid_dir;
   unsigned int instance;
   std::string fqdn;
+  spdlog::level::level_enum log_level;
   interface_cfg_t n3;
   interface_cfg_t n6;
   interface_cfg_t n4;
@@ -206,6 +209,8 @@ class upf_config {
     upf_5g_features.nrf_addr.port             = 80;
     upf_5g_features.nrf_addr.api_version      = "v1";
     upf_5g_features.nrf_addr.fqdn             = {};
+  
+    log_level = spdlog::level::debug;
   };
 
   void lock() { m_rw_lock.lock(); };

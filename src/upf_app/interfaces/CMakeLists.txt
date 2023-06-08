@@ -8,7 +8,7 @@ include_directories(${SRC_TOP_DIR}/pfcp)
 include_directories(${SRC_TOP_DIR}/common)
 include_directories(${SRC_TOP_DIR}/common/utils)
 
-include_directories(${SRC_TOP_DIR}/../build/ext/spdlog/include)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
 
 add_library(interfaces STATIC
   ${CMAKE_CURRENT_SOURCE_DIR}/ForwardingActionRulesImpl.cpp
