@@ -1,4 +1,3 @@
-set(CMAKE_C_FLAGS "-Wno-unused-parameter -Wno-unused-variable -Wno-unused-function -Wno-error -Wno-return-type -Wno-empty-body")
 include(${SRC_TOP_DIR}/upf_app/cmake/toolchain.cmake)
 include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
