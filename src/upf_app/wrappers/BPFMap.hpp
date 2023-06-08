@@ -4,6 +4,7 @@
 #include <bpf/bpf.h>
 #include <bpf/libbpf.h>
 #include <utils/LogDefines.h>
+#include "logger.hpp"
 
 /**
  * @brief This class abstracts the communication with a specific BPF map.
@@ -94,10 +95,12 @@ int BPFMap::update(KeyType &key, ValueType &value, int flags)
   if(updateReturn != 0) {
     // FIXME: Maybe Key is not support by fmt.
     // LOG_ERROR("{}. The key {} cannot be updated in map {}", strerror(updateReturn), key, mName);
+    Logger::upf_app().error("The key cannot be updated in map ");
     throw std::runtime_error("The BPF map cannot be updated");
   }else{
     // LOG_DBG("The key {} was updated at {} map!", key, mName);
     // LOG_DBG("The key was updated at {} map!", mName);
+    Logger::upf_app().error("The key was updated at %s map! ", mName.c_str());
   }
   return updateReturn;
 }
@@ -111,9 +114,12 @@ int BPFMap::remove(KeyType &key)
 
   if(deleteReturn != 0) {
     // LOG_ERROR("{}. The key {} cannot be removed in map {}", strerror(deleteReturn), key, mName);
+    Logger::upf_app().error("The key cannot be removed in map ");
     throw std::runtime_error("The BPF map cannot be removed");
   } else {
     // LOG_DBG("The key {} was removed at {} map!", key, mName);
+    // Logger::upf_app().error("The key %d was removed at %s map! ",key, mName.c_str());
+    Logger::upf_app().error("The key was updated at %s map! ", mName.c_str());
   }
 
   return deleteReturn;
