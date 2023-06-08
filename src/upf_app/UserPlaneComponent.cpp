@@ -39,10 +39,10 @@ std::shared_ptr<RulesUtilities> UserPlaneComponent::getRulesUtilities() const
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<PFCP_Session_PDR_Lookup> UserPlaneComponent::getPFCP_Session_PDR_Lookup() const
+std::shared_ptr<PFCP_Session_PDR_LookupProgram> UserPlaneComponent::getPFCP_Session_PDR_LookupProgram() const
 {
   LOG_FUNC();
-  return mpPFCP_Session_PDR_Lookup;
+  return mpPFCP_Session_PDR_LookupProgram;
 }
 
 /*****************************************************************************************************************/
@@ -63,14 +63,14 @@ std::string UserPlaneComponent::getUDPInterface() const
 void UserPlaneComponent::onNewSessionProgram(u_int32_t programId, u_int32_t fileDescriptor)
 {
   LOG_FUNC();
-  mpPFCP_Session_PDR_Lookup->updateProgramMap(programId, fileDescriptor);
+  mpPFCP_Session_PDR_LookupProgram->updateProgramMap(programId, fileDescriptor);
 }
 
 /*****************************************************************************************************************/
 void UserPlaneComponent::onDestroySessionProgram(u_int32_t programId)
 {
   LOG_FUNC();
-  mpPFCP_Session_PDR_Lookup->removeProgramMap(programId);
+  mpPFCP_Session_PDR_LookupProgram->removeProgramMap(programId);
 }
 
 /*****************************************************************************************************************/
@@ -100,15 +100,15 @@ void UserPlaneComponent::setup(
   mpRulesUtilities = pRulesUtilities;
   mGTPInterface = gtpInterface;
   mUDPInterface = udpInterface;
-  mpPFCP_Session_PDR_Lookup = std::make_shared<PFCP_Session_PDR_Lookup>(gtpInterface, udpInterface);
+  mpPFCP_Session_PDR_LookupProgram = std::make_shared<PFCP_Session_PDR_LookupProgram>(gtpInterface, udpInterface);
 
-  if(!mpPFCP_Session_PDR_Lookup) {
+  if(!mpPFCP_Session_PDR_LookupProgram) {
     LOG_ERROR("Program not initialized");
     throw std::runtime_error("Program not initialized");
   }
 
   SignalHandler::getInstance().enable();
-  mpPFCP_Session_PDR_Lookup->setup();
+  mpPFCP_Session_PDR_LookupProgram->setup();
 
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();
@@ -119,6 +119,6 @@ void UserPlaneComponent::setup(
 void UserPlaneComponent::tearDown()
 {
   LOG_FUNC();
-  mpPFCP_Session_PDR_Lookup->tearDown();
+  mpPFCP_Session_PDR_LookupProgram->tearDown();
   SessionProgramManager::getInstance().removeAll();
 }

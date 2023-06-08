@@ -18,25 +18,25 @@ class SessionManager;
 class RulesUtilities;
 
 
-using PFCP_Session_PDR_LookupLifeCycle = ProgramLifeCycle<pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c>;
+using PFCP_Session_PDR_LookupProgramLifeCycle = ProgramLifeCycle<pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c>;
 
 /**
  * @brief Singleton class to abrastract the UPF bpf program.
  */
-class PFCP_Session_PDR_Lookup
+class PFCP_Session_PDR_LookupProgram
 {
 public:
   /**
-   * @brief Construct a new PFCP_Session_PDR_Lookup object.
+   * @brief Construct a new PFCP_Session_PDR_LookupProgram object.
    *
    */
-  explicit PFCP_Session_PDR_Lookup(const std::string& gtpInterface, const std::string& udpInterface);
+  explicit PFCP_Session_PDR_LookupProgram(const std::string& gtpInterface, const std::string& udpInterface);
   
   /*****************************************************************************************************************/
   /**
-   * @brief Destroy the PFCP_Session_PDR_Lookup object
+   * @brief Destroy the PFCP_Session_PDR_LookupProgram object
    */
-  virtual ~PFCP_Session_PDR_Lookup();
+  virtual ~PFCP_Session_PDR_LookupProgram();
 
   /*****************************************************************************************************************/
   /**
@@ -147,7 +147,7 @@ private:
   std::shared_ptr<BPFMap> mpNextProgRuleMap;
 
   // The BPF lifecycle program.
-  std::shared_ptr<PFCP_Session_PDR_LookupLifeCycle> mpLifeCycle;
+  std::shared_ptr<PFCP_Session_PDR_LookupProgramLifeCycle> mpLifeCycle;
 
   // The GTP interface.
   std::string mGTPInterface;

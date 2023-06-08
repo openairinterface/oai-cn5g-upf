@@ -55,7 +55,7 @@ void SessionManager::createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSessi
   std::sort(pSession->pdrs.begin(), pSession->pdrs.end(), SessionManager::comparePDR);
 
   LOG_DBG("Extract the key (PDI) from the highest priority PDR");
-  auto pPFCP_Session_PDR_Lookup = UserPlaneComponent::getInstance().getPFCP_Session_PDR_Lookup();
+  auto pPFCP_Session_PDR_LookupProgram = UserPlaneComponent::getInstance().getPFCP_Session_PDR_LookupProgram();
 
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
@@ -73,7 +73,7 @@ void SessionManager::createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSessi
   }
   LOG_DBG("PDI extracted from PDR {}", pdrHighPriority->pdr_id.rule_id);
 
-  // pPFCP_Session_PDR_Lookup->getNextProgRuleMap()->update(&next_rule_prog_index_key)
+  // pPFCP_Session_PDR_LookupProgram->getNextProgRuleMap()->update(&next_rule_prog_index_key)
   LOG_DBG("Extract FAR from the highest priority PDR");
   std::shared_ptr<pfcp::pfcp_far> pFar;
   pfcp::far_id_t farId;

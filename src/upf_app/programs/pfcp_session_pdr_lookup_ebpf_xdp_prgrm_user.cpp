@@ -14,7 +14,7 @@ using namespace upf;
 //upf_config upf_cfg;
 
 /*****************************************************************************************************************/
-PFCP_Session_PDR_Lookup::PFCP_Session_PDR_Lookup(const std::string& gtpInterface, const std::string& udpInterface)
+PFCP_Session_PDR_LookupProgram::PFCP_Session_PDR_LookupProgram(const std::string& gtpInterface, const std::string& udpInterface)
  : mGTPInterface(gtpInterface), mUDPInterface(udpInterface)
 {
   LOG_FUNC();
@@ -35,7 +35,7 @@ PFCP_Session_PDR_Lookup::PFCP_Session_PDR_Lookup(const std::string& gtpInterface
  // // LOG_DBG("GTP Interface: %s, IF_NAME: %d, IPv4: %d \n", gtp_interface.if_name, gtp_interface.ipv4_address);
  // // LOG_DBG("UDP Interface: %s, IF_NAME: %d, IPv4: %d \n", udp_interface.if_name, udp_interface.ipv4_address);
   
-  mpLifeCycle = std::make_shared<PFCP_Session_PDR_LookupLifeCycle>(
+  mpLifeCycle = std::make_shared<PFCP_Session_PDR_LookupProgramLifeCycle>(
                                                       pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__open, \
                                                       pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__load, \
                                                       pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__attach, \
@@ -44,13 +44,13 @@ PFCP_Session_PDR_Lookup::PFCP_Session_PDR_Lookup(const std::string& gtpInterface
 }
 
 /*****************************************************************************************************************/
-PFCP_Session_PDR_Lookup::~PFCP_Session_PDR_Lookup()
+PFCP_Session_PDR_LookupProgram::~PFCP_Session_PDR_LookupProgram()
 {
   LOG_FUNC();
 }
 
 /*****************************************************************************************************************/
-void PFCP_Session_PDR_Lookup::setup()
+void PFCP_Session_PDR_LookupProgram::setup()
 {
   LOG_FUNC();
 
@@ -80,7 +80,7 @@ void PFCP_Session_PDR_Lookup::setup()
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMaps> PFCP_Session_PDR_Lookup::getMaps()
+std::shared_ptr<BPFMaps> PFCP_Session_PDR_LookupProgram::getMaps()
 {
   LOG_FUNC();
   return mpMaps;
@@ -89,21 +89,21 @@ std::shared_ptr<BPFMaps> PFCP_Session_PDR_Lookup::getMaps()
 /*****************************************************************************************************************/
 // TODO: Check when kill when running.
 // It was noted the infinity loop.
-void PFCP_Session_PDR_Lookup::tearDown()
+void PFCP_Session_PDR_LookupProgram::tearDown()
 {
   LOG_FUNC();
   mpLifeCycle->tearDown();
 }
 
 /*****************************************************************************************************************/
-void PFCP_Session_PDR_Lookup::updateProgramMap(uint32_t key, uint32_t fd)
+void PFCP_Session_PDR_LookupProgram::updateProgramMap(uint32_t key, uint32_t fd)
 {
   LOG_FUNC();
   mpTeidSessionMap->update(key, fd, BPF_ANY);
 }
 
 /*****************************************************************************************************************/
-void PFCP_Session_PDR_Lookup::removeProgramMap(uint32_t key)
+void PFCP_Session_PDR_LookupProgram::removeProgramMap(uint32_t key)
 {
   LOG_FUNC();
   s32 fd;
@@ -114,42 +114,42 @@ void PFCP_Session_PDR_Lookup::removeProgramMap(uint32_t key)
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_PDR_Lookup::getTeidSessionMap() const
+std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getTeidSessionMap() const
 {
   LOG_FUNC();
   return mpTeidSessionMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_PDR_Lookup::getUeIpSessionMap() const
+std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getUeIpSessionMap() const
 {
   LOG_FUNC();
   return mpUeIpSessionMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_PDR_Lookup::getNextProgRuleMap() const
+std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getNextProgRuleMap() const
 {
   LOG_FUNC();
   return mpNextProgRuleMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_PDR_Lookup::getNextProgRuleIndexMap() const
+std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getNextProgRuleIndexMap() const
 {
   LOG_FUNC();
   return mpNextProgRuleIndexMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_PDR_Lookup::getIfaceMap() const
+std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getIfaceMap() const
 {
   LOG_FUNC();
   return mpIfaceMap;
 }
 
 /*****************************************************************************************************************/
-void PFCP_Session_PDR_Lookup::initializeMaps()
+void PFCP_Session_PDR_LookupProgram::initializeMaps()
 {
   LOG_FUNC();
   // Store all maps available in the program.

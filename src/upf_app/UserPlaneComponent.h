@@ -7,7 +7,7 @@
 
 class SessionManager;
 class RulesUtilities;
-class PFCP_Session_PDR_Lookup;
+class PFCP_Session_PDR_LookupProgram;
 class PFCP_Session_LookupProgram;
 
 /**
@@ -72,11 +72,11 @@ public:
 
   /*****************************************************************************************************************/
   /**
-   * @brief Get PFCP_Session_PDR_Lookup object.
+   * @brief Get PFCP_Session_PDR_LookupProgram object.
    *
-   * @return std::shared_ptr<PFCP_Session_PDR_Lookup> The PFCP_Session_PDR_Lookup reference.
+   * @return std::shared_ptr<PFCP_Session_PDR_LookupProgram> The PFCP_Session_PDR_LookupProgram reference.
    */
-  std::shared_ptr<PFCP_Session_PDR_Lookup> getPFCP_Session_PDR_Lookup() const;
+  std::shared_ptr<PFCP_Session_PDR_LookupProgram> getPFCP_Session_PDR_LookupProgram() const;
 
   /*****************************************************************************************************************/
   /**
@@ -123,8 +123,8 @@ private:
   // The rules factory reference.
   std::shared_ptr<RulesUtilities> mpRulesUtilities;
 
-  // The PFCP_Session_PDR_Lookup (BPF program entry point) reference.
-  std::shared_ptr<PFCP_Session_PDR_Lookup> mpPFCP_Session_PDR_Lookup;
+  // The PFCP_Session_PDR_LookupProgram (BPF program entry point) reference.
+  std::shared_ptr<PFCP_Session_PDR_LookupProgram> mpPFCP_Session_PDR_LookupProgram;
 
   // The PFCP_Session_LookupProgram (BPF program for PFCP Session) reference.
   std::shared_ptr<PFCP_Session_LookupProgram> mpPFCP_Session_LookupProgram;
