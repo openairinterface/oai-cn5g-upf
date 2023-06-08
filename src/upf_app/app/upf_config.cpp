@@ -323,10 +323,10 @@ int upf_config::load(const string& config_file) {
   // Log Level
   try {
     std::string string_level;
-    spgwu_cfg.lookupValue(SPGWU_CONFIG_STRING_LOG_LEVEL, string_level);
+    upf_cfg.lookupValue(UPF_CONFIG_STRING_LOG_LEVEL, string_level);
     log_level = spdlog::level::from_str(string_level);
   } catch (const SettingNotFoundException& nfex) {
-    Logger::spgwu_app().error(
+    Logger::upf_app().error(
         "%s : %s, using defaults", nfex.what(), nfex.getPath());
   }
 

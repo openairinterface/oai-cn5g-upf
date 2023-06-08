@@ -5,7 +5,7 @@
 #include <spdlog/logger.h>
 #include <spdlog/spdlog.h>
 
-#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
+// #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 
 namespace Utils{
   /*****************************************************************************************************************/
@@ -69,7 +69,7 @@ namespace Utils{
   { 
     // TODO: Put definition depending on the spdlog version.
     std::shared_ptr<spdlog::sinks::sink> pColorSink;
-    pColorSink = std::make_shared<spdlog::sinks::stdout_sink_mt>();
+    pColorSink = std::make_shared<spdlog::sinks::ansicolor_stdout_sink_mt>();
     mpLogger = std::make_shared<spdlog::logger>("upf_logger", pColorSink);
     mpLogger->set_level(spdlog::level::debug);
   }

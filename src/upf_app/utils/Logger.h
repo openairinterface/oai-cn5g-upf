@@ -1,6 +1,13 @@
 #ifndef __LOGGER_H__
 #define __LOGGER_H__
 
+// Used by SPDLOG to use external FMT library
+#define SPDLOG_FMT_EXTERNAL
+
+// this way we redefine: warn->start, error->warn, critical->error
+#define SPDLOG_LEVEL_NAMES                                                     \
+  {"trace", "debug", "info", "start", "warning", "error", "off"};
+
 #include <memory>
 #include <spdlog/spdlog.h>
 #include <string>

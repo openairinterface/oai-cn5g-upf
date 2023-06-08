@@ -93,11 +93,11 @@ int BPFMap::update(KeyType &key, ValueType &value, int flags)
 
   if(updateReturn != 0) {
     // FIXME: Maybe Key is not support by fmt.
-    LOG_ERROR("{}. The key {} cannot be updated in map {}", strerror(updateReturn), key, mName);
+    // LOG_ERROR("{}. The key {} cannot be updated in map {}", strerror(updateReturn), key, mName);
     throw std::runtime_error("The BPF map cannot be updated");
   }else{
-    LOG_DBG("The key {} was updated at {} map!", key, mName);
-    LOG_DBG("The key was updated at {} map!", mName);
+    // LOG_DBG("The key {} was updated at {} map!", key, mName);
+    // LOG_DBG("The key was updated at {} map!", mName);
   }
   return updateReturn;
 }
@@ -110,10 +110,10 @@ int BPFMap::remove(KeyType &key)
   int deleteReturn = bpf_map_delete_elem(mapFd, &key);
 
   if(deleteReturn != 0) {
-    LOG_ERROR("{}. The key {} cannot be removed in map {}", strerror(deleteReturn), key, mName);
+    // LOG_ERROR("{}. The key {} cannot be removed in map {}", strerror(deleteReturn), key, mName);
     throw std::runtime_error("The BPF map cannot be removed");
   } else {
-    LOG_DBG("The key {} was removed at {} map!", key, mName);
+    // LOG_DBG("The key {} was removed at {} map!", key, mName);
   }
 
   return deleteReturn;

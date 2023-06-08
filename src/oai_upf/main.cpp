@@ -164,7 +164,7 @@ int main(int argc, char** argv) {
   // Config
   upf_cfg.load(Options::getlibconfigConfig());
   upf_cfg.display();
-  Logger::set_level(spgwu_cfg.log_level);
+  Logger::set_level(upf_cfg.log_level);
   
   // Inter task Interface
   itti_inst = new itti_mw();

@@ -1,5 +1,6 @@
 #include_directories(${CMAKE_SOURCE_DIR}/)
 include_directories(${SRC_TOP_DIR}/upf_app)
+include_directories(${SRC_TOP_DIR}/upf_app/utils)
 include_directories(${SRC_TOP_DIR}/upf_app/include)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
@@ -18,11 +19,11 @@ add_library(interfaces STATIC
 )
 
 # target_link_libraries(interfaces
-#   PRIVATE httplib::httplib
+#   # PRIVATE httplib::httplib
 #   #PRIVATE nlohmann_json::nlohmann_json
 #   #PRIVATE upf_xdp
 #   #asan
-#   #spdlog::spdlog
+#   PRIVATE spdlog
 #   #upfutils
 #   #oai
 # )
