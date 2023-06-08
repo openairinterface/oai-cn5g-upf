@@ -5,11 +5,12 @@
 #include <SessionProgramManager.h>
 #include <SignalHandler.h>
 #include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h>
-#include <utils/LogDefines.h>
+// // #include <utils/LogDefines.h>
+#include "logger.hpp"
 
 UserPlaneComponent::UserPlaneComponent()
 {
-  LOG_FUNC();
+  
 // Set new handlers for libbpf.
 #ifdef DEBUG_LIBBPF
   libbpf_set_print(UserPlaneComponent::printLibbpfLog);
@@ -18,49 +19,49 @@ UserPlaneComponent::UserPlaneComponent()
 
 UserPlaneComponent::~UserPlaneComponent()
 {
-  LOG_FUNC();
+  
   tearDown();
 }
 
 std::shared_ptr<SessionManager> UserPlaneComponent::getSessionManager() const
 {
-  LOG_FUNC();
+  
   return mpSessionManager;
 }
 
 std::shared_ptr<RulesUtilities> UserPlaneComponent::getRulesUtilities() const
 {
-  LOG_FUNC();
+  
   return mpRulesUtilities;
 }
 
 std::shared_ptr<UPFProgram> UserPlaneComponent::getUPFProgram() const
 {
-  LOG_FUNC();
+  
   return mpUPFProgram;
 }
 
 std::string UserPlaneComponent::getGTPInterface() const
 {
-  LOG_FUNC();
+  
   return mGTPInterface;
 }
 
 std::string UserPlaneComponent::getUDPInterface() const
 {
-  LOG_FUNC();
+  
   return mUDPInterface;
 }
 
 void UserPlaneComponent::onNewSessionProgram(u_int32_t programId, u_int32_t fileDescriptor)
 {
-  LOG_FUNC();
+  
   mpUPFProgram->updateProgramMap(programId, fileDescriptor);
 }
 
 void UserPlaneComponent::onDestroySessionProgram(u_int32_t programId)
 {
-  LOG_FUNC();
+  
   mpUPFProgram->removeProgramMap(programId);
 }
 
@@ -72,14 +73,14 @@ int UserPlaneComponent::printLibbpfLog(enum libbpf_print_level lvl, const char *
 
 UserPlaneComponent &UserPlaneComponent::getInstance()
 {
-  LOG_FUNC();
+  
   static UserPlaneComponent sInstance;
   return sInstance;
 }
 
 void UserPlaneComponent::setup(std::shared_ptr<RulesUtilities> pRulesUtilities, const std::string& gtpInterface, const std::string& udpInterface)
 {
-  LOG_FUNC();
+  
 
   mpRulesUtilities = pRulesUtilities;
   mGTPInterface = gtpInterface;
@@ -87,7 +88,7 @@ void UserPlaneComponent::setup(std::shared_ptr<RulesUtilities> pRulesUtilities, 
   mpUPFProgram = std::make_shared<UPFProgram>(gtpInterface, udpInterface);
 
   if(!mpUPFProgram) {
-    LOG_ERROR("Program not initialized");
+    Logger::upf_app().error("Program not initialized");
     throw std::runtime_error("Program not initialized");
   }
 
@@ -101,7 +102,7 @@ void UserPlaneComponent::setup(std::shared_ptr<RulesUtilities> pRulesUtilities, 
 
 void UserPlaneComponent::tearDown()
 {
-  LOG_FUNC();
+  
   mpUPFProgram->tearDown();
   SessionProgramManager::getInstance().removeAll();
 }

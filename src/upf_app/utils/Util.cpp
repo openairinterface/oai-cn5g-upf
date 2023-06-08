@@ -6,7 +6,7 @@
 #include <sstream>
 #include <iostream>
 
-Util::~Util() { LOG_FUNC(); }
+Util::~Util() { }
 
 // C - https://stackoverflow.com/a/7326381/2203249
 // C++ - https://stackoverflow.com/a/34949247/2203249

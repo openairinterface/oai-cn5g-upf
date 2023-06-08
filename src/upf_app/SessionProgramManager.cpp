@@ -10,8 +10,9 @@
 #include <pfcp/pfcp_far.h>
 #include <spdlog/fmt/ostr.h>
 #include <types.h>
-#include <utils/LogDefines.h>
+// // #include <utils/LogDefines.h>
 #include <wrappers/BPFMap.hpp>
+#include "logger.hpp"
 
 #include <arpa/inet.h>
 
@@ -40,14 +41,14 @@ std::ostream &operator<<(std::ostream &Str, struct next_rule_prog_index_key cons
 /*****************************************************************************************************************/
 SessionProgramManager::~SessionProgramManager()
 {
-  LOG_FUNC();
+ 
   removeAll();
 }
 
 /*****************************************************************************************************************/
 SessionProgramManager &SessionProgramManager::getInstance()
 {
-  LOG_FUNC();
+ 
   static SessionProgramManager sInstance;
   return sInstance;
 }
@@ -55,7 +56,7 @@ SessionProgramManager &SessionProgramManager::getInstance()
 /*****************************************************************************************************************/
 void SessionProgramManager::setTeidSessionMap(std::shared_ptr<BPFMap> pProgramsMaps)
 {
-  LOG_FUNC();
+ 
   mpTeidSessionMap = pProgramsMaps;
 }
 
@@ -64,7 +65,7 @@ void SessionProgramManager::setTeidSessionMap(std::shared_ptr<BPFMap> pProgramsM
 void SessionProgramManager::createPipeline(uint32_t seid, uint32_t teid, uint8_t sourceInterface, uint32_t ueIpAddress,
                                    std::shared_ptr<pfcp::pfcp_far> pFar)
 {
-  LOG_FUNC();
+ 
   
   struct next_rule_prog_index_key key;
   struct in_addr ip_addr;
@@ -78,13 +79,17 @@ void SessionProgramManager::createPipeline(uint32_t seid, uint32_t teid, uint8_t
   
   
   ip_addr.s_addr = ueIpAddress;
-  LOG_DBG("TEID: {}, Source Interface: {}, UE IP: {}", htonl(teid), sourceInterface, inet_ntoa(ip_addr));
+  // LOG_DBG("TEID: {}, Source Interface: {}, UE IP: {}", htonl(teid), sourceInterface, inet_ntoa(ip_addr));
+  //ToDo Verify ip to string conversion
+  // Logger::upf_app().debug("TEID: %d, Source Interface: %d, UE IP: {}", htonl(teid), sourceInterface, inet_ntoa(ip_addr));
   
-  LOG_DBG("Instantiate a new FARProgram");
+  // LOG_DBG("Instantiate a new FARProgram");
+  Logger::upf_app().debug("Instantiate a new FARProgram");
   std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
   pFARProgram->setup();
 
-  LOG_DBG("Store FARProgram index in the UPFProgram");
+  // LOG_DBG("Store FARProgram index in the UPFProgram");
+  Logger::upf_app().debug("Store FARProgram index in the UPFProgram");
   auto pUPFProgram = UserPlaneComponent::getInstance().getUPFProgram();
   id = pFARProgram->getId();
   fd = pFARProgram->getFd();
@@ -93,7 +98,8 @@ void SessionProgramManager::createPipeline(uint32_t seid, uint32_t teid, uint8_t
   pUPFProgram->getNextProgRuleIndexMap()->update(key, id, BPF_ANY);
   pUPFProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
 
-  LOG_DBG("Store FAR in the FAR program");
+  // LOG_DBG("Store FAR in the FAR program");
+  Logger::upf_app().debug("Store FAR in the FAR program");
   uint8_t index = 0;
   // TODO: Create a method to encapuslate.
   /*
@@ -145,22 +151,26 @@ void SessionProgramManager::createPipeline(uint32_t seid, uint32_t teid, uint8_t
 /*****************************************************************************************************************/
 void SessionProgramManager::removePipeline(uint32_t seid)
 {
-  LOG_FUNC();
+ 
 
-  LOG_DBG("Remove FARProgram index from UPFProgram map");
+  // LOG_DBG("Remove FARProgram index from UPFProgram map");
+  Logger::upf_app().debug("Remove FARProgram index from UPFProgram map");
   auto it = mSessionProgramsMap.find(seid);
   if(it == mSessionProgramsMap.end()){
-    LOG_ERROR("The PDU Session {} does not exist. Cannot be removed", seid);
+    // LOG_ERROR("The PDU Session {} does not exist. Cannot be removed", seid);
+    Logger::upf_app().error("The PDU Session %d does not exist. Cannot be removed", seid);
     throw std::runtime_error("The session does not exist. Cannot be removed");
   }
 
-  LOG_DBG("Delete the SessionPrograms object. It will release the pipeline");
+  // LOG_DBG("Delete the SessionPrograms object. It will release the pipeline");
+  Logger::upf_app().debug("Delete the SessionPrograms object. It will release the pipeline");
   // The key represent the pointer to the pipeline related to the session.
   auto key = it->second->getKey();
   it->second.reset();
   mSessionProgramsMap.erase(seid);
 
-  LOG_DBG("Clean PDU Session from the entry program's map");
+  // LOG_DBG("Clean PDU Session from the entry program's map");
+  Logger::upf_app().debug("Clean PDU Session from the entry program's map");
   auto pUPFProgram = UserPlaneComponent::getInstance().getUPFProgram();
   pUPFProgram->getNextProgRuleIndexMap()->remove(key);
 }
@@ -168,13 +178,14 @@ void SessionProgramManager::removePipeline(uint32_t seid)
 /*****************************************************************************************************************/
 void SessionProgramManager::create(uint32_t seid)
 {
-  LOG_FUNC();
+ 
 
   // Check if there is a key with seid value.
   // TODO: Check if can be abstract the programMap.
 
   if(mSessionProgramMap.find(seid) != mSessionProgramMap.end()) {
-    LOG_ERROR("PDU Session {} already exists. Cannot create a new program with this key", seid);
+    // LOG_ERROR("PDU Session {} already exists. Cannot create a new program with this key", seid);
+    Logger::upf_app().error("PDU Session {} already exists. Cannot create a new program with this key", seid);
     throw std::runtime_error("Cannot create a new program with key (seid)");
   }
 
@@ -201,11 +212,12 @@ void SessionProgramManager::create(uint32_t seid)
 /*****************************************************************************************************************/
 void SessionProgramManager::remove(uint32_t seid)
 {
-  LOG_FUNC();
+ 
 
   auto sessionProgram = findSessionProgram(seid);
   if(!sessionProgram) {
-    LOG_ERROR("The PDU session {} does not exist. Cannot be removed", seid);
+    // LOG_ERROR("The PDU session {} does not exist. Cannot be removed", seid);
+    Logger::upf_app().error("The PDU session %d does not exist. Cannot be removed", seid);
     throw std::runtime_error("The session does not exist. Cannot be removed");
   }
   sessionProgram->tearDown();
@@ -215,7 +227,7 @@ void SessionProgramManager::remove(uint32_t seid)
 /*****************************************************************************************************************/
 void SessionProgramManager::removeAll()
 {
-  LOG_FUNC();
+ 
 
   for(auto pair : mSessionProgramMap) {
     pair.second->tearDown();
@@ -229,14 +241,14 @@ void SessionProgramManager::removeAll()
 /*****************************************************************************************************************/
 void SessionProgramManager::setOnNewSessionObserver(OnStateChangeSessionProgramObserver *pObserver)
 {
-  LOG_FUNC();
+ 
   mpOnNewSessionProgramObserver = pObserver;
 }
 
 /*****************************************************************************************************************/
 std::shared_ptr<SessionProgram> SessionProgramManager::findSessionProgram(uint32_t seid)
 {
-  LOG_FUNC();
+ 
   std::shared_ptr<SessionProgram> pSessionProgram;
 
   auto it = mSessionProgramMap.find(seid);
@@ -250,7 +262,7 @@ std::shared_ptr<SessionProgram> SessionProgramManager::findSessionProgram(uint32
 /*****************************************************************************************************************/
 std::shared_ptr<SessionPrograms> SessionProgramManager::findSessionPrograms(uint32_t seid)
 {
-  LOG_FUNC();
+ 
   std::shared_ptr<SessionPrograms> pSessionPrograms;
 
   auto it = mSessionProgramsMap.find(seid);
@@ -264,7 +276,7 @@ std::shared_ptr<SessionPrograms> SessionProgramManager::findSessionPrograms(uint
 /*****************************************************************************************************************/
 SessionProgramManager::SessionProgramManager()
 {
-  LOG_FUNC();
+ 
   for(auto &item : mProgramArray) {
     item = EMPTY_SLOT;
   }
@@ -274,14 +286,16 @@ SessionProgramManager::SessionProgramManager()
 /*****************************************************************************************************************/
 int32_t SessionProgramManager::getEmptySlot()
 {
-  LOG_FUNC();
+ 
   auto it = std::find(mProgramArray.begin(), mProgramArray.end(), EMPTY_SLOT);
   if(it != mProgramArray.end()) {
     auto index = it - mProgramArray.begin();
-    LOG_DBG("Element with index {} is empty", index);
+    // LOG_DBG("Element with index {} is empty", index);
+    Logger::upf_app().error("Element with index %d is empty", index);
     return index;
   } else {
-    LOG_ERROR("No space available");
+    // LOG_ERROR("No space available");
+    Logger::upf_app().error("No space available");
     throw std::runtime_error("No space available");
   }
 }

@@ -4,7 +4,8 @@
  */
 #include "Configuration.h"
 #include <string>
-#include <utils/LogDefines.h>
+// // #include <utils/LogDefines.h>
+#include "logger.hpp"
 
 // Values get from enviroment variable GTP_INTERFACE and UDP_INTERFACE
 // Consider to update these variables with you want to update the default values.
@@ -19,9 +20,11 @@ Configuration::Configuration(int argc, char **argv)
     Configuration::sUDPInterface = argv[2];
   }
 
-  LOG_DBG("GTP Inteface {}", Configuration::sGTPInterface);
-  LOG_DBG("UDP Inteface {}", Configuration::sUDPInterface);
+  Logger::upf_app().debug("GTP Inteface %s", Configuration::sGTPInterface.c_str());
+  Logger::upf_app().debug("UDPInteface %s", Configuration::sUDPInterface.c_str());
+  // LOG_DBG("GTP Inteface {}", Configuration::sGTPInterface);
+  // LOG_DBG("UDP Inteface {}", Configuration::sUDPInterface);
   for(int i = 1; i < argc; ++i) {
-    LOG_DBG("arg {} = {}", i, argv[i]);
+    Logger::upf_app().debug("arg %d = %d", i, argv[i]);
   }
 }
