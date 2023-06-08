@@ -14,7 +14,7 @@ using namespace upf;
 //upf_config upf_cfg;
 
 /*****************************************************************************************************************/
-UPFProgram::UPFProgram(const std::string& gtpInterface, const std::string& udpInterface)
+PFCP_Session_PDR_Lookup::PFCP_Session_PDR_Lookup(const std::string& gtpInterface, const std::string& udpInterface)
  : mGTPInterface(gtpInterface), mUDPInterface(udpInterface)
 {
   LOG_FUNC();
@@ -35,7 +35,7 @@ UPFProgram::UPFProgram(const std::string& gtpInterface, const std::string& udpIn
  // // LOG_DBG("GTP Interface: %s, IF_NAME: %d, IPv4: %d \n", gtp_interface.if_name, gtp_interface.ipv4_address);
  // // LOG_DBG("UDP Interface: %s, IF_NAME: %d, IPv4: %d \n", udp_interface.if_name, udp_interface.ipv4_address);
   
-  mpLifeCycle = std::make_shared<UPFProgramLifeCycle>(
+  mpLifeCycle = std::make_shared<PFCP_Session_PDR_LookupLifeCycle>(
                                                       pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__open, \
                                                       pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__load, \
                                                       pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__attach, \
@@ -44,13 +44,13 @@ UPFProgram::UPFProgram(const std::string& gtpInterface, const std::string& udpIn
 }
 
 /*****************************************************************************************************************/
-UPFProgram::~UPFProgram()
+PFCP_Session_PDR_Lookup::~PFCP_Session_PDR_Lookup()
 {
   LOG_FUNC();
 }
 
 /*****************************************************************************************************************/
-void UPFProgram::setup()
+void PFCP_Session_PDR_Lookup::setup()
 {
   LOG_FUNC();
 
@@ -80,7 +80,7 @@ void UPFProgram::setup()
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMaps> UPFProgram::getMaps()
+std::shared_ptr<BPFMaps> PFCP_Session_PDR_Lookup::getMaps()
 {
   LOG_FUNC();
   return mpMaps;
@@ -89,21 +89,21 @@ std::shared_ptr<BPFMaps> UPFProgram::getMaps()
 /*****************************************************************************************************************/
 // TODO: Check when kill when running.
 // It was noted the infinity loop.
-void UPFProgram::tearDown()
+void PFCP_Session_PDR_Lookup::tearDown()
 {
   LOG_FUNC();
   mpLifeCycle->tearDown();
 }
 
 /*****************************************************************************************************************/
-void UPFProgram::updateProgramMap(uint32_t key, uint32_t fd)
+void PFCP_Session_PDR_Lookup::updateProgramMap(uint32_t key, uint32_t fd)
 {
   LOG_FUNC();
   mpTeidSessionMap->update(key, fd, BPF_ANY);
 }
 
 /*****************************************************************************************************************/
-void UPFProgram::removeProgramMap(uint32_t key)
+void PFCP_Session_PDR_Lookup::removeProgramMap(uint32_t key)
 {
   LOG_FUNC();
   s32 fd;
@@ -114,42 +114,42 @@ void UPFProgram::removeProgramMap(uint32_t key)
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> UPFProgram::getTeidSessionMap() const
+std::shared_ptr<BPFMap> PFCP_Session_PDR_Lookup::getTeidSessionMap() const
 {
   LOG_FUNC();
   return mpTeidSessionMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> UPFProgram::getUeIpSessionMap() const
+std::shared_ptr<BPFMap> PFCP_Session_PDR_Lookup::getUeIpSessionMap() const
 {
   LOG_FUNC();
   return mpUeIpSessionMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> UPFProgram::getNextProgRuleMap() const
+std::shared_ptr<BPFMap> PFCP_Session_PDR_Lookup::getNextProgRuleMap() const
 {
   LOG_FUNC();
   return mpNextProgRuleMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> UPFProgram::getNextProgRuleIndexMap() const
+std::shared_ptr<BPFMap> PFCP_Session_PDR_Lookup::getNextProgRuleIndexMap() const
 {
   LOG_FUNC();
   return mpNextProgRuleIndexMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> UPFProgram::getIfaceMap() const
+std::shared_ptr<BPFMap> PFCP_Session_PDR_Lookup::getIfaceMap() const
 {
   LOG_FUNC();
   return mpIfaceMap;
 }
 
 /*****************************************************************************************************************/
-void UPFProgram::initializeMaps()
+void PFCP_Session_PDR_Lookup::initializeMaps()
 {
   LOG_FUNC();
   // Store all maps available in the program.

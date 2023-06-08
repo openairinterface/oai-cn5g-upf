@@ -18,39 +18,49 @@ class SessionManager;
 class RulesUtilities;
 
 
-using UPFProgramLifeCycle = ProgramLifeCycle<pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c>;
+using PFCP_Session_PDR_LookupLifeCycle = ProgramLifeCycle<pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c>;
 
 /**
  * @brief Singleton class to abrastract the UPF bpf program.
  */
-class UPFProgram
+class PFCP_Session_PDR_Lookup
 {
 public:
   /**
-   * @brief Construct a new UPFProgram object.
+   * @brief Construct a new PFCP_Session_PDR_Lookup object.
    *
    */
-  explicit UPFProgram(const std::string& gtpInterface, const std::string& udpInterface);
+  explicit PFCP_Session_PDR_Lookup(const std::string& gtpInterface, const std::string& udpInterface);
+  
+  /*****************************************************************************************************************/
   /**
-   * @brief Destroy the UPFProgram object
+   * @brief Destroy the PFCP_Session_PDR_Lookup object
    */
-  virtual ~UPFProgram();
+  virtual ~PFCP_Session_PDR_Lookup();
+
+  /*****************************************************************************************************************/
   /**
    * @brief Setup the BPF program.
    *
    */
   void setup();
+
+  /*****************************************************************************************************************/
   /**
    * @brief Get the BPFMaps object.
    *
    * @return std::shared_ptr<BPFMaps> The reference of the BPFMaps.
    */
   std::shared_ptr<BPFMaps> getMaps();
+  
+  /*****************************************************************************************************************/
   /**
    * @brief Tear downs the BPF program.
    *
    */
   void tearDown();
+
+  /*****************************************************************************************************************/
   /**
    * @brief Update program int map.
    *
@@ -58,30 +68,40 @@ public:
    * @param fd The file descriptor.
    */
   void updateProgramMap(uint32_t key, uint32_t fd);
+  
+  /*****************************************************************************************************************/
   /**
    * @brief Remove program in map.
    *
    * @param key The key which will be remove in the program map.
    */
   void removeProgramMap(uint32_t key);
+
+  /*****************************************************************************************************************/
   /**
    * @brief Get the TEID to session Map object.
    *
    * @return std::shared_ptr<BPFMap> The TEID to fd map.
    */
   std::shared_ptr<BPFMap> getTeidSessionMap() const;
+
+  /*****************************************************************************************************************/
   /**
    * @brief Get the UE IP to session Map object.
    *
    * @return std::shared_ptr<BPFMap> The UE IP to fd map.
    */
   std::shared_ptr<BPFMap> getUeIpSessionMap() const;
+
+  /*****************************************************************************************************************/
   /**
    * @brief Get the NextProgRule Map object.
    *
    * @return std::shared_ptr<BPFMap> The NextProgRule to fd map.
    */
   std::shared_ptr<BPFMap> getNextProgRuleMap() const;
+
+  /*****************************************************************************************************************/
   /**
    * @brief Get the NextProgRuleIndex Map object.
    *
@@ -89,6 +109,7 @@ public:
    */
   std::shared_ptr<BPFMap> getNextProgRuleIndexMap() const;
 
+  /*****************************************************************************************************************/
   /**
    * @brief Get the iface Map object.
    *
@@ -126,7 +147,7 @@ private:
   std::shared_ptr<BPFMap> mpNextProgRuleMap;
 
   // The BPF lifecycle program.
-  std::shared_ptr<UPFProgramLifeCycle> mpLifeCycle;
+  std::shared_ptr<PFCP_Session_PDR_LookupLifeCycle> mpLifeCycle;
 
   // The GTP interface.
   std::string mGTPInterface;

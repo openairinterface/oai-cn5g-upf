@@ -18,10 +18,17 @@
 // #include "thread_sched.hpp"
 // #include "uint_generator.hpp"
 
-SessionManager::SessionManager() { LOG_FUNC(); }
+/*****************************************************************************************************************/
+SessionManager::SessionManager() {
+  LOG_FUNC(); 
+}
 
-SessionManager::~SessionManager() { LOG_FUNC(); }
+/*****************************************************************************************************************/
+SessionManager::~SessionManager() { 
+  LOG_FUNC(); 
+}
 
+/*****************************************************************************************************************/
 void SessionManager::createSession(std::shared_ptr<SessionBpf> pSession)
 {
   LOG_FUNC();
@@ -29,6 +36,7 @@ void SessionManager::createSession(std::shared_ptr<SessionBpf> pSession)
   LOG_DBG("Session {} has been cretead", pSession->getSeid());
 }
 
+/*****************************************************************************************************************/
 void SessionManager::createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSession)
 {
   LOG_FUNC();
@@ -47,7 +55,7 @@ void SessionManager::createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSessi
   std::sort(pSession->pdrs.begin(), pSession->pdrs.end(), SessionManager::comparePDR);
 
   LOG_DBG("Extract the key (PDI) from the highest priority PDR");
-  auto pUPFProgram = UserPlaneComponent::getInstance().getUPFProgram();
+  auto pPFCP_Session_PDR_Lookup = UserPlaneComponent::getInstance().getPFCP_Session_PDR_Lookup();
 
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
@@ -65,7 +73,7 @@ void SessionManager::createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSessi
   }
   LOG_DBG("PDI extracted from PDR {}", pdrHighPriority->pdr_id.rule_id);
 
-  // pUPFProgram->getNextProgRuleMap()->update(&next_rule_prog_index_key)
+  // pPFCP_Session_PDR_Lookup->getNextProgRuleMap()->update(&next_rule_prog_index_key)
   LOG_DBG("Extract FAR from the highest priority PDR");
   std::shared_ptr<pfcp::pfcp_far> pFar;
   pfcp::far_id_t farId;
@@ -80,6 +88,7 @@ void SessionManager::createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSessi
   mSeidToSession[pSession->get_up_seid()] = pSession;
 }
 
+/*****************************************************************************************************************/
 void SessionManager::removeBPFSession(uint64_t seid)
 {
   LOG_FUNC();
@@ -91,6 +100,7 @@ void SessionManager::removeBPFSession(uint64_t seid)
   LOG_DBG("Session {} has been removed", seid);
 }
 
+/*****************************************************************************************************************/
 bool SessionManager::comparePDR(const std::shared_ptr<pfcp::pfcp_pdr> &pFirst,
                                 const std::shared_ptr<pfcp::pfcp_pdr> &pSecond)
 {
@@ -102,6 +112,7 @@ bool SessionManager::comparePDR(const std::shared_ptr<pfcp::pfcp_pdr> &pFirst,
   return precedenceFirst.precedence < precedenceSecond.precedence;
 }
 
+/*****************************************************************************************************************/
 void SessionManager::removeSession(uint64_t seid)
 {
   LOG_FUNC();

@@ -84,14 +84,14 @@ void SessionProgramManager::createPipeline(uint32_t seid, uint32_t teid, uint8_t
   std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
   pFARProgram->setup();
 
-  LOG_DBG("Store FARProgram index in the UPFProgram");
-  auto pUPFProgram = UserPlaneComponent::getInstance().getUPFProgram();
+  LOG_DBG("Store FARProgram index in the PFCP_Session_PDR_Lookup");
+  auto pPFCP_Session_PDR_Lookup = UserPlaneComponent::getInstance().getPFCP_Session_PDR_Lookup();
   id = pFARProgram->getId();
   fd = pFARProgram->getFd();
 
   // TODO: Get the nextProgRule index from a pool of values.
-  pUPFProgram->getNextProgRuleIndexMap()->update(key, id, BPF_ANY);
-  pUPFProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
+  pPFCP_Session_PDR_Lookup->getNextProgRuleIndexMap()->update(key, id, BPF_ANY);
+  pPFCP_Session_PDR_Lookup->getNextProgRuleMap()->update(id, fd, BPF_ANY);
 
   LOG_DBG("Store FAR in the FAR program");
   uint8_t index = 0;
@@ -147,7 +147,7 @@ void SessionProgramManager::removePipeline(uint32_t seid)
 {
   LOG_FUNC();
 
-  LOG_DBG("Remove FARProgram index from UPFProgram map");
+  LOG_DBG("Remove FARProgram index from PFCP_Session_PDR_Lookup map");
   auto it = mSessionProgramsMap.find(seid);
   if(it == mSessionProgramsMap.end()){
     LOG_ERROR("The PDU Session {} does not exist. Cannot be removed", seid);
@@ -161,8 +161,8 @@ void SessionProgramManager::removePipeline(uint32_t seid)
   mSessionProgramsMap.erase(seid);
 
   LOG_DBG("Clean PDU Session from the entry program's map");
-  auto pUPFProgram = UserPlaneComponent::getInstance().getUPFProgram();
-  pUPFProgram->getNextProgRuleIndexMap()->remove(key);
+  auto pPFCP_Session_PDR_Lookup = UserPlaneComponent::getInstance().getPFCP_Session_PDR_Lookup();
+  pPFCP_Session_PDR_Lookup->getNextProgRuleIndexMap()->remove(key);
 }
 
 /*****************************************************************************************************************/
@@ -270,7 +270,6 @@ SessionProgramManager::SessionProgramManager()
   }
 }
 
-
 /*****************************************************************************************************************/
 int32_t SessionProgramManager::getEmptySlot()
 {
@@ -285,4 +284,3 @@ int32_t SessionProgramManager::getEmptySlot()
     throw std::runtime_error("No space available");
   }
 }
-/*****************************************************************************************************************/
