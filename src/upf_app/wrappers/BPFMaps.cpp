@@ -33,6 +33,7 @@ BPFMap& BPFMaps::getMap(const char *pName)
       return mMaps[i];
     }
   }
-  LOG_ERROR("Map {} not found", pName)
+  Logger::upf_app().error("Map %s not found", pName);
+  // LOG_ERROR("Map {} not found", pName)
   throw std::runtime_error("Map was not found");
 }

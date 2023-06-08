@@ -3,7 +3,7 @@
 #include <bpf/bpf.h>          // bpf calls
 #include <bpf/libbpf.h>       // bpf wrappers
 #include <sys/resource.h>     // rlimit
-#include <utils/LogDefines.h> // Logs
+// #include <utils/LogDefines.h> // Logs
 #include <net/if.h>           // if_nametoindex
 #include <wrappers/BPFMaps.h>
 #include <wrappers/BPFMap.hpp>
@@ -13,7 +13,7 @@
 SessionProgram::SessionProgram(const std::string& gtpInterface, const std::string& udpInterface)
   : mGTPInterface(gtpInterface), mUDPInterface(udpInterface)
 {
-  LOG_FUNC();
+  
   mpLifeCycle = std::make_shared<SessionProgramLifeCycle>(
                                                           pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__open, \
                                                           pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__load, \
@@ -25,14 +25,14 @@ SessionProgram::SessionProgram(const std::string& gtpInterface, const std::strin
 /*****************************************************************************************************************/
 SessionProgram::~SessionProgram()
 {
-  LOG_FUNC();
+  
 }
 
 /*****************************************************************************************************************/
 // TODO: Pass configuration throught args.
 void SessionProgram::setup()
 {
-  LOG_FUNC();
+  
 
   mpLifeCycle->open();
   initializeMaps();
@@ -48,70 +48,70 @@ void SessionProgram::setup()
 /*****************************************************************************************************************/
 void SessionProgram::tearDown()
 {
-  LOG_FUNC();
+  
   mpLifeCycle->tearDown();
 }
 
 /*****************************************************************************************************************/
 int SessionProgram::getUplinkFileDescriptor() const
 {
-  LOG_FUNC();
+  
   return bpf_program__fd(mpLifeCycle->getBPFSkeleton()->progs.uplink_entry_point);
 }
 
 /*****************************************************************************************************************/
 int SessionProgram::getDownlinkFileDescriptor() const
 {
-  LOG_FUNC();
+  
   return bpf_program__fd(mpLifeCycle->getBPFSkeleton()->progs.downlink_entry_point);
 }
 
 /*****************************************************************************************************************/
 std::shared_ptr<BPFMap> SessionProgram::getFARMap() const
 {
-  LOG_FUNC();
+  
   return mpFARMap;
 }
 
 /*****************************************************************************************************************/
 std::shared_ptr<BPFMap> SessionProgram::getUplinkPDRsMap() const
 {
-  LOG_FUNC();
+  
   return mpUplinkPDRsMap;
 }
 
 /*****************************************************************************************************************/
 std::shared_ptr<BPFMap> SessionProgram::getDownlinkPDRsMap() const
 {
-  LOG_FUNC();
+  
   return mpDownlinkPDRsMap;
 }
 
 /*****************************************************************************************************************/
 std::shared_ptr<BPFMap> SessionProgram::getCounterMap() const
 {
-  LOG_FUNC();
+  
   return mpCounterMap;
 }
 
 /*****************************************************************************************************************/
 std::shared_ptr<BPFMap> SessionProgram::getEgressInterfaceMap() const
 {
-  LOG_FUNC();
+  
   return mpEgressInterfaceMap;
 }
 
 /*****************************************************************************************************************/
 std::shared_ptr<BPFMap> SessionProgram::getArpTableMap() const
 {
-  LOG_FUNC();
+  
   return mpArpTableMap;
 }
 
 /*****************************************************************************************************************/
 void SessionProgram::initializeMaps()
 {
-  LOG_FUNC();
+  
   // Store all maps available in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
 

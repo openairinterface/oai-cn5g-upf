@@ -3,7 +3,7 @@
 
 #include <bpf/bpf.h>
 #include <bpf/libbpf.h>
-#include <utils/LogDefines.h>
+// #include <utils/LogDefines.h>
 #include "logger.hpp"
 
 /**
@@ -78,9 +78,11 @@ int BPFMap::lookup(KeyType &key, void *pValue)
   int lookupReturn = bpf_map_lookup_elem(mapFd, &key, pValue);
 
   if(lookupReturn != 0) {
-    LOG_INF("The key {} cannot be found in map {}", key, mName);
+    // LOG_INF("The key {} cannot be found in map {}", key, mName);
+    Logger::upf_app().info("The key %d cannot be found in map %s",key, mName.c_str());
   }else {
-    LOG_DBG("The key {} was found at {} map!", key, mName);
+    // LOG_DBG("The key {} was found at {} map!", key, mName);
+    Logger::upf_app().info("The key %d was found at %s map!",key, mName.c_str());
   }
   return lookupReturn;
 }

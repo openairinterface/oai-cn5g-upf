@@ -4,11 +4,12 @@
 #include <bpf/libbpf.h>    // bpf wrappers
 #include <iostream>        // cout
 #include <stdexcept>       // exception
-#include <utils/LogDefines.h>
+// #include <utils/LogDefines.h>
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
 #include "interfaces.h"
 #include "upf_config.hpp"
+#include "logger.hpp"
 
 using namespace upf;
 //upf_config upf_cfg;
@@ -17,7 +18,7 @@ using namespace upf;
 UPFProgram::UPFProgram(const std::string& gtpInterface, const std::string& udpInterface)
  : mGTPInterface(gtpInterface), mUDPInterface(udpInterface)
 {
-  LOG_FUNC();
+  
 
  // // __builtin_memset(&gtp_interface, 0, sizeof(struct interface));
  // // __builtin_memset(&udp_interface, 0, sizeof(struct interface));
@@ -46,13 +47,13 @@ UPFProgram::UPFProgram(const std::string& gtpInterface, const std::string& udpIn
 /*****************************************************************************************************************/
 UPFProgram::~UPFProgram()
 {
-  LOG_FUNC();
+  
 }
 
 /*****************************************************************************************************************/
 void UPFProgram::setup()
 {
-  LOG_FUNC();
+  
 
   // LOG_DBG("Saving Interfaces in Map");
   // auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
@@ -70,19 +71,22 @@ void UPFProgram::setup()
   mpLifeCycle->attach();
   // Entry point interface
   if(mUDPInterface.empty() || mGTPInterface.empty()){
-    LOG_ERROR("GTP or UDP interface not defined!");
+    // LOG_ERROR("GTP or UDP interface not defined!");
+    Logger::upf_app().error("GTP or UDP interface not defined!");
     throw std::runtime_error("GTP or UDP interface not defined!");
   }
-  LOG_DBG("Link UDP interface to interface {}", mUDPInterface.c_str())
+  // LOG_DBG("Link UDP interface to interface {}", mUDPInterface.c_str())
+  Logger::upf_app().debug("Link UDP interface to interface %s", mUDPInterface.c_str());
   mpLifeCycle->link("xdp_entry_point", mUDPInterface.c_str());
-  LOG_DBG("Link GTP interface to interface {}", mGTPInterface.c_str())
+  // LOG_DBG("Link GTP interface to interface {}", mGTPInterface.c_str())
+  Logger::upf_app().debug("Link GTP interface to interface %s", mGTPInterface.c_str());
   mpLifeCycle->link("xdp_entry_point", mGTPInterface.c_str());
 }
 
 /*****************************************************************************************************************/
 std::shared_ptr<BPFMaps> UPFProgram::getMaps()
 {
-  LOG_FUNC();
+  
   return mpMaps;
 }
 
@@ -91,21 +95,21 @@ std::shared_ptr<BPFMaps> UPFProgram::getMaps()
 // It was noted the infinity loop.
 void UPFProgram::tearDown()
 {
-  LOG_FUNC();
+  
   mpLifeCycle->tearDown();
 }
 
 /*****************************************************************************************************************/
 void UPFProgram::updateProgramMap(uint32_t key, uint32_t fd)
 {
-  LOG_FUNC();
+  
   mpTeidSessionMap->update(key, fd, BPF_ANY);
 }
 
 /*****************************************************************************************************************/
 void UPFProgram::removeProgramMap(uint32_t key)
 {
-  LOG_FUNC();
+  
   s32 fd;
   // Remove only if exists.
   if(mpTeidSessionMap->lookup(key, &fd) == 0) {
@@ -116,42 +120,42 @@ void UPFProgram::removeProgramMap(uint32_t key)
 /*****************************************************************************************************************/
 std::shared_ptr<BPFMap> UPFProgram::getTeidSessionMap() const
 {
-  LOG_FUNC();
+  
   return mpTeidSessionMap;
 }
 
 /*****************************************************************************************************************/
 std::shared_ptr<BPFMap> UPFProgram::getUeIpSessionMap() const
 {
-  LOG_FUNC();
+  
   return mpUeIpSessionMap;
 }
 
 /*****************************************************************************************************************/
 std::shared_ptr<BPFMap> UPFProgram::getNextProgRuleMap() const
 {
-  LOG_FUNC();
+  
   return mpNextProgRuleMap;
 }
 
 /*****************************************************************************************************************/
 std::shared_ptr<BPFMap> UPFProgram::getNextProgRuleIndexMap() const
 {
-  LOG_FUNC();
+  
   return mpNextProgRuleIndexMap;
 }
 
 /*****************************************************************************************************************/
 std::shared_ptr<BPFMap> UPFProgram::getIfaceMap() const
 {
-  LOG_FUNC();
+  
   return mpIfaceMap;
 }
 
 /*****************************************************************************************************************/
 void UPFProgram::initializeMaps()
 {
-  LOG_FUNC();
+  
   // Store all maps available in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
 

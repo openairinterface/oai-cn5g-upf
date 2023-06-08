@@ -124,7 +124,7 @@ COPY --from=oai-upf-builder \
 # Ubuntu 18 --> boost 67 will be copied
     /usr/lib/libboost_system.so.1.6*.0 \
     /oai-upf/build/ext/libbpf/src/libbpf.so.0 \
-    /oai-upf/build/upf/build/upf_app/utils/libupfutils.so \
+    # /oai-upf/build/upf/build/upf_app/utils/libupfutils.so \
     ./
 
 RUN ldconfig && \

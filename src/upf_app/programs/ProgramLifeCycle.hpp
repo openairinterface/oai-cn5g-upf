@@ -9,9 +9,10 @@
 #include <net/if.h>       // if_nametoindex
 #include <sstream>        //stringstream
 #include <sys/resource.h> // rlimit
-#include <utils/LogDefines.h>
+// #include <utils/LogDefines.h>
 #include <vector>
 #include <Configuration.h>
+#include "logger.hpp"
 
 /**
  * @brief Program states.
@@ -116,7 +117,7 @@ ProgramLifeCycle<BPFSkeletonType>::ProgramLifeCycle(
     , mDestroyFunc(destroyFunc)
     , mpSkeleton(NULL)
 {
-  LOG_FUNC();
+  
   // Check if the XDP is driver or skb mode.
   mFlags = Configuration::sIsSocketBufferEnabled ? XDP_FLAGS_UPDATE_IF_NOEXIST | XDP_FLAGS_SKB_MODE : XDP_FLAGS_UPDATE_IF_NOEXIST;
 }
@@ -124,7 +125,7 @@ ProgramLifeCycle<BPFSkeletonType>::ProgramLifeCycle(
 template <class BPFSkeletonType>
 ProgramLifeCycle<BPFSkeletonType>::~ProgramLifeCycle()
 {
-  LOG_FUNC();
+  
   // if(mpSkeleton != NULL) {
   //   delete mpSkeleton;
   // }
@@ -133,7 +134,7 @@ ProgramLifeCycle<BPFSkeletonType>::~ProgramLifeCycle()
 template <class BPFSkeletonType>
 BPFSkeletonType *ProgramLifeCycle<BPFSkeletonType>::open()
 {
-  LOG_FUNC();
+  
   struct rlimit r = {RLIM_INFINITY, RLIM_INFINITY};
   if(setrlimit(RLIMIT_MEMLOCK, &r)) {
     perror("setrlimit(RLIMIT_MEMLOCK)");
@@ -152,7 +153,7 @@ BPFSkeletonType *ProgramLifeCycle<BPFSkeletonType>::open()
 template <class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::load()
 {
-  LOG_FUNC();
+  
   // Load BPF programs identified in skeleton.
   // We do not need to pass the path of the .o (object), due to encapsulation
   // made by bpftool in skeleton object.
@@ -168,7 +169,7 @@ void ProgramLifeCycle<BPFSkeletonType>::load()
 template <class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::attach()
 {
-  LOG_FUNC();
+  
   // Attach is not support by XDP programs.
   // This call does not do anything.
   if(int err = mAttachFunc(mpSkeleton)) {
@@ -183,7 +184,7 @@ void ProgramLifeCycle<BPFSkeletonType>::attach()
 template <class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::link(std::string sectionName, std::string interface)
 {
-  LOG_FUNC();
+  
 
   struct bpf_program *prog;
   auto ifIndex = if_nametoindex(interface.c_str());
@@ -193,7 +194,8 @@ void ProgramLifeCycle<BPFSkeletonType>::link(std::string sectionName, std::strin
   // TODO: Remove hardcoded.
   if(!ifIndex) {
     perror("if_nametoindex");
-    LOG_ERROR("Interface {} not found", interface);
+    // LOG_ERROR("Interface {} not found", interface);
+    Logger::upf_app().error("Interface %s not found", interface.c_str());
     throw std::runtime_error("Interface not found!");
   }
 
@@ -206,7 +208,8 @@ void ProgramLifeCycle<BPFSkeletonType>::link(std::string sectionName, std::strin
       fd = bpf_program__fd(prog);
       // Link program (fd) to the interface.
       if(bpf_set_link_xdp_fd(ifIndex, fd, mFlags) < 0) {
-        LOG_ERROR("BPF program {} link set XDP failed", sectionName);
+        // LOG_ERROR("BPF program {} link set XDP failed", sectionName);
+        Logger::upf_app().error("BPF program %s link set XDP failed", sectionName.c_str());
         tearDown();
         throw std::runtime_error("BPF program link set XDP failed");
       }
@@ -224,25 +227,28 @@ void ProgramLifeCycle<BPFSkeletonType>::link(std::string sectionName, std::strin
 
       // Update the global link state.
       mState = LINKED;
-      LOG_INF("BPF program {} hooked in {} XDP interface", sectionName, interface);
+      // LOG_INF("BPF program {} hooked in {} XDP interface", sectionName, interface);
+      Logger::upf_app().error("BPF program %s hooked in %s XDP interface", sectionName.c_str(), interface.c_str());
       return;
     };
   }
-  LOG_ERROR("Section {} not found", sectionName);
+  // LOG_ERROR("Section {} not found", sectionName);
+  Logger::upf_app().error("Section %s not found", sectionName.c_str());
   throw std::runtime_error("Section not found");
 }
 
 template <class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::tearDown()
 {
-  LOG_FUNC();
+  
   std::lock_guard<std::mutex> lock(sTearDownMutex);
   struct bpf_program *prog;
   std::string section;
 
   if(mState != ProgramState::IDLE) {
     if(mState == LINKED) {
-      LOG_DBG("There are some program in LINKED state.");
+      // LOG_DBG("There are some program in LINKED state.");
+      Logger::upf_app().debug("There are some program in LINKED state.");
       bpf_object__for_each_program(prog, mpSkeleton->obj)
       {
         // Get section name.
@@ -250,32 +256,38 @@ void ProgramLifeCycle<BPFSkeletonType>::tearDown()
         // Find the section.
         auto it = mSectionLinkInterfacesMap.find(section);
         if(it == mSectionLinkInterfacesMap.end()) {
-          LOG_DBG("BPF program {} are not link to any interface", section);
+          // LOG_DBG("BPF program {} are not link to any interface", section);
+          Logger::upf_app().debug("BPF program %s are not link to any interface", section.c_str());
           continue;
         }
         // For each link in this section, do unlink.
         for(auto linkEntry : it->second) {
-          LOG_DBG("BPF program {} is in a HOOKED state", section.c_str());
+          // LOG_DBG("BPF program {} is in a HOOKED state", section.c_str());
+          Logger::upf_app().debug("BPF program %s is in a HOOKED state", section.c_str());
           if(bpf_set_link_xdp_fd(linkEntry, -1, mFlags)) {
-            LOG_ERROR("BPF program {} cannot unlink the {} interface", section, linkEntry);
+            // LOG_ERROR("BPF program {} cannot unlink the {} interface", section, linkEntry);
+            Logger::upf_app().error("BPF program %s cannot unlink the %d interface", section.c_str(), linkEntry);
             throw std::runtime_error("BPF program cannot unlink");
           };
-          LOG_INF("BPF program {} unlink to {} interface", section, linkEntry);
+          // LOG_INF("BPF program {} unlink to {} interface", section, linkEntry);
+          Logger::upf_app().info("BPF program %s unlink to %d interface", section.c_str(), linkEntry);
         }
       }
     } else {
-      LOG_DBG("There are not any program in LINKED state.");
+      // LOG_DBG("There are not any program in LINKED state.");
+      Logger::upf_app().debug("There are not any program in LINKED state.");
     }
     destroy();
   } else {
-    LOG_DBG("Programs is in IDLE state. TearDown skipped");
+    // LOG_DBG("Programs is in IDLE state. TearDown skipped");
+    Logger::upf_app().debug("Programs is in IDLE state. TearDown skipped");
   }
 }
 
 template <class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::destroy()
 {
-  LOG_FUNC();
+  
   // Destroy program.
   if(mState != IDLE) {
     mDestroyFunc(mpSkeleton);
@@ -287,14 +299,14 @@ void ProgramLifeCycle<BPFSkeletonType>::destroy()
 template <class BPFSkeletonType>
 BPFSkeletonType *ProgramLifeCycle<BPFSkeletonType>::getBPFSkeleton() const
 {
-  LOG_FUNC();
+  
   return mpSkeleton;
 }
 
 template <class BPFSkeletonType>
 ProgramState ProgramLifeCycle<BPFSkeletonType>::getState() const
 {
-  LOG_FUNC();
+  
   return mState;
 }
 

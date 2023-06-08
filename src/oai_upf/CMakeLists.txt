@@ -321,7 +321,6 @@ GTPV1U
 PFCP
 far_ebpf_xdp
 pfcp_session_pdr_lookup_ebpf_xdp
-upfutils
 pfcp_session_lookup_ebpf_xdp
 UPF_XDP
 gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group
