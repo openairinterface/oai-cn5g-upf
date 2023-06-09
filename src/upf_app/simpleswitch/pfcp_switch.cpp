@@ -609,11 +609,6 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
     pfcp_session* session = nullptr;
     if (not exist) {
       session = new pfcp_session(fseid, generate_seid());
-      Logger::pfcp_switch().info("\n");
-      Logger::pfcp_switch().info("===============");
-      Logger::pfcp_switch().info("ADDING FARs");
-      Logger::pfcp_switch().info("===============");
-
       for (auto it : req->pfcp_ies.create_fars) {
         create_far& cr_far = it;
         if (not session->create(cr_far, cause, offending_ie.offending_ie)) {
@@ -624,10 +619,6 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
       }
 
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
-        Logger::pfcp_switch().info("\n");
-        Logger::pfcp_switch().info("===============");
-        Logger::pfcp_switch().info("ADDING PDRs");
-        Logger::pfcp_switch().info("===============");
         //--------------------------------
         // Process PDR to be created
         cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
