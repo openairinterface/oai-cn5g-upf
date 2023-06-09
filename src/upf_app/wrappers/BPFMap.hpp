@@ -102,7 +102,7 @@ int BPFMap::update(KeyType& key, ValueType& value, int flags) {
   } else {
     // LOG_DBG("The key {} was updated at {} map!", key, mName);
     // LOG_DBG("The key was updated at {} map!", mName);
-    Logger::upf_app().error("The key was updated at %s map! ", mName.c_str());
+    Logger::upf_app().debug("The key was updated at %s map! ", mName.c_str());
   }
   return updateReturn;
 }

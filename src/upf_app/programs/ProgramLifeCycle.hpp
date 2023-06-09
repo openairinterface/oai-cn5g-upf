@@ -219,7 +219,7 @@ void ProgramLifeCycle<BPFSkeletonType>::link(
       mState = LINKED;
       // LOG_INF("BPF program {} hooked in {} XDP interface", sectionName,
       // interface);
-      Logger::upf_app().error(
+      Logger::upf_app().info(
           "BPF program %s hooked in %s XDP interface", sectionName.c_str(),
           interface.c_str());
       return;
