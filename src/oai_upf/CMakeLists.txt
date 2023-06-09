@@ -161,15 +161,15 @@ add_definitions(-DCMAKER)
 add_definitions(-DBSTRLIB_CAN_USE_STL=1 -DBSTRLIB_CAN_USE_IOSTREAM=1 -DBSTRLIB_THROWS_EXCEPTIONS=1)
 
 # CMAKE_C_FLAGS_DEBUG: -fsanitize=address not compatible with valgrind
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS} -g -fstack-protector-all -DMALLOC_CHECK_=3 -DINFO_IS_ON=1 -DDEBUG_IS_ON=1 -DTRACE_IS_ON=1 -O0  -fno-omit-frame-pointer")
-set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS} -O2 -fno-omit-frame-pointer -s -DINFO_IS_ON=1")
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS} -g  -O1 -DINFO_IS_ON=1 ")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS} -g -fstack-protector-all -DMALLOC_CHECK_=3 -O0 -fno-omit-frame-pointer")
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS} -O2 -fno-omit-frame-pointer -s ")
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS} -g  -O1 ")
 set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS} -Os -s")
 
 # CMAKE_CXX_FLAGS_DEBUG: -fsanitize=address not compatible with valgrind
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -std=c++17  -g -fstack-protector-all -DMALLOC_CHECK_=3 -DINFO_IS_ON=1 -DDEBUG_IS_ON=1 -DTRACE_IS_ON=1 -O0 -fno-omit-frame-pointer")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -std=c++17  -O2 -fno-omit-frame-pointer -s -DINFO_IS_ON=1")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS} -std=c++17 -g -O1 -DINFO_IS_ON=1")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -std=c++17  -g -fstack-protector-all -DMALLOC_CHECK_=3 -O0 -fno-omit-frame-pointer")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -std=c++17  -O2 -fno-omit-frame-pointer -s ")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS} -std=c++17 -g -O1 ")
 set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS} -std=c++17 -Os -s")
 
 
@@ -262,7 +262,7 @@ else(STATIC_LINKING)
     SET(BUILD_SHARED_LIBS ON)
 endif(STATIC_LINKING)
 
-ADD_SUBDIRECTORY(${SRC_TOP_DIR}/common ${CMAKE_CURRENT_BINARY_DIR}/common)
+#ADD_SUBDIRECTORY(${SRC_TOP_DIR}/common ${CMAKE_CURRENT_BINARY_DIR}/common)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/common/utils ${CMAKE_CURRENT_BINARY_DIR}/utils)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/pfcp ${CMAKE_CURRENT_BINARY_DIR}/pfcp)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app ${CMAKE_CURRENT_BINARY_DIR}/upf_app)
@@ -289,7 +289,7 @@ include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 include_directories(${SRC_TOP_DIR}/upf_app/interfaces)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
-include_directories(${SRC_TOP_DIR}/../build/ext/spdlog/include)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
 include_directories(${SRC_TOP_DIR}/../build/ext/libbpf)
 link_directories(${SRC_TOP_DIR}/../build/ext/libbpf/src)
 
@@ -307,6 +307,9 @@ add_executable(upf
   SET(ASAN)
 ENDIF(STATIC_LINKING)
 
+## Common modules
+include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger/logger.cmake)
+
 # folly glog dl double-conversion for FB folly library
 target_link_libraries (upf 
 ${ASAN}  -Wl,--start-group CN_UTILS 
@@ -318,13 +321,11 @@ interfaces
 UDP
 GTPV1U
 PFCP
-3GPP_COMMON_TYPES
 far_ebpf_xdp
 pfcp_session_pdr_lookup_ebpf_xdp
-upfutils
 pfcp_session_lookup_ebpf_xdp
 UPF_XDP
-gflags glog dl double-conversion folly -Wl,--end-group
+gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group
 pthread m rt config++
 event boost_system curl
 )

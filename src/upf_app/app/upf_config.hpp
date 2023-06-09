@@ -41,6 +41,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string>
+#include "logger.hpp"
 
 namespace upf {
 
@@ -78,6 +79,7 @@ namespace upf {
 
 #define UPF_CONFIG_STRING_5G_FEATURES "SUPPORT_5G_FEATURES"
 #define UPF_CONFIG_STRING_ENABLE_5G_FEATURES "ENABLE_5G_FEATURES"
+#define UPF_CONFIG_STRING_ENABLE_BPF_DATAPATH "ENABLE_BPF_DATAPATH"
 #define UPF_CONFIG_STRING_5G_FEATURES_REGISTER_NRF "REGISTER_NRF"
 #define UPF_CONFIG_STRING_5G_FEATURES_UPF_FQDN "UPF_FQDN_5G"
 #define UPF_CONFIG_STRING_5G_FEATURES_NRF "NRF"
@@ -91,6 +93,7 @@ namespace upf {
 #define UPF_CONFIG_STRING_5G_FEATURES_DNN "DNN"
 #define UPF_CONFIG_STRING_5G_FEATURES_USE_FQDN_NRF "USE_FQDN_NRF"
 #define UPF_CONFIG_STRING_5G_FEATURES_UPF_INFO_DNN_LIST "DNN_LIST"
+#define UPF_CONFIG_STRING_LOG_LEVEL "LOG_LEVEL"
 
 #define UPF_ABORT_ON_ERROR true
 #define UPG_WARN_ON_ERROR false
@@ -141,6 +144,7 @@ class upf_config {
   std::string pid_dir;
   unsigned int instance;
   std::string fqdn;
+  spdlog::level::level_enum log_level;
   interface_cfg_t n3;
   interface_cfg_t n6;
   interface_cfg_t n4;
@@ -157,6 +161,7 @@ class upf_config {
 
   struct {
     bool enable_5g_features;
+    bool enable_bpf_datapath;
     bool register_nrf;
     upf_info_t upf_info;
     bool use_fqdn_nrf;
@@ -199,6 +204,7 @@ class upf_config {
     n4.port                                  = pfcp::default_port;
 
     upf_5g_features.enable_5g_features        = false;
+    upf_5g_features.enable_bpf_datapath       = false;
     upf_5g_features.register_nrf              = false;
     upf_5g_features.upf_info                  = {};
     upf_5g_features.use_fqdn_nrf              = false;
@@ -206,6 +212,8 @@ class upf_config {
     upf_5g_features.nrf_addr.port             = 80;
     upf_5g_features.nrf_addr.api_version      = "v1";
     upf_5g_features.nrf_addr.fqdn             = {};
+
+    log_level = spdlog::level::debug;
   };
 
   void lock() { m_rw_lock.lock(); };

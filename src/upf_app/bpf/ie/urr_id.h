@@ -6,10 +6,9 @@
 
 //-------------------------------------
 // 8.2.54 URR ID
-typedef struct urr_id_s
-{
+typedef struct urr_id_s {
   ie_base_t_ base;
   u32 urr_id;
 } urr_id_t_;
 
-#endif // __URR_ID_H__
+#endif  // __URR_ID_H__

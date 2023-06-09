@@ -1,36 +1,22 @@
 #include "PacketDetectionInformation.h"
-#include <utils/LogDefines.h>
+// #include <utils/LogDefines.h>
 
-PacketDetectionInformation::PacketDetectionInformation(u32 teid, u32 ueIpAddress, SourceInterface sourceInterface)
-  : mTeid(teid), mUeIpAddress(ueIpAddress), mSourceInterface(sourceInterface)
-{
-  LOG_FUNC();
+PacketDetectionInformation::PacketDetectionInformation(
+    u32 teid, u32 ueIpAddress, SourceInterface sourceInterface)
+    : mTeid(teid),
+      mUeIpAddress(ueIpAddress),
+      mSourceInterface(sourceInterface) {}
 
-}
+PacketDetectionInformation::~PacketDetectionInformation() {}
 
-PacketDetectionInformation::~PacketDetectionInformation()
-{
-  LOG_FUNC();
-
-}
-
-u32 PacketDetectionInformation::getTeid()
-{
-  LOG_FUNC();
+u32 PacketDetectionInformation::getTeid() {
   return mTeid;
-
 }
 
-u32 PacketDetectionInformation::getUeIpAddress()
-{
-  LOG_FUNC();
+u32 PacketDetectionInformation::getUeIpAddress() {
   return mUeIpAddress;
-
 }
 
-u32 PacketDetectionInformation::getSourceInterface()
-{
-  LOG_FUNC();
+u32 PacketDetectionInformation::getSourceInterface() {
   return mSourceInterface;
-
 }

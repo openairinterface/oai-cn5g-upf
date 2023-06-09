@@ -3,12 +3,11 @@
 #include <cassert>
 #include <string>
 
-BPFMaps::BPFMaps(bpf_object_skeleton *pBPFObjectSkeleton)
-: mpBPFObjectSkeleton(pBPFObjectSkeleton)
-{
+BPFMaps::BPFMaps(bpf_object_skeleton* pBPFObjectSkeleton)
+    : mpBPFObjectSkeleton(pBPFObjectSkeleton) {
   // Check if there is at least one element.
-  if(mpBPFObjectSkeleton->map_cnt >= 0) {
-    for(unsigned int i = 0; i < mpBPFObjectSkeleton->map_cnt; i++) {
+  if (mpBPFObjectSkeleton->map_cnt >= 0) {
+    for (unsigned int i = 0; i < mpBPFObjectSkeleton->map_cnt; i++) {
       std::string name(mpBPFObjectSkeleton->maps[i].name);
       mMaps.emplace_back(*mpBPFObjectSkeleton->maps[i].map, name);
     }
@@ -17,8 +16,7 @@ BPFMaps::BPFMaps(bpf_object_skeleton *pBPFObjectSkeleton)
 
 BPFMaps::~BPFMaps() {}
 
-BPFMap& BPFMaps::getMap(const char *pName)
-{
+BPFMap& BPFMaps::getMap(const char* pName) {
   // Check if is not NULL.
   assert(pName != NULL);
 
@@ -27,12 +25,13 @@ BPFMap& BPFMaps::getMap(const char *pName)
 
   unsigned int i;
   std::string nameStr(pName);
-  for(i = 0; i < mpBPFObjectSkeleton->map_cnt; i++) {
+  for (i = 0; i < mpBPFObjectSkeleton->map_cnt; i++) {
     std::string mapStr(mpBPFObjectSkeleton->maps[i].name);
-    if(nameStr == mapStr) {
+    if (nameStr == mapStr) {
       return mMaps[i];
     }
   }
-  LOG_ERROR("Map {} not found", pName)
+  Logger::upf_app().error("Map %s not found", pName);
+  // LOG_ERROR("Map {} not found", pName)
   throw std::runtime_error("Map was not found");
 }

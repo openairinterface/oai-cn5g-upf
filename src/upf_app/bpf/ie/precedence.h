@@ -6,9 +6,8 @@
 
 //-------------------------------------
 // 8.2.11 Precedence
-typedef struct precedence_s
-{
+typedef struct precedence_s {
   u32 precedence;
 } precedence_t_;
 
-#endif // __PRECEDENCE_H__
+#endif  // __PRECEDENCE_H__

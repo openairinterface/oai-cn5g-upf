@@ -8,8 +8,7 @@
 #include <ie/bar_id.h>
 #include <ie/far_id.h>
 
-typedef struct pfcp_far_s
-{
+typedef struct pfcp_far_s {
   far_id_t_ far_id;
   apply_action_t_ apply_action;
   forwarding_parameters_t_ forwarding_parameters;
@@ -17,4 +16,4 @@ typedef struct pfcp_far_s
   bar_id_t_ bar_id;
 
 } pfcp_far_t_;
-#endif // __PFCP_FAR_H__
+#endif  // __PFCP_FAR_H__

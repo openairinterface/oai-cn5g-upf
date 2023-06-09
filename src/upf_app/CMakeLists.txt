@@ -1,6 +1,5 @@
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/toolchain.cmake)
 add_subdirectory(bpf)
-add_subdirectory(utils)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/bpf_pfcp)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/common)
@@ -10,7 +9,7 @@ include_directories(${SRC_TOP_DIR}/gtpv1u)
 include_directories(${SRC_TOP_DIR}/itti)
 include_directories(${SRC_TOP_DIR}/udp)  
 include_directories(${SRC_TOP_DIR}/pfcp)
-include_directories(${SRC_TOP_DIR}/../build/ext/spdlog/include)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 
@@ -40,8 +39,8 @@ link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src)
 target_link_libraries(UPF_XDP
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.a
   ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.so
-  PUBLIC upfutils
-  # PRIVATE spdlog::spdlog
+  # PUBLIC upfutils
+  # PRIVATE spdlog
   PRIVATE elf
   PRIVATE z
 )

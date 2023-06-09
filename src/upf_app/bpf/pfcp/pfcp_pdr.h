@@ -4,8 +4,7 @@
 #include <types.h>
 #include <ie/group_ie/create_pdr.h>
 
-typedef struct pfcp_pdr_s
-{
+typedef struct pfcp_pdr_s {
   // TODO: Remove local_seid.
   pdr_id_t_ pdr_id;
   precedence_t_ precedence;
@@ -17,4 +16,4 @@ typedef struct pfcp_pdr_s
   activate_predefined_rules_t_ activate_predefined_rules;
 } pfcp_pdr_t_;
 
-#endif // __PFCP_PDR_H__
+#endif  // __PFCP_PDR_H__

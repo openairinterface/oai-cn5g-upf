@@ -6,10 +6,9 @@
 
 //-------------------------------------
 // 8.2.92 Traffic Endpoint ID
-typedef struct traffic_endpoint_id
-{
+typedef struct traffic_endpoint_id {
   ie_base_t_ base;
   u8 traffic_endpoint_id;
-}traffic_endpoint_id_t_;
+} traffic_endpoint_id_t_;
 
-#endif // IE_TRAFFIC_ENDPOINT_H
+#endif  // IE_TRAFFIC_ENDPOINT_H

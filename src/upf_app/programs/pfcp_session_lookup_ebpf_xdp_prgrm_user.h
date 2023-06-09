@@ -160,4 +160,4 @@ private:
   // The UDP interface.
   std::string mUDPInterface;
 };
-#endif // __PFCP_SESSION_LOOKUP_EBPF_XDP_PRGRM_USER_H__
+#endif  // __PFCP_SESSION_LOOKUP_EBPF_XDP_PRGRM_USER_H__

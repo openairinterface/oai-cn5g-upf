@@ -1,19 +1,16 @@
 #include "pfcp_session_lookup_ebpf_xdp_prgrm_user.h"
 #include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h>
-#include <bpf/bpf.h>          // bpf calls
-#include <bpf/libbpf.h>       // bpf wrappers
-#include <sys/resource.h>     // rlimit
-#include <utils/LogDefines.h> // Logs
-#include <net/if.h>           // if_nametoindex
+#include <bpf/bpf.h>       // bpf calls
+#include <bpf/libbpf.h>    // bpf wrappers
+#include <sys/resource.h>  // rlimit
+// // #include <utils/LogDefines.h> // Logs
+#include <net/if.h>  // if_nametoindex
 #include <wrappers/BPFMaps.h>
 #include <wrappers/BPFMap.hpp>
 
-
 /*****************************************************************************************************************/
 PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(const std::string& gtpInterface, const std::string& udpInterface)
-  : mGTPInterface(gtpInterface), mUDPInterface(udpInterface)
-{
-  LOG_FUNC();
+  : mGTPInterface(gtpInterface), mUDPInterface(udpInterface) {
   mpLifeCycle = std::make_shared<PFCP_Session_LookupProgramLifeCycle>(
                                                           pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__open, \
                                                           pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__load, \
@@ -23,105 +20,82 @@ PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(const std::string& gtpInt
 }
 
 /*****************************************************************************************************************/
-PFCP_Session_LookupProgram::~PFCP_Session_LookupProgram()
-{
-  LOG_FUNC();
+PFCP_Session_LookupProgram::~PFCP_Session_LookupProgram() {
 }
 
 /*****************************************************************************************************************/
 // TODO: Pass configuration throught args.
-void PFCP_Session_LookupProgram::setup()
-{
-  LOG_FUNC();
-
+void PFCP_Session_LookupProgram::setup() {
   mpLifeCycle->open();
   initializeMaps();
   mpLifeCycle->load();
   mpLifeCycle->attach();
 
-  // It must have one program linked to the redirect interface in order the operation would be successful.
-  // Assume there are already a program linked to the interfaces. So we dont need to link a dummy program.
+  // It must have one program linked to the redirect interface in order the
+  // operation would be successful. Assume there are already a program linked to
+  // the interfaces. So we dont need to link a dummy program.
   // mpLifeCycle->link("xdp_redirect_dummy", mUDPInterface.c_str());
   // mpLifeCycle->link("xdp_redirect_dummy", mGTPInterface.c_str());
 }
 
 /*****************************************************************************************************************/
-void PFCP_Session_LookupProgram::tearDown()
-{
-  LOG_FUNC();
+void PFCP_Session_LookupProgram::tearDown() {
   mpLifeCycle->tearDown();
 }
 
 /*****************************************************************************************************************/
-int PFCP_Session_LookupProgram::getUplinkFileDescriptor() const
-{
-  LOG_FUNC();
+int PFCP_Session_LookupProgram::getUplinkFileDescriptor() const {
   return bpf_program__fd(mpLifeCycle->getBPFSkeleton()->progs.uplink_entry_point);
 }
 
 /*****************************************************************************************************************/
-int PFCP_Session_LookupProgram::getDownlinkFileDescriptor() const
-{
-  LOG_FUNC();
+int PFCP_Session_LookupProgram::getDownlinkFileDescriptor() const {
   return bpf_program__fd(mpLifeCycle->getBPFSkeleton()->progs.downlink_entry_point);
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getFARMap() const
-{
-  LOG_FUNC();
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getFARMap() const {
   return mpFARMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getUplinkPDRsMap() const
-{
-  LOG_FUNC();
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getUplinkPDRsMap() const {
   return mpUplinkPDRsMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getDownlinkPDRsMap() const
-{
-  LOG_FUNC();
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getDownlinkPDRsMap() const {
   return mpDownlinkPDRsMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getCounterMap() const
-{
-  LOG_FUNC();
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getCounterMap() const {
   return mpCounterMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getEgressInterfaceMap() const
-{
-  LOG_FUNC();
-  return mpEgressInterfaceMap;
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getEgressInterfaceMap() const {
+ return mpEgressInterfaceMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getArpTableMap() const
-{
-  LOG_FUNC();
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getArpTableMap() const {
   return mpArpTableMap;
 }
 
 /*****************************************************************************************************************/
-void PFCP_Session_LookupProgram::initializeMaps()
-{
-  LOG_FUNC();
+void PFCP_Session_LookupProgram::initializeMaps() {
   // Store all maps available in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
 
   // Warning - The name of the map must be the same of the BPF program.
   // Initialize maps.
-  mpFARMap = std::make_shared<BPFMap>(mpMaps->getMap("m_fars"));
-  mpUplinkPDRsMap = std::make_shared<BPFMap>(mpMaps->getMap("m_teid_pdr"));
+  mpFARMap          = std::make_shared<BPFMap>(mpMaps->getMap("m_fars"));
+  mpUplinkPDRsMap   = std::make_shared<BPFMap>(mpMaps->getMap("m_teid_pdr"));
   mpDownlinkPDRsMap = std::make_shared<BPFMap>(mpMaps->getMap("m_ueip_pdr"));
-  mpCounterMap = std::make_shared<BPFMap>(mpMaps->getMap("mc_stats"));
-  mpEgressInterfaceMap = std::make_shared<BPFMap>(mpMaps->getMap("m_redirect_interfaces"));
+  mpCounterMap      = std::make_shared<BPFMap>(mpMaps->getMap("mc_stats"));
+  mpEgressInterfaceMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_redirect_interfaces"));
   mpArpTableMap = std::make_shared<BPFMap>(mpMaps->getMap("m_arp_table"));
 }
 /*****************************************************************************************************************/

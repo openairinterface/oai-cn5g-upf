@@ -9,8 +9,7 @@
 
 //------------------------------------------------------------------------------
 // Table 7.5.2.3-3: Duplicating Parameters IE in FAR
-typedef struct duplicating_parameters_s
-{
+typedef struct duplicating_parameters_s {
   ie_base_t_ base;
   destination_interface_t_ destination_interface;
   outer_header_creation_t_ outer_header_creation;
@@ -18,4 +17,4 @@ typedef struct duplicating_parameters_s
   forwarding_policy_t_ forwarding_policy;
 } duplicating_parameters_t_;
 
-#endif // __DUPLICATING_PARAMETERS_H__
+#endif  // __DUPLICATING_PARAMETERS_H__

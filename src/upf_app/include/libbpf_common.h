@@ -30,13 +30,10 @@
  * including any extra padding, it with memset() and then assigns initial
  * values provided by users in struct initializer-syntax as varargs.
  */
-#define DECLARE_LIBBPF_OPTS(TYPE, NAME, ...)				    \
-	struct TYPE NAME = ({ 						    \
-		memset(&NAME, 0, sizeof(struct TYPE));			    \
-		(struct TYPE) {						    \
-			.sz = sizeof(struct TYPE),			    \
-			__VA_ARGS__					    \
-		};							    \
-	})
+#define DECLARE_LIBBPF_OPTS(TYPE, NAME, ...)                                   \
+  struct TYPE NAME = ({                                                        \
+    memset(&NAME, 0, sizeof(struct TYPE));                                     \
+    (struct TYPE){.sz = sizeof(struct TYPE), __VA_ARGS__};                     \
+  })
 
 #endif /* __LIBBPF_LIBBPF_COMMON_H */

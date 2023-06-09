@@ -10,4 +10,4 @@ struct next_rule_prog_index_key {
   u32 ipv4_address;
 };
 
-#endif // __NEXT_PROG_RULE_KEY_H__
+#endif  // __NEXT_PROG_RULE_KEY_H__

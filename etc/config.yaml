@@ -41,52 +41,56 @@ register_nf:
 nfs:
   smf:
     host: oai-smf
+    n4:
+      interface_name: eth0
+      port: 8805
   nrf:
     host: oai-nrf
+    sbi:
+      port_http1: 80
+      port_http2: 8080
+      api_version: v1
+      interface_name: eth0
   upf:
     host: oai-upf
     sbi:
       port_http1: 80
       api_version: v1
       interface_name: eth0
+    n3:
+      interface_name: eth0
+      port: 2152
+    n4:
+      interface_name: eth0
+      port: 8805
+    n6:
+      interface_name: eth0
+    n9:
+      interface_name: eth0
+      port: 2152
 
 ##### Options to enable/disable #####
 upf:
   support_features:
-    # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
-    enable_bpf_datapath: no
-    # If "on": Source natting is done for UE, DEFAULT= off
-    enable_snat: yes
-    # If "on": Enable usage monitoring and reposrting with default URR, DEFAULT= off
-    enable_usage_reporting: no
-    # If "2": Send only HTTP/2 requests, DEFAULT=1 (HTTP1)
-    client_http_version: 1
+    enable_bpf_datapath: no    # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
+    enable_snat: yes           # If "on": Source natting is done for UE, DEFAULT= off
+    enable_usage_reporting: no # If "on": Enable usage monitoring and reposrting with default URR, DEFAULT= off
   sNssaiList:
     - sNssai:
-        sst: 1
+      - sst: 1
         sd: 0xFFFFFF
         dnnList:
           - dnn: oai
-      pdu_session_type: IPv4
-      ipv4_pool: 12.1.1.0/24
-      ipv6_prefix: 2001:1:2::/64
-  interfaceList:
-    - interfaceType: "N4"
-      interface: eth0
-      ipv4EndpointAddresses:
-        - "read"
-    - interfaceType: "N3"
-      networkInstance: "oai.n3.org"
-      interface: eth0
-      ipv4EndpointAddresses:
-        - "read"
-    - interfaceType: "N6"
-      networkInstance: "oai.n6.org"
-      interface: eth0
-      ipv4EndpointAddresses:
-        - "read"
-    - interfaceType: "N9"
-      networkInstance: "oai.n9.org"
-      interface: eth0
-      ipv4EndpointAddresses:
-        - "read"
+      - sst: 222
+        sd: 123
+        dnnList:
+          - dnn: default
+dnns:
+  - dnn: "oai"
+    pdu_session_type: "IPv4"
+    ipv4_pool: "12.1.1.151 - 12.1.1.253"
+    ipv6_prefix: "2001:1:2::/64"
+  - dnn: "default"
+    pdu_session_type: "IPv4"
+    ipv4_pool: "12.1.2.151 - 12.1.2.253"
+    ipv6_prefix: "2001:1:2::/64"

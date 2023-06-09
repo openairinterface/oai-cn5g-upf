@@ -12,17 +12,18 @@
  * FARProgram is mandatory.
  *
  */
-class SessionPrograms
-{
-public:
-  SessionPrograms(struct next_rule_prog_index_key key, std::shared_ptr<FARProgram> pFARProgram);
+class SessionPrograms {
+ public:
+  SessionPrograms(
+      struct next_rule_prog_index_key key,
+      std::shared_ptr<FARProgram> pFARProgram);
   virtual ~SessionPrograms();
   struct next_rule_prog_index_key getKey() const;
   std::shared_ptr<FARProgram> getFARProgram() const;
 
-private:
+ private:
   std::shared_ptr<FARProgram> mpFARProgram;
   struct next_rule_prog_index_key mKey;
 };
 
-#endif // __SESSIONPROGRAMS_H__
+#endif  // __SESSIONPROGRAMS_H__

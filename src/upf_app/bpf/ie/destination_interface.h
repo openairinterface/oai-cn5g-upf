@@ -6,18 +6,16 @@
 
 //-------------------------------------
 // 8.2.24 Destination Interface
-enum destination_interface_value_e
-{
+enum destination_interface_value_e {
   /* Request / Initial message */
-  INTERFACE_VALUE_ACCESS = 0,
-  INTERFACE_VALUE_CORE = 1,
+  INTERFACE_VALUE_ACCESS         = 0,
+  INTERFACE_VALUE_CORE           = 1,
   INTERFACE_VALUE_SGI_LAN_N6_LAN = 2,
-  INTERFACE_VALUE_CP_FUNCTION = 3,
-  INTERFACE_VALUE_LI_FUNCTION = 4
+  INTERFACE_VALUE_CP_FUNCTION    = 3,
+  INTERFACE_VALUE_LI_FUNCTION    = 4
 };
 
-typedef struct destination_interface_s
-{
+typedef struct destination_interface_s {
   ie_base_t_ base;
   u8 interface_value;
   // bool operator==(const struct destination_interface_s &i) const
@@ -26,4 +24,4 @@ typedef struct destination_interface_s
   // };
 } destination_interface_t_;
 
-#endif // __DESTINATION_INTERFACE_H__
+#endif  // __DESTINATION_INTERFACE_H__

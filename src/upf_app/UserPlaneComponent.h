@@ -1,7 +1,7 @@
 #ifndef __USERPLANECOMPONENT_H__
 #define __USERPLANECOMPONENT_H__
 
-#include <bpf/libbpf.h> // enum libbpf_print_level
+#include <bpf/libbpf.h>  // enum libbpf_print_level
 #include <memory>
 #include <observer/OnStateChangeSessionProgramObserver.h>
 
@@ -11,12 +11,12 @@ class PFCP_Session_PDR_LookupProgram;
 class PFCP_Session_LookupProgram;
 
 /**
- * @brief User Plane component class to abstract the BPF Service Function Chain for mobile core network.
+ * @brief User Plane component class to abstract the BPF Service Function Chain
+ * for mobile core network.
  *
  */
-class UserPlaneComponent : public OnStateChangeSessionProgramObserver
-{
-public:
+class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
+ public:
   /**
    * @brief Destroy the User Plane Component object.
    *
@@ -96,7 +96,8 @@ public:
 
   /*****************************************************************************************************************/
   // From onNewSessionProgramObserver.
-  void onNewSessionProgram(u_int32_t programId, u_int32_t fileDescriptor) override;
+  void onNewSessionProgram(
+      u_int32_t programId, u_int32_t fileDescriptor) override;
 
   /*****************************************************************************************************************/
   // From onNewSessionProgramObserver.
@@ -104,9 +105,7 @@ public:
 
   // TODO: getSessionManger?
 
-
-
-private:
+ private:
   /**
    * @brief Construct a new User Plane Component object.
    *
@@ -115,7 +114,8 @@ private:
   UserPlaneComponent();
 
   // Log function for libbpf. Do not used it!!
-  static int printLibbpfLog(enum libbpf_print_level lvl, const char *fmt, va_list args);
+  static int printLibbpfLog(
+      enum libbpf_print_level lvl, const char* fmt, va_list args);
 
   // The session manager reference.
   std::shared_ptr<SessionManager> mpSessionManager;
@@ -136,4 +136,4 @@ private:
   std::string mUDPInterface;
 };
 
-#endif // __USERPLANECOMPONENT_H__
+#endif  // __USERPLANECOMPONENT_H__

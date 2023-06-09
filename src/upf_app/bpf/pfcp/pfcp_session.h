@@ -8,8 +8,7 @@
 #define SESSION_PDRS_MAX_SIZE 10
 #define SESSION_FARS_MAX_SIZE 10
 
-typedef struct pfcp_session_s
-{
+typedef struct pfcp_session_s {
   seid_t_ seid;
   // TODO: Turn to counter the iter variable.
   u32 pdrs_counter;
@@ -19,4 +18,4 @@ typedef struct pfcp_session_s
 
 } pfcp_session_t_;
 
-#endif // __PFCP_SESSION_H__
+#endif  // __PFCP_SESSION_H__

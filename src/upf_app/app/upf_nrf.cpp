@@ -299,7 +299,8 @@ void upf_nrf::send_curl(
         upf_cfg.n4.if_name.c_str());  // TODO: use another interface for UPF
                                       // to communicate with NRF
     if (upf_cfg.upf_5g_features.nrf_addr.http_version == 2) {
-      curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+      if (Logger::should_log(spdlog::level::debug))
+        curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
       // We use a self-signed test server, skip verification during debugging
       curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
       curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);

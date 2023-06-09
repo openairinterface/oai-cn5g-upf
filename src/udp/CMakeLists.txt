@@ -27,7 +27,7 @@ include_directories(${SRC_TOP_DIR}/oai_upf)
 include_directories(${SRC_TOP_DIR}/oai_upf/app)
 include_directories(${SRC_TOP_DIR}/pfcp)
 include_directories(${SRC_TOP_DIR}/udp)
-include_directories(${SRC_TOP_DIR}/../build/ext/spdlog/include)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
 #include_directories(${SRC_TOP_DIR}/../build/ext/folly/include)
 
 add_library (UDP STATIC

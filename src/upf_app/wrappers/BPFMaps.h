@@ -8,15 +8,14 @@
  * @brief It is used to retrieve all the BPF maps which are stores in skeletons.
  *
  */
-class BPFMaps
-{
-public:
+class BPFMaps {
+ public:
   /**
    * @brief Construct a new BPFMaps object.
    *
    * @param pBPFObjectSkeleton The bpf skeleton.
    */
-  BPFMaps(bpf_object_skeleton *pBPFObjectSkeleton);
+  BPFMaps(bpf_object_skeleton* pBPFObjectSkeleton);
   /**
    * @brief Destroy the BPFMaps object.
    *
@@ -28,18 +27,18 @@ public:
    * @param pName The name of the BPF map.
    * @return BPFMap& The abstraction of the map.
    */
-  BPFMap &getMap(const char *pName);
+  BPFMap& getMap(const char* pName);
 
-  BPFMaps(const BPFMaps &) = delete;
-  BPFMaps &operator=(const BPFMaps &) = delete;
+  BPFMaps(const BPFMaps&) = delete;
+  BPFMaps& operator=(const BPFMaps&) = delete;
 
-private:
+ private:
   // The bpf skeleton.
-  bpf_object_skeleton *mpBPFObjectSkeleton;
+  bpf_object_skeleton* mpBPFObjectSkeleton;
 
   // The reference of all maps in bpf program.
   // TODO: Change to hash map.
   std::vector<BPFMap> mMaps;
 };
 
-#endif // __BPFMAPS_H__
+#endif  // __BPFMAPS_H__

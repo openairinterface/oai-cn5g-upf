@@ -14,25 +14,27 @@ class SessionPrograms;
 class FARProgram;
 
 /**
- * @brief This class is used to manager the PFCP Sesssion (eBPF bytecode) in kernel space.
- * It store all the BPFProgram that was loaded on the datapath.
+ * @brief This class is used to manager the PFCP Sesssion (eBPF bytecode) in
+ * kernel space. It store all the BPFProgram that was loaded on the datapath.
  *
  */
-class SessionProgramManager
-{
-public:
+class SessionProgramManager {
+ public:
   /**
    * @brief Destroy the Session Program Manager object.
    *
    */
   virtual ~SessionProgramManager();
+
+  /*****************************************************************************************************************/
   /**
    * @brief Get the Instance object.
    *
    * @return SessionProgramManager& The unique instance.
    */
-  static SessionProgramManager &getInstance();
+  static SessionProgramManager& getInstance();
 
+  /*****************************************************************************************************************/
   /**
    * @brief Set the Programs Map object.
    *
@@ -40,6 +42,7 @@ public:
    */
   void setTeidSessionMap(std::shared_ptr<BPFMap> pProgramsMaps);
 
+  /*****************************************************************************************************************/
   /**
    * @brief Create a new program related to the SEID.
    * The context will be empty.
@@ -47,23 +50,31 @@ public:
    * @param seid  The session identifier.
    */
   void create(uint32_t seid);
+
+  /*****************************************************************************************************************/
   /**
    * @brief Remove program session context.
    *
    * @param seid The session identifier.
    */
   void remove(uint32_t seid);
+
+  /*****************************************************************************************************************/
   /**
    * @brief Remove all programs.
    *
    */
   void removeAll();
+  
+  /*****************************************************************************************************************/
   /**
    * @brief Set the On New Session Observer object.
    *
-   * @param pObserver The observer which will be notify when a PFCP_Session_LookupProgram is created.
+   * @param pObserver The observer which will be notified when a PFCP_Session_LookupProgram is created.
    */
-  void setOnNewSessionObserver(OnStateChangeSessionProgramObserver *pObserver);
+  void setOnNewSessionObserver(OnStateChangeSessionProgramObserver* pObserver);
+
+  /*****************************************************************************************************************/
   /**
    * @brief Find the Session Program object.
    *
@@ -72,10 +83,14 @@ public:
    */
   std::shared_ptr<PFCP_Session_LookupProgram> findSessionProgram(uint32_t seid);
 
-  void createPipeline(uint32_t seid, uint32_t teid, uint8_t sourceInterface, uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar);
+  /*****************************************************************************************************************/
+  void createPipeline(
+      uint32_t seid, uint32_t teid, uint8_t sourceInterface,
+      uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar);
   void removePipeline(uint32_t seid);
   std::shared_ptr<SessionPrograms> findSessionPrograms(uint32_t seid);
-private:
+
+ private:
   /**
    * @brief Construct a new Session Program Manager object.
    *
@@ -89,8 +104,8 @@ private:
   // The program eBPF map.
   std::shared_ptr<BPFMap> mpUeIpSessionMap;
 
-  // The observer which will be notify when a PFCP_Session_LookupProgram is created.
-  OnStateChangeSessionProgramObserver *mpOnNewSessionProgramObserver;
+  // The observer which will be notified when a PFCP_Session_LookupProgram is created.
+  OnStateChangeSessionProgramObserver* mpOnNewSessionProgramObserver;
 
   // The Maps to store the instance of the programs.
   std::map<uint32_t, std::shared_ptr<PFCP_Session_LookupProgram>> mSessionProgramMap;
@@ -104,4 +119,4 @@ private:
   std::array<int64_t, 10> mProgramArray;
 };
 
-#endif // __SESSIONPROGRAMMANAGER_H__
+#endif  // __SESSIONPROGRAMMANAGER_H__

@@ -14,12 +14,11 @@
 
 //-----------------------------------------------------------------------------
 // Table 7.5.2.3-2: Forwarding Parameters IE in FAR
-typedef struct forwarding_parameters_s
-{
+typedef struct forwarding_parameters_s {
   ie_base_t_ base;
   destination_interface_t_ destination_interface;
   redirect_information_t_ redirect_information;
-  outer_header_creation_t_ outer_header_creation; 
+  outer_header_creation_t_ outer_header_creation;
   transport_level_marking_t_ transport_level_marking;
   forwarding_policy_t_ forwarding_policy;
   header_enrichment_t_ header_enrichment;
@@ -27,4 +26,4 @@ typedef struct forwarding_parameters_s
   proxying_t_ proxying;
 } forwarding_parameters_t_;
 
-#endif // __FORWARDING_PARAMETERS_H__
+#endif  // __FORWARDING_PARAMETERS_H__

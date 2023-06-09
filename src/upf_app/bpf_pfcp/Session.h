@@ -10,24 +10,24 @@
 #include "pfcp_pdr.hpp"
 #include "pfcp_far.hpp"
 
-class Session
-{
-public:
+class Session {
+ public:
   Session(u64 seid);
   virtual ~Session();
   void addPDR(std::shared_ptr<PacketDetectionRule> pPdr);
   void addFAR(std::shared_ptr<ForwardingActionRule> pFar);
   void addPDR(std::shared_ptr<pfcp::pfcp_pdr> pPdr);
   void addFAR(std::shared_ptr<pfcp::pfcp_far> pFAR);
-  static bool comparePDR(const std::shared_ptr<PacketDetectionRule>& first, const std::shared_ptr<PacketDetectionRule>& second);
+  static bool comparePDR(
+      const std::shared_ptr<PacketDetectionRule>& first,
+      const std::shared_ptr<PacketDetectionRule>& second);
   std::shared_ptr<PacketDetectionRule> getHighestPrecedencePDR();
 
-private:
-
- std::list<std::shared_ptr<PacketDetectionRule>> mPDRs;
- std::vector<std::shared_ptr<ForwardingActionRule>> mFARs;
- u64 mSeid;
- std::shared_ptr<pfcp::pfcp_session> mpSession;
+ private:
+  std::list<std::shared_ptr<PacketDetectionRule>> mPDRs;
+  std::vector<std::shared_ptr<ForwardingActionRule>> mFARs;
+  u64 mSeid;
+  std::shared_ptr<pfcp::pfcp_session> mpSession;
 };
 
-#endif // __SESSION_H__
+#endif  // __SESSION_H__

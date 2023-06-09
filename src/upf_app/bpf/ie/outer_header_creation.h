@@ -14,8 +14,8 @@
 enum outer_header_creation_description_value_e {
   OUTER_HEADER_CREATION_GTPU_UDP_IPV4 = 0x0100,
   OUTER_HEADER_CREATION_GTPU_UDP_IPV6 = 0x0200,
-  OUTER_HEADER_CREATION_UDP_IPV4 = 0x0400,
-  OUTER_HEADER_CREATION_UDP_IPV6 = 0x0800
+  OUTER_HEADER_CREATION_UDP_IPV4      = 0x0400,
+  OUTER_HEADER_CREATION_UDP_IPV6      = 0x0800
 };
 
 //-------------------------------------
@@ -29,4 +29,4 @@ typedef struct outer_header_creation_s {
   u16 port_number;
 } outer_header_creation_t_;
 
-#endif // __OUTER_HEADER_CREATION_H__
+#endif  // __OUTER_HEADER_CREATION_H__

@@ -320,6 +320,16 @@ int upf_config::load(const string& config_file) {
         "%s : %s, using defaults", nfex.what(), nfex.getPath());
   }
 
+  // Log Level
+  try {
+    std::string string_level;
+    upf_cfg.lookupValue(UPF_CONFIG_STRING_LOG_LEVEL, string_level);
+    log_level = spdlog::level::from_str(string_level);
+  } catch (const SettingNotFoundException& nfex) {
+    Logger::upf_app().error(
+        "%s : %s, using defaults", nfex.what(), nfex.getPath());
+  }
+
   try {
     const Setting& itti_cfg = upf_cfg[UPF_CONFIG_STRING_ITTI_TASKS];
     load_itti(itti_cfg, itti);
@@ -512,6 +522,13 @@ int upf_config::load(const string& config_file) {
         upf_5g_features.register_nrf = true;
       } else {
         upf_5g_features.register_nrf = false;
+      }
+
+      support_features.lookupValue(UPF_CONFIG_STRING_ENABLE_BPF_DATAPATH, opt);
+      if (boost::iequals(opt, "yes")) {
+        upf_5g_features.enable_bpf_datapath = true;
+      } else {
+        upf_5g_features.enable_bpf_datapath = false;
       }
 
       support_features.lookupValue(
@@ -775,6 +792,9 @@ void upf_config::display() {
     Logger::upf_app().info(
         "    register_nrf: %s", (upf_5g_features.register_nrf) ? "yes" : "no");
     Logger::upf_app().info(
+        "    enable_bpf_datapath: %s",
+        (upf_5g_features.enable_bpf_datapath) ? "yes" : "no");
+    Logger::upf_app().info(
         "    use_fqdn_nrf: %s", (upf_5g_features.use_fqdn_nrf) ? "yes" : "no");
     if (upf_5g_features.register_nrf) {
       Logger::upf_app().info("    NRF:");
@@ -809,4 +829,7 @@ void upf_config::display() {
       }
     }
   }
+  Logger::upf_app().info(
+      "- Log Level will be .......: %s",
+      spdlog::level::to_string_view(log_level));
 }

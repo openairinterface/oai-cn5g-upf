@@ -10,8 +10,8 @@
 
 /* This is the data record stored in the map */
 struct datarec {
-	__u64 rx_packets;
-	__u64 rx_bytes;
+  __u64 rx_packets;
+  __u64 rx_bytes;
 };
 
 #ifndef XDP_ACTION_MAX
@@ -27,6 +27,5 @@ static const char *xdp_action_names[XDP_ACTION_MAX] = {
     [XDP_REDIRECT] = "XDP_REDIRECT"
 };
 // clang-format on
-
 
 #endif /* __XDP_STATS_KERN_USER_H */
