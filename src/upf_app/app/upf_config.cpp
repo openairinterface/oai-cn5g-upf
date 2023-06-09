@@ -524,7 +524,6 @@ int upf_config::load(const string& config_file) {
         upf_5g_features.register_nrf = false;
       }
 
-    if (upf_5g_features.enable_bpf_datapath) {
       support_features.lookupValue(
           UPF_CONFIG_STRING_ENABLE_BPF_DATAPATH, opt);
       if (boost::iequals(opt, "yes")) {

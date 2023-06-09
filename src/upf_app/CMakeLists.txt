@@ -1,6 +1,5 @@
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/toolchain.cmake)
 add_subdirectory(bpf)
-add_subdirectory(utils)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/bpf_pfcp)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/common)

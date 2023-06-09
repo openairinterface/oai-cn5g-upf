@@ -673,9 +673,11 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         }
       }
 
-      std::shared_ptr<pfcp::pfcp_session> pSession = std::make_shared<pfcp::pfcp_session>(*session);
-      spSessionManager = UserPlaneComponent::getInstance().getSessionManager();
-      spSessionManager->createBPFSession(pSession);  
+      if(upf_cfg.upf_5g_features.enable_bpf_datapath){
+            std::shared_ptr<pfcp::pfcp_session> pSession = std::make_shared<pfcp::pfcp_session>(*session);
+            spSessionManager = UserPlaneComponent::getInstance().getSessionManager();
+            spSessionManager->createBPFSession(pSession);  
+      }
 
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         s = std::shared_ptr<pfcp_session>(session);
