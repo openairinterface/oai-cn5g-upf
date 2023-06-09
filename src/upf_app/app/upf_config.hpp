@@ -79,6 +79,7 @@ namespace upf {
 
 #define UPF_CONFIG_STRING_5G_FEATURES "SUPPORT_5G_FEATURES"
 #define UPF_CONFIG_STRING_ENABLE_5G_FEATURES "ENABLE_5G_FEATURES"
+#define UPF_CONFIG_STRING_ENABLE_BPF_DATAPATH "ENABLE_BPF_DATAPATH"
 #define UPF_CONFIG_STRING_5G_FEATURES_REGISTER_NRF "REGISTER_NRF"
 #define UPF_CONFIG_STRING_5G_FEATURES_UPF_FQDN "UPF_FQDN_5G"
 #define UPF_CONFIG_STRING_5G_FEATURES_NRF "NRF"
@@ -160,6 +161,7 @@ class upf_config {
 
   struct {
     bool enable_5g_features;
+    bool enable_bpf_datapath;
     bool register_nrf;
     upf_info_t upf_info;
     bool use_fqdn_nrf;
@@ -202,6 +204,7 @@ class upf_config {
     n4.port                                  = pfcp::default_port;
 
     upf_5g_features.enable_5g_features        = false;
+    upf_5g_features.enable_bpf_datapath       = false;
     upf_5g_features.register_nrf              = false;
     upf_5g_features.upf_info                  = {};
     upf_5g_features.use_fqdn_nrf              = false;

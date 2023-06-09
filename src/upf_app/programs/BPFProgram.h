@@ -2,7 +2,6 @@
 #define __BPFPROGRAM_H__
 
 #include <stdint.h>
-#include <utils/Util.h>
 
 class BPFProgram
 {

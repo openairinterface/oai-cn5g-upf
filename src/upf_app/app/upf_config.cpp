@@ -524,6 +524,15 @@ int upf_config::load(const string& config_file) {
         upf_5g_features.register_nrf = false;
       }
 
+    if (upf_5g_features.enable_bpf_datapath) {
+      support_features.lookupValue(
+          UPF_CONFIG_STRING_ENABLE_BPF_DATAPATH, opt);
+      if (boost::iequals(opt, "yes")) {
+        upf_5g_features.enable_bpf_datapath = true;
+      } else {
+        upf_5g_features.enable_bpf_datapath = false;
+      }
+
       support_features.lookupValue(
           UPF_CONFIG_STRING_5G_FEATURES_USE_FQDN_NRF, opt);
       if (boost::iequals(opt, "yes")) {
@@ -784,6 +793,8 @@ void upf_config::display() {
   if (upf_5g_features.enable_5g_features) {
     Logger::upf_app().info(
         "    register_nrf: %s", (upf_5g_features.register_nrf) ? "yes" : "no");
+    Logger::upf_app().info(
+        "    enable_bpf_datapath: %s", (upf_5g_features.enable_bpf_datapath) ? "yes" : "no");
     Logger::upf_app().info(
         "    use_fqdn_nrf: %s", (upf_5g_features.use_fqdn_nrf) ? "yes" : "no");
     if (upf_5g_features.register_nrf) {

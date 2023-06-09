@@ -121,7 +121,7 @@ int my_check_redundant_process(char* exec_name) {
   return result;
 }
 //------------------------------------------------------------------------------
-void setup()
+void setup_bpf()
 {
   std::shared_ptr<RulesUtilities> mpRulesFactory;
   mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
@@ -193,7 +193,7 @@ int main(int argc, char** argv) {
   fflush(fp);
   fclose(fp);
 
-  setup();
+  if(upf_cfg.upf_5g_features.enable_bpf_datapath) setup_bpf();
   // once all udp servers initialized
   io_service.run();
 
