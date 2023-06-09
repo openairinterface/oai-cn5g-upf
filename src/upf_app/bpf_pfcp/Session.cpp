@@ -1,49 +1,31 @@
 #include <Session.h>
 // // #include <utils/LogDefines.h>
 
-Session::Session(u64 seid)
-  : mSeid(seid)
-{
-  
-}
+Session::Session(u64 seid) : mSeid(seid) {}
 
-Session::~Session()
-{
-  
-}
+Session::~Session() {}
 
-void Session::addPDR(std::shared_ptr<PacketDetectionRule> pPdr)
-{
-  
+void Session::addPDR(std::shared_ptr<PacketDetectionRule> pPdr) {
   mPDRs.push_back(pPdr);
   mPDRs.sort(Session::comparePDR);
 }
 
-void Session::addFAR(std::shared_ptr<ForwardingActionRule> pFar)
-{
-  
+void Session::addFAR(std::shared_ptr<ForwardingActionRule> pFar) {
   mFARs.push_back(pFar);
 }
 
-void Session::addPDR(std::shared_ptr<pfcp::pfcp_pdr> pPdr)
-{
-  
+void Session::addPDR(std::shared_ptr<pfcp::pfcp_pdr> pPdr) {
   // mpSession->pdrs
 }
 
-void Session::addFAR(std::shared_ptr<pfcp::pfcp_far> pFAR)
-{
-  
-}
+void Session::addFAR(std::shared_ptr<pfcp::pfcp_far> pFAR) {}
 
-bool Session::comparePDR(const std::shared_ptr<PacketDetectionRule>& first, const std::shared_ptr<PacketDetectionRule>& second)
-{
-  
+bool Session::comparePDR(
+    const std::shared_ptr<PacketDetectionRule>& first,
+    const std::shared_ptr<PacketDetectionRule>& second) {
   return first->getPrecedence() < second->getPrecedence();
 }
 
-std::shared_ptr<PacketDetectionRule> Session::getHighestPrecedencePDR()
-{
-  
+std::shared_ptr<PacketDetectionRule> Session::getHighestPrecedencePDR() {
   return *mPDRs.begin();
 }

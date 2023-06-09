@@ -5,7 +5,6 @@
 #include <types.h>
 #include <linux/bpf.h>
 
-static u32 eth_handle(struct xdp_md *ctx, struct ethhdr *ethh);
+static u32 eth_handle(struct xdp_md* ctx, struct ethhdr* ethh);
 
-
-#endif // PROTOCOLS_ETH_H
+#endif  // PROTOCOLS_ETH_H

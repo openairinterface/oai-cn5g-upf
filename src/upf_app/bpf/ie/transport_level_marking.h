@@ -6,10 +6,9 @@
 
 //-------------------------------------
 // 8.2.12 Transport Level Marking
-typedef struct transport_level_marking_s
-{
+typedef struct transport_level_marking_s {
   ie_base_t_ base;
-  s8 transport_level_marking[2]; // 2 octets
+  s8 transport_level_marking[2];  // 2 octets
 } transport_level_marking_t_;
 
-#endif // __TRANSPORT_LEVEL_MARKING_H__
+#endif  // __TRANSPORT_LEVEL_MARKING_H__

@@ -19,7 +19,7 @@
 #include <utils/utils.h>
 #include <far_maps.h>
 //#include <upf_xdp_bpf_maps.h>
-#include <string.h>   //Needed for memcpy
+#include <string.h>  //Needed for memcpy
 
 // #ifndef UDP_INTERFACE
 // // // N6
@@ -67,13 +67,14 @@ static u32 update_dst_mac_address(struct iphdr* p_ip, struct ethhdr* p_eth) {
 }
 
 /*****************************************************************************************************************/
-static u32 create_outer_header_gtpu_ipv4(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
+static u32 create_outer_header_gtpu_ipv4(
+    struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
   bpf_debug("Create Outer Header GTPU_IPv4");
   bpf_debug("Original Packet: Data/UDP/IP/ETH");
-  
+
   struct ethhdr* p_eth;
   struct iphdr* p_ip;
-  
+
   __builtin_memset(&p_eth, 0, sizeof(p_eth));
   __builtin_memset(&p_ip, 0, sizeof(p_ip));
 
@@ -106,7 +107,7 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md* p_ctx, pfcp_far_t_* p_fa
   }
 
   memcpy(p_eth, p_orig_eth, sizeof(*p_eth));
-  
+
   /*
   |----------------------------------------------------------------|
   |-------------------------- Add IP header -----------------------|
@@ -123,7 +124,7 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md* p_ctx, pfcp_far_t_* p_fa
   }
 
   p_ip->version  = 4;
-  p_ip->ihl      = 5;       // No options
+  p_ip->ihl      = 5;  // No options
   p_ip->tos      = 0;
   p_ip->tot_len  = htons(ntohs(p_inner_ip->tot_len) + GTP_ENCAPSULATED_SIZE);
   p_ip->id       = 0;       // No fragmentation
@@ -131,7 +132,7 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md* p_ctx, pfcp_far_t_* p_fa
   p_ip->ttl      = 64;
   p_ip->protocol = IPPROTO_UDP;
   p_ip->check    = 0;
-  
+
   /***********************/
   // uint32_t udpInterfaceindex =
   // if_nametoindex((UserPlaneComponent::getInstance().getUDPInterface()).c_str());
@@ -143,7 +144,8 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md* p_ctx, pfcp_far_t_* p_fa
 
   // p_ip->saddr = udp_interface_ipv4;
   p_ip->saddr = 25184595;
-  p_ip->daddr = p_far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
+  p_ip->daddr =
+      p_far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
 
   /*
   |----------------------------------------------------------------|
@@ -156,13 +158,11 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md* p_ctx, pfcp_far_t_* p_fa
   }
 
   p_udp->source = htons(GTP_UDP_PORT);
-  p_udp->dest = htons(p_far->forwarding_parameters.outer_header_creation.port_number);
+  p_udp->dest =
+      htons(p_far->forwarding_parameters.outer_header_creation.port_number);
   p_udp->len = htons(
-                      ntohs(p_inner_ip->tot_len) + \
-                      sizeof(*p_udp)             + \
-                      sizeof(struct gtpuhdr)     + \
-                      sizeof(struct gtpu_extn_pdu_session_container)
-                      );
+      ntohs(p_inner_ip->tot_len) + sizeof(*p_udp) + sizeof(struct gtpuhdr) +
+      sizeof(struct gtpu_extn_pdu_session_container));
   p_udp->check = 0;
 
   /*
@@ -170,9 +170,11 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md* p_ctx, pfcp_far_t_* p_fa
   |-------------------------- Add GTP header ----------------------|
   |----------------------------------------------------------------|
   */
-  bpf_debug("Destination MAC:%x:%x:%x:",  p_eth->h_dest[0], p_eth->h_dest[1], p_eth->h_dest[2]);
-  bpf_debug(                "%x:%x:%x\n", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
-  
+  bpf_debug(
+      "Destination MAC:%x:%x:%x:", p_eth->h_dest[0], p_eth->h_dest[1],
+      p_eth->h_dest[2]);
+  bpf_debug("%x:%x:%x\n", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
+
   p_mac_address = bpf_map_lookup_elem(&m_arp_table, &p_ip->daddr);
   if (!p_mac_address) {
     bpf_debug("MAC address not found!!\n");
@@ -182,10 +184,14 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md* p_ctx, pfcp_far_t_* p_fa
   // swap_src_dst_mac(p_data);
   memcpy(p_eth->h_dest, p_mac_address, sizeof(p_eth->h_dest));
 
-  bpf_debug("Destination MAC:%x:%x:%x:",  p_eth->h_dest[0], p_eth->h_dest[1], p_eth->h_dest[2]);
-  bpf_debug(                "%x:%x:%x\n", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
+  bpf_debug(
+      "Destination MAC:%x:%x:%x:", p_eth->h_dest[0], p_eth->h_dest[1],
+      p_eth->h_dest[2]);
+  bpf_debug("%x:%x:%x\n", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
   bpf_debug("Destination IP:%d, \t", p_ip->daddr);
-  bpf_debug("Port:%d\n", p_far->forwarding_parameters.outer_header_creation.port_number);
+  bpf_debug(
+      "Port:%d\n",
+      p_far->forwarding_parameters.outer_header_creation.port_number);
 
   struct gtpuhdr* p_gtpuh = (void*) (p_udp + 1);
   if ((void*) (p_gtpuh + 1) > p_data_end) {
@@ -223,7 +229,7 @@ static u32 create_outer_header_gtpu_ipv4(struct xdp_md* p_ctx, pfcp_far_t_* p_fa
   |---------------------- Compute L3 CHECKSUM ---------------------|
   |----------------------------------------------------------------|
   */
-  __wsum l3sum = pcn_csum_diff(0, 0, (__be32*)p_ip, sizeof(*p_ip), 0);
+  __wsum l3sum = pcn_csum_diff(0, 0, (__be32*) p_ip, sizeof(*p_ip), 0);
   pcn_l3_csum_replace(p_ctx, IP_CSUM_OFFSET, 0, l3sum, 0);
 
   bpf_debug("GTP-Encapsulated Packet: Data/UDP/IP/EXT/GTP/UDP/IP/ETH");

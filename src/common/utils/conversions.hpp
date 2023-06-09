@@ -36,9 +36,9 @@
 #define IN_ADDR_FMT "%u.%u.%u.%u"
 #define PRI_IN_ADDR(aDDRESS)                                                   \
   (uint8_t)((aDDRESS.s_addr) & 0x000000ff),                                    \
-      (uint8_t)(((aDDRESS.s_addr) & 0x0000ff00) >> 8),                         \
-      (uint8_t)(((aDDRESS.s_addr) & 0x00ff0000) >> 16),                        \
-      (uint8_t)(((aDDRESS.s_addr) & 0xff000000) >> 24)
+      (uint8_t) (((aDDRESS.s_addr) & 0x0000ff00) >> 8),                        \
+      (uint8_t) (((aDDRESS.s_addr) & 0x00ff0000) >> 16),                       \
+      (uint8_t) (((aDDRESS.s_addr) & 0xff000000) >> 24)
 
 #define IPV4_ADDR_DISPLAY_8(aDDRESS)                                           \
   (aDDRESS)[0], (aDDRESS)[1], (aDDRESS)[2], (aDDRESS)[3]

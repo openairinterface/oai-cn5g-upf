@@ -9,8 +9,7 @@
 
 //-------------------------------------
 // 8.2.67 Header Enrichment
-typedef struct header_enrichment_s
-{
+typedef struct header_enrichment_s {
   u8 spare : 3;
   u8 header_type : 5;
   u8 lenght_of_header_field_name;
@@ -19,4 +18,4 @@ typedef struct header_enrichment_s
   s8 header_field_value[HEADER_ENRICHMENT_FIELD_VALUE_MAX_SIZE];
 } header_enrichment_t_;
 
-#endif // __HEADER_ENRICHMENT_H__
+#endif  // __HEADER_ENRICHMENT_H__

@@ -18,8 +18,7 @@
 
 //------------------------------------------------------------------------------
 // Table 7.5.2.2-2: PDI IE within PFCP Session Establishment Request
-typedef struct pdi
-{
+typedef struct pdi {
   ie_base_t_ base;
   source_interface_t_ source_interface;
   _fteid_t_ fteid;
@@ -34,6 +33,6 @@ typedef struct pdi
   framed_routing_t_ framed_routing;
   framed_ipv6_route_t_ framed_ipv6_route;
 
-}pdi_t_;
+} pdi_t_;
 
-#endif // IE_PDI_H
+#endif  // IE_PDI_H

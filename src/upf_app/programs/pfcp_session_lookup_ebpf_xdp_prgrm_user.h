@@ -6,7 +6,8 @@
 #include <pfcp_session_lookup_ebpf_xdp_prgrm_kernel_skel.h>
 #include <ProgramLifeCycle.hpp>
 
-using SessionProgramLifeCycle = ProgramLifeCycle<pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c>;
+using SessionProgramLifeCycle =
+    ProgramLifeCycle<pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c>;
 
 class BPFMaps;
 class BPFMap;
@@ -15,14 +16,14 @@ class BPFMap;
  * @brief This class is used to interface with BPF program (Session).
  *
  */
-class SessionProgram
-{
-public:
+class SessionProgram {
+ public:
   /**
    * @brief Construct a new Session Program object.
    *
    */
-  SessionProgram(const std::string& gtpInterface, const std::string& udpInterface);
+  SessionProgram(
+      const std::string& gtpInterface, const std::string& udpInterface);
   /**
    * @brief Destroy the Session Program object.
    *
@@ -93,7 +94,7 @@ public:
    */
   std::shared_ptr<BPFMap> getArpTableMap() const;
 
-private:
+ private:
   /**
    * @brief Initialize BPF maps wrappers references.
    *
@@ -133,4 +134,4 @@ private:
   // The UDP interface.
   std::string mUDPInterface;
 };
-#endif // __PFCP_SESSION_LOOKUP_EBPF_XDP_PRGRM_USER_H__
+#endif  // __PFCP_SESSION_LOOKUP_EBPF_XDP_PRGRM_USER_H__

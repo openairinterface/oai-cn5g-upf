@@ -22,7 +22,8 @@
 
 //         /* Get next bit: */
 //         out <<= 1;
-//         out |= (*data >> bits_read) & 1; // item a) work from the least significant bits
+//         out |= (*data >> bits_read) & 1; // item a) work from the least
+//         significant bits
 
 //         /* Increment bit counter: */
 //         bits_read++;

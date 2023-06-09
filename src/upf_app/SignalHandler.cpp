@@ -2,29 +2,20 @@
 // #include <utils/LogDefines.h>
 #include <UserPlaneComponent.h>
 
-SignalHandler& SignalHandler::getInstance() 
-{
- 
+SignalHandler& SignalHandler::getInstance() {
   static SignalHandler sInstance;
   return sInstance;
 }
 
-SignalHandler::~SignalHandler() 
-{
- 
-}
+SignalHandler::~SignalHandler() {}
 
-void SignalHandler::enable() 
-{
- 
+void SignalHandler::enable() {
   signal(SIGINT, SignalHandler::tearDown);
   signal(SIGTERM, SignalHandler::tearDown);
   signal(SIGSEGV, SignalHandler::tearDown);
 }
 
-void SignalHandler::tearDown(int signal) 
-{
-   
+void SignalHandler::tearDown(int signal) {
   UserPlaneComponent::getInstance().tearDown();
   exit(0);
 }

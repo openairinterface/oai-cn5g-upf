@@ -8,13 +8,12 @@
 #include <string>
 // #include <utils/LogDefines.h>
 
-class Configuration
-{
-public:
-  Configuration(int argc, char **argv);
+class Configuration {
+ public:
+  Configuration(int argc, char** argv);
   static std::string sGTPInterface;
   static std::string sUDPInterface;
   static unsigned char sIsSocketBufferEnabled;
 };
 
-#endif // __CONFIGURATION_H__
+#endif  // __CONFIGURATION_H__

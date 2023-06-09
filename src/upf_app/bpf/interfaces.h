@@ -9,4 +9,4 @@ struct interface {
   u32 ipv4_address;
 };
 
-#endif // __INTERFACES_H__
+#endif  // __INTERFACES_H__

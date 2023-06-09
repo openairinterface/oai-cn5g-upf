@@ -6,8 +6,7 @@
 
 //-------------------------------------
 // 8.2.26 Apply Action
-typedef struct apply_action_s
-{
+typedef struct apply_action_s {
   // ie_base_t_ base;
   u8 spare : 3;
   u8 dupl : 1;
@@ -17,4 +16,4 @@ typedef struct apply_action_s
   u8 drop : 1;
 } apply_action_t_;
 
-#endif // __APPLY_ACTION_H__
+#endif  // __APPLY_ACTION_H__

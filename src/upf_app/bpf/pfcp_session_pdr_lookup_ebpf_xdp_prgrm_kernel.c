@@ -27,49 +27,51 @@
 #include "xdp_stats_kern.h"
 #include "xdp_stats_kern_user.h"
 
-
-
-
 /*****************************************************************************************************************/
 // u32 litToBigEndian(u32 x) {
-//   return (((x<<24) & 0xff000000) | ((x<<8) & 0x00ff0000) | ((x>>24) & 0x000000ff) | ((x>>8) & 0x0000ff00));
+//   return (((x<<24) & 0xff000000) | ((x<<8) & 0x00ff0000) | ((x>>24) &
+//   0x000000ff) | ((x>>8) & 0x0000ff00));
 // };
 
 // u32 bigToLitEndian(u32 x) {
-//   return (((x>>24) & 0x000000ff) | ((x>>8) & 0x0000ff00) | ((x<<8) & 0x00ff0000) | ((x<<24) & 0xff000000));
+//   return (((x>>24) & 0x000000ff) | ((x>>8) & 0x0000ff00) | ((x<<8) &
+//   0x00ff0000) | ((x<<24) & 0xff000000));
 // };
 
-
-
 /*****************************************************************************************************************/
-static u32 tail_call_next_prog(struct xdp_md *p_ctx, teid_t_ teid, u8 source_value, u32 ipv4_address)
-{
+static u32 tail_call_next_prog(
+    struct xdp_md* p_ctx, teid_t_ teid, u8 source_value, u32 ipv4_address) {
   struct next_rule_prog_index_key map_key;
-  u32 *index_prog;
+  u32* index_prog;
 
   __builtin_memset(&map_key, 0, sizeof(struct next_rule_prog_index_key));
 
-  map_key.teid = (((teid<<24) & 0xff000000) | ((teid<<8) & 0x00ff0000) | ((teid>>24) & 0x000000ff) | ((teid>>8) & 0x0000ff00));  
+  map_key.teid =
+      (((teid << 24) & 0xff000000) | ((teid << 8) & 0x00ff0000) |
+       ((teid >> 24) & 0x000000ff) | ((teid >> 8) & 0x0000ff00));
   map_key.source_value = source_value;
   map_key.ipv4_address = ipv4_address;
-  bpf_debug("This is the key teid: %d, source: %d, ip: %d\n", map_key.teid, map_key.source_value, map_key.ipv4_address);
-  
-  index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
-  //bpf_tail_call(p_ctx, &m_next_rule_prog, 1);
+  bpf_debug(
+      "This is the key teid: %d, source: %d, ip: %d\n", map_key.teid,
+      map_key.source_value, map_key.ipv4_address);
 
-  if(index_prog){
+  index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
+  // bpf_tail_call(p_ctx, &m_next_rule_prog, 1);
+
+  if (index_prog) {
     bpf_debug("Value of the eBPF tail call, index_prog = %d\n", *index_prog);
     bpf_tail_call(p_ctx, &m_next_rule_prog, *index_prog);
     bpf_debug("BPF tail call was not executed!\n");
   }
   bpf_debug("BPF tail call was not executed!\n");
   bpf_debug("One reason could be:\n");
-  bpf_debug("1. Key values not matching hash key for map m_next_rule_prog!\n \
+  bpf_debug(
+      "1. Key values not matching hash key for map m_next_rule_prog!\n \
              \t\t\t\t\t\t You have to compare the keys\n \
              \t\t\t\t\t\t 2. Endianess problem!\n \
              \t\t\t\t\t\t Map and Key values are saved in different endianess!\n\
              \t\t\t\t\t\t Map Hash Key and Key not matching\n");
-  
+
   return 0;
 }
 
@@ -85,25 +87,27 @@ static u32 tail_call_next_prog(struct xdp_md *p_ctx, teid_t_ teid, u8 source_val
  * @param p_gtpuh The GTP header.
  * @return u32 The XDP action.
  */
-static u32 gtp_handle(struct xdp_md *p_ctx, struct gtpuhdr *p_gtpuh, u32 src_ue_ip)
-{
-  void *p_data_end = (void *)(long)p_ctx->data_end;
-  struct gtpu_extn_pdu_session_container* gtpu_ext_hdr =(void *)(p_gtpuh + 1);
+static u32 gtp_handle(
+    struct xdp_md* p_ctx, struct gtpuhdr* p_gtpuh, u32 src_ue_ip) {
+  void* p_data_end = (void*) (long) p_ctx->data_end;
+  struct gtpu_extn_pdu_session_container* gtpu_ext_hdr = (void*) (p_gtpuh + 1);
 
-  if((void *)p_gtpuh + sizeof(*p_gtpuh) > p_data_end) {
+  if ((void*) p_gtpuh + sizeof(*p_gtpuh) > p_data_end) {
     bpf_debug("Invalid GTPU packet");
     return XDP_DROP;
   }
 
   // TODO: Handle other PDU.
-  if(p_gtpuh->message_type != GTPU_G_PDU) {
-    bpf_debug("Message type 0x%x is not GTPU GPDU(0x%x)", p_gtpuh->message_type, GTPU_G_PDU);
+  if (p_gtpuh->message_type != GTPU_G_PDU) {
+    bpf_debug(
+        "Message type 0x%x is not GTPU GPDU(0x%x)", p_gtpuh->message_type,
+        GTPU_G_PDU);
     return XDP_PASS;
   }
 
   bpf_debug("GTP GPDU received");
 
-  if(!ip_inner_check_ipv4(p_ctx, (struct iphdr *)(gtpu_ext_hdr + 1))) {
+  if (!ip_inner_check_ipv4(p_ctx, (struct iphdr*) (gtpu_ext_hdr + 1))) {
     bpf_debug("Invalid IP inner");
     return XDP_DROP;
   }
@@ -114,7 +118,6 @@ static u32 gtp_handle(struct xdp_md *p_ctx, struct gtpuhdr *p_gtpuh, u32 src_ue_
 
   return XDP_PASS;
 }
-
 
 /*****************************************************************************************************************/
 /**
@@ -128,15 +131,15 @@ static u32 gtp_handle(struct xdp_md *p_ctx, struct gtpuhdr *p_gtpuh, u32 src_ue_
  * @param udph The UDP header.
  * @return u32 The XDP action.
  */
-static u32 udp_handle(struct xdp_md *p_ctx, struct udphdr *udph, u32 src_ip, u32 dest_ip)
-{
-  void *p_data_end = (void *)(long)p_ctx->data_end;
+static u32 udp_handle(
+    struct xdp_md* p_ctx, struct udphdr* udph, u32 src_ip, u32 dest_ip) {
+  void* p_data_end = (void*) (long) p_ctx->data_end;
   struct next_rule_prog_index_key map_key;
   u32 index_prog;
   u32 dport;
 
   /* Hint: +1 is sizeof(struct udphdr) */
-  if((void *)udph + sizeof(*udph) > p_data_end) {
+  if ((void*) udph + sizeof(*udph) > p_data_end) {
     bpf_debug("Invalid UDP packet");
     return XDP_ABORTED;
   }
@@ -144,18 +147,17 @@ static u32 udp_handle(struct xdp_md *p_ctx, struct udphdr *udph, u32 src_ip, u32
   bpf_debug("UDP packet validated");
   dport = htons(udph->dest);
 
-  switch(dport) {
-  case GTP_UDP_PORT:
-    // The source IP is the UE IP address (uplink).
-    return gtp_handle(p_ctx, (struct gtpuhdr *)(udph + 1), src_ip);
-  default:
-    // The destination IP is the UE IP address (donwlink).
-    tail_call_next_prog(p_ctx, 0, INTERFACE_VALUE_CORE, dest_ip);
+  switch (dport) {
+    case GTP_UDP_PORT:
+      // The source IP is the UE IP address (uplink).
+      return gtp_handle(p_ctx, (struct gtpuhdr*) (udph + 1), src_ip);
+    default:
+      // The destination IP is the UE IP address (donwlink).
+      tail_call_next_prog(p_ctx, 0, INTERFACE_VALUE_CORE, dest_ip);
 
-    return XDP_PASS;
+      return XDP_PASS;
   }
 }
-
 
 /*****************************************************************************************************************/
 /**
@@ -169,29 +171,28 @@ static u32 udp_handle(struct xdp_md *p_ctx, struct udphdr *udph, u32 src_ip, u32
  * @param iph The IP header.
  * @return u32 The XDP action.
  */
-static u32 ipv4_handle(struct xdp_md *p_ctx, struct iphdr *iph)
-{
-  void *p_data_end = (void *)(long)p_ctx->data_end;
+static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
+  void* p_data_end = (void*) (long) p_ctx->data_end;
   // Type need to match map.
   u32 ip_src;
   u32 ip_dest;
 
   // Hint: +1 is sizeof(struct iphdr)
-  if((void *)iph + sizeof(*iph) > p_data_end) {
+  if ((void*) iph + sizeof(*iph) > p_data_end) {
     bpf_debug("Invalid IPv4 packet");
     return XDP_ABORTED;
   }
-  ip_src = iph->saddr;
+  ip_src  = iph->saddr;
   ip_dest = iph->daddr;
 
   bpf_debug("Valid IPv4 packet: raw daddr:0x%x", ip_dest);
-  switch(iph->protocol) {
-  case IPPROTO_UDP:
-    return udp_handle(p_ctx, (struct udphdr *)(iph + 1), ip_src, ip_dest);
-  case IPPROTO_TCP:
-  default:
-    bpf_debug("TCP protocol L4");
-    return XDP_PASS;
+  switch (iph->protocol) {
+    case IPPROTO_UDP:
+      return udp_handle(p_ctx, (struct udphdr*) (iph + 1), ip_src, ip_dest);
+    case IPPROTO_TCP:
+    default:
+      bpf_debug("TCP protocol L4");
+      return XDP_PASS;
   }
 }
 
@@ -203,12 +204,11 @@ static u32 ipv4_handle(struct xdp_md *p_ctx, struct iphdr *iph)
  * @param iph The IP header.
  * @return u8 The XDP action.
  */
-static u8 ip_inner_check_ipv4(struct xdp_md *p_ctx, struct iphdr *iph)
-{
-  void *p_data_end = (void *)(long)p_ctx->data_end;
+static u8 ip_inner_check_ipv4(struct xdp_md* p_ctx, struct iphdr* iph) {
+  void* p_data_end = (void*) (long) p_ctx->data_end;
 
   // Hint: +1 is sizeof(struct iphdr)
-  if((void *)iph + sizeof(*iph) > p_data_end) {
+  if ((void*) iph + sizeof(*iph) > p_data_end) {
     bpf_debug("Invalid IPv4 packet");
     return XDP_ABORTED;
   }
@@ -225,7 +225,6 @@ struct vlan_hdr {
   __be16 h_vlan_encapsulated_proto;
 };
 
-
 /*****************************************************************************************************************/
 /**
  *
@@ -236,15 +235,14 @@ struct vlan_hdr {
  * @param ethh
  * @return u32 The XDP action.
  */
-static u32 eth_handle(struct xdp_md *p_ctx, struct ethhdr *ethh)
-{
-  void *p_data_end = (void *)(long)p_ctx->data_end;
+static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
+  void* p_data_end = (void*) (long) p_ctx->data_end;
   u16 eth_type;
   u64 offset;
-  struct vlan_hdr *vlan_hdr;
+  struct vlan_hdr* vlan_hdr;
 
   offset = sizeof(*ethh);
-  if((void *)ethh + offset > p_data_end) {
+  if ((void*) ethh + offset > p_data_end) {
     bpf_debug("Cannot parse L2");
     return XDP_PASS;
   }
@@ -252,34 +250,33 @@ static u32 eth_handle(struct xdp_md *p_ctx, struct ethhdr *ethh)
   eth_type = htons(ethh->h_proto);
   bpf_debug("Debug: eth_type:0x%x", eth_type);
 
-  switch(eth_type) {
-  case ETH_P_8021Q:
-  case ETH_P_8021AD:
-    bpf_debug("VLAN!! Changing the offset");
-    vlan_hdr = (void *)ethh + offset;
-    offset += sizeof(*vlan_hdr);
-    if(!((void *)ethh + offset > p_data_end))
-      eth_type = htons(vlan_hdr->h_vlan_encapsulated_proto);
-    // Enter in next case.
-  case ETH_P_IP:
-    return ipv4_handle(p_ctx, (struct iphdr *)((void *)ethh + offset));
-  case ETH_P_IPV6:
-  // Skip non 802.3 Ethertypes
-  case ETH_P_ARP:
-  // Skip non 802.3 Ethertypes
-  // Fall-through
-  default:
-    bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x", offset, eth_type);
-    return XDP_PASS;
+  switch (eth_type) {
+    case ETH_P_8021Q:
+    case ETH_P_8021AD:
+      bpf_debug("VLAN!! Changing the offset");
+      vlan_hdr = (void*) ethh + offset;
+      offset += sizeof(*vlan_hdr);
+      if (!((void*) ethh + offset > p_data_end))
+        eth_type = htons(vlan_hdr->h_vlan_encapsulated_proto);
+      // Enter in next case.
+    case ETH_P_IP:
+      return ipv4_handle(p_ctx, (struct iphdr*) ((void*) ethh + offset));
+    case ETH_P_IPV6:
+    // Skip non 802.3 Ethertypes
+    case ETH_P_ARP:
+    // Skip non 802.3 Ethertypes
+    // Fall-through
+    default:
+      bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x", offset, eth_type);
+      return XDP_PASS;
   }
 }
 
 /*****************************************************************************************************************/
 SEC("xdp_entry_point")
-int entry_point(struct xdp_md *p_ctx)
-{
-  void *p_data = (void *)(long)p_ctx->data;
-  struct ethhdr *eth = p_data;
+int entry_point(struct xdp_md* p_ctx) {
+  void* p_data       = (void*) (long) p_ctx->data;
+  struct ethhdr* eth = p_data;
 
   bpf_debug("XDP ENTRY POINT");
 

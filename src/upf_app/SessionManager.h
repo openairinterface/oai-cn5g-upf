@@ -23,21 +23,20 @@ class ForwardingActionRules;
 class PacketDetectionRules;
 class SessionBpf;
 
-// FIXME: This class compose the UserPlaneComponent. When the program is deleted,
-// this class must be updated.
+// FIXME: This class compose the UserPlaneComponent. When the program is
+// deleted, this class must be updated.
 
 // TODO: SessionRequestHandler? SessionMessageHandler?
 
 // TODO: Decouple PDR and FAR management.
 
 /**
- * @brief This class abstracts the communication to manager the session BPF maps.
- * It communicate with BPF maps in order to update its PDRs and FARs.
- * This class does not validate the input.
+ * @brief This class abstracts the communication to manager the session BPF
+ * maps. It communicate with BPF maps in order to update its PDRs and FARs. This
+ * class does not validate the input.
  */
-class SessionManager
-{
-public:
+class SessionManager {
+ public:
   // Set of PDRs.
   using pdrs_t = std::vector<std::shared_ptr<PacketDetectionRules>>;
   /**
@@ -59,24 +58,30 @@ public:
   /**
    * @brief Remove a session object from BPF map.
    *
-   * @param seid The session endpoint identifier representing the session to be removed.
+   * @param seid The session endpoint identifier representing the session to be
+   * removed.
    */
   void removeSession(uint64_t seid);
   /**
    * @brief  Creates BPF pipeline.
    *
-   * @param pSession The PFCP session which contains the context that will be deployed.
+   * @param pSession The PFCP session which contains the context that will be
+   * deployed.
    */
   void createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSession);
   /**
    * @brief Remove BPF pipeline.
    *
-   * @param seid  The PFCP session which contains the context that will be removed.
+   * @param seid  The PFCP session which contains the context that will be
+   * removed.
    */
   void removeBPFSession(uint64_t seid);
 
-  std::unordered_map<uint64_t, std::shared_ptr<pfcp::pfcp_session>> mSeidToSession;
-  static bool comparePDR(const std::shared_ptr<pfcp::pfcp_pdr>& first, const std::shared_ptr<pfcp::pfcp_pdr>& second);
+  std::unordered_map<uint64_t, std::shared_ptr<pfcp::pfcp_session>>
+      mSeidToSession;
+  static bool comparePDR(
+      const std::shared_ptr<pfcp::pfcp_pdr>& first,
+      const std::shared_ptr<pfcp::pfcp_pdr>& second);
 };
 
-#endif // __SESSIONMANAGER_H__
+#endif  // __SESSIONMANAGER_H__

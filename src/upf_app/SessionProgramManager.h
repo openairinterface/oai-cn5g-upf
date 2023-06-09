@@ -14,13 +14,12 @@ class SessionPrograms;
 class FARProgram;
 
 /**
- * @brief This class is used to manager the PFCP Sesssion (eBPF bytecode) in kernel space.
- * It store all the BPFProgram that was loaded on the datapath.
+ * @brief This class is used to manager the PFCP Sesssion (eBPF bytecode) in
+ * kernel space. It store all the BPFProgram that was loaded on the datapath.
  *
  */
-class SessionProgramManager
-{
-public:
+class SessionProgramManager {
+ public:
   /**
    * @brief Destroy the Session Program Manager object.
    *
@@ -31,7 +30,7 @@ public:
    *
    * @return SessionProgramManager& The unique instance.
    */
-  static SessionProgramManager &getInstance();
+  static SessionProgramManager& getInstance();
 
   /**
    * @brief Set the Programs Map object.
@@ -61,21 +60,26 @@ public:
   /**
    * @brief Set the On New Session Observer object.
    *
-   * @param pObserver The observer which will be notify when a SessionProgram is created.
+   * @param pObserver The observer which will be notify when a SessionProgram is
+   * created.
    */
-  void setOnNewSessionObserver(OnStateChangeSessionProgramObserver *pObserver);
+  void setOnNewSessionObserver(OnStateChangeSessionProgramObserver* pObserver);
   /**
    * @brief Find the Session Program object.
    *
    * @param seid The session identifier.
-   * @return std::shared_ptr<SessionProgram> The program, which represents the session.
+   * @return std::shared_ptr<SessionProgram> The program, which represents the
+   * session.
    */
   std::shared_ptr<SessionProgram> findSessionProgram(uint32_t seid);
 
-  void createPipeline(uint32_t seid, uint32_t teid, uint8_t sourceInterface, uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar);
+  void createPipeline(
+      uint32_t seid, uint32_t teid, uint8_t sourceInterface,
+      uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar);
   void removePipeline(uint32_t seid);
   std::shared_ptr<SessionPrograms> findSessionPrograms(uint32_t seid);
-private:
+
+ private:
   /**
    * @brief Construct a new Session Program Manager object.
    *
@@ -90,7 +94,7 @@ private:
   std::shared_ptr<BPFMap> mpUeIpSessionMap;
 
   // The observer which will be notify when a SessionProgram is created.
-  OnStateChangeSessionProgramObserver *mpOnNewSessionProgramObserver;
+  OnStateChangeSessionProgramObserver* mpOnNewSessionProgramObserver;
 
   // The Maps to store the instance of the programs.
   std::map<uint32_t, std::shared_ptr<SessionProgram>> mSessionProgramMap;
@@ -104,4 +108,4 @@ private:
   std::array<int64_t, 10> mProgramArray;
 };
 
-#endif // __SESSIONPROGRAMMANAGER_H__
+#endif  // __SESSIONPROGRAMMANAGER_H__

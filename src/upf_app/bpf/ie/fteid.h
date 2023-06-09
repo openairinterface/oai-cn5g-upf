@@ -7,8 +7,7 @@
 
 //-------------------------------------
 // 8.2.3 F-TEID
-typedef struct fteid
-{
+typedef struct fteid {
   ie_base_t_ base;
   u8 chid : 1;
   u8 ch : 1;
@@ -18,6 +17,6 @@ typedef struct fteid
   u32 ipv4_address;
   u8 ipv6_address[16];
   u8 choose_id;
-}_fteid_t_;
+} _fteid_t_;
 
-#endif // IE_FTEID_H
+#endif  // IE_FTEID_H

@@ -212,7 +212,7 @@ class upf_config {
     upf_5g_features.nrf_addr.port             = 80;
     upf_5g_features.nrf_addr.api_version      = "v1";
     upf_5g_features.nrf_addr.fqdn             = {};
-  
+
     log_level = spdlog::level::debug;
   };
 

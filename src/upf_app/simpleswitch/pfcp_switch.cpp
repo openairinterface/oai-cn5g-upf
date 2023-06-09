@@ -53,7 +53,6 @@
 
 static std::shared_ptr<SessionManager> spSessionManager;
 
-
 using namespace pfcp;
 using namespace gtpv1u;
 using namespace upf;
@@ -673,10 +672,12 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         }
       }
 
-      if(upf_cfg.upf_5g_features.enable_bpf_datapath){
-            std::shared_ptr<pfcp::pfcp_session> pSession = std::make_shared<pfcp::pfcp_session>(*session);
-            spSessionManager = UserPlaneComponent::getInstance().getSessionManager();
-            spSessionManager->createBPFSession(pSession);  
+      if (upf_cfg.upf_5g_features.enable_bpf_datapath) {
+        std::shared_ptr<pfcp::pfcp_session> pSession =
+            std::make_shared<pfcp::pfcp_session>(*session);
+        spSessionManager =
+            UserPlaneComponent::getInstance().getSessionManager();
+        spSessionManager->createBPFSession(pSession);
       }
 
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
