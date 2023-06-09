@@ -23,13 +23,13 @@
 
 static const std::string ASYNC_CMD   = "async_cmd";
 static const std::string GTPV1_U     = "gtpv1_u";
-static const std::string ITTI        = "itti";
+static const std::string ITTI        = "itti   ";
 static const std::string UPF_APP     = "upf_app";
-static const std::string UPF_N3      = "upf_n3";
-static const std::string UPF_N4      = "upf_n4";
-static const std::string SYSTEM      = "system";
-static const std::string UDP         = "udp";
-static const std::string PFCP        = "pfcp";
+static const std::string UPF_N3      = "upf_n3 ";
+static const std::string UPF_N4      = "upf_n4 ";
+static const std::string SYSTEM      = "system ";
+static const std::string UDP         = "udp    ";
+static const std::string PFCP        = "pfcp   ";
 static const std::string PFCP_SWITCH = "pfcp_switch";
 
 class Logger {
