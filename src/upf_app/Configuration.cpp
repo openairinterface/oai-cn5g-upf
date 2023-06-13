@@ -6,12 +6,17 @@
 #include <string>
 // // #include <utils/LogDefines.h>
 #include "logger.hpp"
-
+#include "upf_config.hpp"
 // Values get from enviroment variable GTP_INTERFACE and UDP_INTERFACE
 // Consider to update these variables with you want to update the default
 // values.
-std::string Configuration::sGTPInterface            = "enp6s0";
-std::string Configuration::sUDPInterface            = "enp7s0";
+using namespace upf;
+extern upf_config upf_cfg;
+
+std::string Configuration::sGTPInterface            = upf_cfg.n3.if_name;
+std::string Configuration::sUDPInterface            = upf_cfg.n6.if_name;;
+//std::string Configuration::sGTPInterface            = "enp6s0";
+//std::string Configuration::sUDPInterface            = "enp7s0";
 unsigned char Configuration::sIsSocketBufferEnabled = 0;
 
 Configuration::Configuration(int argc, char** argv) {
