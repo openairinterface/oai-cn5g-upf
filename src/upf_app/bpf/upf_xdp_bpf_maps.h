@@ -10,7 +10,9 @@
 #include <next_prog_rule_map.h>
 #include <next_prog_rule_key.h>
 
-#define MAX_LENGTH 10
+#define MAX_LENGTH 5000 //10
+#define INTERFACE_ENTRIES_MAX 12
+#define MAX_UEs 100000
 
 /*****************************************************************************************************************/
 // Maps TEID to PFCP_Session_LookupProgram
@@ -21,7 +23,7 @@ struct bpf_map_def SEC("maps") m_teid_session = {
     .value_size = sizeof(s32),      //!< program which represents the session.
     // TODO: Check how the management works. The size should be equal
     // to the maximum number of sessions.
-    .max_entries = 10000,  //!< TODO: Is it enought?
+    .max_entries = MAX_LENGTH, //10000,  //!< TODO: Is it enought?
 };
 
 /*****************************************************************************************************************/
@@ -34,7 +36,7 @@ struct bpf_map_def SEC("maps") m_ueip_session = {
     .value_size = sizeof(s32),    //!< program which represents the session.
     // TODO Check how the management works. The size should be equal
     // to the maximum number of sessions.
-    .max_entries = 100000,  //!< TODO: Is it enought?
+    .max_entries = MAX_UEs,  //!< TODO: Is it enought?
 };
 
 /*****************************************************************************************************************/
@@ -42,7 +44,7 @@ struct bpf_map_def SEC("maps") m_ue_ip_pdr = {
     .type        = BPF_MAP_TYPE_HASH,
     .key_size    = sizeof(u32),  //!< UE IP
     .value_size  = sizeof(u32),  //!< PDR
-    .max_entries = 100000,
+    .max_entries = MAX_UEs,
 };
 
 /*****************************************************************************************************************/
@@ -50,7 +52,7 @@ struct bpf_map_def SEC("maps") m_next_rule_prog_index = {
     .type        = BPF_MAP_TYPE_HASH,
     .key_size    = sizeof(struct next_rule_prog_index_key),
     .value_size  = sizeof(u32),
-    .max_entries = 10,
+    .max_entries = MAX_LENGTH, //10,
 };
 
 /*****************************************************************************************************************/
@@ -58,7 +60,7 @@ struct bpf_map_def SEC("maps") m_iface = {
     .type        = BPF_MAP_TYPE_HASH,
     .key_size    = sizeof(u32),
     .value_size  = sizeof(32),
-    .max_entries = 6,
+    .max_entries = INTERFACE_ENTRIES_MAX, //6,
 };
 
 // BPF_ANNOTATE_KV_PAIR(m_next_rule_prog_index, struct next_rule_prog_index_key,
