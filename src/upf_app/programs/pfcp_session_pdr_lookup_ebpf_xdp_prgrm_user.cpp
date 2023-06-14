@@ -12,7 +12,7 @@
 #include "logger.hpp"
 
 using namespace upf;
-// upf_config upf_cfg;
+extern upf_config upf_cfg;
 
 /*****************************************************************************************************************/
 PFCP_Session_PDR_LookupProgram::PFCP_Session_PDR_LookupProgram(const std::string& gtpInterface, const std::string& udpInterface)
@@ -47,6 +47,40 @@ PFCP_Session_PDR_LookupProgram::~PFCP_Session_PDR_LookupProgram() {
 }
 
 /*****************************************************************************************************************/
+void PFCP_Session_PDR_LookupProgram::create_iface_map_entry(reference_point s) {
+  struct interface iface;
+  __builtin_memset(&iface, 0, sizeof(interface));
+  
+  switch(s) {
+  case N3_INTERFACE:
+    iface.ipv4_address = upf_cfg.n3.addr4.s_addr;     
+    iface.port = upf_cfg.n3.port;
+    iface.if_name = (upf_cfg.n3.if_name).c_str();
+    mpIfaceMap->update(s, iface, BPF_ANY);
+    break;
+  case N4_INTERFACE:
+    iface.ipv4_address = upf_cfg.n4.addr4.s_addr;     
+    iface.port = upf_cfg.n4.port;
+    iface.if_name = (upf_cfg.n4.if_name).c_str();
+    mpIfaceMap->update(s, iface, BPF_ANY);
+    break;
+  case N6_INTERFACE:
+    iface.ipv4_address = upf_cfg.n6.addr4.s_addr;     
+    iface.port = upf_cfg.n6.port;
+    iface.if_name = (upf_cfg.n6.if_name).c_str();
+    mpIfaceMap->update(s, iface, BPF_ANY);
+    break;
+  case N9_INTERFACE:
+    Logger::upf_app().error("Reference Point N9 Not Defined");
+    break; 
+  case N19_INTERFACE:
+    Logger::upf_app().error("Reference Point N19 Not Defined");
+    break;   
+  default:
+    Logger::upf_app().error("The Reference Point is Not Defined");
+  }
+}
+/*****************************************************************************************************************/
 void PFCP_Session_PDR_LookupProgram::setup() {
 
   // LOG_DBG("Saving Interfaces in Map");
@@ -65,18 +99,25 @@ void PFCP_Session_PDR_LookupProgram::setup() {
   mpLifeCycle->attach();
   // Entry point interface
   if (mUDPInterface.empty() || mGTPInterface.empty()) {
-    // LOG_ERROR("GTP or UDP interface not defined!");
     Logger::upf_app().error("GTP or UDP interface not defined!");
     throw std::runtime_error("GTP or UDP interface not defined!");
   }
-  // LOG_DBG("Link UDP interface to interface {}", mUDPInterface.c_str())
+
   Logger::upf_app().debug(
       "Link UDP interface to interface %s", mUDPInterface.c_str());
   mpLifeCycle->link("xdp_entry_point", mUDPInterface.c_str());
-  // LOG_DBG("Link GTP interface to interface {}", mGTPInterface.c_str())
+
   Logger::upf_app().debug(
       "Link GTP interface to interface %s", mGTPInterface.c_str());
   mpLifeCycle->link("xdp_entry_point", mGTPInterface.c_str());
+
+  Logger::upf_app().debug(
+      "Create Interfaces Map");  
+  create_iface_map_entry(N3_INTERFACE);
+  create_iface_map_entry(N6_INTERFACE);
+  create_iface_map_entry(N4_INTERFACE); 
+}
+
 }
 
 /*****************************************************************************************************************/
