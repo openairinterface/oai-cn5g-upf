@@ -118,8 +118,6 @@ void PFCP_Session_PDR_LookupProgram::setup() {
   create_iface_map_entry(N4_INTERFACE); 
 }
 
-}
-
 /*****************************************************************************************************************/
 std::shared_ptr<BPFMaps> PFCP_Session_PDR_LookupProgram::getMaps() {
   return mpMaps;
