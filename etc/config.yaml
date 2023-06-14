@@ -22,9 +22,6 @@
 # OAI CN Configuration File
 ### This file can be used by all OAI NFs
 ### Some fields are specific to an NF and will be ignored by other NFs
-### The {{ env['ENV_NAME'] }} syntax lets you define these values in a docker-compose file
-### If you intend to mount this file or use a bare-metal deployment, please refer to README.md
-### The README.md also defines default values and allowed values for each configuration parameter
 
 ############# Common configuration
 
@@ -35,6 +32,8 @@ log_level:
 # If "on": Register to NRF, DEFAULT= off
 register_nf:
   upf: yes
+
+http_version: 1.1
 
 ############## SBI Interfaces
 ### Each NF takes its local SBI interfaces and remote interfaces from here, unless it gets them using NRF discovery mechanisms
@@ -47,8 +46,7 @@ nfs:
   nrf:
     host: oai-nrf
     sbi:
-      port_http1: 80
-      port_http2: 8080
+      port: 80
       api_version: v1
       interface_name: eth0
   upf:
@@ -81,16 +79,17 @@ upf:
         sd: 0xFFFFFF
         dnnList:
           - dnn: oai
-      - sst: 222
-        sd: 123
+      - sst: 1
+        sd: 1
         dnnList:
-          - dnn: default
+          - dnn: oai.ipv4
+          
 dnns:
   - dnn: "oai"
     pdu_session_type: "IPv4"
     ipv4_pool: "12.1.1.151 - 12.1.1.253"
     ipv6_prefix: "2001:1:2::/64"
-  - dnn: "default"
+  - dnn: "oai.ipv4"
     pdu_session_type: "IPv4"
-    ipv4_pool: "12.1.2.151 - 12.1.2.253"
+    ipv4_pool: "12.1.1.51 - 12.1.1.150"
     ipv6_prefix: "2001:1:2::/64"
