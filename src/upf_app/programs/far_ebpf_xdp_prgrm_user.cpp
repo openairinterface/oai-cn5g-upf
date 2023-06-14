@@ -12,8 +12,9 @@
 /*****************************************************************************************************************/
 FARProgram::FARProgram() : BPFProgram() {
   mpLifeCycle = std::make_shared<FARProgramLifeCycle>(
-      far_ebpf_xdp_prgrm_kernel_c__open, far_ebpf_xdp_prgrm_kernel_c__load,
-      far_ebpf_xdp_prgrm_kernel_c__attach,
+      far_ebpf_xdp_prgrm_kernel_c__open, \
+      far_ebpf_xdp_prgrm_kernel_c__load, \
+      far_ebpf_xdp_prgrm_kernel_c__attach, \
       far_ebpf_xdp_prgrm_kernel_c__destroy);
 }
 
