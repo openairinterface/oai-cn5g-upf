@@ -123,14 +123,10 @@ void setup_bpf() {
   std::shared_ptr<RulesUtilities> mpRulesFactory;
   mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
 
-  // LOG_WARN("TODO: remove the encoded interfaces");
-
   string sGTPInterface = N3_IF_NAME;
   string sUDPInterface = N6_IF_NAME;
   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
   Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
-  // LOG_DBG("GTP interface: {}", sGTPInterface);
-  // LOG_DBG("UDP interface: {}", sUDPInterface);
   UserPlaneComponent::getInstance().setup(
       mpRulesFactory, sGTPInterface, sUDPInterface);
   // spSessionManager = UserPlaneComponent::getInstance().getSessionManager();
