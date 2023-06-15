@@ -17,17 +17,9 @@
 #include <utils/csum.h>
 #include <utils/logger.h>
 #include <utils/utils.h>
+#include <interfaces.h>
 #include <pfcp_session_lookup_maps.h>
 #include <string.h>  //Needed for memcpy
-
-/*****************************************************************************************************************/
-// #ifndef LOCAL_IP
-// // N3 interface
-// #define LOCAL_IP 14512345
-// #endif
-// #ifndef LOCAL_MAC
-// #define LOCAL_MAC 0
-// #endif
 
 /*****************************************************************************************************************/
 // TODO: Put dummy in test folder.
@@ -69,9 +61,16 @@ static u32 create_outer_header_gtpu_ipv4(
 
   struct ethhdr* p_eth;
   struct iphdr* p_ip;
-
+  void *map_element;
+  struct s_interface *iface = NULL;
+  enum e_reference_point reference = N3_INTERFACE;
+  
   __builtin_memset(&p_eth, 0, sizeof(p_eth));
   __builtin_memset(&p_ip, 0, sizeof(p_ip));
+  __builtin_memset(&map_element, 0, sizeof(map_element));
+
+  map_element = bpf_map_lookup_elem(&m_upf_interfaces, &reference);
+  memcpy(iface, map_element, sizeof(struct s_interface));
 
   void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
@@ -127,18 +126,8 @@ static u32 create_outer_header_gtpu_ipv4(
   p_ip->ttl      = 64;
   p_ip->protocol = IPPROTO_UDP;
   p_ip->check    = 0;
-
-  /***********************/
-  // uint32_t udpInterfaceindex =
-  // if_nametoindex((UserPlaneComponent::getInstance().getUDPInterface()).c_str());
-  // uint32_t udpInterfaceindex =  if_nametoindex(UDP_INTERFACE);
-  // u32 udp_interface_ipv4 = bpf_map_lookup_elem(&m_upf_interfaces, udpInterfaceindex);
-  // u32 udp_interface_ipv4 = bpf_map_lookup_elem(&m_upf_interfaces, 1);
-
-  /***********************/
-
-  // p_ip->saddr = udp_interface_ipv4;
-  p_ip->saddr = 25184595;
+  p_ip->saddr = iface->ipv4_address;
+  bpf_debug(" p_ip->saddr:%d", p_ip->saddr);
   p_ip->daddr =
       p_far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
 
