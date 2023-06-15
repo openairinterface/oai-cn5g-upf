@@ -1,5 +1,5 @@
-#ifndef __SESSION_CONTEXT_MAPS_H__
-#define __SESSION_CONTEXT_MAPS_H__
+#ifndef __PFCP_SESSION_PDR_LOOKUP_MAPS_H__
+#define __PFCP_SESSION_PDR_LOOKUP_MAPS_H__
 
 #include <linux/bpf.h>
 #include <types.h>
@@ -58,4 +58,4 @@ struct bpf_map_def SEC("maps") m_arp_table = {
     .value_size  = 6,            // MAC address
     .max_entries = ARP_ENTRIES_MAX_SIZE, //2,
 };
-#endif  // __SESSION_CONTEXT_MAPS_H__
+#endif  // __PFCP_SESSION_PDR_LOOKUP_MAPS_H__

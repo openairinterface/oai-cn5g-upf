@@ -13,11 +13,11 @@
 #include <pfcp/pfcp_pdr.h>
 #include <protocols/gtpu.h>
 #include <protocols/ip.h>
-#include <session_bpf_maps.h>
+#include <pfcp_session_pdr_lookup_maps.h>
 #include <utils/csum.h>
 #include <utils/logger.h>
 #include <utils/utils.h>
-#include <upf_xdp_bpf_maps.h>
+#include <pfcp_session_lookup_maps.h>
 #include <string.h>  //Needed for memcpy
 
 /*****************************************************************************************************************/

@@ -1,5 +1,5 @@
-#ifndef __MAPS_H__
-#define __MAPS_H__
+#ifndef __PFCP_SESSION_LOOKUP_MAPS_H__
+#define __PFCP_SESSION_LOOKUP_MAPS_H__
 
 #include <ie/group_ie/create_pdr.h>
 #include <pfcp/pfcp_pdr.h>
@@ -66,4 +66,4 @@ struct bpf_map_def SEC("maps") m_upf_interfaces = {
 // BPF_ANNOTATE_KV_PAIR(m_next_rule_prog_index, struct next_rule_prog_index_key,
 // u32);
 
-#endif  // __MAPS_H__
+#endif  // __PFCP_SESSION_LOOKUP_MAPS_H__

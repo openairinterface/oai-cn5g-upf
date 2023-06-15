@@ -12,7 +12,7 @@
 #include <protocols/gtpu.h>
 #include <protocols/ip.h>
 #include <protocols/udp.h>
-#include <upf_xdp_bpf_maps.h>
+#include <pfcp_session_lookup_maps.h>
 #include <utils/logger.h>
 #include <utils/utils.h>
 #include <next_prog_rule_key.h>
