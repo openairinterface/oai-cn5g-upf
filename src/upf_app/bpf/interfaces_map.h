@@ -10,10 +10,10 @@
 
 
 /*****************************************************************************************************************/
-struct bpf_map_def SEC("maps") m_iface = {
+struct bpf_map_def SEC("maps") m_upf_interfaces = {
     .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(reference_point),
-    .value_size  = sizeof(struct interface),
+    .key_size    = sizeof(enum e_reference_point),
+    .value_size  = sizeof(struct s_interface),
     .max_entries = INTERFACE_ENTRIES_MAX, //6,
 };
 

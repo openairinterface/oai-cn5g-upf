@@ -137,8 +137,8 @@ static u32 create_outer_header_gtpu_ipv4(
   // uint32_t udpInterfaceindex =
   // if_nametoindex((UserPlaneComponent::getInstance().getUDPInterface()).c_str());
   // uint32_t udpInterfaceindex =  if_nametoindex(UDP_INTERFACE);
-  // u32 udp_interface_ipv4 = bpf_map_lookup_elem(&m_iface, udpInterfaceindex);
-  // u32 udp_interface_ipv4 = bpf_map_lookup_elem(&m_iface, 1);
+  // u32 udp_interface_ipv4 = bpf_map_lookup_elem(&m_upf_interfaces, udpInterfaceindex);
+  // u32 udp_interface_ipv4 = bpf_map_lookup_elem(&m_upf_interfaces, 1);
 
   /***********************/
 

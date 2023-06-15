@@ -1,128 +1,133 @@
 #ifndef __PFCP_SESSION_LOOKUP_EBPF_XDP_PRGRM_USER_H__
 #define __PFCP_SESSION_LOOKUP_EBPF_XDP_PRGRM_USER_H__
 
-#include <memory>
-#include <map>
-#include <pfcp_session_lookup_ebpf_xdp_prgrm_kernel_skel.h>
 #include <ProgramLifeCycle.hpp>
+#include <atomic>
+#include <linux/bpf.h>  // manage maps (e.g. bpf_update*)
+#include <memory>
+#include <mutex>
+#include <signal.h>  // signals
+#include <pfcp_session_lookup_ebpf_xdp_prgrm_kernel_skel.h>
+#include <wrappers/BPFMap.hpp>
 
-using PFCP_Session_LookupProgramLifeCycle = ProgramLifeCycle<pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c>;
+#include "interfaces.h"
 
 class BPFMaps;
 class BPFMap;
+class SessionManager;
+class RulesUtilities;
+
+
+using PFCP_Session_LookupProgramLifeCycle = ProgramLifeCycle<pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c>;
 
 /**
- * @brief This class is used to interface with BPF program (Session).
- *
+ * @brief Singleton class to abrastract the UPF bpf program.
  */
 class PFCP_Session_LookupProgram
 {
 public:
-  
-  /*****************************************************************************************************************/
   /**
-   * @brief Construct a new Session Program object.
+   * @brief Construct a new PFCP_Session_LookupProgram object.
    *
    */
-  PFCP_Session_LookupProgram(const std::string& gtpInterface, const std::string& udpInterface);
+  explicit PFCP_Session_LookupProgram(const std::string& gtpInterface, const std::string& udpInterface);
   
   /*****************************************************************************************************************/
   /**
-   * @brief Destroy the Session Program object.
-   *
+   * @brief Destroy the PFCP_Session_LookupProgram object
    */
   virtual ~PFCP_Session_LookupProgram();
 
   /*****************************************************************************************************************/
   /**
-   * @brief Setup the program.
+   * @brief Insert one UPF reference point interface into a map.
+   *
+   */
+  
+  void create_upf_interface_map_entry(e_reference_point s);
+
+  /*****************************************************************************************************************/
+  /**
+   * @brief Setup the BPF program.
    *
    */
   void setup();
 
   /*****************************************************************************************************************/
   /**
-   * @brief Tear down the program.
+   * @brief Get the BPFMaps object.
+   *
+   * @return std::shared_ptr<BPFMaps> The reference of the BPFMaps.
+   */
+  std::shared_ptr<BPFMaps> getMaps();
+  
+  /*****************************************************************************************************************/
+  /**
+   * @brief Tear downs the BPF program.
    *
    */
   void tearDown();
 
   /*****************************************************************************************************************/
   /**
-   * @brief Get the Downlink File Descriptor (entry point) object.
+   * @brief Update program int map.
    *
-   * @return int The file descriptor of the entry point program.
+   * @param key The key which will be inserted the program file descriptor.
+   * @param fd The file descriptor.
    */
-  int getUplinkFileDescriptor() const;
+  void updateProgramMap(uint32_t key, uint32_t fd);
+  
+  /*****************************************************************************************************************/
+  /**
+   * @brief Remove program in map.
+   *
+   * @param key The key which will be remove in the program map.
+   */
+  void removeProgramMap(uint32_t key);
 
   /*****************************************************************************************************************/
   /**
-   * @brief Get the Uplink File Descriptor (entry point) object.
+   * @brief Get the TEID to session Map object.
    *
-   * @return int The file descriptor of the entry point program.
+   * @return std::shared_ptr<BPFMap> The TEID to fd map.
    */
-  int getDownlinkFileDescriptor() const;
+  std::shared_ptr<BPFMap> getTeidSessionMap() const;
 
   /*****************************************************************************************************************/
   /**
-   * @brief Get PDR maps reference.
+   * @brief Get the UE IP to session Map object.
    *
-   * @return std::shared_ptr<BPFMap> The PDR map reference.
+   * @return std::shared_ptr<BPFMap> The UE IP to fd map.
    */
-  std::shared_ptr<BPFMap> getPDRMap() const;
+  std::shared_ptr<BPFMap> getUeIpSessionMap() const;
 
   /*****************************************************************************************************************/
   /**
-   * @brief Get the FAR Map object.
+   * @brief Get the NextProgRule Map object.
    *
-   * @return std::shared_ptr<BPFMap> The FAR map.
+   * @return std::shared_ptr<BPFMap> The NextProgRule to fd map.
    */
-  std::shared_ptr<BPFMap> getFARMap() const;
+  std::shared_ptr<BPFMap> getNextProgRuleMap() const;
 
   /*****************************************************************************************************************/
   /**
-   * @brief Get the Uplink PDRs Map object.
+   * @brief Get the NextProgRuleIndex Map object.
    *
-   * @return std::shared_ptr<BPFMap> The uplink to PDR map.
+   * @return std::shared_ptr<BPFMap> The pdi to index map.
    */
-  std::shared_ptr<BPFMap> getUplinkPDRsMap() const;
+  std::shared_ptr<BPFMap> getNextProgRuleIndexMap() const;
 
   /*****************************************************************************************************************/
   /**
-   * @brief Get the Downlink PDRs Map object.
+   * @brief Get the iface Map object.
    *
-   * @return std::shared_ptr<BPFMap> The uplink to PDR map.
+   * @return std::shared_ptr<BPFMap> The iface_name.
    */
-  std::shared_ptr<BPFMap> getDownlinkPDRsMap() const;
+  std::shared_ptr<BPFMap> getIfaceMap() const;
 
-  /*****************************************************************************************************************/
+ private:
   /**
-   * @brief Get the Counter Map object.
-   *
-   * @return std::shared_ptr<BPFMap> The counter map.
-   */
-  std::shared_ptr<BPFMap> getCounterMap() const;
-
-  /*****************************************************************************************************************/
-  /**
-   * @brief Get the Egress Interface Map object.
-   *
-   * @return std::shared_ptr<BPFMap> The egress interface map.
-   */
-  std::shared_ptr<BPFMap> getEgressInterfaceMap() const;
-
-  /*****************************************************************************************************************/
-  /**
-   * @brief Get the Arp Table Map object.
-   *
-   * @return std::shared_ptr<BPFMap>  The arp table map.
-   */
-  std::shared_ptr<BPFMap> getArpTableMap() const;
-
-  /*****************************************************************************************************************/
-private:
-  /**
-   * @brief Initialize BPF maps wrappers references.
+   * @brief Initialize BPF wrappers maps.
    *
    */
   void initializeMaps();
@@ -130,26 +135,21 @@ private:
   // The reference of the bpf maps.
   std::shared_ptr<BPFMaps> mpMaps;
 
-  // The PDR map reference.
-  std::shared_ptr<BPFMap> mpPDRMap;
+  // The skeleton of the UPF program generated by bpftool.
+  // ProgramLifeCycle is the owner of the pointer.
+  pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c* spSkeleton;
 
-  // The PDR map reference.
-  std::shared_ptr<BPFMap> mpFARMap;
+  // The program eBPF map.
+  std::shared_ptr<BPFMap> mpTeidSessionMap;
 
-  // The uplink PDR eBPF map.
-  std::shared_ptr<BPFMap> mpUplinkPDRsMap;
+  // The program eBPF map.
+  std::shared_ptr<BPFMap> mpUeIpSessionMap;
 
-  // The downlink PDR eBPF map.
-  std::shared_ptr<BPFMap> mpDownlinkPDRsMap;
+  // The pdi key to program index map.
+  std::shared_ptr<BPFMap> mpNextProgRuleIndexMap;
 
-  // The counter packet map.
-  std::shared_ptr<BPFMap> mpCounterMap;
-
-  // The egress interface map.
-  std::shared_ptr<BPFMap> mpEgressInterfaceMap;
-
-  // The arp table map.
-  std::shared_ptr<BPFMap> mpArpTableMap;
+  // The next prog rule map.
+  std::shared_ptr<BPFMap> mpNextProgRuleMap;
 
   // The BPF lifecycle program.
   std::shared_ptr<PFCP_Session_LookupProgramLifeCycle> mpLifeCycle;
@@ -159,5 +159,11 @@ private:
 
   // The UDP interface.
   std::string mUDPInterface;
+
+  // The iface map.
+  std::shared_ptr<BPFMap> mpUPFIfaceMap;
+
+  //struct interface gtp_interface, udp_interface;
 };
+
 #endif  // __PFCP_SESSION_LOOKUP_EBPF_XDP_PRGRM_USER_H__

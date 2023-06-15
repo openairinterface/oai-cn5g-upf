@@ -1,10 +1,10 @@
 #include "UserPlaneComponent.h"
 #include <RulesUtilities.h>
 #include <SessionManager.h>
-#include <pfcp_session_lookup_ebpf_xdp_prgrm_user.h>
+#include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h>
 #include <SessionProgramManager.h>
 #include <SignalHandler.h>
-#include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h>
+#include <pfcp_session_lookup_ebpf_xdp_prgrm_user.h>
 // // #include <utils/LogDefines.h>
 #include "logger.hpp"
 
@@ -32,8 +32,8 @@ std::shared_ptr<RulesUtilities> UserPlaneComponent::getRulesUtilities() const {
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<PFCP_Session_PDR_LookupProgram> UserPlaneComponent::getPFCP_Session_PDR_LookupProgram() const {
-  return mpPFCP_Session_PDR_LookupProgram;
+std::shared_ptr<PFCP_Session_LookupProgram> UserPlaneComponent::getPFCP_Session_LookupProgram() const {
+  return mpPFCP_Session_LookupProgram;
 }
 
 /*****************************************************************************************************************/
@@ -48,12 +48,12 @@ std::string UserPlaneComponent::getUDPInterface() const {
 
 /*****************************************************************************************************************/
 void UserPlaneComponent::onNewSessionProgram(u_int32_t programId, u_int32_t fileDescriptor) {
-  mpPFCP_Session_PDR_LookupProgram->updateProgramMap(programId, fileDescriptor);
+  mpPFCP_Session_LookupProgram->updateProgramMap(programId, fileDescriptor);
 }
 
 /*****************************************************************************************************************/
 void UserPlaneComponent::onDestroySessionProgram(u_int32_t programId) {
-  mpPFCP_Session_PDR_LookupProgram->removeProgramMap(programId);
+  mpPFCP_Session_LookupProgram->removeProgramMap(programId);
 }
 
 /*****************************************************************************************************************/
@@ -78,15 +78,15 @@ void UserPlaneComponent::setup(
   mpRulesUtilities = pRulesUtilities;
   mGTPInterface = gtpInterface;
   mUDPInterface = udpInterface;
-  mpPFCP_Session_PDR_LookupProgram = std::make_shared<PFCP_Session_PDR_LookupProgram>(gtpInterface, udpInterface);
+  mpPFCP_Session_LookupProgram = std::make_shared<PFCP_Session_LookupProgram>(gtpInterface, udpInterface);
 
-  if(!mpPFCP_Session_PDR_LookupProgram) {
+  if(!mpPFCP_Session_LookupProgram) {
     Logger::upf_app().error("The eBPF Program is Not Initialized");
     throw std::runtime_error("The eBPF Program is Not Initialized");
   }
 
   SignalHandler::getInstance().enable();
-  mpPFCP_Session_PDR_LookupProgram->setup();
+  mpPFCP_Session_LookupProgram->setup();
 
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();
@@ -94,6 +94,6 @@ void UserPlaneComponent::setup(
 
 /*****************************************************************************************************************/
 void UserPlaneComponent::tearDown() {
-  mpPFCP_Session_PDR_LookupProgram->tearDown();
+  mpPFCP_Session_LookupProgram->tearDown();
   SessionProgramManager::getInstance().removeAll();
 }

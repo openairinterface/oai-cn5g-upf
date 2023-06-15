@@ -1,7 +1,7 @@
 #include "SessionManager.h"
-#include <pfcp_session_lookup_ebpf_xdp_prgrm_user.h>
-#include <SessionProgramManager.h>
 #include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h>
+#include <SessionProgramManager.h>
+#include <pfcp_session_lookup_ebpf_xdp_prgrm_user.h>
 #include <bits/stdc++.h>  //sort
 #include <interfaces/ForwardingActionRules.h>
 #include <interfaces/PacketDetectionRules.h>
@@ -53,7 +53,7 @@ void SessionManager::createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSessi
       pSession->pdrs.begin(), pSession->pdrs.end(), SessionManager::comparePDR);
 
   Logger::upf_app().debug("Extract the key (PDI) from the highest priority PDR");
-  auto pPFCP_Session_PDR_LookupProgram = UserPlaneComponent::getInstance().getPFCP_Session_PDR_LookupProgram();
+  auto pPFCP_Session_LookupProgram = UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
@@ -74,7 +74,7 @@ void SessionManager::createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSessi
   Logger::upf_app().debug(
       "PDI extracted from PDR %d", pdrHighPriority->pdr_id.rule_id);
 
-  // pPFCP_Session_PDR_LookupProgram->getNextProgRuleMap()->update(&next_rule_prog_index_key)
+  // pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(&next_rule_prog_index_key)
   Logger::upf_app().debug("Extract FAR from the highest priority PDR");
   std::shared_ptr<pfcp::pfcp_far> pFar;
   pfcp::far_id_t farId;

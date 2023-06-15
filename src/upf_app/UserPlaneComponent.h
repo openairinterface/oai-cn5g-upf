@@ -7,8 +7,8 @@
 
 class SessionManager;
 class RulesUtilities;
-class PFCP_Session_PDR_LookupProgram;
 class PFCP_Session_LookupProgram;
+class PFCP_Session_PDR_LookupProgram;
 
 /**
  * @brief User Plane component class to abstract the BPF Service Function Chain
@@ -72,11 +72,11 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
 
   /*****************************************************************************************************************/
   /**
-   * @brief Get PFCP_Session_PDR_LookupProgram object.
+   * @brief Get PFCP_Session_LookupProgram object.
    *
-   * @return std::shared_ptr<PFCP_Session_PDR_LookupProgram> The PFCP_Session_PDR_LookupProgram reference.
+   * @return std::shared_ptr<PFCP_Session_LookupProgram> The PFCP_Session_LookupProgram reference.
    */
-  std::shared_ptr<PFCP_Session_PDR_LookupProgram> getPFCP_Session_PDR_LookupProgram() const;
+  std::shared_ptr<PFCP_Session_LookupProgram> getPFCP_Session_LookupProgram() const;
 
   /*****************************************************************************************************************/
   /**
@@ -123,11 +123,11 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
   // The rules factory reference.
   std::shared_ptr<RulesUtilities> mpRulesUtilities;
 
-  // The PFCP_Session_PDR_LookupProgram (BPF program entry point) reference.
-  std::shared_ptr<PFCP_Session_PDR_LookupProgram> mpPFCP_Session_PDR_LookupProgram;
-
-  // The PFCP_Session_LookupProgram (BPF program for PFCP Session) reference.
+  // The PFCP_Session_LookupProgram (BPF program entry point) reference.
   std::shared_ptr<PFCP_Session_LookupProgram> mpPFCP_Session_LookupProgram;
+
+  // The PFCP_Session_PDR_LookupProgram (BPF program for PFCP Session) reference.
+  std::shared_ptr<PFCP_Session_PDR_LookupProgram> mpPFCP_Session_PDR_LookupProgram;
 
   // The GTP interface.
   std::string mGTPInterface;

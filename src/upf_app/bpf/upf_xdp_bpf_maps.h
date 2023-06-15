@@ -9,13 +9,14 @@
 #include <ie/teid.h>
 #include <next_prog_rule_map.h>
 #include <next_prog_rule_key.h>
+#include "interfaces.h"
 
 #define MAX_LENGTH 5000 //10
 #define INTERFACE_ENTRIES_MAX 12
 #define MAX_UEs 100000
 
 /*****************************************************************************************************************/
-// Maps TEID to PFCP_Session_LookupProgram
+// Maps TEID to PFCP_Session_PDR_LookupProgram
 struct bpf_map_def SEC("maps") m_teid_session = {
     .type =
         BPF_MAP_TYPE_PROG_ARRAY,  //!< Must have the key and value with 4 bytes
@@ -27,7 +28,7 @@ struct bpf_map_def SEC("maps") m_teid_session = {
 };
 
 /*****************************************************************************************************************/
-// Maps UE IPv4 address to PFCP_Session_LookupProgram
+// Maps UE IPv4 address to PFCP_Session_PDR_LookupProgram
 // FIXME: Select a primary key. We could use a hash value of the IP as a key.
 struct bpf_map_def SEC("maps") m_ueip_session = {
     .type =
@@ -56,13 +57,12 @@ struct bpf_map_def SEC("maps") m_next_rule_prog_index = {
 };
 
 /*****************************************************************************************************************/
-struct bpf_map_def SEC("maps") m_iface = {
+struct bpf_map_def SEC("maps") m_upf_interfaces = {
     .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(u32),
-    .value_size  = sizeof(32),
+    .key_size    = sizeof(enum e_reference_point),
+    .value_size  = sizeof(struct s_interface),
     .max_entries = INTERFACE_ENTRIES_MAX, //6,
 };
-
 // BPF_ANNOTATE_KV_PAIR(m_next_rule_prog_index, struct next_rule_prog_index_key,
 // u32);
 

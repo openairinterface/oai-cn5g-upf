@@ -1,8 +1,8 @@
 #include "SessionProgramManager.h"
 #include <far_ebpf_xdp_prgrm_user.h>
-#include <pfcp_session_lookup_ebpf_xdp_prgrm_user.h>
-#include <SessionPrograms.h>
 #include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h>
+#include <SessionPrograms.h>
+#include <pfcp_session_lookup_ebpf_xdp_prgrm_user.h>
 #include <UserPlaneComponent.h>
 #include <net/if.h>  // if_nametoindex
 #include <next_prog_rule_key.h>
@@ -91,13 +91,13 @@ void SessionProgramManager::createPipeline(
   pFARProgram->setup();
 
   Logger::upf_app().debug("Store FARProgram index in the UPFProgram");
-  auto pPFCP_Session_PDR_LookupProgram = UserPlaneComponent::getInstance().getPFCP_Session_PDR_LookupProgram();
+  auto pPFCP_Session_LookupProgram = UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
   id = pFARProgram->getId();
   fd = pFARProgram->getFd();
 
   // TODO: Get the nextProgRule index from a pool of values.
-  pPFCP_Session_PDR_LookupProgram->getNextProgRuleIndexMap()->update(key, id, BPF_ANY);
-  pPFCP_Session_PDR_LookupProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
+  pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->update(key, id, BPF_ANY);
+  pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
 
   // LOG_DBG("Store FAR in the FAR program");
   Logger::upf_app().debug("Store FAR in the FAR program");
@@ -176,8 +176,8 @@ void SessionProgramManager::removePipeline(uint32_t seid) {
   mSessionProgramsMap.erase(seid);
 
     Logger::upf_app().debug("Clean PDU Session from the entry program's map");
-  auto pPFCP_Session_PDR_LookupProgram = UserPlaneComponent::getInstance().getPFCP_Session_PDR_LookupProgram();
-  pPFCP_Session_PDR_LookupProgram->getNextProgRuleIndexMap()->remove(key);
+  auto pPFCP_Session_LookupProgram = UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+  pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->remove(key);
 }
 
 /*****************************************************************************************************************/
@@ -195,11 +195,11 @@ void SessionProgramManager::create(uint32_t seid) {
     throw std::runtime_error("Cannot Create a New eBPF program with Key (seid)");
   }
 
-  // Instantiate a new PFCP_Session_LookupProgram
+  // Instantiate a new PFCP_Session_PDR_LookupProgram
   auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
   auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
-  std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram = std::make_shared<PFCP_Session_LookupProgram>(gtpInterface, udpInterface);
-  pPFCP_Session_LookupProgram->setup();
+  std::shared_ptr<PFCP_Session_PDR_LookupProgram> pPFCP_Session_PDR_LookupProgram = std::make_shared<PFCP_Session_PDR_LookupProgram>(gtpInterface, udpInterface);
+  pPFCP_Session_PDR_LookupProgram->setup();
 
   // Initialize key egress interface map.
   uint32_t udpInterfaceIndex = if_nametoindex(udpInterface.c_str());
@@ -208,11 +208,11 @@ void SessionProgramManager::create(uint32_t seid) {
   uint32_t uplinkId   = static_cast<uint32_t>(FlowDirection::UPLINK);
   uint32_t downlinkId = static_cast<uint32_t>(FlowDirection::DOWNLINK);
   
-  pPFCP_Session_LookupProgram->getEgressInterfaceMap()->update(uplinkId, udpInterfaceIndex, BPF_ANY);
-  pPFCP_Session_LookupProgram->getEgressInterfaceMap()->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
+  pPFCP_Session_PDR_LookupProgram->getEgressInterfaceMap()->update(uplinkId, udpInterfaceIndex, BPF_ANY);
+  pPFCP_Session_PDR_LookupProgram->getEgressInterfaceMap()->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
 
-  // Update the PFCP_Session_LookupProgram map.
-  mSessionProgramMap.insert(std::pair<uint32_t, std::shared_ptr<PFCP_Session_LookupProgram>>(seid, pPFCP_Session_LookupProgram));
+  // Update the PFCP_Session_PDR_LookupProgram map.
+  mSessionProgramMap.insert(std::pair<uint32_t, std::shared_ptr<PFCP_Session_PDR_LookupProgram>>(seid, pPFCP_Session_PDR_LookupProgram));
 }
 
 /*****************************************************************************************************************/
@@ -233,7 +233,7 @@ void SessionProgramManager::removeAll() {
   for (auto pair : mSessionProgramMap) {
     pair.second->tearDown();
 
-    // Notify observer that a PFCP_Session_LookupProgram was removed.
+    // Notify observer that a PFCP_Session_PDR_LookupProgram was removed.
     mpOnNewSessionProgramObserver->onDestroySessionProgram(pair.first);
   }
   mSessionProgramMap.clear();
@@ -246,15 +246,15 @@ void SessionProgramManager::setOnNewSessionObserver(
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<PFCP_Session_LookupProgram> SessionProgramManager::findSessionProgram(uint32_t seid) {
-  std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram;
+std::shared_ptr<PFCP_Session_PDR_LookupProgram> SessionProgramManager::findSessionProgram(uint32_t seid) {
+  std::shared_ptr<PFCP_Session_PDR_LookupProgram> pPFCP_Session_PDR_LookupProgram;
 
   auto it = mSessionProgramMap.find(seid);
   if(it != mSessionProgramMap.end()) {
-    pPFCP_Session_LookupProgram = it->second;
+    pPFCP_Session_PDR_LookupProgram = it->second;
   }
 
-  return pPFCP_Session_LookupProgram;
+  return pPFCP_Session_PDR_LookupProgram;
 }
 
 /*****************************************************************************************************************/

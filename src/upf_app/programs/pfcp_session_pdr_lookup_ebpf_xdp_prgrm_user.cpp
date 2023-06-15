@@ -1,45 +1,22 @@
 #include "pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h"
-#include <SessionManager.h>
-#include <bpf/bpf.h>     // bpf calls
-#include <bpf/libbpf.h>  // bpf wrappers
-#include <iostream>      // cout
-#include <stdexcept>     // exception
-// // #include <utils/LogDefines.h>
-#include <wrappers/BPFMap.hpp>
+#include <pfcp_session_lookup_ebpf_xdp_prgrm_user.h>
+#include <bpf/bpf.h>       // bpf calls
+#include <bpf/libbpf.h>    // bpf wrappers
+#include <sys/resource.h>  // rlimit
+// // #include <utils/LogDefines.h> // Logs
+#include <net/if.h>  // if_nametoindex
 #include <wrappers/BPFMaps.h>
-#include "interfaces.h"
-#include "upf_config.hpp"
-#include "logger.hpp"
-
-using namespace upf;
-extern upf_config upf_cfg;
+#include <wrappers/BPFMap.hpp>
 
 /*****************************************************************************************************************/
 PFCP_Session_PDR_LookupProgram::PFCP_Session_PDR_LookupProgram(const std::string& gtpInterface, const std::string& udpInterface)
- : mGTPInterface(gtpInterface), mUDPInterface(udpInterface) {
-
- // // __builtin_memset(&gtp_interface, 0, sizeof(struct interface));
- // // __builtin_memset(&udp_interface, 0, sizeof(struct interface));
-
- // // if(mUDPInterface.empty() || mGTPInterface.empty()){
- // //   LOG_ERROR("GTP and/or UDP interface(s) are not defined!");
- // //   throw std::runtime_error("GTP and/or UDP interface(s) are not defined!");
- // // }
-  
- // // gtp_interface.ipv4_address = atoi((conv::toString(upf_cfg.n3.addr4)).c_str());
- // // LOG_DBG(".......................GTP Interface: %d\n", upf_cfg.n3.addr4.s_addr);
- // // LOG_DBG("    Interface ipv4.addr ........: %s", inet_ntoa(upf_cfg.n3.addr4));
- // // udp_interface.ipv4_address = atoi((conv::toString(upf_cfg.n6.addr4)).c_str());
-
- // // LOG_DBG("GTP Interface: %s, IF_NAME: %d, IPv4: %d \n", gtp_interface.if_name, gtp_interface.ipv4_address);
- // // LOG_DBG("UDP Interface: %s, IF_NAME: %d, IPv4: %d \n", udp_interface.if_name, udp_interface.ipv4_address);
-  
+  : mGTPInterface(gtpInterface), mUDPInterface(udpInterface) {
   mpLifeCycle = std::make_shared<PFCP_Session_PDR_LookupProgramLifeCycle>(
-                                                      pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__open, \
-                                                      pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__load, \
-                                                      pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__attach, \
-                                                      pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__destroy
-                                                      );
+                                                          pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__open, \
+                                                          pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__load, \
+                                                          pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__attach, \
+                                                          pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__destroy
+                                                          );
 }
 
 /*****************************************************************************************************************/
@@ -47,126 +24,63 @@ PFCP_Session_PDR_LookupProgram::~PFCP_Session_PDR_LookupProgram() {
 }
 
 /*****************************************************************************************************************/
-void PFCP_Session_PDR_LookupProgram::create_iface_map_entry(reference_point s) {
-  struct interface iface;
-  __builtin_memset(&iface, 0, sizeof(interface));
-  
-  switch(s) {
-  case N3_INTERFACE:
-    iface.ipv4_address = upf_cfg.n3.addr4.s_addr;     
-    iface.port = upf_cfg.n3.port;
-    iface.if_name = (upf_cfg.n3.if_name).c_str();
-    mpIfaceMap->update(s, iface, BPF_ANY);
-    break;
-  case N4_INTERFACE:
-    iface.ipv4_address = upf_cfg.n4.addr4.s_addr;     
-    iface.port = upf_cfg.n4.port;
-    iface.if_name = (upf_cfg.n4.if_name).c_str();
-    mpIfaceMap->update(s, iface, BPF_ANY);
-    break;
-  case N6_INTERFACE:
-    iface.ipv4_address = upf_cfg.n6.addr4.s_addr;     
-    iface.port = upf_cfg.n6.port;
-    iface.if_name = (upf_cfg.n6.if_name).c_str();
-    mpIfaceMap->update(s, iface, BPF_ANY);
-    break;
-  case N9_INTERFACE:
-    Logger::upf_app().error("Reference Point N9 Not Defined");
-    break; 
-  case N19_INTERFACE:
-    Logger::upf_app().error("Reference Point N19 Not Defined");
-    break;   
-  default:
-    Logger::upf_app().error("The Reference Point is Not Defined");
-  }
-}
-/*****************************************************************************************************************/
+// TODO: Pass configuration throught args.
 void PFCP_Session_PDR_LookupProgram::setup() {
-
-  // LOG_DBG("Saving Interfaces in Map");
-  // auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
-  // auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
-
-  // uint32_t gtpInterfaceIndex = if_nametoindex(gtpInterface.c_str());
-  // uint32_t udpInterfaceIndex = if_nametoindex(udpInterface.c_str());
-
-  // mpIfaceMap->update(gtpInterfaceIndex, gtp_interface.ipv4_address, BPF_ANY);
-  // mpIfaceMap->update(udpInterfaceIndex, udp_interface.ipv4_address, BPF_ANY);
-
-  spSkeleton = mpLifeCycle->open();
+  mpLifeCycle->open();
   initializeMaps();
   mpLifeCycle->load();
   mpLifeCycle->attach();
-  // Entry point interface
-  if (mUDPInterface.empty() || mGTPInterface.empty()) {
-    Logger::upf_app().error("GTP or UDP interface not defined!");
-    throw std::runtime_error("GTP or UDP interface not defined!");
-  }
 
-  Logger::upf_app().debug(
-      "Link UDP interface to interface %s", mUDPInterface.c_str());
-  mpLifeCycle->link("xdp_entry_point", mUDPInterface.c_str());
-
-  Logger::upf_app().debug(
-      "Link GTP interface to interface %s", mGTPInterface.c_str());
-  mpLifeCycle->link("xdp_entry_point", mGTPInterface.c_str());
-
-  Logger::upf_app().debug(
-      "Create Interfaces Map");  
-  create_iface_map_entry(N3_INTERFACE);
-  create_iface_map_entry(N6_INTERFACE);
-  create_iface_map_entry(N4_INTERFACE); 
+  // It must have one program linked to the redirect interface in order the
+  // operation would be successful. Assume there are already a program linked to
+  // the interfaces. So we dont need to link a dummy program.
+  // mpLifeCycle->link("xdp_redirect_dummy", mUDPInterface.c_str());
+  // mpLifeCycle->link("xdp_redirect_dummy", mGTPInterface.c_str());
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMaps> PFCP_Session_PDR_LookupProgram::getMaps() {
-  return mpMaps;
-}
-
-/*****************************************************************************************************************/
-// TODO: Check when kill when running.
-// It was noted the infinity loop.
 void PFCP_Session_PDR_LookupProgram::tearDown() {
   mpLifeCycle->tearDown();
 }
 
 /*****************************************************************************************************************/
-void PFCP_Session_PDR_LookupProgram::updateProgramMap(uint32_t key, uint32_t fd) {
-  mpTeidSessionMap->update(key, fd, BPF_ANY);
+int PFCP_Session_PDR_LookupProgram::getUplinkFileDescriptor() const {
+  return bpf_program__fd(mpLifeCycle->getBPFSkeleton()->progs.uplink_entry_point);
 }
 
 /*****************************************************************************************************************/
-void PFCP_Session_PDR_LookupProgram::removeProgramMap(uint32_t key) {
-  s32 fd;
-  // Remove only if exists.
-  if (mpTeidSessionMap->lookup(key, &fd) == 0) {
-    mpTeidSessionMap->remove(key);
-  }
+int PFCP_Session_PDR_LookupProgram::getDownlinkFileDescriptor() const {
+  return bpf_program__fd(mpLifeCycle->getBPFSkeleton()->progs.downlink_entry_point);
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getTeidSessionMap() const {
-  return mpTeidSessionMap;
+std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getFARMap() const {
+  return mpFARMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getUeIpSessionMap() const {
-  return mpUeIpSessionMap;
+std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getUplinkPDRsMap() const {
+  return mpUplinkPDRsMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getNextProgRuleMap() const {
-  return mpNextProgRuleMap;
+std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getDownlinkPDRsMap() const {
+  return mpDownlinkPDRsMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getNextProgRuleIndexMap() const {
-  return mpNextProgRuleIndexMap;
+std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getCounterMap() const {
+  return mpCounterMap;
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getIfaceMap() const {
-  return mpIfaceMap;
+std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getEgressInterfaceMap() const {
+ return mpEgressInterfaceMap;
+}
+
+/*****************************************************************************************************************/
+std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getArpTableMap() const {
+  return mpArpTableMap;
 }
 
 /*****************************************************************************************************************/
@@ -175,12 +89,13 @@ void PFCP_Session_PDR_LookupProgram::initializeMaps() {
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
 
   // Warning - The name of the map must be the same of the BPF program.
-  mpTeidSessionMap = std::make_shared<BPFMap>(mpMaps->getMap("m_teid_session"));
-  mpUeIpSessionMap = std::make_shared<BPFMap>(mpMaps->getMap("m_ueip_session"));
-  mpNextProgRuleMap =
-      std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_prog"));
-  mpNextProgRuleIndexMap =
-      std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_prog_index"));
-  mpIfaceMap = std::make_shared<BPFMap>(mpMaps->getMap("m_iface"));
+  // Initialize maps.
+  mpFARMap          = std::make_shared<BPFMap>(mpMaps->getMap("m_fars"));
+  mpUplinkPDRsMap   = std::make_shared<BPFMap>(mpMaps->getMap("m_teid_pdr"));
+  mpDownlinkPDRsMap = std::make_shared<BPFMap>(mpMaps->getMap("m_ueip_pdr"));
+  mpCounterMap      = std::make_shared<BPFMap>(mpMaps->getMap("mc_stats"));
+  mpEgressInterfaceMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_redirect_interfaces"));
+  mpArpTableMap = std::make_shared<BPFMap>(mpMaps->getMap("m_arp_table"));
 }
 /*****************************************************************************************************************/
