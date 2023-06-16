@@ -20,7 +20,7 @@
 # */
 #---------------------------------------------------------------------
 #
-FROM ubuntu:focal as spgwu-cppcheck
+FROM ubuntu:focal as upf-cppcheck
 
 RUN apt-get update && \
     apt-get upgrade -y && \

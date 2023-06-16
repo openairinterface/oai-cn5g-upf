@@ -20,7 +20,7 @@
 # */
 #---------------------------------------------------------------------
 #
-FROM ubuntu:focal as spgwu-clang-format-check
+FROM ubuntu:focal as upf-clang-format-check
 ARG MERGE_REQUEST_CHECK
 ARG SOURCE_BRANCH
 ARG TARGET_BRANCH
