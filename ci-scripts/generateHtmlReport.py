@@ -1,25 +1,27 @@
-#/*
-# * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
-# * contributor license agreements.  See the NOTICE file distributed with
-# * this work for additional information regarding copyright ownership.
-# * The OpenAirInterface Software Alliance licenses this file to You under
-# * the OAI Public License, Version 1.1  (the "License"); you may not use this file
-# * except in compliance with the License.
-# * You may obtain a copy of the License at
-# *
-# *	  http://www.openairinterface.org/?page_id=698
-# *
-# * Unless required by applicable law or agreed to in writing, software
-# * distributed under the License is distributed on an "AS IS" BASIS,
-# * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# * See the License for the specific language governing permissions and
-# * limitations under the License.
-# *-------------------------------------------------------------------------------
-# * For more information about the OpenAirInterface (OAI) Software Alliance:
-# *	  contact@openairinterface.org
-# */
-#---------------------------------------------------------------------
+#!/usr/bin/env python3
+"""
+Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+contributor license agreements.  See the NOTICE file distributed with
+this work for additional information regarding copyright ownership.
+The OpenAirInterface Software Alliance licenses this file to You under
+the OAI Public License, Version 1.1  (the "License"); you may not use this file
+except in compliance with the License.
+You may obtain a copy of the License at
 
+  http://www.openairinterface.org/?page_id=698
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+------------------------------------------------------------------------------
+For more information about the OpenAirInterface (OAI) Software Alliance:
+  contact@openairinterface.org
+---------------------------------------------------------------------
+"""
+
+import argparse
 import glob
 import os
 import re
@@ -393,7 +395,7 @@ class HtmlReport():
 
 		variants = ['docker', 'podman']
 		for variant in variants:
-			logFileName = 'spgwu_' + variant + '_image_build.log'
+			logFileName = 'upf_' + variant + '_image_build.log'
 			if os.path.isfile(cwd + '/archives/' + logFileName):
 				status = False
 				section_start_pattern = 'git config --global http'
@@ -440,11 +442,11 @@ class HtmlReport():
 
 		variants = ['docker', 'podman']
 		for variant in variants:
-			logFileName = 'spgwu_' + variant + '_image_build.log'
+			logFileName = 'upf_' + variant + '_image_build.log'
 			if os.path.isfile(cwd + '/archives/' + logFileName):
 				status = False
-				section_start_pattern = 'build_spgwu --install-deps --force'
-				section_end_pattern = 'build_spgwu --clean --build-type Release --jobs --Verbose'
+				section_start_pattern = 'build_upf --install-deps --force'
+				section_end_pattern = 'build_upf --clean --build-type Release --jobs --Verbose'
 				section_status = False
 				package_install = False
 				folly_build_start = False
@@ -458,7 +460,7 @@ class HtmlReport():
 				with open(cwd + '/archives/' + logFileName, 'r') as logfile:
 					for line in logfile:
 						# new method --> buildx may cache this stage
-						result = re.search('^#([0-9]+).* RUN ./build_spgwu --install-deps', line)
+						result = re.search('^#([0-9]+).* RUN ./build_upf --install-deps', line)
 						if result is not None:
 							build_stage_id = result.group(1)
 						result = re.search(f'^#{build_stage_id} CACHED', line)
@@ -511,7 +513,7 @@ class HtmlReport():
 				else:
 					cell_msg = '	  <td bgcolor="Tomato"><pre style="border:none; background-color:Tomato"><b>'
 					cell_msg += 'KO:\n'
-				cell_msg += ' -- build_spgwu --install-deps --force\n'
+				cell_msg += ' -- build_upf --install-deps --force\n'
 				if base_image:
 					cell_msg += '   ** Packages Installation: N/A\n'
 				elif package_install:
@@ -562,10 +564,10 @@ class HtmlReport():
 
 		variants = ['docker', 'podman']
 		for variant in variants:
-			logFileName = 'spgwu_' + variant + '_image_build.log'
+			logFileName = 'upf_' + variant + '_image_build.log'
 			if os.path.isfile(cwd + '/archives/' + logFileName):
 				status = False
-				section_start_pattern = 'build_spgwu --clean --build-type Release --jobs --Verbose'
+				section_start_pattern = 'build_upf --clean --build-type Release --jobs --Verbose'
 				section_end_pattern = 'FROM .* as oai-upf$'
 				section_status = False
 				with open(cwd + '/archives/' + logFileName, 'r') as logfile:
@@ -587,7 +589,7 @@ class HtmlReport():
 				else:
 					cell_msg = '	  <td bgcolor="Tomato"><pre style="border:none; background-color:Tomato"><b>'
 					cell_msg += 'KO:\n'
-				cell_msg += ' -- build_spgwu --clean --build-type Release --jobs</b></pre></td>\n'
+				cell_msg += ' -- build_upf --clean --build-type Release --jobs</b></pre></td>\n'
 			else:
 				cell_msg = '	  <td bgcolor="Tomato"><pre style="border:none; background-color:Tomato"><b>'
 				cell_msg += 'KO: logfile (' + logFileName + ') not found</b></pre></td>\n'
@@ -604,11 +606,11 @@ class HtmlReport():
 
 		variants = ['docker', 'podman']
 		for variant in variants:
-			logFileName = 'spgwu_' + variant + '_image_build.log'
+			logFileName = 'upf_' + variant + '_image_build.log'
 			nb_errors = 0
 			nb_warnings = 0
 			if os.path.isfile(cwd + '/archives/' + logFileName):
-				section_start_pattern = 'build_spgwu --clean --build-type Release --jobs --Verbose'
+				section_start_pattern = 'build_upf --clean --build-type Release --jobs --Verbose'
 				section_end_pattern = 'FROM .* as oai-upf$'
 				section_status = False
 				with open(cwd + '/archives/' + logFileName, 'r') as logfile:
@@ -658,7 +660,7 @@ class HtmlReport():
 
 		variants = ['docker', 'podman']
 		for variant in variants:
-			logFileName = 'spgwu_' + variant + '_image_build.log'
+			logFileName = 'upf_' + variant + '_image_build.log'
 			if os.path.isfile(cwd + '/archives/' + logFileName):
 				section_start_pattern = 'FROM .* as oai-upf$'
 				section_end_pattern = 'WORKDIR /oai-upf/etc'
@@ -703,7 +705,7 @@ class HtmlReport():
 
 		variants = ['docker', 'podman']
 		for variant in variants:
-			logFileName = 'spgwu_' + variant + '_image_build.log'
+			logFileName = 'upf_' + variant + '_image_build.log'
 			if os.path.isfile(cwd + '/archives/' + logFileName):
 				section_start_pattern = 'WORKDIR /oai-upf/etc'
 				if variant == 'docker':
@@ -751,7 +753,7 @@ class HtmlReport():
 
 		variants = ['docker', 'podman']
 		for variant in variants:
-			logFileName = 'spgwu_' + variant + '_image_build.log'
+			logFileName = 'upf_' + variant + '_image_build.log'
 			if os.path.isfile(cwd + '/archives/' + logFileName):
 				if variant == 'docker':
 					section_start_pattern = 'naming to docker.io/library/oai-upf:'
@@ -928,66 +930,106 @@ def Usage():
 	print('  --git_target_branch=[Git Target Branch Name]')
 	print('  --git_target_commit=[Git Target Commit SHA-ONE]')
 
+def _parse_args() -> argparse.Namespace:
+    """Parse the command line args
+
+    Returns:
+        argparse.Namespace: the created parser
+    """
+    example_text = '''example:
+        ./generateHtmlReport.py --help'''
+
+    parser = argparse.ArgumentParser(description='OAI 5G CORE NETWORK Utility tool',
+                                    epilog=example_text,
+                                    formatter_class=argparse.RawDescriptionHelpFormatter)
+
+    # Pipeline Name
+    parser.add_argument(
+        '--job-name', '-jn',
+        action='store',
+        help='Pipeline name',
+    )
+
+    # Build Number
+    parser.add_argument(
+        '--build-id', '-id',
+        action='store',
+        help='Build ID or number',
+    )
+
+    # Build URL
+    parser.add_argument(
+        '--build-url',
+        action='store',
+        help='Build URL',
+    )
+
+    # GIT repo URL
+    parser.add_argument(
+        '--git-url',
+        action='store',
+        help='GIT repo URL',
+    )
+
+    # GIT source branch
+    parser.add_argument(
+        '--git-src-branch',
+        action='store',
+        help='GIT source branch',
+    )
+
+    # GIT source commit
+    parser.add_argument(
+        '--git-src-commit',
+        action='store',
+        help='GIT source commit (SHA-ONE)',
+    )
+
+    # GIT MR or PR
+    parser.add_argument(
+        '--git-merge-request',
+        action='store_true',
+        default=False,
+        help='GIT source commit (SHA-ONE)',
+    )
+
+    # GIT destination branch
+    parser.add_argument(
+        '--git-dst-branch',
+        action='store',
+        help='GIT destination branch',
+    )
+
+    # GIT destination commit
+    parser.add_argument(
+        '--git-dst-commit',
+        action='store',
+        help='GIT destination commit (SHA-ONE)',
+    )
+
+    args, unknown = parser.parse_known_args()
+    return args
+
 #--------------------------------------------------------------------------------------------------------
 #
 # Start of main
 #
 #--------------------------------------------------------------------------------------------------------
 
-argvs = sys.argv
-argc = len(argvs)
-
 HTML = HtmlReport()
 
-while len(argvs) > 1:
-	myArgv = argvs.pop(1)
-	if re.match('^\-\-help$', myArgv, re.IGNORECASE):
-		Usage()
-		sys.exit(0)
-	elif re.match('^\-\-job_name=(.+)$', myArgv, re.IGNORECASE):
-		matchReg = re.match('^\-\-job_name=(.+)$', myArgv, re.IGNORECASE)
-		HTML.job_name = matchReg.group(1)
-	elif re.match('^\-\-job_id=(.+)$', myArgv, re.IGNORECASE):
-		matchReg = re.match('^\-\-job_id=(.+)$', myArgv, re.IGNORECASE)
-		HTML.job_id = matchReg.group(1)
-	elif re.match('^\-\-job_url=(.+)$', myArgv, re.IGNORECASE):
-		matchReg = re.match('^\-\-job_url=(.+)$', myArgv, re.IGNORECASE)
-		HTML.job_url = matchReg.group(1)
-	elif re.match('^\-\-git_url=(.+)$', myArgv, re.IGNORECASE):
-		matchReg = re.match('^\-\-git_url=(.+)$', myArgv, re.IGNORECASE)
-		HTML.git_url = matchReg.group(1)
-	elif re.match('^\-\-git_src_branch=(.+)$', myArgv, re.IGNORECASE):
-		matchReg = re.match('^\-\-git_src_branch=(.+)$', myArgv, re.IGNORECASE)
-		HTML.git_src_branch = matchReg.group(1)
-	elif re.match('^\-\-git_src_commit=(.+)$', myArgv, re.IGNORECASE):
-		matchReg = re.match('^\-\-git_src_commit=(.+)$', myArgv, re.IGNORECASE)
-		HTML.git_src_commit = matchReg.group(1)
-	elif re.match('^\-\-git_src_commit_msg=(.+)$', myArgv, re.IGNORECASE):
-		# Not Mandatory
-		matchReg = re.match('^\-\-git_src_commit_msg=(.+)$', myArgv, re.IGNORECASE)
-		HTML.git_src_commit_msg = matchReg.group(1)
-	elif re.match('^\-\-git_pull_request=(.+)$', myArgv, re.IGNORECASE):
-		# Can be silent: would be false!
-		matchReg = re.match('^\-\-git_pull_request=(.+)$', myArgv, re.IGNORECASE)
-		if matchReg.group(1) == 'true' or matchReg.group(1) == 'True':
-			HTML.git_pull_request = True
-	elif re.match('^\-\-git_target_branch=(.+)$', myArgv, re.IGNORECASE):
-		matchReg = re.match('^\-\-git_target_branch=(.+)$', myArgv, re.IGNORECASE)
-		HTML.git_target_branch = matchReg.group(1)
-	elif re.match('^\-\-git_target_commit=(.+)$', myArgv, re.IGNORECASE):
-		matchReg = re.match('^\-\-git_target_commit=(.+)$', myArgv, re.IGNORECASE)
-		HTML.git_target_commit = matchReg.group(1)
-	else:
-		sys.exit('Invalid Parameter: ' + myArgv)
+# Parse the arguments
+args = _parse_args()
 
-if HTML.job_name == '' or HTML.job_id == '' or HTML.job_url == '':
-	sys.exit('Missing Parameter in job description')
-
-if HTML.git_url == '' or HTML.git_src_branch == '' or HTML.git_src_commit == '':
-	sys.exit('Missing Parameter in Git Repository description')
-
-if HTML.git_pull_request:
-	if HTML.git_target_commit == '' or HTML.git_target_branch == '':
-		 sys.exit('Missing Parameter in Git Pull Request Repository description')
+# to be back-ward compatible
+HTML.job_name = args.job_name
+HTML.job_name = args.build_id
+HTML.job_url = args.build_url
+HTML.git_url = args.git_url
+HTML.git_src_branch = args.git_src_branch
+HTML.git_src_commit = args.git_src_commit
+HTML.git_pull_request = args.git_merge_request
+HTML.git_target_branch = args.git_dst_branch
+HTML.git_target_commit = args.git_dst_commit
 
 HTML.generate()

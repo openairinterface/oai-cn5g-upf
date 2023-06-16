@@ -152,7 +152,7 @@ install_bpftool_from_git() {
 
     #wget --recursive --no-parent $GIT_URL ./bpftool
     $SUDO apt install -y wget gcc-multilib
-    wget $GIT_URL && tar -xvf linux-5.7.tar.gz && rm -rf linux-5.7.tar.gz
+    wget -nv $GIT_URL & ls -lst linux-5.7.tar.gz && tar -xf linux-5.7.tar.gz && rm -rf linux-5.7.tar.gz
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
     cd linux-5.7/tools/bpf/bpftool && make -j $(nproc)
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
