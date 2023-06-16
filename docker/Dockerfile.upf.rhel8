@@ -64,7 +64,8 @@ RUN ./build_spgwu --install-deps --force && \
     rm -rf /etc/rhsm
 RUN ./build_spgwu --clean --build-type Release --jobs --Verbose && \
     ldd /oai-upf/build/upf/build/spgwu && \
-    mv /oai-upf/build/upf/build/spgwu /oai-upf/build/upf/build/oai_upf
+    mv /oai-upf/build/upf/build/spgwu /oai-upf/build/upf/build/oai_upf && \
+    echo "end of UPF build"
 
 #---------------------------------------------------------------------
 # TARGET IMAGE

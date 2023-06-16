@@ -446,7 +446,7 @@ class HtmlReport():
 			if os.path.isfile(cwd + '/archives/' + logFileName):
 				status = False
 				section_start_pattern = 'build_upf --install-deps --force'
-				section_end_pattern = 'build_upf --clean --build-type Release --jobs --Verbose'
+				section_end_pattern = 'UPF not compiled, to compile it, re-run build_upf without'
 				section_status = False
 				package_install = False
 				folly_build_start = False
@@ -568,18 +568,18 @@ class HtmlReport():
 			if os.path.isfile(cwd + '/archives/' + logFileName):
 				status = False
 				section_start_pattern = 'build_upf --clean --build-type Release --jobs --Verbose'
-				section_end_pattern = 'FROM .* as oai-upf$'
+				section_end_pattern = 'end of UPF build'
 				section_status = False
 				with open(cwd + '/archives/' + logFileName, 'r') as logfile:
 					for line in logfile:
+						result = re.search(section_end_pattern, line)
+						if result is not None and section_status:
+							section_status = False
 						result = re.search(section_start_pattern, line)
 						if result is not None:
 							section_status = True
-						result = re.search(section_end_pattern, line)
-						if result is not None:
-							section_status = False
 						if section_status:
-							result = re.search('spgwu installed', line)
+							result = re.search('upf installed', line)
 							if result is not None:
 								status = True
 					logfile.close()
@@ -611,7 +611,7 @@ class HtmlReport():
 			nb_warnings = 0
 			if os.path.isfile(cwd + '/archives/' + logFileName):
 				section_start_pattern = 'build_upf --clean --build-type Release --jobs --Verbose'
-				section_end_pattern = 'FROM .* as oai-upf$'
+				section_end_pattern = 'upf installed'
 				section_status = False
 				with open(cwd + '/archives/' + logFileName, 'r') as logfile:
 					for line in logfile:
