@@ -13,10 +13,11 @@
 using namespace upf;
 extern upf_config upf_cfg;
 
-std::string Configuration::sGTPInterface            = upf_cfg.n3.if_name;
-std::string Configuration::sUDPInterface            = upf_cfg.n6.if_name;;
-//std::string Configuration::sGTPInterface            = "enp6s0";
-//std::string Configuration::sUDPInterface            = "enp7s0";
+std::string Configuration::sGTPInterface = upf_cfg.n3.if_name;
+std::string Configuration::sUDPInterface = upf_cfg.n6.if_name;
+;
+// std::string Configuration::sGTPInterface            = "enp6s0";
+// std::string Configuration::sUDPInterface            = "enp7s0";
 unsigned char Configuration::sIsSocketBufferEnabled = 0;
 
 Configuration::Configuration(int argc, char** argv) {

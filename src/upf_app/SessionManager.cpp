@@ -20,27 +20,25 @@
 // #include "uint_generator.hpp"
 
 /*****************************************************************************************************************/
-SessionManager::SessionManager() {
-}
+SessionManager::SessionManager() {}
 
 /*****************************************************************************************************************/
-SessionManager::~SessionManager() { 
-}
+SessionManager::~SessionManager() {}
 
 /*****************************************************************************************************************/
-void SessionManager::createSession(std::shared_ptr<SessionBpf> pSession)
-{
+void SessionManager::createSession(std::shared_ptr<SessionBpf> pSession) {
   SessionProgramManager::getInstance().create(pSession->getSeid());
-  Logger::upf_app().debug("Session %d Has Been Cretead Successfully", pSession->getSeid());
+  Logger::upf_app().debug(
+      "Session %d Has Been Cretead Successfully", pSession->getSeid());
 }
 
 /*****************************************************************************************************************/
-void SessionManager::createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSession)
-{
+void SessionManager::createBPFSession(
+    std::shared_ptr<pfcp::pfcp_session> pSession) {
   Logger::upf_app().debug("Session %d Received", pSession->get_up_seid());
   Logger::upf_app().debug("Preparing the Datapath ...");
   Logger::upf_app().debug("Find the PDR with Highest Precedence:");
-  
+
   // The lower precedence values indicate higher precedence of the PDR, and the
   // higher precedence values indicate lower precedence of the PDR when matching
   // a packet.
@@ -52,8 +50,10 @@ void SessionManager::createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSessi
   std::sort(
       pSession->pdrs.begin(), pSession->pdrs.end(), SessionManager::comparePDR);
 
-  Logger::upf_app().debug("Extract the key (PDI) from the highest priority PDR");
-  auto pPFCP_Session_LookupProgram = UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+  Logger::upf_app().debug(
+      "Extract the key (PDI) from the highest priority PDR");
+  auto pPFCP_Session_LookupProgram =
+      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
@@ -70,7 +70,7 @@ void SessionManager::createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSessi
         pdi.get(sourceInterface) && pdi.get(ueIpAddress))) {
     throw std::runtime_error("No fields available");
   }
-  
+
   Logger::upf_app().debug(
       "PDI extracted from PDR %d", pdrHighPriority->pdr_id.rule_id);
 
@@ -104,8 +104,9 @@ void SessionManager::removeBPFSession(uint64_t seid) {
 }
 
 /*****************************************************************************************************************/
-bool SessionManager::comparePDR(const std::shared_ptr<pfcp::pfcp_pdr> &pFirst,
-                                const std::shared_ptr<pfcp::pfcp_pdr> &pSecond){
+bool SessionManager::comparePDR(
+    const std::shared_ptr<pfcp::pfcp_pdr>& pFirst,
+    const std::shared_ptr<pfcp::pfcp_pdr>& pSecond) {
   pfcp::precedence_t precedenceFirst, precedenceSecond;
   // TODO: Check if exists.
   pFirst->get(precedenceFirst);
@@ -114,7 +115,7 @@ bool SessionManager::comparePDR(const std::shared_ptr<pfcp::pfcp_pdr> &pFirst,
 }
 
 /*****************************************************************************************************************/
-void SessionManager::removeSession(uint64_t seid){
+void SessionManager::removeSession(uint64_t seid) {
   SessionProgramManager::getInstance().remove(seid);
   Logger::upf_app().debug("Session %d has been removed", seid);
 }

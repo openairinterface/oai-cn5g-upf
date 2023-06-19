@@ -65,12 +65,13 @@ class SessionProgramManager {
    *
    */
   void removeAll();
-  
+
   /*****************************************************************************************************************/
   /**
    * @brief Set the On New Session Observer object.
    *
-   * @param pObserver The observer which will be notified when a PFCP_Session_PDR_LookupProgram is created.
+   * @param pObserver The observer which will be notified when a
+   * PFCP_Session_PDR_LookupProgram is created.
    */
   void setOnNewSessionObserver(OnStateChangeSessionProgramObserver* pObserver);
 
@@ -79,9 +80,11 @@ class SessionProgramManager {
    * @brief Find the Session Program object.
    *
    * @param seid The session identifier.
-   * @return std::shared_ptr<PFCP_Session_PDR_LookupProgram> The program, which represents the session.
+   * @return std::shared_ptr<PFCP_Session_PDR_LookupProgram> The program, which
+   * represents the session.
    */
-  std::shared_ptr<PFCP_Session_PDR_LookupProgram> findSessionProgram(uint32_t seid);
+  std::shared_ptr<PFCP_Session_PDR_LookupProgram> findSessionProgram(
+      uint32_t seid);
 
   /*****************************************************************************************************************/
   void createPipeline(
@@ -104,11 +107,13 @@ class SessionProgramManager {
   // The program eBPF map.
   std::shared_ptr<BPFMap> mpUeIpSessionMap;
 
-  // The observer which will be notified when a PFCP_Session_PDR_LookupProgram is created.
+  // The observer which will be notified when a PFCP_Session_PDR_LookupProgram
+  // is created.
   OnStateChangeSessionProgramObserver* mpOnNewSessionProgramObserver;
 
   // The Maps to store the instance of the programs.
-  std::map<uint32_t, std::shared_ptr<PFCP_Session_PDR_LookupProgram>> mSessionProgramMap;
+  std::map<uint32_t, std::shared_ptr<PFCP_Session_PDR_LookupProgram>>
+      mSessionProgramMap;
 
   // The Maps to store the instance of the FARs programs.
   // std::map<uint32_t, std::shared_ptr<FARProgram>> mFARProgramMap;
