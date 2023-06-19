@@ -1,9 +1,9 @@
-				The OpenAirInterface Software Alliance (OSA)
-					OAI Public License (Version 1.1)
+        The OpenAirInterface Software Alliance (OSA)
+          OAI Public License (Version 1.1)
 
 LICENSE TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION OF OPENAIR 5G SOFTWARE.
 
-1.	Definitions.
+1.  Definitions.
 
 “License” shall mean the terms and conditions for use, reproduction, and distribution set forth 
 in this document.
@@ -56,13 +56,13 @@ forth the terms and conditions applicable to its Contribution.
 “Contributor” shall mean any individual or Legal Entity on behalf of whom a Contribution 
 has been received by Licensor and subsequently incorporated within the Work.
 
-2.	Grant of Copyright License.
+2.  Grant of Copyright License.
 Subject to the terms and conditions of this License, Licensor and each Contributor hereby 
 grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable 
 copyright license to reproduce, prepare Derivative Works of, publicly display, publicly 
 perform, and distribute the Work and such Derivative Works in Source or Object form
 
-3. 	Grant of Patent License.
+3.  Grant of Patent License.
 
 3.1 Grant of Patent License for study, testing and research purposes:
 Subject to the terms and conditions of this License, Licensor and each Contributor hereby 
@@ -174,7 +174,7 @@ The present license shall be governed by the laws of France.
 
 END OF TERMS AND CONDITIONS
 
-1.	APPENDIX: How to apply the PRESENT OPENAIR 5G License to your work
+1.  APPENDIX: How to apply the PRESENT OPENAIR 5G License to your work
 To apply the present License to your work, attach the following boilerplate notice, with the 
 fields enclosed by brackets “[]” replaced with your own identifying information. (Don’t 
 include the brackets!) The text should be enclosed in the appropriate comment syntax for the 
