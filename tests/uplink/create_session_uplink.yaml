@@ -1,0 +1,20 @@
+# This file should be run from pfcp-kichen-sink in the host machine:
+- seid: 1
+  pdrs: 
+  - pdrID: 2
+    precedence: 1
+    pdi: 
+      sourceInterface: Access
+      localFTEID:
+        teid: 100
+        ip4: 172.2.16.15
+      ueIPAddress: 
+        isDestination: false
+        ip4: 192.168.60.1
+    outerHeaderRemoval: OUTER_HEADER_GTPU_UDP_IPV4
+    farID: 100
+  fars: 
+  - farID: 100
+    applyAction: Forward
+    forwardingParameters: 
+      destinationInterface: Core

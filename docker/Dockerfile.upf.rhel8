@@ -1,0 +1,144 @@
+#/*
+# * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+# * contributor license agreements.  See the NOTICE file distributed with
+# * this work for additional information regarding copyright ownership.
+# * The OpenAirInterface Software Alliance licenses this file to You under
+# * the OAI Public License, Version 1.1  (the "License"); you may not use this file
+# * except in compliance with the License.
+# * You may obtain a copy of the License at
+# *
+# *      http://www.openairinterface.org/?page_id=698
+# *
+# * Unless required by applicable law or agreed to in writing, software
+# * distributed under the License is distributed on an "AS IS" BASIS,
+# * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# * See the License for the specific language governing permissions and
+# * limitations under the License.
+# *-------------------------------------------------------------------------------
+# * For more information about the OpenAirInterface (OAI) Software Alliance:
+# *      contact@openairinterface.org
+# */
+#---------------------------------------------------------------------
+#
+# Dockerfile for the Open-Air-Interface UPF-TINY service
+#   Valid for UBI 8.6 | RHEL 8.6
+#
+#---------------------------------------------------------------------
+
+#---------------------------------------------------------------------
+# BUILDER IMAGE
+#---------------------------------------------------------------------
+FROM registry.access.redhat.com/ubi8/ubi:latest as oai-upf-builder
+
+# Entitlements and RHSM configurations are Open-Shift Secret and ConfigMaps
+# It is pre-requisite
+# Copy the entitlements
+COPY ./etc-pki-entitlement /etc/pki/entitlement
+
+# Copy the subscription manager configurations
+COPY ./rhsm-conf /etc/rhsm
+COPY ./rhsm-ca /etc/rhsm/ca
+
+RUN rm /etc/rhsm-host && \
+    # Initialize /etc/yum.repos.d/redhat.repo
+    # See https://access.redhat.com/solutions/1443553
+    yum repolist --disablerepo=* && \
+    subscription-manager repos --enable codeready-builder-for-rhel-8-x86_64-rpms && \
+    yum update -y && \
+    yum -y install --enablerepo="codeready-builder-for-rhel-8-x86_64-rpms" \
+       diffutils \
+       file \
+       wget \
+       psmisc \
+       git
+
+# Copy the workspace as is
+WORKDIR /oai-upf
+COPY . /oai-upf
+
+# Installing and Building UPF-TINY
+WORKDIR /oai-upf/build/scripts
+RUN ./build_spgwu --install-deps --force && \
+    # Remove entitlements and Subscription Manager configs
+    rm -rf /etc/pki/entitlement && \
+    rm -rf /etc/rhsm
+RUN ./build_spgwu --clean --build-type Release --jobs --Verbose && \
+    ldd /oai-upf/build/upf/build/spgwu && \
+    mv /oai-upf/build/upf/build/spgwu /oai-upf/build/upf/build/oai_upf && \
+    echo "end of UPF build"
+
+#---------------------------------------------------------------------
+# TARGET IMAGE
+#---------------------------------------------------------------------
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest as oai-upf
+ENV TZ=Europe/Paris
+
+# Copy the entitlements
+COPY ./etc-pki-entitlement /etc/pki/entitlement
+# Copy the subscription manager configurations
+COPY ./rhsm-conf /etc/rhsm
+COPY ./rhsm-ca /etc/rhsm/ca
+
+# We install some debug tools for the moment in addition of mandatory libraries
+RUN rm -f /etc/rhsm-host && \
+    microdnf update -y && \
+    microdnf install -y \
+      python3 \
+      python3-pip \
+      tzdata \
+      procps-ng \
+      psmisc \
+      net-tools \
+      ethtool \
+      iproute \
+      iptables \
+      initscripts \
+      libicu \
+      boost \
+      libevent \
+      findutils \
+      libconfig && \
+    pip3 install jinja2 && \
+    microdnf clean all -y && \
+    rm -rf /var/cache/yum /var/cache/dnf && \
+    # Remove entitlements and Subscription Manager configs
+    rm -rf /etc/pki/entitlement && \
+    rm -rf /etc/rhsm
+
+# Copying executable and generated libraries
+WORKDIR /oai-upf/bin
+COPY --from=oai-upf-builder \
+    /oai-upf/build/upf/build/oai_upf \
+    /oai-upf/scripts/entrypoint.py \
+    /oai-upf/scripts/healthcheck.sh \
+    ./
+
+# Copying installed libraries from builder
+COPY --from=oai-upf-builder \
+# Currently we keep these folly dependencies from the builder
+    /lib64/libgflags.so.2.1 \
+    /lib64/libglog.so.0 \
+    /lib64/libdouble-conversion.so.1 \
+    /usr/local/lib64/libspdlog.so \
+    /usr/local/lib64/libfmt.so \
+    /lib64/
+RUN ldconfig && \
+    ldd /oai-upf/bin/oai_upf
+
+# Copying template configuration files
+# The configuration folder will be flat
+WORKDIR /oai-upf/etc
+COPY --from=oai-upf-builder /oai-upf/etc/upf.conf .
+
+WORKDIR /oai-upf
+
+# expose ports
+EXPOSE 2152/udp 8805/udp
+# healthcheck
+HEALTHCHECK --interval=10s \
+            --timeout=15s \
+            --retries=6 \
+    CMD /oai-upf/bin/healthcheck.sh
+
+CMD ["/oai-upf/bin/oai_upf", "-c", "/oai-upf/etc/upf.conf", "-o"]
+ENTRYPOINT ["python3", "/oai-upf/bin/entrypoint.py"]
