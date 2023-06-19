@@ -5,16 +5,15 @@
 #include <interfaces/SessionBpf.h>
 #include <pfcp/pfcp_session.h>
 
-class SessionBpfImpl : public SessionBpf
-{
-public:
-  SessionBpfImpl(pfcp_session_t_ &session);
+class SessionBpfImpl : public SessionBpf {
+ public:
+  SessionBpfImpl(pfcp_session_t_& session);
   virtual ~SessionBpfImpl();
   seid_t_ getSeid() override;
   pfcp_session_t_ getData() override;
 
-private:
+ private:
   pfcp_session_t_ mSession;
 };
 
-#endif // __SESSIONBPFIMPL_H__
+#endif  // __SESSIONBPFIMPL_H__

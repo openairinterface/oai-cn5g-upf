@@ -32,7 +32,8 @@ std::shared_ptr<RulesUtilities> UserPlaneComponent::getRulesUtilities() const {
 }
 
 /*****************************************************************************************************************/
-std::shared_ptr<PFCP_Session_LookupProgram> UserPlaneComponent::getPFCP_Session_LookupProgram() const {
+std::shared_ptr<PFCP_Session_LookupProgram>
+UserPlaneComponent::getPFCP_Session_LookupProgram() const {
   return mpPFCP_Session_LookupProgram;
 }
 
@@ -47,7 +48,8 @@ std::string UserPlaneComponent::getUDPInterface() const {
 }
 
 /*****************************************************************************************************************/
-void UserPlaneComponent::onNewSessionProgram(u_int32_t programId, u_int32_t fileDescriptor) {
+void UserPlaneComponent::onNewSessionProgram(
+    u_int32_t programId, u_int32_t fileDescriptor) {
   mpPFCP_Session_LookupProgram->updateProgramMap(programId, fileDescriptor);
 }
 
@@ -57,30 +59,29 @@ void UserPlaneComponent::onDestroySessionProgram(u_int32_t programId) {
 }
 
 /*****************************************************************************************************************/
-int UserPlaneComponent::printLibbpfLog(enum libbpf_print_level lvl, const char *fmt, va_list args)
-{
+int UserPlaneComponent::printLibbpfLog(
+    enum libbpf_print_level lvl, const char* fmt, va_list args) {
   // Do not put LOG_FUNC() here.
   return vfprintf(stderr, fmt, args);
 }
 
 /*****************************************************************************************************************/
-UserPlaneComponent &UserPlaneComponent::getInstance() {
+UserPlaneComponent& UserPlaneComponent::getInstance() {
   static UserPlaneComponent sInstance;
   return sInstance;
 }
 
 /*****************************************************************************************************************/
 void UserPlaneComponent::setup(
-                              std::shared_ptr<RulesUtilities> pRulesUtilities, 
-                              const std::string& gtpInterface, 
-                              const std::string& udpInterface
-                              ) {
+    std::shared_ptr<RulesUtilities> pRulesUtilities,
+    const std::string& gtpInterface, const std::string& udpInterface) {
   mpRulesUtilities = pRulesUtilities;
-  mGTPInterface = gtpInterface;
-  mUDPInterface = udpInterface;
-  mpPFCP_Session_LookupProgram = std::make_shared<PFCP_Session_LookupProgram>(gtpInterface, udpInterface);
+  mGTPInterface    = gtpInterface;
+  mUDPInterface    = udpInterface;
+  mpPFCP_Session_LookupProgram =
+      std::make_shared<PFCP_Session_LookupProgram>(gtpInterface, udpInterface);
 
-  if(!mpPFCP_Session_LookupProgram) {
+  if (!mpPFCP_Session_LookupProgram) {
     Logger::upf_app().error("The eBPF Program is Not Initialized");
     throw std::runtime_error("The eBPF Program is Not Initialized");
   }

@@ -29,8 +29,8 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
    *
    * @return The singleton instance.
    */
-  static UserPlaneComponent &getInstance();
-  
+  static UserPlaneComponent& getInstance();
+
   /*****************************************************************************************************************/
   /**
    * @brief Setup User Plane Component.
@@ -41,11 +41,9 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
    * @param udpInterface
    */
   void setup(
-            std::shared_ptr<RulesUtilities> pRulesUtilities, 
-            const std::string& gtpInterface, 
-            const std::string& udpInterface
-            );
-  
+      std::shared_ptr<RulesUtilities> pRulesUtilities,
+      const std::string& gtpInterface, const std::string& udpInterface);
+
   /*****************************************************************************************************************/
   /**
    * @brief Tear down User Plane Component.
@@ -74,9 +72,11 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
   /**
    * @brief Get PFCP_Session_LookupProgram object.
    *
-   * @return std::shared_ptr<PFCP_Session_LookupProgram> The PFCP_Session_LookupProgram reference.
+   * @return std::shared_ptr<PFCP_Session_LookupProgram> The
+   * PFCP_Session_LookupProgram reference.
    */
-  std::shared_ptr<PFCP_Session_LookupProgram> getPFCP_Session_LookupProgram() const;
+  std::shared_ptr<PFCP_Session_LookupProgram> getPFCP_Session_LookupProgram()
+      const;
 
   /*****************************************************************************************************************/
   /**
@@ -126,8 +126,10 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
   // The PFCP_Session_LookupProgram (BPF program entry point) reference.
   std::shared_ptr<PFCP_Session_LookupProgram> mpPFCP_Session_LookupProgram;
 
-  // The PFCP_Session_PDR_LookupProgram (BPF program for PFCP Session) reference.
-  std::shared_ptr<PFCP_Session_PDR_LookupProgram> mpPFCP_Session_PDR_LookupProgram;
+  // The PFCP_Session_PDR_LookupProgram (BPF program for PFCP Session)
+  // reference.
+  std::shared_ptr<PFCP_Session_PDR_LookupProgram>
+      mpPFCP_Session_PDR_LookupProgram;
 
   // The GTP interface.
   std::string mGTPInterface;

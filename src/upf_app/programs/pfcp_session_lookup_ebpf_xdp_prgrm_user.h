@@ -17,21 +17,21 @@ class BPFMap;
 class SessionManager;
 class RulesUtilities;
 
-
-using PFCP_Session_LookupProgramLifeCycle = ProgramLifeCycle<pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c>;
+using PFCP_Session_LookupProgramLifeCycle =
+    ProgramLifeCycle<pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c>;
 
 /**
  * @brief Singleton class to abrastract the UPF bpf program.
  */
-class PFCP_Session_LookupProgram
-{
-public:
+class PFCP_Session_LookupProgram {
+ public:
   /**
    * @brief Construct a new PFCP_Session_LookupProgram object.
    *
    */
-  explicit PFCP_Session_LookupProgram(const std::string& gtpInterface, const std::string& udpInterface);
-  
+  explicit PFCP_Session_LookupProgram(
+      const std::string& gtpInterface, const std::string& udpInterface);
+
   /*****************************************************************************************************************/
   /**
    * @brief Destroy the PFCP_Session_LookupProgram object
@@ -43,7 +43,7 @@ public:
    * @brief Insert one UPF reference point interface into a map.
    *
    */
-  
+
   void create_upf_interface_map_entry(e_reference_point s);
 
   /*****************************************************************************************************************/
@@ -60,7 +60,7 @@ public:
    * @return std::shared_ptr<BPFMaps> The reference of the BPFMaps.
    */
   std::shared_ptr<BPFMaps> getMaps();
-  
+
   /*****************************************************************************************************************/
   /**
    * @brief Tear downs the BPF program.
@@ -76,7 +76,7 @@ public:
    * @param fd The file descriptor.
    */
   void updateProgramMap(uint32_t key, uint32_t fd);
-  
+
   /*****************************************************************************************************************/
   /**
    * @brief Remove program in map.
@@ -163,7 +163,7 @@ public:
   // The iface map.
   std::shared_ptr<BPFMap> mpUPFIfaceMap;
 
-  //struct interface gtp_interface, udp_interface;
+  // struct interface gtp_interface, udp_interface;
 };
 
 #endif  // __PFCP_SESSION_LOOKUP_EBPF_XDP_PRGRM_USER_H__

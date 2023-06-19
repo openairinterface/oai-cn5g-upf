@@ -5,8 +5,8 @@
 #include <pfcp/pfcp_pdr.h>
 #include <pfcp/pfcp_far.h>
 
-#define SESSION_PDRS_MAX_SIZE 5000 //10
-#define SESSION_FARS_MAX_SIZE 5000 //10
+#define SESSION_PDRS_MAX_SIZE 5000  // 10
+#define SESSION_FARS_MAX_SIZE 5000  // 10
 
 typedef struct pfcp_session_s {
   seid_t_ seid;

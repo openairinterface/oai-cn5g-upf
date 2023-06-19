@@ -61,10 +61,10 @@ static u32 create_outer_header_gtpu_ipv4(
 
   struct ethhdr* p_eth;
   struct iphdr* p_ip;
-  void *map_element;
-  struct s_interface *iface = NULL;
+  void* map_element;
+  struct s_interface* iface        = NULL;
   enum e_reference_point reference = N3_INTERFACE;
-  
+
   __builtin_memset(&p_eth, 0, sizeof(p_eth));
   __builtin_memset(&p_ip, 0, sizeof(p_ip));
   __builtin_memset(&map_element, 0, sizeof(map_element));
@@ -75,7 +75,7 @@ static u32 create_outer_header_gtpu_ipv4(
   void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
   void* p_mac_address;
-  //struct bpf_fib_lookup fib_params = {};
+  // struct bpf_fib_lookup fib_params = {};
 
   // Adjust space to the left.
   bpf_xdp_adjust_head(p_ctx, (int32_t) -GTP_ENCAPSULATED_SIZE);
@@ -126,7 +126,7 @@ static u32 create_outer_header_gtpu_ipv4(
   p_ip->ttl      = 64;
   p_ip->protocol = IPPROTO_UDP;
   p_ip->check    = 0;
-  p_ip->saddr = iface->ipv4_address;
+  p_ip->saddr    = iface->ipv4_address;
   bpf_debug(" p_ip->saddr:%d", p_ip->saddr);
   p_ip->daddr =
       p_far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
@@ -233,7 +233,7 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
   void* p_data         = (void*) (long) p_ctx->data;
   void* p_data_end     = (void*) (long) p_ctx->data_end;
   struct ethhdr* p_eth = p_data;
-  //void* p_mac_address;
+  // void* p_mac_address;
 
   u8 dest_interface;
   u16 outer_header_creation;

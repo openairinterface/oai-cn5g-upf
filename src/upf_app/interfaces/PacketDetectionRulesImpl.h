@@ -4,10 +4,9 @@
 #include <interfaces/PacketDetectionRules.h>
 #include <pfcp/pfcp_pdr.h>
 
-class PacketDetectionRulesImpl : public PacketDetectionRules
-{
-public:
-  PacketDetectionRulesImpl(pfcp_pdr_t_ &myPdr);
+class PacketDetectionRulesImpl : public PacketDetectionRules {
+ public:
+  PacketDetectionRulesImpl(pfcp_pdr_t_& myPdr);
   virtual ~PacketDetectionRulesImpl();
   teid_t_ getTeid() override;
   pdr_id_t_ getPdrId() override;
@@ -20,9 +19,8 @@ public:
   activate_predefined_rules_t_ getActivatePredefinedRules() override;
   pfcp_pdr_t_ getData() override;
 
-
-private:
+ private:
   pfcp_pdr_t_ mPdr;
 };
 
-#endif // __PACKETDETECTIONRULESIMPL_H__
+#endif  // __PACKETDETECTIONRULESIMPL_H__

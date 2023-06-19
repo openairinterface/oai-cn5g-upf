@@ -6,10 +6,9 @@
 #include <pfcp/pfcp_far.h>
 #include <types.h>
 
-#define MAX_LENGTH 5000 //10
+#define MAX_LENGTH 5000  // 10
 #define ARP_ENTRIES_MAX_SIZE 12
 #define FAR_TAILS_MAX 1
-
 
 /*****************************************************************************************************************/
 // The unique FAR that will be consumed in this program.
@@ -17,7 +16,7 @@ struct bpf_map_def SEC("maps") m_far = {
     .type        = BPF_MAP_TYPE_HASH,
     .key_size    = sizeof(u8),
     .value_size  = sizeof(pfcp_far_t_),
-    .max_entries = FAR_TAILS_MAX, //1,
+    .max_entries = FAR_TAILS_MAX,  // 1,
 };
 
 /*****************************************************************************************************************/
@@ -25,7 +24,7 @@ struct bpf_map_def SEC("maps") m_redirect_interfaces = {
     .type        = BPF_MAP_TYPE_DEVMAP,
     .key_size    = sizeof(u32),  // id
     .value_size  = sizeof(u32),  // tx port
-    .max_entries = MAX_LENGTH, //10,
+    .max_entries = MAX_LENGTH,   // 10,
 };
 
 /*****************************************************************************************************************/
@@ -33,9 +32,9 @@ struct bpf_map_def SEC("maps") m_redirect_interfaces = {
 // TODO: Pin this maps. It does not depend on the session program
 struct bpf_map_def SEC("maps") m_arp_table = {
     .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(u32),  // IPv4 address
-    .value_size  = 6,            // MAC address
-    .max_entries = ARP_ENTRIES_MAX_SIZE, //2,
+    .key_size    = sizeof(u32),           // IPv4 address
+    .value_size  = 6,                     // MAC address
+    .max_entries = ARP_ENTRIES_MAX_SIZE,  // 2,
 };
 
 /*****************************************************************************************************************/
