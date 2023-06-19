@@ -93,22 +93,22 @@ static u32 gtp_handle(
   struct gtpu_extn_pdu_session_container* gtpu_ext_hdr = (void*) (p_gtpuh + 1);
 
   if ((void*) p_gtpuh + sizeof(*p_gtpuh) > p_data_end) {
-    bpf_debug("Invalid GTPU packet");
+    bpf_debug("Invalid GTPU packet\n");
     return XDP_DROP;
   }
 
   // TODO: Handle other PDU.
   if (p_gtpuh->message_type != GTPU_G_PDU) {
     bpf_debug(
-        "Message type 0x%x is not GTPU GPDU(0x%x)", p_gtpuh->message_type,
+        "Message type 0x%x is not GTPU GPDU(0x%x)\n", p_gtpuh->message_type,
         GTPU_G_PDU);
     return XDP_PASS;
   }
 
-  bpf_debug("GTP GPDU received");
+  bpf_debug("GTP GPDU received\n");
 
   if (!ip_inner_check_ipv4(p_ctx, (struct iphdr*) (gtpu_ext_hdr + 1))) {
-    bpf_debug("Invalid IP inner");
+    bpf_debug("Invalid IP inner\n");
     return XDP_DROP;
   }
 
@@ -131,20 +131,20 @@ static u32 gtp_handle(
  * @param udph The UDP header.
  * @return u32 The XDP action.
  */
-static u32 udp_handle(struct xdp_md *p_ctx, struct udphdr *udph, u32 src_ip, u32 dest_ip)
-{
-  void *p_data_end = (void *)(long)p_ctx->data_end;
-  //struct next_rule_prog_index_key map_key;
-  //u32 index_prog;
+static u32 udp_handle(
+    struct xdp_md* p_ctx, struct udphdr* udph, u32 src_ip, u32 dest_ip) {
+  void* p_data_end = (void*) (long) p_ctx->data_end;
+  // struct next_rule_prog_index_key map_key;
+  // u32 index_prog;
   u32 dport;
 
   /* Hint: +1 is sizeof(struct udphdr) */
   if ((void*) udph + sizeof(*udph) > p_data_end) {
-    bpf_debug("Invalid UDP packet");
+    bpf_debug("Invalid UDP packet\n");
     return XDP_ABORTED;
   }
 
-  bpf_debug("UDP packet validated");
+  bpf_debug("UDP packet validated\n");
   dport = htons(udph->dest);
 
   switch (dport) {
@@ -179,19 +179,19 @@ static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
 
   // Hint: +1 is sizeof(struct iphdr)
   if ((void*) iph + sizeof(*iph) > p_data_end) {
-    bpf_debug("Invalid IPv4 packet");
+    bpf_debug("Invalid IPv4 packet\n");
     return XDP_ABORTED;
   }
   ip_src  = iph->saddr;
   ip_dest = iph->daddr;
 
-  bpf_debug("Valid IPv4 packet: raw daddr:0x%x", ip_dest);
+  bpf_debug("Valid IPv4 packet: raw daddr:0x%x\n", ip_dest);
   switch (iph->protocol) {
     case IPPROTO_UDP:
       return udp_handle(p_ctx, (struct udphdr*) (iph + 1), ip_src, ip_dest);
     case IPPROTO_TCP:
     default:
-      bpf_debug("TCP protocol L4");
+      bpf_debug("TCP protocol L4\n");
       return XDP_PASS;
   }
 }
@@ -209,7 +209,7 @@ static u8 ip_inner_check_ipv4(struct xdp_md* p_ctx, struct iphdr* iph) {
 
   // Hint: +1 is sizeof(struct iphdr)
   if ((void*) iph + sizeof(*iph) > p_data_end) {
-    bpf_debug("Invalid IPv4 packet");
+    bpf_debug("Invalid IPv4 packet\n");
     return XDP_ABORTED;
   }
 
@@ -243,17 +243,17 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
 
   offset = sizeof(*ethh);
   if ((void*) ethh + offset > p_data_end) {
-    bpf_debug("Cannot parse L2");
+    bpf_debug("Cannot parse L2\n");
     return XDP_PASS;
   }
 
   eth_type = htons(ethh->h_proto);
-  bpf_debug("Debug: eth_type:0x%x", eth_type);
+  bpf_debug("Debug: eth_type:0x%x\n", eth_type);
 
   switch (eth_type) {
     case ETH_P_8021Q:
     case ETH_P_8021AD:
-      bpf_debug("VLAN!! Changing the offset");
+      bpf_debug("VLAN!! Changing the offset\n");
       vlan_hdr = (void*) ethh + offset;
       offset += sizeof(*vlan_hdr);
       if (!((void*) ethh + offset > p_data_end))
@@ -267,7 +267,7 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
     // Skip non 802.3 Ethertypes
     // Fall-through
     default:
-      bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x", offset, eth_type);
+      bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x\n", offset, eth_type);
       return XDP_PASS;
   }
 }
@@ -278,11 +278,11 @@ int entry_point(struct xdp_md* p_ctx) {
   void* p_data       = (void*) (long) p_ctx->data;
   struct ethhdr* eth = p_data;
 
-  bpf_debug("XDP ENTRY POINT");
+  bpf_debug("XDP ENTRY POINT\n");
 
   // Start to handle the ethernet header.
   u32 action = xdp_stats_record_action(p_ctx, eth_handle(p_ctx, eth));
-  bpf_debug("Action %d", action);
+  bpf_debug("Action %d\n", action);
 
   return action;
 }

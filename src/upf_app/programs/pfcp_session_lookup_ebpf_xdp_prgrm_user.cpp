@@ -50,28 +50,32 @@ PFCP_Session_LookupProgram::~PFCP_Session_LookupProgram() {
 void PFCP_Session_LookupProgram::create_upf_interface_map_entry(e_reference_point s) {
   struct s_interface iface;
   __builtin_memset(&iface, 0, sizeof(s_interface));
+  uint s_little_endian;
   
   switch(s) {
   case N3_INTERFACE:
     iface.ipv4_address = upf_cfg.n3.addr4.s_addr;     
     iface.port = upf_cfg.n3.port;
-    iface.if_name = (upf_cfg.n3.if_name).c_str();
-    getIfaceMap()->update(s, iface, BPF_ANY);
-    Logger::upf_app().info("Reference Point N3 Added to m_upf_interface Map");
+    iface.if_name = (upf_cfg.n3.if_name).c_str(); 
+    s_little_endian = (((s>>24) & 0x000000ff) | ((s>>8) & 0x0000ff00) | ((s<<8) & 0x00ff0000) | ((s<<24) & 0xff000000));
+    getIfaceMap()->update(s_little_endian, iface, BPF_ANY);
+    Logger::upf_app().info("Reference Point N3 Added to m_upf_interfaces Map");
     break;
   case N6_INTERFACE:
     iface.ipv4_address = upf_cfg.n6.addr4.s_addr;     
     iface.port = upf_cfg.n6.port;
     iface.if_name = (upf_cfg.n6.if_name).c_str();
-    getIfaceMap()->update(s, iface, BPF_ANY);
-    Logger::upf_app().info("Reference Point N6 Added to m_upf_interface Map");
+     s_little_endian = (((s>>24) & 0x000000ff) | ((s>>8) & 0x0000ff00) | ((s<<8) & 0x00ff0000) | ((s<<24) & 0xff000000));
+    getIfaceMap()->update(s_little_endian, iface, BPF_ANY);
+    Logger::upf_app().info("Reference Point N6 Added to m_upf_interfaces Map");
     break;
   case N4_INTERFACE:
     iface.ipv4_address = upf_cfg.n4.addr4.s_addr;     
     iface.port = upf_cfg.n4.port;
     iface.if_name = (upf_cfg.n4.if_name).c_str();
-    getIfaceMap()->update(s, iface, BPF_ANY);
-    Logger::upf_app().info("Reference Point N4 Added to m_upf_interface Map");
+    s_little_endian = (((s>>24) & 0x000000ff) | ((s>>8) & 0x0000ff00) | ((s<<8) & 0x00ff0000) | ((s<<24) & 0xff000000));
+    getIfaceMap()->update(s_little_endian, iface, BPF_ANY);
+    Logger::upf_app().info("Reference Point N4 Added to m_upf_interfaces Map");
     break;
   case N9_INTERFACE:
     Logger::upf_app().error("Reference Point N9 Not Defined");
@@ -163,7 +167,7 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getIfaceMap() const {
 
 /*****************************************************************************************************************/
 void PFCP_Session_LookupProgram::initializeMaps() {
-  // Store all maps available in the program.
+  // Store all available Maps in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
 
   // Warning - The name of the map must be the same of the BPF program.

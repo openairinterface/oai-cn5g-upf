@@ -29,7 +29,7 @@
 SEC("xdp_redirect_dummy")
 int xdp_redirect_gtpu(struct xdp_md* p_ctx) {
   // PASS.
-  bpf_debug("Redirecting packets");
+  bpf_debug("Redirecting packets\n");
   return XDP_PASS;
 }
 
@@ -56,26 +56,22 @@ static u32 update_dst_mac_address(struct iphdr* p_ip, struct ethhdr* p_eth) {
 /*****************************************************************************************************************/
 static u32 create_outer_header_gtpu_ipv4(
     struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
-  bpf_debug("Create Outer Header GTPU_IPv4");
-  bpf_debug("Original Packet: Data/UDP/IP/ETH");
+  bpf_debug("Create Outer Header GTPU_IPv4\n");
+  bpf_debug("Original Packet: Data/UDP/IP/ETH\n");
 
   struct ethhdr* p_eth;
   struct iphdr* p_ip;
-  void *map_element;
-  struct s_interface *iface = NULL;
-  enum e_reference_point reference = N3_INTERFACE;
-  
+  struct s_interface* map_element;
+  e_reference_point reference = N3_INTERFACE;
+
   __builtin_memset(&p_eth, 0, sizeof(p_eth));
   __builtin_memset(&p_ip, 0, sizeof(p_ip));
   __builtin_memset(&map_element, 0, sizeof(map_element));
 
-  map_element = bpf_map_lookup_elem(&m_upf_interfaces, &reference);
-  memcpy(iface, map_element, sizeof(struct s_interface));
-
   void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
   void* p_mac_address;
-  //struct bpf_fib_lookup fib_params = {};
+  // struct bpf_fib_lookup fib_params = {};
 
   // Adjust space to the left.
   bpf_xdp_adjust_head(p_ctx, (int32_t) -GTP_ENCAPSULATED_SIZE);
@@ -91,15 +87,13 @@ static u32 create_outer_header_gtpu_ipv4(
   */
   p_eth = p_data;
   if ((void*) (p_eth + 1) > p_data_end) {
-    bpf_debug("Invalid pointer");
+    bpf_debug("Invalid pointer\n");
     return XDP_DROP;
   }
-
   struct ethhdr* p_orig_eth = p_data + GTP_ENCAPSULATED_SIZE;
   if ((void*) (p_orig_eth + 1) > p_data_end) {
     return XDP_DROP;
   }
-
   memcpy(p_eth, p_orig_eth, sizeof(*p_eth));
 
   /*
@@ -111,12 +105,10 @@ static u32 create_outer_header_gtpu_ipv4(
   if ((void*) (p_ip + 1) > p_data_end) {
     return XDP_DROP;
   }
-
   struct iphdr* p_inner_ip = (void*) p_ip + GTP_ENCAPSULATED_SIZE;
   if ((void*) (p_inner_ip + 1) > p_data_end) {
     return XDP_DROP;
   }
-
   p_ip->version  = 4;
   p_ip->ihl      = 5;  // No options
   p_ip->tos      = 0;
@@ -126,11 +118,20 @@ static u32 create_outer_header_gtpu_ipv4(
   p_ip->ttl      = 64;
   p_ip->protocol = IPPROTO_UDP;
   p_ip->check    = 0;
-  p_ip->saddr = iface->ipv4_address;
-  bpf_debug(" p_ip->saddr:%d", p_ip->saddr);
+  bpf_debug("REFERENCE VALUE FOR FRANCK: %x\n", reference);
+  map_element = bpf_map_lookup_elem(&m_upf_interfaces, &reference);
+
+  if (map_element != NULL) {
+    p_ip->saddr = map_element->ipv4_address;
+    bpf_debug("Map Values: IP:%d, port:%d\n", map_element->ipv4_address,
+    map_element->port);
+    bpf_debug("Franck Value of ip:%d\n", p_ip->saddr);
+  } else {
+    bpf_debug("return null value?????----------------------------------\n");
+  }
+
   p_ip->daddr =
       p_far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
-
   /*
   |----------------------------------------------------------------|
   |-------------------------- Add UDP header ----------------------|
@@ -155,7 +156,7 @@ static u32 create_outer_header_gtpu_ipv4(
   |----------------------------------------------------------------|
   */
   bpf_debug(
-      "Destination MAC:%x:%x:%x:", p_eth->h_dest[0], p_eth->h_dest[1],
+      "Destination MAC:%x:%x:%x:\n", p_eth->h_dest[0], p_eth->h_dest[1],
       p_eth->h_dest[2]);
   bpf_debug("%x:%x:%x\n", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
 
@@ -169,7 +170,7 @@ static u32 create_outer_header_gtpu_ipv4(
   memcpy(p_eth->h_dest, p_mac_address, sizeof(p_eth->h_dest));
 
   bpf_debug(
-      "Destination MAC:%x:%x:%x:", p_eth->h_dest[0], p_eth->h_dest[1],
+      "Destination MAC:%x:%x:%x:\n", p_eth->h_dest[0], p_eth->h_dest[1],
       p_eth->h_dest[2]);
   bpf_debug("%x:%x:%x\n", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
   bpf_debug("Destination IP:%d, \t", p_ip->daddr);
@@ -216,8 +217,8 @@ static u32 create_outer_header_gtpu_ipv4(
   __wsum l3sum = pcn_csum_diff(0, 0, (__be32*) p_ip, sizeof(*p_ip), 0);
   pcn_l3_csum_replace(p_ctx, IP_CSUM_OFFSET, 0, l3sum, 0);
 
-  bpf_debug("GTP-Encapsulated Packet: Data/UDP/IP/EXT/GTP/UDP/IP/ETH");
-  bpf_debug("GTPU header were pushed!");
+  bpf_debug("GTP-Encapsulated Packet: Data/UDP/IP/EXT/GTP/UDP/IP/ETH\n");
+  bpf_debug("GTPU header were pushed!\n");
 }
 
 /*****************************************************************************************************************/
@@ -233,7 +234,7 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
   void* p_data         = (void*) (long) p_ctx->data;
   void* p_data_end     = (void*) (long) p_ctx->data_end;
   struct ethhdr* p_eth = p_data;
-  //void* p_mac_address;
+  // void* p_mac_address;
 
   u8 dest_interface;
   u16 outer_header_creation;
@@ -242,13 +243,13 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
   // TODO buff
 
   if ((void*) (p_eth + 1) > p_data_end) {
-    bpf_debug("Invalid pointer");
+    bpf_debug("Invalid pointer\n");
     return XDP_DROP;
   }
 
   // Check if it is a forward action.
   if (!p_far) {
-    bpf_debug("Invalid FAR!");
+    bpf_debug("Invalid FAR!\n");
     return XDP_DROP;
   }
 
@@ -296,24 +297,24 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
       bpf_debug("OUTER_HEADER_CREATION_UDP_IPV4 REDIRECT FAILED\n");
     } else if (dest_interface == INTERFACE_VALUE_ACCESS) {
       // Redirect to core network.
-      bpf_debug("Destination is to INTERFACE_VALUE_ACCESS");
+      bpf_debug("Destination is to INTERFACE_VALUE_ACCESS\n");
       switch (outer_header_creation) {
         case OUTER_HEADER_CREATION_GTPU_UDP_IPV4:
-          bpf_debug("OUTER_HEADER_CREATION_GTPU_UDP_IPV4");
+          bpf_debug("OUTER_HEADER_CREATION_GTPU_UDP_IPV4\n");
           create_outer_header_gtpu_ipv4(p_ctx, p_far);
           return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
           break;
         case OUTER_HEADER_CREATION_GTPU_UDP_IPV6:
-          bpf_debug("OUTER_HEADER_CREATION_GTPU_UDP_IPV6");
+          bpf_debug("OUTER_HEADER_CREATION_GTPU_UDP_IPV6\n");
           break;
         default:
           bpf_debug(
-              "In destination to ACCESS - Invalid option: %d",
+              "In destination to ACCESS - Invalid option: %d\n",
               outer_header_creation);
       }
     }
   } else {
-    bpf_debug("Forward action unset");
+    bpf_debug("Forward action unset\n");
   }
 
   return XDP_PASS;

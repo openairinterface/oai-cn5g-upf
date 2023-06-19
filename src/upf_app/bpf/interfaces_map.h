@@ -8,13 +8,12 @@
 
 #define INTERFACE_ENTRIES_MAX 12
 
-
 /*****************************************************************************************************************/
 struct bpf_map_def SEC("maps") m_upf_interfaces = {
     .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(enum e_reference_point),
+    .key_size    = sizeof(struct s_reference_point),
     .value_size  = sizeof(struct s_interface),
-    .max_entries = INTERFACE_ENTRIES_MAX, //6,
+    .max_entries = INTERFACE_ENTRIES_MAX,  // 6,
 };
 
 // BPF_ANNOTATE_KV_PAIR(m_next_rule_prog_index, struct next_rule_prog_index_key,

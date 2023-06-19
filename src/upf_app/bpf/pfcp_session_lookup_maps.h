@@ -11,7 +11,7 @@
 #include <next_prog_rule_key.h>
 #include "interfaces.h"
 
-#define MAX_LENGTH 5000 //10
+#define MAX_LENGTH 5000  // 10
 #define INTERFACE_ENTRIES_MAX 12
 #define MAX_UEs 100000
 
@@ -24,7 +24,7 @@ struct bpf_map_def SEC("maps") m_teid_session = {
     .value_size = sizeof(s32),      //!< program which represents the session.
     // TODO: Check how the management works. The size should be equal
     // to the maximum number of sessions.
-    .max_entries = MAX_LENGTH, //10000,  //!< TODO: Is it enought?
+    .max_entries = MAX_LENGTH,  // 10000,  //!< TODO: Is it enought?
 };
 
 /*****************************************************************************************************************/
@@ -53,16 +53,23 @@ struct bpf_map_def SEC("maps") m_next_rule_prog_index = {
     .type        = BPF_MAP_TYPE_HASH,
     .key_size    = sizeof(struct next_rule_prog_index_key),
     .value_size  = sizeof(u32),
-    .max_entries = MAX_LENGTH, //10,
+    .max_entries = MAX_LENGTH,  // 10,
 };
 
 /*****************************************************************************************************************/
 struct bpf_map_def SEC("maps") m_upf_interfaces = {
     .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(enum e_reference_point),
+    .key_size    = sizeof(e_reference_point),
     .value_size  = sizeof(struct s_interface),
-    .max_entries = INTERFACE_ENTRIES_MAX, //6,
+    .max_entries = INTERFACE_ENTRIES_MAX,  // 6,
 };
+// struct bpf_map_def SEC("maps") m_upf_interfaces = {
+//     .type        = BPF_MAP_TYPE_HASH,
+//     .key_size    = sizeof(struct s_reference_point),
+//     .value_size  = sizeof(struct s_interface),
+//     .max_entries = INTERFACE_ENTRIES_MAX, //6,
+// };
+
 // BPF_ANNOTATE_KV_PAIR(m_next_rule_prog_index, struct next_rule_prog_index_key,
 // u32);
 
