@@ -370,7 +370,7 @@ class HtmlReport():
 		self.file.write('	  <tr bgcolor="#33CCFF" >\n')
 		self.file.write('		<th>Stage Name</th>\n')
 		self.file.write('		<th>Image Kind</th>\n')
-		self.file.write('		<th>OAI UPF-TINY <font color="Gold">Ubuntu18</font> Image</th>\n')
+		self.file.write('		<th>OAI UPF-TINY <font color="Gold">Ubuntu20</font> Image</th>\n')
 		self.file.write('		<th>OAI UPF-TINY <font color="Gold">RHEL8</font> Image</th>\n')
 		self.file.write('	  </tr>\n')
 
@@ -1023,7 +1023,7 @@ args = _parse_args()
 
 # to be back-ward compatible
 HTML.job_name = args.job_name
-HTML.job_name = args.build_id
+HTML.job_id = args.build_id
 HTML.job_url = args.build_url
 HTML.git_url = args.git_url
 HTML.git_src_branch = args.git_src_branch
