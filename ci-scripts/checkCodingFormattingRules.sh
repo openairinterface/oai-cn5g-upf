@@ -75,7 +75,7 @@ then
     for EXTENSION in ${EXTENSION_LIST[@]}
     do
         echo "Checking for all files with .${EXTENSION} extension"
-        FILE_LIST=`tree -n --noreport -i -f -P *.${EXTENSION} | sed -e 's#^\./##' | grep -v test | grep "\.${EXTENSION}"`
+        FILE_LIST=`tree -n --noreport -i -f -P *.${EXTENSION} | sed -e 's#^\./##' | grep -v tests | grep "\.${EXTENSION}"`
         for FILE_TO_CHECK in ${FILE_LIST[@]}
         do
             TO_FORMAT=`clang-format -output-replacements-xml ${FILE_TO_CHECK} 2>&1 | grep -v replacements | grep -c replacement`
@@ -170,7 +170,7 @@ echo " ----------------------------------------------------------"
 echo ""
 
 # Retrieve the list of modified files since the latest develop commit
-MODIFIED_FILES=`git log $TARGET_INIT_COMMIT..$MERGE_COMMMIT --oneline --name-status | egrep "^M|^A" | sed -e "s@^M\t*@@" -e "s@^A\t*@@" | sort | uniq | grep -v test`
+MODIFIED_FILES=`git log $TARGET_INIT_COMMIT..$MERGE_COMMMIT --oneline --name-status | egrep "^M|^A" | sed -e "s@^M\t*@@" -e "s@^A\t*@@" | sort | uniq | grep -v tests`
 NB_TO_FORMAT=0
 NB_TOTAL=0
 
