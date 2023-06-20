@@ -303,8 +303,8 @@ check_enable_epel_repos() {
     else
       echo "EPEL repos not present. Installing them."
       wget --tries=4 --retry-connrefused --wait=8 \
-        https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
-      $SUDO $INSTALLER install $OPTION epel-release-latest-7.noarch.rpm
+        https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+      $SUDO $INSTALLER install $OPTION epel-release-latest-8.noarch.rpm
       rm -f epel-release-latest-7.noarch.rpm
     fi
   fi

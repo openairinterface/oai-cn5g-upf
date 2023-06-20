@@ -48,7 +48,7 @@ RUN dnf install 'dnf-command(config-manager)' -y && \
 WORKDIR /oai-upf
 COPY . /oai-upf
 
-# Installing and Building UPF-TINY
+# Installing and Building UPF
 WORKDIR /oai-upf/build/scripts
 RUN ./build_upf --install-deps --force
 
