@@ -51,7 +51,6 @@ install_fb_folly_from_source(){
 
     if [[ "$OS_BASEDISTRO" == "fedora" ]]; then
       $SUDO $INSTALLER install $OPTION \
-        gcc-c++ \
         make \
         boost-devel \
         libevent-devel \
@@ -67,7 +66,6 @@ install_fb_folly_from_source(){
       # We need Boost 1.66 or later
       # Boost-Installation should have been taken care before.
       $SUDO $INSTALLER install $OPTION \
-        g++ \
         cmake \
         libevent-dev \
         libdouble-conversion-dev \
