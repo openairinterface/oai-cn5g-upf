@@ -38,7 +38,7 @@
 #include <stdexcept>
 
 using namespace pfcp;
-using namespace  oai::config;
+using namespace oai::config;
 using namespace std;
 
 extern itti_mw* itti_inst;
@@ -243,7 +243,7 @@ upf_n4::upf_n4()
     Logger::upf_n4().error("Cannot create task TASK_UPF_N4");
     throw std::runtime_error("Cannot create task TASK_UPF_N4");
   }
-  if (!upf_cfg.upf_5g_features.register_nrf) {
+  if (!upf_cfg.register_nrf) {
     for (std::vector<pfcp::node_id_t>::const_iterator it = upf_cfg.smfs.begin();
          it != upf_cfg.smfs.end(); ++it) {
       start_association(*it);

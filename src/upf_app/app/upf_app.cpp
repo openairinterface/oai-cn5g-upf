@@ -40,7 +40,7 @@
 #include <stdexcept>
 
 using namespace pfcp;
-using namespace  oai::config;
+using namespace oai::config;
 using namespace std;
 
 // C includes
@@ -161,8 +161,7 @@ upf_app::upf_app(const std::string& config_file) {
     throw;
   }
   try {
-    if (upf_cfg.upf_5g_features.enable_5g_features and
-        upf_cfg.upf_5g_features.register_nrf)
+    if (upf_cfg.enable_5g_features and upf_cfg.register_nrf)
       upf_nrf_inst = new upf_nrf();
   } catch (std::exception& e) {
     Logger::upf_app().error("Cannot create UPF_NRF: %s", e.what());

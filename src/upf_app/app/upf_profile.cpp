@@ -34,7 +34,7 @@
 #include "upf_profile.hpp"
 #include "string.hpp"
 
-using namespace  oai::config;
+using namespace oai::config;
 
 //------------------------------------------------------------------------------
 void upf_nf_profile::set_nf_instance_id(const std::string& instance_id) {

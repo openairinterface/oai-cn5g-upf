@@ -41,7 +41,7 @@
 #include "3gpp_29.500.h"
 #include "upf_config.hpp"
 
-using namespace  oai::config;
+using namespace oai::config;
 using json = nlohmann::json;
 
 extern itti_mw* itti_inst;
@@ -211,11 +211,11 @@ void upf_nrf::generate_upf_profile() {
   upf_profile.set_fqdn(upf_cfg.fqdn);
   upf_profile.add_nf_ipv4_addresses(upf_cfg.n4.addr4);  // N4's Addr
   // Get NSSAI from conf file
-  for (auto s : upf_cfg.upf_5g_features.upf_info.snssai_upf_info_list) {
+  for (auto s : upf_cfg.upf_info.snssai_upf_info_list) {
     upf_profile.add_snssai(s.snssai);
   }
   // Get UPF Info from conf file
-  upf_profile.set_upf_info(upf_cfg.upf_5g_features.upf_info);
+  upf_profile.set_upf_info(upf_cfg.upf_info);
   // Display the profile
   upf_profile.display();
 }
@@ -298,7 +298,7 @@ void upf_nrf::send_curl(
         curl, CURLOPT_INTERFACE,
         upf_cfg.n4.if_name.c_str());  // TODO: use another interface for UPF
                                       // to communicate with NRF
-    if (upf_cfg.upf_5g_features.nrf_addr.http_version == 2) {
+    if (upf_cfg.nrf_addr.http_version == 2) {
       if (Logger::should_log(spdlog::level::debug))
         curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
       // We use a self-signed test server, skip verification during debugging
@@ -335,8 +335,7 @@ void upf_nrf::send_curl(
 //---------------------------------------------------------------------------------------------
 void upf_nrf::get_nrf_api_root(std::string& api_root) {
   api_root =
-      std::string(inet_ntoa(
-          *((struct in_addr*) &upf_cfg.upf_5g_features.nrf_addr.ipv4_addr))) +
-      ":" + std::to_string(upf_cfg.upf_5g_features.nrf_addr.port) +
-      NNRF_NFM_BASE + upf_cfg.upf_5g_features.nrf_addr.api_version;
+      std::string(inet_ntoa(*((struct in_addr*) &upf_cfg.nrf_addr.ipv4_addr))) +
+      ":" + std::to_string(upf_cfg.nrf_addr.port) + NNRF_NFM_BASE +
+      upf_cfg.nrf_addr.api_version;
 }

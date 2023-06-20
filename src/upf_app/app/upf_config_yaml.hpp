@@ -28,8 +28,8 @@ constexpr auto UPF_CONFIG_INSTANCE_ID         = "instance_id";
 constexpr auto UPF_CONFIG_INSTANCE_ID_LABEL   = "Instance ID";
 constexpr auto UPF_CONFIG_PID_DIRECTORY       = "pid_directory";
 constexpr auto UPF_CONFIG_PID_DIRECTORY_LABEL = "PID Directory";
-constexpr auto UPF_CONFIG_UPF_NAME           = "upf_name";
-constexpr auto UPF_CONFIG_UPF_NAME_LABEL     = "UPF Name";
+constexpr auto UPF_CONFIG_UPF_NAME            = "upf_name";
+constexpr auto UPF_CONFIG_UPF_NAME_LABEL      = "UPF Name";
 
 namespace oai::config {
 

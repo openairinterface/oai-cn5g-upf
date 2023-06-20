@@ -96,21 +96,20 @@ const std::string upf::get_upf_name() const {
 upf_config_yaml::upf_config_yaml(
     const std::string& config_path, bool log_stdout, bool log_rot_file)
     : oai::config::config(
-          config_path, oai::config::UPF_CONFIG_NAME, log_stdout,
-          log_rot_file) {
-  m_used_sbi_values    = {oai::config::UPF_CONFIG_NAME,
-                       oai::config::UDM_CONFIG_NAME,
-                       oai::config::NRF_CONFIG_NAME};
-  m_used_config_values = {oai::config::LOG_LEVEL_CONFIG_NAME,
-                          oai::config::REGISTER_NF_CONFIG_NAME,
-                          NF_CONFIG_HTTP_NAME, oai::config::NF_LIST_CONFIG_NAME,
-                          oai::config::UPF_CONFIG_NAME};
+          config_path, oai::config::UPF_CONFIG_NAME, log_stdout, log_rot_file) {
+  m_used_sbi_values = {
+      oai::config::UPF_CONFIG_NAME, oai::config::UDM_CONFIG_NAME,
+      oai::config::NRF_CONFIG_NAME};
+  m_used_config_values = {
+      oai::config::LOG_LEVEL_CONFIG_NAME, oai::config::REGISTER_NF_CONFIG_NAME,
+      NF_CONFIG_HTTP_NAME, oai::config::NF_LIST_CONFIG_NAME,
+      oai::config::UPF_CONFIG_NAME};
 
   // TODO with NF_Type and switch
   // TODO: Still we need to add default NFs even we don't use this in all_in_one
   // use case
   auto m_upf = std::make_shared<upf>(
-      "UPF", "oai-upf", sbi_interface("SBI", "oai-upf1", 80, "v1", "eth0"));
+      "UPF", "oai-upf", sbi_interface("SBI", "oai-upf", 80, "v1", "eth0"));
   add_nf("upf", m_upf);
 
   auto m_udm = std::make_shared<nf>(
@@ -135,13 +134,12 @@ void upf_config_yaml::pre_process() {
 
 //------------------------------------------------------------------------------
 void upf_config_yaml::to_upf_config(oai::config::upf_config& cfg) {
-  std::shared_ptr<upf> upf_local =
-      std::static_pointer_cast<upf>(get_local());
-  cfg.instance     = upf_local->get_instance_id();
-  cfg.pid_dir      = upf_local->get_pid_directory();
-  cfg.upf_name    = upf_local->get_upf_name();
-  cfg.log_level    = spdlog::level::from_str(log_level());
-  cfg.register_nrf = register_nrf();
+  std::shared_ptr<upf> upf_local = std::static_pointer_cast<upf>(get_local());
+  cfg.instance                   = upf_local->get_instance_id();
+  cfg.pid_dir                    = upf_local->get_pid_directory();
+//   cfg.upf_name                   = upf_local->get_upf_name();
+  cfg.log_level                  = spdlog::level::from_str(log_level());
+  cfg.register_nrf               = register_nrf();
 
   cfg.use_fqdn_dns = false;  // TODO: to be removed
   if (get_http_version() == 2) cfg.use_http2 = true;

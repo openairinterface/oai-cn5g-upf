@@ -157,24 +157,42 @@ class upf_config {
 
   uint32_t max_pfcp_sessions;
 
+  typedef struct nf_addr_s {
+    struct in_addr ipv4_addr;
+    unsigned int port;
+    std::string api_version;
+    std::string fqdn;
+    std::string uri_root;
+      unsigned int http_version;
+
+  } nf_addr;
+
   bool snat;
   std::vector<pdn_cfg_t> pdns;
   std::vector<pfcp::node_id_t> smfs;
 
-  struct {
-    bool enable_5g_features;
-    bool enable_bpf_datapath;
-    bool register_nrf;
-    upf_info_t upf_info;
-    bool use_fqdn_nrf;
-    struct {
-      struct in_addr ipv4_addr;
-      unsigned int port;
-      unsigned int http_version;
-      std::string api_version;
-      std::string fqdn;
-    } nrf_addr;
-  } upf_5g_features;
+  bool enable_5g_features;
+  bool enable_bpf_datapath;
+  bool register_nrf;
+  upf_info_t upf_info;
+  bool use_fqdn_dns;
+  bool use_http2;
+
+
+  nf_addr udm_addr;
+  nf_addr nrf_addr;
+
+  // struct {
+  //   struct in_addr ipv4_addr;
+  //   unsigned int port;
+  //   unsigned int http_version;
+  //   std::string api_version;
+  //   std::string fqdn;
+  // } nrf_addr;
+
+  interface_cfg_t sbi;
+  unsigned int sbi_http2_port;
+  std::string sbi_api_version;
 
   upf_config()
       : m_rw_lock(),
@@ -205,15 +223,15 @@ class upf_config {
     n4.thread_rd_sched_params.sched_priority = 95;
     n4.port                                  = pfcp::default_port;
 
-    upf_5g_features.enable_5g_features        = false;
-    upf_5g_features.enable_bpf_datapath       = false;
-    upf_5g_features.register_nrf              = false;
-    upf_5g_features.upf_info                  = {};
-    upf_5g_features.use_fqdn_nrf              = false;
-    upf_5g_features.nrf_addr.ipv4_addr.s_addr = INADDR_ANY;
-    upf_5g_features.nrf_addr.port             = 80;
-    upf_5g_features.nrf_addr.api_version      = "v1";
-    upf_5g_features.nrf_addr.fqdn             = {};
+    enable_5g_features        = true;
+    enable_bpf_datapath       = false;
+    register_nrf              = false;
+    upf_info                  = {};
+    use_fqdn_dns              = false;
+    nrf_addr.ipv4_addr.s_addr = INADDR_ANY;
+    nrf_addr.port             = 80;
+    nrf_addr.api_version      = "v1";
+    nrf_addr.fqdn             = {};
 
     log_level = spdlog::level::debug;
   };

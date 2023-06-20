@@ -101,7 +101,7 @@ void upf_n3_task(void* args_p) {
 upf_n3::upf_n3()
     : gtpu_l4_stack(
           upf_cfg.n3.addr4, upf_cfg.n3.port, upf_cfg.n3.thread_rd_sched_params,
-          upf_cfg.upf_5g_features.enable_5g_features) {
+          upf_cfg.enable_5g_features) {
   Logger::upf_n3().startup("Starting...");
   if (itti_inst->create_task(
           TASK_UPF_N3, upf_n3_task, &upf_cfg.itti.s1u_sched_params)) {
