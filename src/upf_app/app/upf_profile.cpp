@@ -243,7 +243,7 @@ void upf_nf_profile::to_json(nlohmann::json& data) const {
   for (auto s : snssais) {
     nlohmann::json tmp = {};
     tmp["sst"]         = s.sst;
-    tmp["sd"]          = s.sd;
+    tmp["sd"]          = std::to_string(s.sd);
     data["sNssais"].push_back(tmp);
   }
   data["fqdn"] = fqdn;
@@ -263,7 +263,7 @@ void upf_nf_profile::to_json(nlohmann::json& data) const {
   for (auto s : upf_info.snssai_upf_info_list) {
     nlohmann::json tmp    = {};
     tmp["sNssai"]["sst"]  = s.snssai.sst;
-    tmp["sNssai"]["sd"]   = s.snssai.sd;
+    tmp["sNssai"]["sd"]   = std::to_string(s.snssai.sd);
     tmp["dnnUpfInfoList"] = nlohmann::json::array();
     for (auto d : s.dnn_upf_info_list) {
       nlohmann::json dnn_json = {};
