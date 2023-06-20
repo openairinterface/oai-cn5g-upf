@@ -10,8 +10,8 @@
 ------------------------------------------------------------------------------
     
 <p align="center">
-    <a href="https://github.com/OPENAIRINTERFACE/oai-upf/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-OAI--Public--V1.1-blue" alt="License"></a>
-    <a href="https://jenkins-oai.eurecom.fr/job/OAI-CN-SPGWU-TINY/"><img src="https://img.shields.io/jenkins/build?jobUrl=https%3A%2F%2Fjenkins-oai.eurecom.fr%2Fjob%2FOAI-CN-SPGWU-TINY%2F&label=build%20SPGWU-TINY"></a>
+    <a href="https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-upf/-/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-OAI--Public--V1.1-blue" alt="License"></a>
+    <a href="https://jenkins-oai.eurecom.fr/job/OAI-CN5G-UPF/"><img src="https://img.shields.io/jenkins/build?jobUrl=https%3A%2F%2Fjenkins-oai.eurecom.fr%2Fjob%2FOAI-CN5G-UPF%2F&label=build%20OAI-UPF"></a>
 </p>
 
   Openair-cn is an implementation of the 3GPP specifications concerning the 
@@ -47,7 +47,7 @@ The text for `OAI Public License V1.1` is also available under [LICENSE](LICENSE
 
 # Collaborative work
 
-  This source code is managed through a GITHUB, a collaborative development platform
+  This source code is managed through a GitLab, a collaborative development platform
 
   Process is explained in [CONTRIBUTING](CONTRIBUTING.md) file.
 

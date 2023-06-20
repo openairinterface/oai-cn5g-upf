@@ -108,9 +108,32 @@ install_libbpf_from_git() {
     fi
 
     git clone $GIT_URL
-    $SUDO $INSTALLER install -y make gcc binutils-dev libbpf-dev \
-						cmake clang libelf-dev libpcap-dev \
-	 					zlib1g-dev llvm libcap-dev python3-docutils
+    if [[ $OS_DISTRO == "ubuntu" ]]; then
+      PACKAGE_LIST="\
+        make \
+        clang \
+        $CMAKE \
+        binutils-dev \
+        libbpf-dev \
+        libelf-dev \
+        libpcap-dev \
+        zlib1g-dev \
+        llvm \
+        python3-docutils"
+    elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
+      PACKAGE_LIST="\
+        make \
+        clang \
+        $CMAKE \
+        binutils-devel \
+        libpfm-devel \
+        elfutils-devel \
+        libpcap \
+        zlib-devel \
+        llvm \
+        python3"
+    fi
+    $SUDO $INSTALLER install -y $PACKAGE_LIST
     cd libbpf && git checkout 051a4009f94d5633a8f734ca4235f0a78ee90469
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
     cd src && make -j $(nproc) 
@@ -150,12 +173,17 @@ install_bpftool_from_git() {
       $SUDO rm -rf bpftool
     fi
 
-    #wget --recursive --no-parent $GIT_URL ./bpftool
-    $SUDO $INSTALLER install -y wget gcc-multilib
-    wget -nv --tries=4 --retry-connrefused --wait=8 $GIT_URL && \
-      ls -lst linux-5.7.tar.gz && \
-      tar -xf linux-5.7.tar.gz && \
-      rm -rf linux-5.7.tar.gz
+    if [[ $OS_DISTRO == "ubuntu" ]]; then
+      $SUDO $INSTALLER install -y wget gcc-multilib
+    elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
+      $SUDO $INSTALLER install -y wget
+    fi
+    # trick for CI
+    if [ ! -f $OPENAIRCN_DIR/build/ext/linux-5.7.tar.gz ]; then
+      wget -nv --tries=4 --retry-connrefused --wait=8 $GIT_URL
+      ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    fi
+    ls -lst linux-5.7.tar.gz && tar -xf linux-5.7.tar.gz && rm -rf linux-5.7.tar.gz
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
     cd linux-5.7/tools/bpf/bpftool && make -j $(nproc)
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
@@ -259,6 +287,7 @@ install_fmt_from_git() {
   return 0
 }
 
+
 #-------------------------------------------------------------------------------
 #arg1 is force (0 or 1) (no interactive script)
 #arg2 is debug (0 or 1) (install debug libraries)
@@ -310,7 +339,7 @@ install_nlohmann_from_git() {
 #-------------------------------------------------------------------------------
 #arg1 is force (0 or 1) (no interactive script)
 #arg2 is debug (0 or 1) (install debug libraries)
-check_install_spgwu_deps() {
+check_install_upf_deps() {
 
   if [ $1 -gt 0 ]; then
     OPTION="-y"
@@ -355,6 +384,7 @@ check_install_spgwu_deps() {
       autoconf \
       automake \
       gcc-c++ \
+      gcc-toolset-12 \
       $CMAKE \
       make \
       git"
@@ -368,15 +398,6 @@ check_install_spgwu_deps() {
   # Libraries
   if [[ $OS_DISTRO == "ubuntu" ]]; then
     case "$(get_distribution_release)" in
-      "ubuntu18.04")
-        # Currently Ubuntu18.04 has boost 1.65 as the latest
-        # We need at least 1.66
-        # PPA has 1.67
-        $SUDO $INSTALLER install $OPTION software-properties-common
-        $SUDO add-apt-repository ppa:mhier/libboost-latest --yes
-        $SUDO $INSTALLER update
-        specific_packages="libconfig++-dev libasio-dev libboost-all-dev libasan4"
-        ;;
       "ubuntu20.04")
         specific_packages="libconfig++-dev libasio-dev libboost-all-dev libasan5"
         ;;
@@ -414,6 +435,8 @@ check_install_spgwu_deps() {
       check \
       nettle-devel \
       libcurl-devel \
+      glibc-devel \
+      glibc-devel.i686 \
       python2 \
       pkgconfig \
       ninja-build \
@@ -424,17 +447,6 @@ check_install_spgwu_deps() {
   echo "Install distro libs"
   $SUDO $INSTALLER install $OPTION $PACKAGE_LIST
   ret=$?;[[ $ret -ne 0 ]] && return $ret
-
-  # fix issue with libboost in U18 for a bare metal deployment
-  if [[ $OS_DISTRO == "ubuntu" ]]; then
-    case "$(get_distribution_release)" in
-      "ubuntu18.04")
-        $SUDO $INSTALLER remove $OPTION libboost1.65-dev || true
-        $SUDO $INSTALLER autoremove $OPTION || true
-        $SUDO $INSTALLER install $OPTION libboost1.67-dev
-        ;;
-    esac
-  fi
 
   echo_info "Packages and Libraries installation finished!"
 
@@ -449,7 +461,7 @@ check_install_spgwu_deps() {
 
   install_fmt_from_git $1 $2
   ret=$?;[[ $ret -ne 0 ]] && return $ret
-  
+
   install_spdlog_from_git $1 $2
   ret=$?;[[ $ret -ne 0 ]] && return $ret
 
@@ -468,12 +480,21 @@ check_install_spgwu_deps() {
   elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
     $SUDO $INSTALLER install $OPTION yaml-cpp yaml-cpp-devel
   fi
+
+  if [[ "$OS_BASEDISTRO" == "fedora" ]]; then
+    rm -f /usr/bin/g++ /usr/bin/gcc
+    update-alternatives --install /usr/bin/gcc gcc /opt/rh/gcc-toolset-12/root/bin/gcc 20
+    update-alternatives --install /usr/bin/g++ g++ /opt/rh/gcc-toolset-12/root/bin/g++ 20
+  fi
+
+  $SUDO ldconfig
+
   return 0
 }
 #-------------------------------------------------------------------------------
 #arg1 is force (0 or 1) (no interactive script)
 #arg2 is debug (0 or 1) (install debug libraries)
-check_install_spgwu_min_deps() {
+check_install_upf_min_deps() {
 
   if [ $1 -gt 0 ]; then
     OPTION="-y"

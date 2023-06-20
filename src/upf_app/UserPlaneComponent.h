@@ -3,6 +3,7 @@
 
 #include <bpf/libbpf.h>  // enum libbpf_print_level
 #include <memory>
+#include <string>
 #include <observer/OnStateChangeSessionProgramObserver.h>
 
 class SessionManager;
