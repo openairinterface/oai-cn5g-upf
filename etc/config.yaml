@@ -22,33 +22,59 @@
 # OAI CN Configuration File
 ### This file can be used by all OAI NFs
 ### Some fields are specific to an NF and will be ignored by other NFs
+### The {{ env['ENV_NAME'] }} syntax lets you define these values in a docker-compose file
+### If you intend to mount this file or use a bare-metal deployment, please refer to README.md
+### The README.md also defines default values and allowed values for each configuration parameter
 
 ############# Common configuration
 
 # Log level for all the NFs
 log_level:
-  upf: debug
+  general: debug
+  amf: debug
+  smf: debug
+  nrf: debug
+  pcf: debug
+  udr: debug
+  udm: debug
+  ausf: debug
+  nssf: debug
 
-# If "on": Register to NRF, DEFAULT= off
+# If you enable registration, the other NFs will use the NRF discovery mechanism
 register_nf:
-  upf: yes
+  general: no
+  amf: no
+  smf: no
+  nrf: no
+  pcf: no
+  udr: no
+  udm: no
+  ausf: no
+  nssf: no
 
 http_version: 1.1
 
 ############## SBI Interfaces
 ### Each NF takes its local SBI interfaces and remote interfaces from here, unless it gets them using NRF discovery mechanisms
 nfs:
+  amf:
+    host: oai-amf
+    sbi:
+      port_http1: 80
+      api_version: v1
+      interface_name: eth0
+    n1:
+      interface_name: eth0
+      port: 38412
   smf:
     host: oai-smf
+    sbi:
+      port_http1: 80
+      api_version: v1
+      interface_name: eth0
     n4:
       interface_name: eth0
       port: 8805
-  nrf:
-    host: oai-nrf
-    sbi:
-      port: 80
-      api_version: v1
-      interface_name: eth0
   upf:
     host: oai-upf
     sbi:
@@ -66,13 +92,135 @@ nfs:
     n9:
       interface_name: eth0
       port: 2152
+  udm:
+    host: oai-udm
+    sbi:
+      port_http1: 80
+      api_version: v1
+      interface_name: eth0
+  udr:
+    host: oai-udr
+    sbi:
+      port_http1: 80
+      api_version: v1
+      interface_name: eth0
+  ausf:
+    host: oai-ausf
+    sbi:
+      port_http1: 80
+      api_version: v1
+      interface_name: eth0
+  pcf:
+    host: oai-pcf
+    sbi:
+      port_http1: 80
+      api_version: v1
+      interface_name: eth0
+  nrf:
+    host: oai-nrf
+    sbi:
+      port_http1: 80
+      api_version: v1
+      interface_name: eth0
+  nssf:
+    host: oai-nssf
+    sbi:
+      port_http1: 80
+      api_version: v1
+      interface_name: eth0
 
-##### Options to enable/disable #####
+#### Common for UDR and AMF
+database:
+  host: mysql
+  user: test
+  type: mysql
+  password: test
+  database_name: oai_db
+  generate_random: true 
+  connection_timeout: 300 # seconds
+
+############## NF-specific configuration
+amf:
+  instance_id: 1
+  pid_directory: "/var/run"
+  amf_name: "OAI-AMF"
+  # This really depends on if we want to keep the "mini" version or not
+  support_features_options:
+    enable_simple_scenario: no # set it to yes to use with the minimanist deployment scenario (including only AMF/SMF and UPF) by using the internal AUSF/UDM implemented inside AMF. 
+                               # There's no NRF in this scenario, SMF info is get from the conf file.   
+                               # Set it to "no" with the normal deployment scenarios with AMF/SMF/UPF/AUSF/UDM/UDR/NRF. Afterthat you can enable the other options e.g., enable NSSF, SMF selection
+    enable_nssf: no            # enable that to work with an NSSF and enable NRF selection also
+    enable_smf_selection: yes 
+  relative_capacity: 30
+  statistics_timer_interval: 20  #in seconds
+  emergency_support: no
+  served_guami_list:
+    - mcc: 999
+      mnc: 01
+      amf_region_id: 7
+      amf_set_id: 8
+      amf_pointer: 9
+    - mcc: 888
+      mnc: 02
+      amf_region_id: 5
+      amf_set_id: 6
+      amf_pointer: 7   
+  plmn_support_list:
+    - mcc: 999
+      mnc: 01
+      tac: 1
+      nssai:
+        - sst: 1
+        - sst: 222
+          sd: 123
+    - mcc: 888
+      mnc: 02
+      tac: 2
+      nssai:
+        - sst: 2
+        - sst: 333
+          sd: 345         
+  supported_integrity_algorithms:
+    - "NIA0"
+    - "NIA1"
+    - "NIA2"
+  supported_encryption_algorithms:
+    - "NEA0"
+    - "NEA1"
+    - "NEA2"
+
+smf:
+  ue_mtu: 1500
+  support_features:
+    use_local_subscription_info: no # Use infos from local_subscription_info or from UDM
+    use_local_pcc_rules: yes # Use infos from local_pcc_rules or from PCF
+  upfs:
+    - host: oai-spgwu
+      port: 8805
+      config:
+        enable_usage_reporting: no
+        enable_dl_pdr_in_pfcp_session_establishment: no
+        n3_local_ipv4: ""   # Just here as a reference, we should skip this
+        # follows UPFInfo from 3GPP TS 29.510, currently only these values from interfaceUpfInfoList are supported
+      upf_info:
+        interfaceUpfInfoList:
+          - interfaceType: "N3"
+            networkInstance: "access.oai.org"
+          - interfaceType: "N6"
+            networkInstance: "core.oai.org"
+  ue_dns:
+    primary_ipv4: "172.21.3.100"
+    primary_ipv6: "2001:4860:4860::8888"
+    secondary_ipv4: "8.8.8.8"
+    secondary_ipv6: "2001:4860:4860::8888"
+  ims:
+    pcscf_ipv4: "127.0.0.1"
+    pcscf_ipv6: "fe80::7915:f408:1787:db8b"
+
 upf:
   support_features:
     enable_bpf_datapath: no    # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
     enable_snat: yes           # If "on": Source natting is done for UE, DEFAULT= off
-    enable_usage_reporting: no # If "on": Enable usage monitoring and reposrting with default URR, DEFAULT= off
   sNssaiList:
     - sNssai:
       - sst: 1
@@ -83,7 +231,8 @@ upf:
         sd: 1
         dnnList:
           - dnn: oai.ipv4
-          
+
+## DNN configuration
 dnns:
   - dnn: "oai"
     pdu_session_type: "IPv4"
@@ -93,3 +242,36 @@ dnns:
     pdu_session_type: "IPv4"
     ipv4_pool: "12.1.1.51 - 12.1.1.150"
     ipv6_prefix: "2001:1:2::/64"
+
+local_subscription_infos:
+  - nssai:
+      sst: 1
+    dnn: "oai"
+    scc_mode: 1
+    qos_profile:
+      5qi: 6
+      priority: 1
+      arp_priority: 1
+      arp_preempt_capability: "NOT_PREEMPT"
+      arp_preempt_vulnerability: "NOT_PREEMPTABLE"
+      session_ambr_ul: "1000Mbps"
+      session_ambr_dl: "1000Mbps"
+  - nssai:
+      sst: 1
+      sd: 1
+    dnn: "oai.ipv4"
+    scc_mode: 1
+    qos_profile:
+      5qi: 7
+      priority: 1
+      arp_priority: 1
+      arp_preempt_capability: "NOT_PREEMPT"
+      arp_preempt_vulnerability: "NOT_PREEMPTABLE"
+      session_ambr_ul: "1000Mbps"
+      session_ambr_dl: "1000Mbps"
+
+pcf:
+  local_policy:
+    policy_decisions_path: /openair-pcf/policies/policy_decisions
+    pcc_rules_path: /openair-pcf/policies/pcc_rules
+    traffic_rules_path: /openair-pcf/policies/traffic_rules

@@ -40,7 +40,7 @@
 #include <stdexcept>
 
 using namespace pfcp;
-using namespace upf;
+using namespace  oai::config;
 using namespace std;
 
 // C includes

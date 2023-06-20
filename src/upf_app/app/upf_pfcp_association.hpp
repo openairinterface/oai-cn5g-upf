@@ -36,7 +36,7 @@
 #include <mutex>
 #include <vector>
 
-namespace upf {
+namespace oai::config {
 
 #define PFCP_ASSOCIATION_HEARTBEAT_MAX_RETRIES 5
 class pfcp_association {
@@ -164,6 +164,6 @@ class pfcp_associations {
 
   void handle_receive_heartbeat_response(const uint64_t trxn_id);
 };
-}  // namespace upf
+}  // namespace oai::config
 
 #endif /* FILE_UPF_PFCP_ASSOCIATION_HPP_SEEN */

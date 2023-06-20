@@ -41,7 +41,7 @@
 #include "3gpp_29.500.h"
 #include "upf_config.hpp"
 
-using namespace upf;
+using namespace  oai::config;
 using json = nlohmann::json;
 
 extern itti_mw* itti_inst;

@@ -290,6 +290,7 @@ include_directories(${SRC_TOP_DIR}/upf_app/app)
 include_directories(${SRC_TOP_DIR}/upf_app/interfaces)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/config)
 include_directories(${SRC_TOP_DIR}/../build/ext/libbpf)
 link_directories(${SRC_TOP_DIR}/../build/ext/libbpf/src)
 

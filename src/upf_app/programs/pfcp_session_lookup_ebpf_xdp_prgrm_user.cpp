@@ -11,7 +11,7 @@
 #include "upf_config.hpp"
 #include "logger.hpp"
 
-using namespace upf;
+using namespace  oai::config;
 extern upf_config upf_cfg;
 
 /*****************************************************************************************************************/

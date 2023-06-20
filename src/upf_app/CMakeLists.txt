@@ -10,6 +10,7 @@ include_directories(${SRC_TOP_DIR}/itti)
 include_directories(${SRC_TOP_DIR}/udp)  
 include_directories(${SRC_TOP_DIR}/pfcp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/config)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 

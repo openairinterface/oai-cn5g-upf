@@ -42,9 +42,9 @@
 #include <UserPlaneComponent.h>
 
 //#include "upf_config.hpp"
-// extern upf::upf_config upf_cfg;
+// extern oai::config::upf_config upf_cfg;
 
-using namespace upf;
+using namespace  oai::config;
 using namespace util;
 using namespace std;
 

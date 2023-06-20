@@ -31,7 +31,7 @@
 #include "simple_switch.hpp"
 
 using namespace pfcp;
-using namespace upf;
+using namespace  oai::config;
 
 extern pfcp_switch* pfcp_switch_inst;
 extern upf_n3* upf_n3_inst;

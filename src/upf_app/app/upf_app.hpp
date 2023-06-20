@@ -42,7 +42,7 @@
 #include <map>
 #include <set>
 
-namespace upf {
+namespace oai::config {
 
 class upf_app {
  private:
@@ -80,5 +80,5 @@ class upf_app {
   //  void handle_itti_msg (itti_n4_session_report_request& m);
   void handle_itti_msg(std::shared_ptr<itti_n4_session_report_response> m);
 };
-}  // namespace upf
+}  // namespace oai::config
 #endif /* FILE_UPF_APP_HPP_SEEN */

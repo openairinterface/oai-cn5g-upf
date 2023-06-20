@@ -42,8 +42,10 @@
 #include <stdbool.h>
 #include <string>
 #include "logger.hpp"
+// #include "upf.h"
 
-namespace upf {
+namespace oai::config {
+const uint32_t SD_NO_VALUE = 0xFFFFFF;
 
 #define UPF_CONFIG_STRING_UPF_CONFIG "UPF"
 #define UPF_CONFIG_STRING_PID_DIRECTORY "PID_DIRECTORY"
@@ -224,6 +226,6 @@ class upf_config {
   int get_pfcp_node_id(pfcp::node_id_t& node_id);
   int get_pfcp_fseid(pfcp::fseid_t& fseid);
 };
-}  // namespace upf
+}  // namespace oai::config
 
 #endif /* FILE_UPF_CONFIG_HPP_SEEN */

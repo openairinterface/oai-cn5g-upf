@@ -47,7 +47,7 @@
 
 using namespace std;
 using namespace libconfig;
-using namespace upf;
+using namespace  oai::config;
 
 // C includes
 #include <arpa/inet.h>
@@ -57,6 +57,7 @@ using namespace upf;
 #include <sys/types.h>
 #include <unistd.h>
 
+namespace oai::config {
 //------------------------------------------------------------------------------
 int upf_config::execute() {
   return RETURNok;
@@ -615,7 +616,7 @@ int upf_config::load(const string& config_file) {
       for (int i = 0; i < count; i++) {
         const Setting& upf_info_item_cfg = upf_info_cfg[i];
         unsigned int nssai_sst           = 0;
-        string nssai_sd                  = {};
+        unsigned int nssai_sd            = 0;
 
         if (!(upf_info_item_cfg.lookupValue(
                 UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SST, nssai_sst))) {
@@ -633,8 +634,8 @@ int upf_config::load(const string& config_file) {
 
         snssai_upf_info_item_t snssai_item = {};
         snssai_t snssai                    = {};
-        snssai.sST                         = nssai_sst;
-        snssai.sD                          = nssai_sd;
+        snssai.sst                         = nssai_sst;
+        snssai.sd                          = nssai_sd;
         snssai_item.snssai                 = snssai;
 
         const Setting& dnn_cfg =
@@ -651,7 +652,7 @@ int upf_config::load(const string& config_file) {
 
           dnn_upf_info_item_t dnn_item = {};
           dnn_item.dnn                 = dnn;
-          snssai_item.dnn_upf_info_list.push_back(dnn_item);
+          snssai_item.dnn_upf_info_list.insert(dnn_item);
         }
 
         upf_5g_features.upf_info.snssai_upf_info_list.push_back(snssai_item);
@@ -816,12 +817,12 @@ void upf_config::display() {
 
         for (auto s : upf_5g_features.upf_info.snssai_upf_info_list) {
           // Logger::upf_app().debug(" Parameters supported by the UPF:");
-          if (s.snssai.sD.compare(std::to_string(SD_NO_VALUE)))
-            Logger::upf_app().info(
-                "        SNSSAI (SST %d, SD %s)", s.snssai.sST,
-                s.snssai.sD.c_str());
-          else
-            Logger::upf_app().info("        SNSSAI (SST %d)", s.snssai.sST);
+          // if (s.snssai.sd.compare(std::to_string(SD_NO_VALUE)))
+          //   Logger::upf_app().info(
+          //       "        SNSSAI (SST %d, SD %d)", s.snssai.sst,
+          //       s.snssai.sd);
+          // else
+          Logger::upf_app().info("        SNSSAI (SST %d)", s.snssai.sst);
           for (auto d : s.dnn_upf_info_list) {
             Logger::upf_app().info("            DNN %s", d.dnn.c_str());
           }
@@ -832,4 +833,5 @@ void upf_config::display() {
   Logger::upf_app().info(
       "- Log Level will be .......: %s",
       spdlog::level::to_string_view(log_level));
+}
 }

@@ -31,7 +31,7 @@
 
 using namespace pfcp;
 
-extern upf::pfcp_switch* pfcp_switch_inst;
+extern oai::config::pfcp_switch* pfcp_switch_inst;
 
 //------------------------------------------------------------------------------
 bool pfcp_session::get(

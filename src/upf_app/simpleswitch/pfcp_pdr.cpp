@@ -31,7 +31,7 @@
 
 using namespace pfcp;
 
-extern upf::upf_n4* upf_n4_inst;
+extern oai::config::upf_n4* upf_n4_inst;
 
 //------------------------------------------------------------------------------
 bool pfcp_pdr::look_up_pack_in_access(

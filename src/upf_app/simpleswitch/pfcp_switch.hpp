@@ -46,7 +46,7 @@
 #include <thread>
 #include <vector>
 
-namespace upf {
+namespace oai::config {
 
 // Have to be tuned for sdt situations
 #define PFCP_SWITCH_MAX_SESSIONS 128
@@ -193,5 +193,5 @@ class pfcp_switch {
 
   std::string to_string() const;
 };
-}  // namespace upf
+}  // namespace oai::config
 #endif /* FILE_PFCP_SWITCH_HPP_SEEN */
