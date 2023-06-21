@@ -40,6 +40,7 @@
 #include <stdexcept>
 
 using namespace pfcp;
+using namespace oai::upf::app;
 using namespace oai::config;
 using namespace std;
 

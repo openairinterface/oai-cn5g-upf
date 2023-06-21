@@ -36,7 +36,9 @@
 
 #include <thread>
 
-namespace oai::config {
+namespace oai {
+namespace upf {
+namespace app {
 
 #define TASK_UPF_N4_TRIGGER_HEARTBEAT_REQUEST (0)
 #define TASK_UPF_N4_TIMEOUT_HEARTBEAT_REQUEST (1)
@@ -123,5 +125,7 @@ class upf_n4 : public pfcp::pfcp_l4_stack {
 
   void time_out_itti_event(const uint32_t timer_id);
 };
-}  // namespace oai::config
+}  // namespace app
+}  // namespace upf
+}  // namespace oai
 #endif /* FILE_SGWU_SX_HPP_SEEN */

@@ -133,7 +133,7 @@ void upf_config_yaml::pre_process() {
 }
 
 //------------------------------------------------------------------------------
-void upf_config_yaml::to_upf_config(oai::config::upf_config& cfg) {
+void upf_config_yaml::to_upf_config(upf_config& cfg) {
   std::shared_ptr<upf> upf_local = std::static_pointer_cast<upf>(get_local());
   cfg.instance                   = upf_local->get_instance_id();
   cfg.pid_dir                    = upf_local->get_pid_directory();

@@ -38,7 +38,8 @@
 #include <stdexcept>
 
 using namespace gtpv1u;
-using namespace  oai::config;
+using namespace oai::upf::app;
+using namespace oai::config;
 using namespace std;
 
 extern itti_mw* itti_inst;

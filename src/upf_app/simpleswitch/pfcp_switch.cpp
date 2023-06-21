@@ -55,7 +55,8 @@ static std::shared_ptr<SessionManager> spSessionManager;
 
 using namespace pfcp;
 using namespace gtpv1u;
-using namespace  oai::config;
+using namespace oai::config;
+using namespace oai::upf::app;
 using namespace std;
 
 extern itti_mw* itti_inst;

@@ -30,8 +30,9 @@
 #include "logger.hpp"
 
 using namespace pfcp;
+using namespace oai::upf::app;
 
-extern oai::config::pfcp_switch* pfcp_switch_inst;
+extern pfcp_switch* pfcp_switch_inst;
 
 //------------------------------------------------------------------------------
 bool pfcp_session::get(

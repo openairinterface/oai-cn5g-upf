@@ -42,6 +42,7 @@
 #include "upf_config.hpp"
 
 using namespace oai::config;
+using namespace oai::upf::app;
 using json = nlohmann::json;
 
 extern itti_mw* itti_inst;

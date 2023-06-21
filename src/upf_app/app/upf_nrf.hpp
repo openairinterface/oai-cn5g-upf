@@ -37,7 +37,9 @@
 #include "3gpp_29.510.h"
 #include "upf_profile.hpp"
 
-namespace oai::config {
+namespace oai {
+namespace upf {
+namespace app {
 
 #define TASK_UPF_NRF_TIMEOUT_NRF_HEARTBEAT (1)
 #define TASK_UPF_NRF_TIMEOUT_NRF_DEREGISTRATION (2)
@@ -136,5 +138,7 @@ class upf_nrf {
    */
   void get_nrf_api_root(std::string& api_root);
 };
-}  // namespace oai::config
+}  // namespace app
+}  // namespace upf
+}  // namespace oai
 #endif /* FILE_UPF_NRF_HPP_SEEN */

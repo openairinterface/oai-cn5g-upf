@@ -44,8 +44,8 @@
 #include "logger.hpp"
 // #include "upf.h"
 
-namespace oai::config {
-const uint32_t SD_NO_VALUE = 0xFFFFFF;
+
+// const uint32_t SD_NO_VALUE = 0xFFFFFF;
 
 #define UPF_CONFIG_STRING_UPF_CONFIG "UPF"
 #define UPF_CONFIG_STRING_PID_DIRECTORY "PID_DIRECTORY"
@@ -99,7 +99,9 @@ const uint32_t SD_NO_VALUE = 0xFFFFFF;
 
 #define UPF_ABORT_ON_ERROR true
 #define UPG_WARN_ON_ERROR false
+using namespace libconfig;
 
+namespace oai::config {
 typedef struct interface_cfg_s {
   std::string if_name;
   struct in_addr addr4;

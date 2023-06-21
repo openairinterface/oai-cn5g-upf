@@ -44,7 +44,7 @@
 
 // #include "upf_config.hpp"
 //  extern oai::config::upf_config upf_cfg;
-
+using namespace oai::upf::app;
 using namespace oai::config;
 using namespace util;
 using namespace std;

@@ -40,7 +40,9 @@
 #include "3gpp_29.510.h"
 #include "3gpp_23.003.h"
 
-namespace oai::config {
+namespace oai {
+namespace upf {
+namespace app {
 
 class upf_nf_profile : public std::enable_shared_from_this<upf_nf_profile> {
  public:
@@ -348,6 +350,8 @@ class upf_nf_profile : public std::enable_shared_from_this<upf_nf_profile> {
   upf_info_t upf_info;
 };
 
-}  // namespace oai::config
+}  // namespace app
+}  // namespace upf
+}  // namespace oai
 
 #endif

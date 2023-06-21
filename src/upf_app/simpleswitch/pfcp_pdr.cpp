@@ -30,8 +30,10 @@
 #include "upf_n4.hpp"
 
 using namespace pfcp;
+using namespace oai::upf::app;
 
-extern oai::config::upf_n4* upf_n4_inst;
+
+extern upf_n4* upf_n4_inst;
 
 //------------------------------------------------------------------------------
 bool pfcp_pdr::look_up_pack_in_access(
