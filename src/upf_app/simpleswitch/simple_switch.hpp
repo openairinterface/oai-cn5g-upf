@@ -38,7 +38,6 @@
 #include <netinet/in.h>
 #include <thread>
 
-
 namespace oai {
 namespace upf {
 namespace app {

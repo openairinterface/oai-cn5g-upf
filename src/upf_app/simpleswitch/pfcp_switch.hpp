@@ -49,7 +49,7 @@
 namespace oai {
 namespace upf {
 namespace app {
-    
+
 // Have to be tuned for sdt situations
 #define PFCP_SWITCH_MAX_SESSIONS 128
 #define PFCP_SWITCH_MAX_PDRS 128

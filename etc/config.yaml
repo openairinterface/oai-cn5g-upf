@@ -195,7 +195,7 @@ smf:
     use_local_subscription_info: no # Use infos from local_subscription_info or from UDM
     use_local_pcc_rules: yes # Use infos from local_pcc_rules or from PCF
   upfs:
-    - host: oai-spgwu
+    - host: oai-upf
       port: 8805
       config:
         enable_usage_reporting: no

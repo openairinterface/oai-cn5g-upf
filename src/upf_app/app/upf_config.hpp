@@ -44,7 +44,6 @@
 #include "logger.hpp"
 // #include "upf.h"
 
-
 // const uint32_t SD_NO_VALUE = 0xFFFFFF;
 
 #define UPF_CONFIG_STRING_UPF_CONFIG "UPF"
@@ -165,7 +164,7 @@ class upf_config {
     std::string api_version;
     std::string fqdn;
     std::string uri_root;
-      unsigned int http_version;
+    unsigned int http_version;
 
   } nf_addr;
 
@@ -179,7 +178,6 @@ class upf_config {
   upf_info_t upf_info;
   bool use_fqdn_dns;
   bool use_http2;
-
 
   nf_addr udm_addr;
   nf_addr nrf_addr;

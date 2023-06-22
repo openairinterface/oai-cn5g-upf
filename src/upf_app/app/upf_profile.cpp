@@ -302,7 +302,7 @@ void upf_nf_profile::from_json(const nlohmann::json& data) {
     for (auto it : data["sNssais"]) {
       snssai_t s = {};
       s.sst      = it["sst"].get<int>();
-      s.sd       = it["sd"].get<int>();
+      s.sd       = std::stoi(it["sd"].get<std::string>());
       snssais.push_back(s);
     }
   }
@@ -348,7 +348,7 @@ void upf_nf_profile::from_json(const nlohmann::json& data) {
           if (it["sNssai"].find("sst") != it["sNssai"].end())
             upf_info_item.snssai.sst = it["sNssai"]["sst"].get<int>();
           if (it["sNssai"].find("sd") != it["sNssai"].end())
-            upf_info_item.snssai.sd = it["sNssai"]["sd"].get<int>();
+            upf_info_item.snssai.sd = std::stoi(it["sd"].get<std::string>());
         }
         if (it.find("dnnUpfInfoList") != it.end()) {
           for (auto d : it["dnnUpfInfoList"]) {

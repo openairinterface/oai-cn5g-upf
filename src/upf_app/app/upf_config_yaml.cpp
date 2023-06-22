@@ -137,9 +137,9 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   std::shared_ptr<upf> upf_local = std::static_pointer_cast<upf>(get_local());
   cfg.instance                   = upf_local->get_instance_id();
   cfg.pid_dir                    = upf_local->get_pid_directory();
-//   cfg.upf_name                   = upf_local->get_upf_name();
-  cfg.log_level                  = spdlog::level::from_str(log_level());
-  cfg.register_nrf               = register_nrf();
+  //   cfg.upf_name                   = upf_local->get_upf_name();
+  cfg.log_level    = spdlog::level::from_str(log_level());
+  cfg.register_nrf = register_nrf();
 
   cfg.use_fqdn_dns = false;  // TODO: to be removed
   if (get_http_version() == 2) cfg.use_http2 = true;

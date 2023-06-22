@@ -10,7 +10,7 @@
 // Values get from enviroment variable GTP_INTERFACE and UDP_INTERFACE
 // Consider to update these variables with you want to update the default
 // values.
-using namespace  oai::config;
+using namespace oai::config;
 extern upf_config upf_cfg;
 
 std::string Configuration::sGTPInterface = upf_cfg.n3.if_name;

@@ -32,7 +32,6 @@
 using namespace pfcp;
 using namespace oai::upf::app;
 
-
 extern upf_n4* upf_n4_inst;
 
 //------------------------------------------------------------------------------

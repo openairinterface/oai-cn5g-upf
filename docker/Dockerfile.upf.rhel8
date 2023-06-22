@@ -121,6 +121,7 @@ COPY --from=oai-upf-builder \
     /lib64/libdouble-conversion.so.1 \
     /usr/local/lib64/libspdlog.so \
     /usr/local/lib64/libfmt.so \
+    /usr/local/lib64/libyaml-cpp.so.0.* \
     /lib64/
 RUN ldconfig && \
     ldd /oai-upf/bin/oai_upf
