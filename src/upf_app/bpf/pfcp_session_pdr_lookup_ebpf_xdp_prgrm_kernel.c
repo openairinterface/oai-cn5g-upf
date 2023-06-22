@@ -123,15 +123,14 @@ static u32 create_outer_header_gtpu_ipv4(
   p_ip->protocol = IPPROTO_UDP;
   p_ip->check    = 0;
   map_element = bpf_map_lookup_elem(&m_upf_interfaces, &reference);
-  if (map_element != NULL) {
-    p_ip->saddr = map_element->ipv4_address;
-    bpf_debug("Map Values: IP:%d, port:%d\n", map_element->ipv4_address,
-    map_element->port);
-    bpf_debug("IP SRC:%d\n", p_ip->saddr);
-  } else {
+  if (!map_element) {
     bpf_debug("N3 Interface NOT Found! \n");
     return XDP_DROP;
-  }
+  } 
+  p_ip->saddr = map_element->ipv4_address;
+  bpf_debug("Map Values: IP:%d, port:%d\n", map_element->ipv4_address,
+    map_element->port);
+  bpf_debug("IP SRC:%d\n", p_ip->saddr);
   p_ip->daddr =
       p_far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
 
