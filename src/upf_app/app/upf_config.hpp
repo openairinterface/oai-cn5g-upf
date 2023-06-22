@@ -179,7 +179,7 @@ class upf_config {
   bool use_fqdn_dns;
   bool use_http2;
 
-  nf_addr udm_addr;
+  nf_addr smf_addr;
   nf_addr nrf_addr;
 
   // struct {

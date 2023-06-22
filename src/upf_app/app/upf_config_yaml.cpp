@@ -98,7 +98,7 @@ upf_config_yaml::upf_config_yaml(
     : oai::config::config(
           config_path, oai::config::UPF_CONFIG_NAME, log_stdout, log_rot_file) {
   m_used_sbi_values = {
-      oai::config::UPF_CONFIG_NAME, oai::config::UDM_CONFIG_NAME,
+      oai::config::UPF_CONFIG_NAME, oai::config::SMF_CONFIG_NAME,
       oai::config::NRF_CONFIG_NAME};
   m_used_config_values = {
       oai::config::LOG_LEVEL_CONFIG_NAME, oai::config::REGISTER_NF_CONFIG_NAME,
@@ -112,13 +112,15 @@ upf_config_yaml::upf_config_yaml(
       "UPF", "oai-upf", sbi_interface("SBI", "oai-upf", 80, "v1", "eth0"));
   add_nf("upf", m_upf);
 
-  auto m_udm = std::make_shared<nf>(
-      "UDM", "oai-udm", sbi_interface("SBI", "oai-udm", 80, "v1", "eth0"));
-  add_nf("udm", m_udm);
-
   auto m_nrf = std::make_shared<nf>(
       "NRF", "oai-nrf", sbi_interface("SBI", "oai-nrf", 80, "v1", "eth0"));
   add_nf("nrf", m_nrf);
+  
+  auto m_smf = std::make_shared<nf>(
+      "SMF", "oai-smf", sbi_interface("SBI", "oai-smf", 80, "v1", "eth0"));
+  add_nf("smf", m_smf);
+
+
 
   update_used_nfs();
 }
@@ -155,9 +157,9 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
     cfg.nrf_addr.uri_root    = get_nf(oai::config::NRF_CONFIG_NAME)->get_url();
   }
 
-  if (get_nf(oai::config::UDM_CONFIG_NAME)) {
-    cfg.udm_addr.api_version = get_nf("udm")->get_sbi().get_api_version();
-    cfg.udm_addr.uri_root    = get_nf(oai::config::UDM_CONFIG_NAME)->get_url();
+  if (get_nf(oai::config::SMF_CONFIG_NAME)) {
+    cfg.smf_addr.api_version = get_nf("smf")->get_sbi().get_api_version();
+    cfg.smf_addr.uri_root    = get_nf(oai::config::SMF_CONFIG_NAME)->get_url();
   }
 }
 }  // namespace oai::config
