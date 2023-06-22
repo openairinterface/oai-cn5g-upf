@@ -33,6 +33,7 @@
 #include "logger.hpp"
 #include "upf_profile.hpp"
 #include "string.hpp"
+#include "3gpp_conversions.hpp"
 
 using namespace oai::upf::app;
 
@@ -302,7 +303,10 @@ void upf_nf_profile::from_json(const nlohmann::json& data) {
     for (auto it : data["sNssais"]) {
       snssai_t s = {};
       s.sst      = it["sst"].get<int>();
-      s.sd       = std::stoi(it["sd"].get<std::string>());
+      if (it["sNssai"].find("sd") != it["sNssai"].end()) {
+        xgpp_conv::sd_string_to_int(
+            it["sNssai"]["sd"].get<std::string>(), s.sd);
+      }
       snssais.push_back(s);
     }
   }
@@ -347,8 +351,10 @@ void upf_nf_profile::from_json(const nlohmann::json& data) {
         if (it.find("sNssai") != it.end()) {
           if (it["sNssai"].find("sst") != it["sNssai"].end())
             upf_info_item.snssai.sst = it["sNssai"]["sst"].get<int>();
-          if (it["sNssai"].find("sd") != it["sNssai"].end())
-            upf_info_item.snssai.sd = std::stoi(it["sd"].get<std::string>());
+          if (it["sNssai"].find("sd") != it["sNssai"].end()) {
+            xgpp_conv::sd_string_to_int(
+                it["sNssai"]["sd"].get<std::string>(), upf_info_item.snssai.sd);
+          }
         }
         if (it.find("dnnUpfInfoList") != it.end()) {
           for (auto d : it["dnnUpfInfoList"]) {
