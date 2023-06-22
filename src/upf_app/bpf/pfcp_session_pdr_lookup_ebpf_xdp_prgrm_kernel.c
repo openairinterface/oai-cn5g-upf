@@ -46,7 +46,7 @@ static u32 update_dst_mac_address(struct iphdr* p_ip, struct ethhdr* p_eth) {
 
   p_mac_address = bpf_map_lookup_elem(&m_arp_table, &p_ip->daddr);
   if (!p_mac_address) {
-    bpf_debug("mac not found!!\n");
+    bpf_debug("MAC Address NOT Found!\n");
     return 1;
   }
   memcpy(p_eth->h_dest, p_mac_address, sizeof(p_eth->h_dest));
@@ -61,16 +61,12 @@ static u32 create_outer_header_gtpu_ipv4(
 
   struct ethhdr* p_eth;
   struct iphdr* p_ip;
-  void* map_element;
-  struct s_interface* iface        = NULL;
-  enum e_reference_point reference = N3_INTERFACE;
+  struct s_interface* map_element;
+  e_reference_point reference = N3_INTERFACE;
 
   __builtin_memset(&p_eth, 0, sizeof(p_eth));
   __builtin_memset(&p_ip, 0, sizeof(p_ip));
   __builtin_memset(&map_element, 0, sizeof(map_element));
-
-  map_element = bpf_map_lookup_elem(&m_upf_interfaces, &reference);
-  memcpy(iface, map_element, sizeof(struct s_interface));
 
   void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
@@ -126,8 +122,16 @@ static u32 create_outer_header_gtpu_ipv4(
   p_ip->ttl      = 64;
   p_ip->protocol = IPPROTO_UDP;
   p_ip->check    = 0;
-  p_ip->saddr    = iface->ipv4_address;
-  bpf_debug(" p_ip->saddr:%d", p_ip->saddr);
+  map_element = bpf_map_lookup_elem(&m_upf_interfaces, &reference);
+  if (map_element != NULL) {
+    p_ip->saddr = map_element->ipv4_address;
+    bpf_debug("Map Values: IP:%d, port:%d\n", map_element->ipv4_address,
+    map_element->port);
+    bpf_debug("IP SRC:%d\n", p_ip->saddr);
+  } else {
+    bpf_debug("N3 Interface NOT Found! \n");
+    return XDP_DROP;
+  }
   p_ip->daddr =
       p_far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
 
