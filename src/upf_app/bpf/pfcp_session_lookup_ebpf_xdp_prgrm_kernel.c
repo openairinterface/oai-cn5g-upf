@@ -31,12 +31,12 @@
 // u32 litToBigEndian(u32 x) {
 //   return (((x<<24) & 0xff000000) | ((x<<8) & 0x00ff0000) | ((x>>24) &
 //   0x000000ff) | ((x>>8) & 0x0000ff00));
-// };
+// }
 
 // u32 bigToLitEndian(u32 x) {
 //   return (((x>>24) & 0x000000ff) | ((x>>8) & 0x0000ff00) | ((x<<8) &
 //   0x00ff0000) | ((x<<24) & 0xff000000));
-// };
+// }
 
 /*****************************************************************************************************************/
 static u32 tail_call_next_prog(
@@ -46,15 +46,12 @@ static u32 tail_call_next_prog(
 
   __builtin_memset(&map_key, 0, sizeof(struct next_rule_prog_index_key));
 
-  map_key.teid =
-      (((teid << 24) & 0xff000000) | ((teid << 8) & 0x00ff0000) |
-       ((teid >> 24) & 0x000000ff) | ((teid >> 8) & 0x0000ff00));
+  map_key.teid         = teid;
   map_key.source_value = source_value;
-  map_key.ipv4_address = (((ipv4_address << 24) & 0xff000000) | ((ipv4_address << 8) & 0x00ff0000) |
-       ((ipv4_address >> 24) & 0x000000ff) | ((ipv4_address >> 8) & 0x0000ff00));;
-  bpf_debug(
-      "This is the key teid: %d, source: %d, ip: %d\n", map_key.teid,
-      map_key.source_value, map_key.ipv4_address);
+  map_key.ipv4_address = ipv4_address;
+  bpf_debug("The value of IP SRC: 0x%x\n", ipv4_address);
+
+  bpf_debug("The value of TEID:%d\n", teid);
 
   index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
   // bpf_tail_call(p_ctx, &m_next_rule_prog, 1);
@@ -107,7 +104,7 @@ static u32 gtp_handle(
   }
 
   bpf_debug("GTP GPDU received\n");
-
+  bpf_debug("Valid GTP Packet with SRC IP:0x%x\n", src_ue_ip);
   if (!ip_inner_check_ipv4(p_ctx, (struct iphdr*) (gtpu_ext_hdr + 1))) {
     bpf_debug("Invalid IP inner\n");
     return XDP_DROP;
@@ -145,7 +142,8 @@ static u32 udp_handle(
     return XDP_ABORTED;
   }
 
-  bpf_debug("UDP packet validated\n");
+  bpf_debug(
+      "Valid UDP Packet with SRC IP:0x%x, and DEST IP:0x%x\n", src_ip, src_ip);
   dport = htons(udph->dest);
 
   switch (dport) {
@@ -180,14 +178,13 @@ static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
 
   // Hint: +1 is sizeof(struct iphdr)
   if ((void*) iph + sizeof(*iph) > p_data_end) {
-    bpf_debug("Invalid IPv4 packet\n");
+    bpf_debug("Invalid IPv4 Packet\n");
     return XDP_ABORTED;
   }
   ip_src  = iph->saddr;
   ip_dest = iph->daddr;
-
   bpf_debug(
-      "Valid IPv4 packet with SRC IP:0x%x, and DEST IP:0x%x\n", ip_src,
+      "Valid IPv4 Packet with SRC IP:0x%x, and DEST IP:0x%x\n", ip_src,
       ip_dest);
   switch (iph->protocol) {
     case IPPROTO_UDP:
