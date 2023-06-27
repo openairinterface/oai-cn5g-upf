@@ -62,72 +62,72 @@ nfs:
     sbi:
       port_http1: 80
       api_version: v1
-      interface_name: eth0
+      interface_name: demo-oai
     n1:
-      interface_name: eth0
+      interface_name: demo-oai
       port: 38412
   smf:
     host: oai-smf
     sbi:
       port_http1: 80
       api_version: v1
-      interface_name: eth0
+      interface_name: demo-oai
     n4:
-      interface_name: eth0
+      interface_name: demo-oai
       port: 8805
   upf:
     host: oai-upf
     sbi:
       port_http1: 80
       api_version: v1
-      interface_name: eth0
+      interface_name: demo-oai
     n3:
-      interface_name: eth0
+      interface_name: demo-oai
       port: 2152
     n4:
-      interface_name: eth0
+      interface_name: demo-oai
       port: 8805
     n6:
-      interface_name: eth0
+      interface_name: demo-oai
     n9:
-      interface_name: eth0
+      interface_name: demo-oai
       port: 2152
   udm:
     host: oai-udm
     sbi:
       port_http1: 80
       api_version: v1
-      interface_name: eth0
+      interface_name: demo-oai
   udr:
     host: oai-udr
     sbi:
       port_http1: 80
       api_version: v1
-      interface_name: eth0
+      interface_name: demo-oai
   ausf:
     host: oai-ausf
     sbi:
       port_http1: 80
       api_version: v1
-      interface_name: eth0
+      interface_name: demo-oai
   pcf:
     host: oai-pcf
     sbi:
       port_http1: 80
       api_version: v1
-      interface_name: eth0
+      interface_name: demo-oai
   nrf:
     host: oai-nrf
     sbi:
       port_http1: 80
       api_version: v1
-      interface_name: eth0
+      interface_name: demo-oai
   nssf:
     host: oai-nssf
     sbi:
       port_http1: 80
       api_version: v1
-      interface_name: eth0
+      interface_name: demo-oai
 
 #### Common for UDR and AMF
 database:
