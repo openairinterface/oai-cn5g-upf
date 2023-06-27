@@ -50,7 +50,8 @@ static u32 tail_call_next_prog(
       (((teid << 24) & 0xff000000) | ((teid << 8) & 0x00ff0000) |
        ((teid >> 24) & 0x000000ff) | ((teid >> 8) & 0x0000ff00));
   map_key.source_value = source_value;
-  map_key.ipv4_address = ipv4_address;
+  map_key.ipv4_address = (((ipv4_address << 24) & 0xff000000) | ((ipv4_address << 8) & 0x00ff0000) |
+       ((ipv4_address >> 24) & 0x000000ff) | ((ipv4_address >> 8) & 0x0000ff00));;
   bpf_debug(
       "This is the key teid: %d, source: %d, ip: %d\n", map_key.teid,
       map_key.source_value, map_key.ipv4_address);
