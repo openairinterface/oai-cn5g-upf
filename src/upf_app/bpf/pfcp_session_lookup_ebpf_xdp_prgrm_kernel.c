@@ -232,22 +232,15 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
 
 SEC("xdp_entry_point")
 int entry_point(struct xdp_md* p_ctx) {
-  void* p_data        = (void*) (long) p_ctx->data;
-  void* p_data_end    = (void*) (long) p_ctx->data_end;
-  struct ethhdr* ethh = p_data;
+  struct ethhdr* ethh = (void*) (long) p_ctx->data;
 
-  if ((void*) (ethh + 1) > p_data_end) {
+  if ((void*) (ethh + 1) > (void*) (long) p_ctx->data_end) {
     bpf_debug("Invalid Ethernet header\n");
     return XDP_DROP;
   }
 
   bpf_debug("XDP ENTRY POINT\n");
-
-  // Start to handle the ethernet header.
-  u32 action = xdp_stats_record_action(p_ctx, eth_handle(p_ctx, ethh));
-  bpf_debug("Action %d\n", action);
-
-  return action;
+  return xdp_stats_record_action(p_ctx, eth_handle(p_ctx, ethh));
 }
 
 char _license[] SEC("license") = "GPL";
