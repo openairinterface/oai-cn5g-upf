@@ -266,10 +266,6 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
     if (dest_interface == INTERFACE_VALUE_CORE) {
       // Redirect to data network.
       bpf_debug("Destination is to INTERFACE_VALUE_CORE\n");
-      bpf_debug(
-          "OUTER_HEADER_CREATION_UDP_IPV4, (@Franck: This message will be "
-          "deleted. I kept it just for comparison with original repos "
-          "upf-bpf)\n");
       bpf_debug("GTP Header Removal ...\n");
       struct ethhdr* p_new_eth = p_data + GTP_ENCAPSULATED_SIZE;
 
