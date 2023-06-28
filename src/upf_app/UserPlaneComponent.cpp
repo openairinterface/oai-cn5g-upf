@@ -5,7 +5,6 @@
 #include <SessionProgramManager.h>
 #include <SignalHandler.h>
 #include <pfcp_session_lookup_ebpf_xdp_prgrm_user.h>
-// // #include <utils/LogDefines.h>
 #include "logger.hpp"
 
 /*****************************************************************************************************************/
@@ -61,7 +60,6 @@ void UserPlaneComponent::onDestroySessionProgram(u_int32_t programId) {
 /*****************************************************************************************************************/
 int UserPlaneComponent::printLibbpfLog(
     enum libbpf_print_level lvl, const char* fmt, va_list args) {
-  // Do not put LOG_FUNC() here.
   return vfprintf(stderr, fmt, args);
 }
 

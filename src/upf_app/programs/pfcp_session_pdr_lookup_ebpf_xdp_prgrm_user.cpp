@@ -3,7 +3,6 @@
 #include <bpf/bpf.h>       // bpf calls
 #include <bpf/libbpf.h>    // bpf wrappers
 #include <sys/resource.h>  // rlimit
-// // #include <utils/LogDefines.h> // Logs
 #include <net/if.h>  // if_nametoindex
 #include <wrappers/BPFMaps.h>
 #include <wrappers/BPFMap.hpp>
@@ -29,12 +28,6 @@ void PFCP_Session_PDR_LookupProgram::setup() {
   initializeMaps();
   mpLifeCycle->load();
   mpLifeCycle->attach();
-
-  // It must have one program linked to the redirect interface in order the
-  // operation would be successful. Assume there are already a program linked to
-  // the interfaces. So we dont need to link a dummy program.
-  // mpLifeCycle->link("xdp_redirect_dummy", mUDPInterface.c_str());
-  // mpLifeCycle->link("xdp_redirect_dummy", mGTPInterface.c_str());
 }
 
 /*****************************************************************************************************************/

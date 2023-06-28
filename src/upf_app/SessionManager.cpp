@@ -7,17 +7,10 @@
 #include <interfaces/PacketDetectionRules.h>
 #include <interfaces/SessionBpf.h>
 #include <pfcp/pfcp_session.h>
-// // #include <utils/LogDefines.h>
 #include <wrappers/BPFMaps.h>
 #include "logger.hpp"
 
 #include <next_prog_rule_key.h>
-// #include "common_defs.h"
-// #include "logger.hpp"
-// #include "msg_pfcp.hpp"
-// #include "pfcp_session.hpp"
-// #include "thread_sched.hpp"
-// #include "uint_generator.hpp"
 
 /*****************************************************************************************************************/
 SessionManager::SessionManager() {}
