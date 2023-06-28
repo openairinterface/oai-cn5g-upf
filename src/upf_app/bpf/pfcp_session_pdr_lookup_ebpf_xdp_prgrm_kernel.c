@@ -459,7 +459,7 @@ static u32 pfcp_pdr_lookup_uplink(struct xdp_md* p_ctx) {
   // We have already assumed that the packet is a GPDU.
   u8* p_iph = (u8*) p_gtpuh + GTPV1U_MSG_HEADER_MIN_SIZE;
 
-  teid = htonl(p_gtpuh->teid);
+  teid = htons(p_gtpuh->teid);
   bpf_debug("GTP GPDU TEID %d with IPv4 payload received\n", teid);
 
   p_pdr = bpf_map_lookup_elem(&m_teid_pdr, &teid);
