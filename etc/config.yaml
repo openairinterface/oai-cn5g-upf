@@ -65,6 +65,17 @@ nfs:
       port_http1: 80
       api_version: v1
       interface_name: demo-oai
+    n3:
+      interface_name: demo-oai
+      port: 2152
+    n4:
+      interface_name: demo-oai
+      port: 8805
+    n6:
+      interface_name: demo-oai
+    n9:
+      interface_name: demo-oai
+      port: 2152
   udm:
     host: oai-udm
     sbi:
@@ -191,19 +202,7 @@ upf:
   support_features:
     enable_bpf_datapath: no    # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
     enable_snat: yes           # If "on": Source natting is done for UE, DEFAULT= off
-  local_interfaces:
-    - n3:
-        interface_name: demo-oai
-        port: 2152
-      n4:
-        interface_name: demo-oai
-        port: 8805
-      n6:
-        interface_name: demo-oai
-      n9:
-        interface_name: demo-oai
-        port: 2152
-  sNssai_list:
+  nssai:
     - sst: 1
       sd: 0xFFFFFF
       dnnList:

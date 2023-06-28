@@ -466,11 +466,11 @@ int upf_config::load(const string& config_file) {
       pdns.push_back(pdn_cfg);
     }
 
-    snat                = false;
+    enable_snat         = false;
     std::string astring = {};
     if (upf_cfg.lookupValue(UPF_CONFIG_STRING_SNAT, astring)) {
       if (boost::iequals(astring, "yes")) {
-        snat = true;
+        enable_snat = true;
       }
     }
 
@@ -754,7 +754,8 @@ void upf_config::display() {
   //     "      thread pool size: %d",
   //     n6.thread_rd_sched_params.thread_pool_size);
   Logger::upf_app().info("- PDN networks:");
-  Logger::upf_app().info("    SNAT .............: %s", (snat) ? "yes" : "no");
+  Logger::upf_app().info(
+      "    SNAT .............: %s", (enable_snat) ? "yes" : "no");
   int i = 1;
   for (auto it : pdns) {
     if (it.prefix_ipv4) {

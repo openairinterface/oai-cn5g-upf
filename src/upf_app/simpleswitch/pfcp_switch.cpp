@@ -306,7 +306,7 @@ void pfcp_switch::setup_pdn_interfaces() {
           it.prefix_ipv4, index);
       rc = system((const char*) cmd.c_str());
 
-      if (upf_cfg.snat) {
+      if (upf_cfg.enable_snat) {
         cmd = fmt::format(
             "iptables -t nat -A POSTROUTING -s {}/{} -o {} -j SNAT --to-source "
             "{}",
@@ -327,7 +327,7 @@ void pfcp_switch::setup_pdn_interfaces() {
           "ip -6 addr add {}/{} dev tun{}", conv::toString(addr6).c_str(),
           it.prefix_ipv6, index);
       rc = system((const char*) cmd.c_str());
-      // if ((it.snat) && (/* SGI has IPv6 address*/)){
+      // if ((it.enable_snat) && (/* SGI has IPv6 address*/)){
       //    cmd = fmt::format("ip6tables -t nat -A POSTROUTING -s {}/{} -o {} -j
       //    SNAT --to-source {}", conv::toString(addr6).c_str(), it.prefix_ipv6,
       //    xxx); rc = system ((const char*)cmd.c_str());

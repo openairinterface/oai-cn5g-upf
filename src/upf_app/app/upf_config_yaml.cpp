@@ -28,6 +28,43 @@
 namespace oai::config {
 
 //------------------------------------------------------------------------------
+upf_support_features::upf_support_features() {
+  m_set = true;
+}
+
+//------------------------------------------------------------------------------
+void upf_support_features::from_yaml(const YAML::Node& node) {
+  if (node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF]) {
+    m_enable_bpf_datapath.from_yaml(
+        node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF]);
+  }
+  if (node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT]) {
+    m_enable_snat.from_yaml(node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT]);
+  }
+}
+
+//------------------------------------------------------------------------------
+std::string upf_support_features::to_string(const std::string& indent) const {
+  std::string out;
+  unsigned int inner_width = get_inner_width(indent.length());
+
+  std::string enable_bpf_datapath = m_enable_bpf_datapath.get_value() ?
+                                        UPF_CONFIG_OPTION_YES_STR :
+                                        UPF_CONFIG_OPTION_NO_STR;
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, INNER_LIST_ELEM,
+      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF_LABEL, inner_width,
+      enable_bpf_datapath));
+
+  std::string enable_snat = m_enable_snat.get_value() ?
+                                UPF_CONFIG_OPTION_YES_STR :
+                                UPF_CONFIG_OPTION_NO_STR;
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, INNER_LIST_ELEM,
+      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT_LABEL, inner_width, enable_snat));
+  return out;
+}
+//------------------------------------------------------------------------------
 upf::upf(
     const std::string& name, const std::string& host, const sbi_interface& sbi)
     : nf(name, host, sbi) {}
@@ -49,6 +86,10 @@ void upf::from_yaml(const YAML::Node& node) {
 
     if (key == UPF_CONFIG_UPF_NAME) {
       m_upf_name.from_yaml(elem.second);
+    }
+
+    if (key == UPF_CONFIG_SUPPORT_FEATURES) {
+      m_upf_support_features.from_yaml(elem.second);
     }
   }
 }
@@ -76,6 +117,11 @@ std::string upf::to_string(const std::string& indent) const {
           BASE_FORMATTER, OUTER_LIST_ELEM, UPF_CONFIG_UPF_NAME_LABEL,
           inner_width, m_upf_name.get_value()));
 
+  out.append(inner_indent)
+      .append(fmt::format(
+          "{} {}\n", OUTER_LIST_ELEM, UPF_CONFIG_SUPPORT_FEATURES_LABEL));
+  out.append(m_upf_support_features.to_string(inner_indent + indent));
+
   return out;
 }
 
@@ -93,6 +139,20 @@ const std::string upf::get_upf_name() const {
 }
 
 //------------------------------------------------------------------------------
+bool upf_support_features::get_option_enable_bpf_datapath() const {
+  return m_enable_bpf_datapath.get_value();
+}
+
+//------------------------------------------------------------------------------
+bool upf_support_features::get_option_enable_snat() const {
+  return m_enable_snat.get_value();
+}
+
+//------------------------------------------------------------------------------
+upf_support_features upf::get_support_features() const {
+  return m_upf_support_features;
+}
+//------------------------------------------------------------------------------
 upf_config_yaml::upf_config_yaml(
     const std::string& config_path, bool log_stdout, bool log_rot_file)
     : oai::config::config(
@@ -102,7 +162,7 @@ upf_config_yaml::upf_config_yaml(
       oai::config::NRF_CONFIG_NAME};
   m_used_config_values = {
       oai::config::LOG_LEVEL_CONFIG_NAME, oai::config::REGISTER_NF_CONFIG_NAME,
-      NF_CONFIG_HTTP_NAME, oai::config::NF_LIST_CONFIG_NAME,
+      oai::config::NF_CONFIG_HTTP_NAME, oai::config::NF_LIST_CONFIG_NAME,
       oai::config::UPF_CONFIG_NAME};
 
   // TODO with NF_Type and switch
@@ -110,17 +170,15 @@ upf_config_yaml::upf_config_yaml(
   // use case
   auto m_upf = std::make_shared<upf>(
       "UPF", "oai-upf", sbi_interface("SBI", "oai-upf", 80, "v1", "eth0"));
-  add_nf("upf", m_upf);
+  add_nf(oai::config::UPF_CONFIG_NAME, m_upf);
+
+  auto m_smf = std::make_shared<nf>(
+      "SMF", "oai-smf", sbi_interface("SBI", "oai-smf", 80, "v1", "eth0"));
+  add_nf(oai::config::SMF_CONFIG_NAME, m_smf);
 
   auto m_nrf = std::make_shared<nf>(
       "NRF", "oai-nrf", sbi_interface("SBI", "oai-nrf", 80, "v1", "eth0"));
-  add_nf("nrf", m_nrf);
-  
-  auto m_smf = std::make_shared<nf>(
-      "SMF", "oai-smf", sbi_interface("SBI", "oai-smf", 80, "v1", "eth0"));
-  add_nf("smf", m_smf);
-
-
+  add_nf(oai::config::NRF_CONFIG_NAME, m_nrf);
 
   update_used_nfs();
 }
@@ -132,6 +190,11 @@ void upf_config_yaml::pre_process() {
   // Process configuration information to display only the appropriate
   // information
   // TODO
+  std::shared_ptr<upf> upf_local = std::static_pointer_cast<upf>(get_local());
+  std::shared_ptr<nf> smf        = get_nf(SMF_CONFIG_NAME);
+  smf->set_config();
+  std::shared_ptr<nf> nrf = get_nf(NRF_CONFIG_NAME);
+  nrf->set_config();
 }
 
 //------------------------------------------------------------------------------
@@ -151,6 +214,10 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   cfg.sbi.port        = local().get_sbi().get_port();
   cfg.sbi.addr4       = local().get_sbi().get_addr4();
   cfg.sbi.if_name     = local().get_sbi().get_if_name();
+
+  cfg.enable_bpf_datapath =
+      upf_local->get_support_features().get_option_enable_bpf_datapath();
+  cfg.enable_snat = upf_local->get_support_features().get_option_enable_snat();
 
   if (get_nf(oai::config::NRF_CONFIG_NAME)) {
     cfg.nrf_addr.api_version = get_nf("nrf")->get_sbi().get_api_version();

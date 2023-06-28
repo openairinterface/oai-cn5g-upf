@@ -46,6 +46,9 @@
 
 // const uint32_t SD_NO_VALUE = 0xFFFFFF;
 
+constexpr auto UPF_CONFIG_OPTION_YES_STR = "Yes";
+constexpr auto UPF_CONFIG_OPTION_NO_STR  = "No";
+
 #define UPF_CONFIG_STRING_UPF_CONFIG "UPF"
 #define UPF_CONFIG_STRING_PID_DIRECTORY "PID_DIRECTORY"
 #define UPF_CONFIG_STRING_INSTANCE "INSTANCE"
@@ -168,7 +171,7 @@ class upf_config {
 
   } nf_addr;
 
-  bool snat;
+  bool enable_snat;
   std::vector<pdn_cfg_t> pdns;
   std::vector<pfcp::node_id_t> smfs;
 
@@ -208,7 +211,7 @@ class upf_config {
         smfs(),
         max_pfcp_sessions(100),
         nsf(),
-        snat(false) {
+        enable_snat(false) {
     itti.itti_timer_sched_params.sched_priority = 85;
     itti.s1u_sched_params.sched_priority        = 84;
     itti.sx_sched_params.sched_priority         = 84;

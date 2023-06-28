@@ -24,32 +24,60 @@
 #include "config.hpp"
 #include "upf_config.hpp"
 
-constexpr auto UPF_CONFIG_INSTANCE_ID         = "instance_id";
-constexpr auto UPF_CONFIG_INSTANCE_ID_LABEL   = "Instance ID";
-constexpr auto UPF_CONFIG_PID_DIRECTORY       = "pid_directory";
-constexpr auto UPF_CONFIG_PID_DIRECTORY_LABEL = "PID Directory";
-constexpr auto UPF_CONFIG_UPF_NAME            = "upf_name";
-constexpr auto UPF_CONFIG_UPF_NAME_LABEL      = "UPF Name";
+constexpr auto UPF_CONFIG_INSTANCE_ID            = "instance_id";
+constexpr auto UPF_CONFIG_INSTANCE_ID_LABEL      = "Instance ID";
+constexpr auto UPF_CONFIG_PID_DIRECTORY          = "pid_directory";
+constexpr auto UPF_CONFIG_PID_DIRECTORY_LABEL    = "PID Directory";
+constexpr auto UPF_CONFIG_UPF_NAME               = "upf_name";
+constexpr auto UPF_CONFIG_UPF_NAME_LABEL         = "UPF Name";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES       = "support_features";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_LABEL = "Support Features";
+
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF = "enable_bpf_datapath";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF_LABEL =
+    "Enable BPF Datapath";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT       = "enable_snat";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT_LABEL = "Enable SNAT";
 
 namespace oai::config {
+class upf_support_features : public config_type {
+ private:
+  option_config_value m_enable_bpf_datapath{};
+  option_config_value m_enable_snat{};
+
+ public:
+  explicit upf_support_features();
+
+  void from_yaml(const YAML::Node& node) override;
+
+  [[nodiscard]] std::string to_string(const std::string& indent) const override;
+  [[nodiscard]] bool get_option_enable_bpf_datapath() const;
+  [[nodiscard]] bool get_option_enable_snat() const;
+};
 
 class upf : public nf {
  private:
   int_config_value m_instance_id;
   string_config_value m_pid_directory;
   string_config_value m_upf_name;
+  upf_support_features m_upf_support_features;
 
  public:
   explicit upf(
       const std::string& name, const std::string& host,
       const sbi_interface& sbi);
-
+  
+    explicit upf(
+      const std::string& name, const std::string& host,
+      const sbi_interface& sbi, const std::string& n6);
+      
   void from_yaml(const YAML::Node& node) override;
 
   [[nodiscard]] std::string to_string(const std::string& indent) const override;
   [[nodiscard]] const uint32_t get_instance_id() const;
   [[nodiscard]] const std::string get_pid_directory() const;
   [[nodiscard]] const std::string get_upf_name() const;
+  upf_support_features get_support_features() const;
 };
 
 class upf_config_yaml : public config {
