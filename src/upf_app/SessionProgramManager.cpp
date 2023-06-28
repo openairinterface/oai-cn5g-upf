@@ -10,7 +10,6 @@
 #include <pfcp/pfcp_far.h>
 #include <spdlog/fmt/ostr.h>
 #include <types.h>
-// // #include <utils/LogDefines.h>
 #include <wrappers/BPFMap.hpp>
 #include "logger.hpp"
 
@@ -18,22 +17,13 @@
 
 #define EMPTY_SLOT -1l
 
-//  TODO: Encapsulate in order file.
-// Custom format for next_rule_prog_index_key.
 
 /*****************************************************************************************************************/
-u32 litToBigEndian(u32 x) {
-  return (
-      ((x << 24) & 0xff000000) | ((x << 8) & 0x00ff0000) |
-      ((x >> 24) & 0x000000ff) | ((x >> 8) & 0x0000ff00));
-};
-
-/*****************************************************************************************************************/
-u32 bigToLitEndian(u32 x) {
-  return (
-      ((x >> 24) & 0x000000ff) | ((x >> 8) & 0x0000ff00) |
-      ((x << 8) & 0x00ff0000) | ((x << 24) & 0xff000000));
-};
+int is_little_endian() {
+    u32 value = 1;
+    u8* byte = (u8*) &value;
+    return (*byte == 1);
+}
 
 /*****************************************************************************************************************/
 std::ostream& operator<<(
@@ -65,30 +55,21 @@ void SessionProgramManager::createPipeline(
     uint32_t seid, uint32_t teid, uint8_t sourceInterface, uint32_t ueIpAddress,
     std::shared_ptr<pfcp::pfcp_far> pFar) {
   struct next_rule_prog_index_key key;
-  struct in_addr ip_addr;
   u32 id;
   s32 fd;
 
   __builtin_memset(&key, 0, sizeof(struct next_rule_prog_index_key));
 
-  // key = {
-  //     .teid         = teid,
-  //     .source_value = sourceInterface,
-  //     .ipv4_address = ueIpAddress};
+  if (is_little_endian()) {
+    key.teid = htobe32(teid);
+    key.ipv4_address = htole32(ueIpAddress);
+    } else {
+      key.teid = htole32(teid);
+      key.ipv4_address = ueIpAddress;
+    }
 
-  key = {
-      .teid         = litToBigEndian(teid),
-      .source_value = sourceInterface,
-      .ipv4_address = litToBigEndian(ueIpAddress)};
-
-  ip_addr.s_addr = ueIpAddress;
-  // LOG_DBG("TEID: {}, Source Interface: {}, UE IP: {}", htonl(teid),
-  // sourceInterface, inet_ntoa(ip_addr));
-  // ToDo Verify ip to string conversion
-  // Logger::upf_app().debug("TEID: %d, Source Interface: %d, UE IP: {}",
-  // htonl(teid), sourceInterface, inet_ntoa(ip_addr));
-
-  // LOG_DBG("Instantiate a new FARProgram");
+  key.source_value = sourceInterface;
+    
   Logger::upf_app().debug("Instantiate a new FARProgram");
   std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
   pFARProgram->setup();
@@ -104,7 +85,6 @@ void SessionProgramManager::createPipeline(
       key, id, BPF_ANY);
   pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
 
-  // LOG_DBG("Store FAR in the FAR program");
   Logger::upf_app().debug("Store FAR in the FAR program");
   uint8_t index = 0;
 
@@ -172,8 +152,6 @@ void SessionProgramManager::create(uint32_t seid) {
   // TODO: Check if can be abstract the programMap.
 
   if (mSessionProgramMap.find(seid) != mSessionProgramMap.end()) {
-    // LOG_ERROR("PDU Session {} already exists. Cannot create a new program
-    // with this key", seid);
     Logger::upf_app().error(
         "PDU Session {} Already Exists. Cannot Create a New eBPF Program with "
         "the same "
@@ -214,7 +192,6 @@ void SessionProgramManager::create(uint32_t seid) {
 void SessionProgramManager::remove(uint32_t seid) {
   auto sessionProgram = findSessionProgram(seid);
   if (!sessionProgram) {
-    // LOG_ERROR("The PDU session {} does not exist. Cannot be removed", seid);
     Logger::upf_app().error(
         "The PDU session %d does not exist. Cannot be removed", seid);
     throw std::runtime_error("The session does not exist. Cannot be removed");
@@ -279,11 +256,9 @@ int32_t SessionProgramManager::getEmptySlot() {
   auto it = std::find(mProgramArray.begin(), mProgramArray.end(), EMPTY_SLOT);
   if (it != mProgramArray.end()) {
     auto index = it - mProgramArray.begin();
-    // LOG_DBG("Element with index {} is empty", index);
     Logger::upf_app().error("Element with index %d is empty", index);
     return index;
   } else {
-    // LOG_ERROR("No space available");
     Logger::upf_app().error("No Space Available");
     throw std::runtime_error("No Space Available");
   }
