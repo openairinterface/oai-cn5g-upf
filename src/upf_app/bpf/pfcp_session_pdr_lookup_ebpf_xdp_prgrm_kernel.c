@@ -45,12 +45,14 @@ static u32 update_dst_mac_address(struct iphdr* p_ip, struct ethhdr* p_eth) {
   void* p_mac_address;
 
   p_mac_address = bpf_map_lookup_elem(&m_arp_table, &p_ip->daddr);
+  
   if (!p_mac_address) {
     bpf_debug("MAC Address NOT Found!\n");
-    return 1;
+    return XDP_DROP;
   }
-  memcpy(p_eth->h_dest, p_mac_address, sizeof(p_eth->h_dest));
-  return 0;
+
+  __builtin_memcpy(p_eth->h_dest, p_mac_address, sizeof(p_eth->h_dest));
+  return XDP_PASS;
 }
 
 /*****************************************************************************************************************/
@@ -59,51 +61,35 @@ static u32 create_outer_header_gtpu_ipv4(
   bpf_debug("Create Outer Header GTPU_IPv4\n");
   bpf_debug("Original Packet: Data/UDP/IP/ETH\n");
 
-  struct ethhdr* p_eth;
-  struct iphdr* p_ip;
-  struct s_interface* map_element;
-  e_reference_point reference = N3_INTERFACE;
-
-  __builtin_memset(&p_eth, 0, sizeof(p_eth));
-  __builtin_memset(&p_ip, 0, sizeof(p_ip));
-  __builtin_memset(&map_element, 0, sizeof(map_element));
-
-  void* p_data     = (void*) (long) p_ctx->data;
-  void* p_data_end = (void*) (long) p_ctx->data_end;
-  void* p_mac_address;
-  // struct bpf_fib_lookup fib_params = {};
-
   // Adjust space to the left.
   bpf_xdp_adjust_head(p_ctx, (int32_t) -GTP_ENCAPSULATED_SIZE);
 
-  // Packet buffer changed, all pointers need to be recomputed
-  p_data     = (void*) (long) p_ctx->data;
-  p_data_end = (void*) (long) p_ctx->data_end;
+  void* p_data_end = (void*) (long) p_ctx->data_end;
 
   /*
   |----------------------------------------------------------------|
   |----------------------- Update ETH header ----------------------|
   |----------------------------------------------------------------|
   */
-  p_eth = p_data;
+  struct ethhdr* p_eth = (void*) (long) p_ctx->data;
   if ((void*) (p_eth + 1) > p_data_end) {
     bpf_debug("Invalid pointer\n");
     return XDP_DROP;
   }
 
-  struct ethhdr* p_orig_eth = p_data + GTP_ENCAPSULATED_SIZE;
+  struct ethhdr* p_orig_eth = p_eth + GTP_ENCAPSULATED_SIZE;
   if ((void*) (p_orig_eth + 1) > p_data_end) {
     return XDP_DROP;
   }
 
-  memcpy(p_eth, p_orig_eth, sizeof(*p_eth));
+  __builtin_memcpy(p_eth, p_orig_eth, sizeof(*p_eth));
 
   /*
   |----------------------------------------------------------------|
   |-------------------------- Add IP header -----------------------|
   |----------------------------------------------------------------|
   */
-  p_ip = (void*) (p_eth + 1);
+  struct iphdr* p_ip = (void*) (p_eth + 1);
   if ((void*) (p_ip + 1) > p_data_end) {
     return XDP_DROP;
   }
@@ -122,11 +108,15 @@ static u32 create_outer_header_gtpu_ipv4(
   p_ip->ttl      = 64;
   p_ip->protocol = IPPROTO_UDP;
   p_ip->check    = 0;
-  map_element    = bpf_map_lookup_elem(&m_upf_interfaces, &reference);
+
+  e_reference_point reference = N3_INTERFACE;
+  struct s_interface* map_element    = bpf_map_lookup_elem(&m_upf_interfaces, &reference);
+  
   if (!map_element) {
     bpf_debug("N3 Interface NOT Found!\n");
     return XDP_DROP;
   }
+
   p_ip->saddr = map_element->ipv4_address;
   bpf_debug(
       "Map Values: IP:%d, port:%d\n", map_element->ipv4_address,
@@ -163,14 +153,14 @@ static u32 create_outer_header_gtpu_ipv4(
       p_eth->h_dest[2]);
   bpf_debug("%x:%x:%x\n", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
 
-  p_mac_address = bpf_map_lookup_elem(&m_arp_table, &p_ip->daddr);
+  void* p_mac_address = bpf_map_lookup_elem(&m_arp_table, &p_ip->daddr);
   if (!p_mac_address) {
     bpf_debug("MAC address not found!!\n");
     return XDP_DROP;
   }
 
   // swap_src_dst_mac(p_data);
-  memcpy(p_eth->h_dest, p_mac_address, sizeof(p_eth->h_dest));
+  __builtin_memcpy(p_eth->h_dest, p_mac_address, sizeof(p_eth->h_dest));
 
   bpf_debug(
       "Destination MAC:%x:%x:%x:", p_eth->h_dest[0], p_eth->h_dest[1],
@@ -187,7 +177,7 @@ static u32 create_outer_header_gtpu_ipv4(
   }
 
   u8 flags = GTP_EXT_FLAGS;
-  memcpy(p_gtpuh, &flags, sizeof(u8));
+  __builtin_memcpy(p_gtpuh, &flags, sizeof(u8));
   p_gtpuh->message_type   = GTPU_G_PDU;
   p_gtpuh->message_length = htons(
       ntohs(p_inner_ip->tot_len) +
@@ -344,10 +334,10 @@ static u32 pfcp_far_apply(
 static u32 pfcp_pdr_match_pdi_access(
     struct xdp_md* p_ctx, pfcp_pdr_t_* p_pdr, struct iphdr* p_iph,
     teid_t_ teid) {
-  if (!p_iph) {
-    bpf_debug("IP header is NULL!!");
-    return 0;
-  }
+  // if (!p_iph) {
+  //   bpf_debug("IP header is NULL!!");
+  //   return 0;
+  // }
 
   // clang-format off
   if(p_pdr->outer_header_removal.outer_header_removal_description != OUTER_HEADER_REMOVAL_GTPU_UDP_IPV4
@@ -364,13 +354,13 @@ static u32 pfcp_pdr_match_pdi_access(
         bpf_debug("TEID: %d", p_pdr->pdi.fteid.teid);
         // bpf_debug("IPv4: %d", p_iph->saddr);
         bpf_debug("IPv4: %d", p_pdr->pdi.ue_ip_address.ipv4_address);
-        return 1;
+        return XDP_DROP;
     }
   // clang-format on
 
   // All the attributes were matched.
   bpf_debug("All atrributes were matched!!");
-  return 0;
+  return XDP_PASS;
 }
 
 /*****************************************************************************************************************/
@@ -385,10 +375,10 @@ static u32 pfcp_pdr_match_pdi_access(
  */
 static u32 pfcp_pdr_match_pdi_downlink(
     pfcp_pdr_t_* p_pdr, struct iphdr* p_iph) {
-  if (!p_iph) {
-    bpf_debug("IP header is NULL!\n");
-    return 0;
-  }
+  // if (!p_iph) {
+  //   bpf_debug("IP header is NULL!\n");
+  //   return 0;
+  // }
 
   // clang-format off
   if(p_pdr->outer_header_removal.outer_header_removal_description != OUTER_HEADER_REMOVAL_UDP_IPV4
@@ -406,13 +396,13 @@ static u32 pfcp_pdr_match_pdi_downlink(
         // bpf_debug("TEID: %d\n", p_pdr->pdi.fteid.teid);
         bpf_debug("IPv4: %d\n", p_iph->daddr);
         bpf_debug("IPv4: %d\n", p_pdr->pdi.ue_ip_address.ipv4_address);
-        return 1;
+        return XDP_DROP;
     }
   // clang-format on
 
   // All the attributes were matched.
   bpf_debug("All atrributes were matched!\n");
-  return 0;
+  return XDP_PASS;
 }
 
 /*****************************************************************************************************************/
@@ -430,58 +420,54 @@ static u32 pfcp_pdr_match_pdi_downlink(
  * @return u32
  */
 static u32 pfcp_pdr_lookup_uplink(struct xdp_md* p_ctx) {
-  pfcp_pdr_t_* p_pdr;
-  pfcp_far_t_* p_far;
-  struct gtpuhdr* p_gtpuh;
-  u64 offset;
-  teid_t_ teid;
-  // seid_t_ seid;
-  // u32 index = 0;
-
-  // u32 i;
   u32 i = 0;
-
   void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
 
-  offset = sizeof(struct ethhdr) + sizeof(struct iphdr) +
-           sizeof(struct udphdr) + sizeof(struct gtpuhdr);
+  u64 offset = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr);
 
-  if (p_data + offset > p_data_end) {
+  if (p_data + offset + sizeof(struct gtpuhdr) > p_data_end) {
     bpf_debug("Invalid GTP packet!");
-    return XDP_PASS;
+    return XDP_DROP; //XDP_PASS;
   }
 
   // Get GTP base address.
-  p_gtpuh = p_data + sizeof(struct ethhdr) + sizeof(struct iphdr) +
-            sizeof(struct udphdr);
+  struct gtpuhdr* p_gtpuh = p_data + offset;
 
-  // We have already assumed that the packet is a GPDU.
-  u8* p_iph = (u8*) p_gtpuh + GTPV1U_MSG_HEADER_MIN_SIZE;
-
-  teid = htons(p_gtpuh->teid);
+  teid_t_ teid = htons(p_gtpuh->teid);
   bpf_debug("GTP GPDU TEID %d with IPv4 payload received\n", teid);
 
-  p_pdr = bpf_map_lookup_elem(&m_teid_pdr, &teid);
+  pfcp_pdr_t_* p_pdr = bpf_map_lookup_elem(&m_teid_pdr, &teid);
 
   if (!p_pdr) {
     bpf_debug("Error - unsync teid->pdrs map.\n");
     return XDP_DROP;
   }
 
-  // For each PDR, check parameters.
-  if (pfcp_pdr_match_pdi_access(
-          p_ctx, &p_pdr[i], (struct iphdr*) p_iph, teid) == 0) {
-    bpf_debug(
-        "PDR associated with teid %d found! PDR id is %d\n", teid,
-        p_pdr->pdr_id.rule_id);
+  // We have already assumed that the packet is a GPDU.
+  struct iphdr* p_iph = (struct iphdr*)((u8*)p_gtpuh + GTPV1U_MSG_HEADER_MIN_SIZE);
 
-    // Lets apply the forwarding actions rule.
-    p_far = bpf_map_lookup_elem(&m_fars, &p_pdr->far_id.far_id);
-    return pfcp_far_apply(p_ctx, p_far, UPLINK);
+  // Check if the IPv4 header extends beyond the data end.
+  if ((void*) (p_iph + 1) > p_data_end) {
+    bpf_debug("Invalid IPv4 Packet\n");
+    return XDP_DROP;
   }
 
-  return XDP_PASS;
+  // For each PDR, check parameters.
+  pfcp_pdr_match_pdi_access(p_ctx, &p_pdr[i], p_iph, teid);
+  bpf_debug(
+      "PDR associated with teid %d found! PDR id is %d\n", teid,
+      p_pdr->pdr_id.rule_id);
+
+  // Lets apply the forwarding actions rule.
+  pfcp_far_t_* p_far = bpf_map_lookup_elem(&m_fars, &p_pdr->far_id.far_id);
+  if (p_far) {
+    return pfcp_far_apply(p_ctx, p_far, UPLINK);
+  }  
+  
+  bpf_debug(
+    "FAR was NOT Found\n");
+  return XDP_DROP; //XDP_PASS;
 }
 
 /*****************************************************************************************************************/
@@ -499,33 +485,28 @@ static u32 pfcp_pdr_lookup_uplink(struct xdp_md* p_ctx) {
  * @return u32
  */
 static u32 pfcp_pdr_lookup_downlink(struct xdp_md* p_ctx) {
-  pfcp_pdr_t_* p_pdr;
-  pfcp_far_t_* p_far;
-  struct iphdr* p_iph;
-  u64 offset;
-  u32 dest_ip;
-  // seid_t_ seid;
-  // u32 index = 0;
-  // u32 i;
   u32 i = 0;
-
   void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
-
-  offset = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr);
-
-  if (p_data + offset > p_data_end) {
+  
+  if (p_data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) > p_data_end) {
     bpf_debug("Invalid GTP packet!\n");
-    return XDP_PASS;
+    return XDP_DROP; //XDP_PASS;
   }
 
   // Get GTP base address.
-  p_iph = p_data + sizeof(struct ethhdr);
+  struct iphdr* p_iph = p_data + sizeof(struct ethhdr);
+  
+  // Check if the IPv4 header extends beyond the data end.
+  if ((void*) (p_iph + 1) > p_data_end) {
+    bpf_debug("Invalid IPv4 Packet\n");
+    return XDP_DROP;
+  }
 
-  dest_ip = p_iph->daddr;
+  u32 dest_ip = p_iph->daddr;
   bpf_debug("Destination IP %d in IPv4 payload received\n", dest_ip);
 
-  p_pdr = bpf_map_lookup_elem(&m_ueip_pdr, &dest_ip);
+  pfcp_pdr_t_* p_pdr = bpf_map_lookup_elem(&m_ueip_pdr, &dest_ip);
 
   if (!p_pdr) {
     bpf_debug("Error - unsync teid->pdrs map.\n");
@@ -533,18 +514,22 @@ static u32 pfcp_pdr_lookup_downlink(struct xdp_md* p_ctx) {
   }
 
   // For each PDR, check parameters.
-  if (pfcp_pdr_match_pdi_downlink(&p_pdr[i], (struct iphdr*) p_iph) == 0) {
-    // Lets apply the forwarding actions rule.
-    p_far = bpf_map_lookup_elem(&m_fars, &p_pdr->far_id.far_id);
+  pfcp_pdr_match_pdi_downlink(&p_pdr[i], p_iph);
+
+  // Lets apply the forwarding actions rule.
+  pfcp_far_t_* p_far = bpf_map_lookup_elem(&m_fars, &p_pdr->far_id.far_id);
+
+   if (p_far) {
     bpf_debug(
-        "PDR associated with UP IP %d found! PDR id:%d and FAR id:%d\n",
-        htonl(p_iph->daddr), p_pdr->pdr_id.rule_id, p_pdr->far_id.far_id);
+      "PDR associated with UP IP %d found! PDR id:%d and FAR id:%d\n",
+      htonl(p_iph->daddr), p_pdr->pdr_id.rule_id, p_pdr->far_id.far_id);
     return pfcp_far_apply(p_ctx, p_far, DOWNLINK);
-  }
+   }
 
-  return XDP_PASS;
+   bpf_debug(
+      "FAR was NOT Found\n"); 
+  return XDP_DROP; //XDP_PASS;
 }
-
 /*****************************************************************************************************************/
 
 SEC("xdp_uplink_entry_point")

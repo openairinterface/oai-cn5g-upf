@@ -89,7 +89,7 @@ static u32 gtp_handle(
   if ((void*) ((struct gtpu_extn_pdu_session_container*) (p_gtpuh + 1) + 1) >
       (void*) (long) p_ctx->data_end) {
     bpf_debug("Invalid IPv4 Inner Header\n");
-    return XDP_ABORTED;
+    return XDP_DROP;
   }
 
   // Jump to session context.
@@ -162,7 +162,7 @@ static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
       // Check if the UDP header extends beyond the data end.
       if ((void*) (udph + 1) > p_data_end) {
         bpf_debug("Invalid UDP packet\n");
-        return XDP_ABORTED;
+        return XDP_DROP;
       }
       return udp_handle(p_ctx, udph, ip_src, ip_dest);
     }
@@ -213,7 +213,7 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
       // Check if the IP header extends beyond the data end.
       if ((void*) (iph + 1) > p_data_end) {
         bpf_debug("Invalid IPv4 Packet\n");
-        return XDP_ABORTED;
+        return XDP_DROP;
       }
       return ipv4_handle(p_ctx, iph);
     }

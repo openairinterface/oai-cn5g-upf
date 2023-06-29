@@ -61,25 +61,9 @@ static u32 create_outer_header_gtpu_ipv4(
   bpf_debug("Create Outer Header GTPU_IPv4\n");
   bpf_debug("Original Packet: Data/UDP/IP/ETH\n");
 
-  // struct ethhdr* p_eth;
-  // struct iphdr* p_ip;
-  // struct s_interface* map_element;
-  // e_reference_point reference = N3_INTERFACE;
-
-  // __builtin_memset(&p_eth, 0, sizeof(p_eth));
-  // __builtin_memset(&p_ip, 0, sizeof(p_ip));
-  // __builtin_memset(&map_element, 0, sizeof(map_element));
-
-  // void* p_data     = (void*) (long) p_ctx->data;
-  // void* p_data_end = (void*) (long) p_ctx->data_end;
-  // void* p_mac_address;
-  // // struct bpf_fib_lookup fib_params = {};
-
   // Adjust space to the left.
   bpf_xdp_adjust_head(p_ctx, (int32_t) -GTP_ENCAPSULATED_SIZE);
 
-  // Packet buffer changed, all pointers need to be recomputed
-  //void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
 
   /*
@@ -416,13 +400,6 @@ SEC("xdp_far")
 int far_entry_point(struct xdp_md* p_ctx) {
   bpf_debug("==========< FAR CONTEXT >==========\n");
  
-  struct ethhdr* ethh = (void*) (long) p_ctx->data;
-
-  if ((void*) (ethh + 1) > (void*) (long) p_ctx->data_end) {
-    bpf_debug("Invalid Ethernet header\n");
-    return XDP_DROP;
-  }
-
   u32 key = 0;
   pfcp_far_t_* p_far = bpf_map_lookup_elem(&m_far, &key);
 
