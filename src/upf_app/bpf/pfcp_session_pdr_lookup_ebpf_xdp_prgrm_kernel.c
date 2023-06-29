@@ -23,15 +23,15 @@
 
 /*****************************************************************************************************************/
 // TODO: Put dummy in test folder.
-/**
- * WARNING: Redirect require an XDP bpf_prog loaded on the TX device.
- */
-SEC("xdp_redirect_dummy")
-int xdp_redirect_gtpu(struct xdp_md* p_ctx) {
-  // PASS.
-  bpf_debug("Redirecting packets\n");
-  return XDP_PASS;
-}
+// /**
+//  * WARNING: Redirect require an XDP bpf_prog loaded on the TX device.
+//  */
+// SEC("xdp_redirect_dummy")
+// int xdp_redirect_gtpu(struct xdp_md* p_ctx) {
+//   // PASS.
+//   bpf_debug("Redirecting packets\n");
+//   return XDP_PASS;
+// }
 
 /*****************************************************************************************************************/
 /**
@@ -546,22 +546,18 @@ static u32 pfcp_pdr_lookup_downlink(struct xdp_md* p_ctx) {
 }
 
 /*****************************************************************************************************************/
-// Uplink entry point.
+
 SEC("xdp_uplink_entry_point")
 int uplink_entry_point(struct xdp_md* p_ctx) {
-  bpf_debug("XDP SESSION CONTEXT - UPLINK\n");
-  u32 action = pfcp_pdr_lookup_uplink(p_ctx);
-  return xdp_stats_record_action(p_ctx, action);
+  bpf_debug("==========< SESSION PDR LOOKUP CONTEXT - UPLINK >==========\n");
+  return xdp_stats_record_action(p_ctx, pfcp_pdr_lookup_uplink(p_ctx));
 }
 
-// Downlink entry point.
 SEC("xdp_downlink_entry_point")
 int downlink_entry_point(struct xdp_md* p_ctx) {
-  bpf_debug("XDP SESSION CONTEXT - DOWNLINK\n");
-  u32 action = pfcp_pdr_lookup_downlink(p_ctx);
-  return xdp_stats_record_action(p_ctx, action);
+  bpf_debug("==========< SESSION PDR LOOKUP CONTEXT - DOWNLINK >==========\n");
+  return xdp_stats_record_action(p_ctx, pfcp_pdr_lookup_downlink(p_ctx));
 }
 
-// For printk.
 char _license[] SEC("license") = "GPL";
 /*****************************************************************************************************************/
