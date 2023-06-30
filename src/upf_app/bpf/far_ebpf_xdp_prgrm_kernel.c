@@ -225,12 +225,17 @@ static u32 create_outer_header_gtpu_ipv4(
  */
 
 static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
-  struct ethhdr* p_eth = (void*) (long) p_ctx->data;
+  void* p_data         = (void*) (long) p_ctx->data;
   void* p_data_end     = (void*) (long) p_ctx->data_end;
-  
+  struct ethhdr* p_eth = p_data;
   // TODO dupl
   // TODO nocp
   // TODO buff
+
+  if ((void*) (p_eth + 1) > p_data_end) {
+    bpf_debug("Invalid pointer\n");
+    return XDP_DROP;
+  }
 
   // Check if it is a forward action.
   if (!p_far) {
@@ -254,9 +259,10 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
     // Redirect to data network.
     bpf_debug("Destination is to INTERFACE_VALUE_CORE\n");
     bpf_debug("GTP Header Removal ...\n");
-    struct ethhdr* p_new_eth = p_eth + GTP_ENCAPSULATED_SIZE;
+    struct ethhdr* p_new_eth = p_data + GTP_ENCAPSULATED_SIZE;
 
     if ((void*) (p_new_eth + 1) > p_data_end) {
+      bpf_debug("+++++++++++++++++++++++++++++++++++++++++\n");
       return XDP_DROP;
     }
     
