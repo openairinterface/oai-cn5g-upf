@@ -202,13 +202,14 @@ upf:
   support_features:
     enable_bpf_datapath: no    # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
     enable_snat: yes           # If "on": Source natting is done for UE, DEFAULT= off
-  nssai:
+  upf_info:
     - sst: 1
-      sd: 0xFFFFFF
+      sd: 123
       dnnList:
         - dnn: oai
+        - dnn: default
     - sst: 1
-      sd: 1
+      sd: 0xFFFFFF
       dnnList:
         - dnn: oai.ipv4
 
@@ -226,4 +227,3 @@ dnns:
   - dnn: "ims"
     pdu_session_type: "IPV4V6"
     ipv4_pool: "14.1.1.2 - 14.1.1.253"
-

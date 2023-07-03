@@ -177,9 +177,10 @@ int main(int argc, char** argv) {
       return 1;
     }
     upf_cfg_yaml->pre_process();
-    upf_cfg_yaml->display();
     // Convert from YAML to internal structure
     upf_cfg_yaml->to_upf_config(upf_cfg);
+    upf_cfg_yaml->display();
+
   }
 
   // upf_cfg.load(Options::getlibconfigConfig());

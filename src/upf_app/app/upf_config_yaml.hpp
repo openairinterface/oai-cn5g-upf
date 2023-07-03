@@ -32,6 +32,8 @@ constexpr auto UPF_CONFIG_UPF_NAME               = "upf_name";
 constexpr auto UPF_CONFIG_UPF_NAME_LABEL         = "UPF Name";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES       = "support_features";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_LABEL = "Support Features";
+constexpr auto UPF_CONFIG_UPF_INFO_LABEL         = "UPF INFO";
+constexpr auto UPF_CONFIG_UPF_INFO               = "upf_info";
 
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF = "enable_bpf_datapath";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF_LABEL =
@@ -46,7 +48,7 @@ class upf_support_features : public config_type {
   option_config_value m_enable_snat{};
 
  public:
-  explicit upf_support_features();
+  explicit upf_support_features(bool enable_bpf_datapath, bool enable_snat);
 
   void from_yaml(const YAML::Node& node) override;
 
@@ -55,22 +57,46 @@ class upf_support_features : public config_type {
   [[nodiscard]] bool get_option_enable_snat() const;
 };
 
+class upf_info_config : public config_type {
+ private:
+  int_config_value m_sd;
+  int_config_value m_sst;
+  snssai_t m_snssai;
+  string_config_value m_dnn;
+  std::vector<snssai_upf_info_item_t> m_snssai_item_list;
+
+ public:
+  explicit upf_info_config(
+      const snssai_t& snssai, const std::vector<std::string>& dnn);
+
+  void from_yaml(const YAML::Node& node) override;
+
+  [[nodiscard]] std::string to_string(const std::string& indent) const override;
+
+  void validate() override;
+
+  [[nodiscard]] const snssai_t& get_snssai() const;
+
+  std::vector<snssai_upf_info_item_t>& get_snssai_upf_info_item();
+};
+
 class upf : public nf {
  private:
   int_config_value m_instance_id;
   string_config_value m_pid_directory;
   string_config_value m_upf_name;
   upf_support_features m_upf_support_features;
+  upf_info_config m_upf_info_config;
 
  public:
   explicit upf(
       const std::string& name, const std::string& host,
       const sbi_interface& sbi);
-  
-    explicit upf(
-      const std::string& name, const std::string& host,
-      const sbi_interface& sbi, const std::string& n6);
-      
+
+  // explicit upf(
+  //   const std::string& name, const std::string& host,
+  //   const sbi_interface& sbi, const std::string& n6);
+
   void from_yaml(const YAML::Node& node) override;
 
   [[nodiscard]] std::string to_string(const std::string& indent) const override;
@@ -78,6 +104,7 @@ class upf : public nf {
   [[nodiscard]] const std::string get_pid_directory() const;
   [[nodiscard]] const std::string get_upf_name() const;
   upf_support_features get_support_features() const;
+  upf_info_config get_upf_info() const;
 };
 
 class upf_config_yaml : public config {
