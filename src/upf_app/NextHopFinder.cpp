@@ -43,9 +43,6 @@ u_int32_t NextHopFinder::retrieveNextHopIP(uint32_t destination_ip) {
         throw std::runtime_error("The Next Hop IPv4 WAS NOT Retrieved");
     }
     
-    addr.s_addr = destination_ip;
-    Logger::upf_app().debug("Destination IP = %s", inet_ntoa(addr));
-    
     return next_hop_ip;
 }
 
