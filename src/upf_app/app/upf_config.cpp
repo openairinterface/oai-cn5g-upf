@@ -581,7 +581,7 @@ int upf_config::load(const string& config_file) {
       fqdn::resolve(nrf_fqdn, nrf_address, nrf_port, addr_type);
       if (addr_type != 0) {  // IPv6: TODO
         throw("DO NOT SUPPORT IPV6 ADDR FOR NRF!");
-      } else {               // IPv4
+      } else {  // IPv4
         IPV4_STR_ADDR_TO_INADDR(
             util::trim(nrf_address).c_str(), nrf_ipv4_addr,
             "BAD IPv4 ADDRESS FORMAT FOR NRF !");

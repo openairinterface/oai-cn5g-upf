@@ -49,7 +49,7 @@
 constexpr auto UPF_CONFIG_OPTION_YES_STR = "Yes";
 constexpr auto UPF_CONFIG_OPTION_NO_STR  = "No";
 const snssai_t DEFAULT_SNSSAI{1, 0xFFFFFF};
-const std::vector<std::string> DEFAULT_DNN_LIST  = {"default"};
+const std::vector<std::string> DEFAULT_DNN_LIST = {"default"};
 
 #define UPF_CONFIG_STRING_UPF_CONFIG "UPF"
 #define UPF_CONFIG_STRING_PID_DIRECTORY "PID_DIRECTORY"

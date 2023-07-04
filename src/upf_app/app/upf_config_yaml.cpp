@@ -77,7 +77,6 @@ upf_info_config::upf_info_config(
   // narrowing conversion, but should be okay because max value is 16777215
   m_sd  = int_config_value("SD", m_snssai.sd);
   m_sst = int_config_value("SST", m_snssai.sst);
-  m_dnn = string_config_value("DNN List", dnn[0]);
 
   m_sd.set_validation_interval(0, 16777215);
   m_sst.set_validation_interval(0, 255);
@@ -131,8 +130,8 @@ std::string upf_info_config::to_string(const std::string& indent) const {
             BASE_FORMATTER, OUTER_LIST_ELEM, m_sd.get_config_name(),
             inner_width, std::to_string(snssai_item.snssai.sd)));
 
-    out.append(indent + indent).append(
-        fmt::format("{} {}:\n", INNER_LIST_ELEM, "DNN List"));
+    out.append(indent + indent)
+        .append(fmt::format("{} {}:\n", INNER_LIST_ELEM, "DNN List"));
     inner_indent = add_indent(indent + indent);
     inner_width  = get_inner_width(inner_indent.length());
 
@@ -158,8 +157,9 @@ const snssai_t& upf_info_config::get_snssai() const {
 }
 //------------------------------------------------------------------------------
 upf::upf(
-    const std::string& name, const std::string& host, const sbi_interface& sbi)
-    : nf(name, host, sbi),
+    const std::string& name, const std::string& host, const sbi_interface& sbi,
+    const local_interface& local)
+    : nf(name, host, sbi, local),
       m_upf_support_features(false, false),
       m_upf_info_config(DEFAULT_SNSSAI, DEFAULT_DNN_LIST) {}
 
@@ -286,7 +286,8 @@ upf_config_yaml::upf_config_yaml(
   // TODO: Still we need to add default NFs even we don't use this in all_in_one
   // use case
   auto m_upf = std::make_shared<upf>(
-      "UPF", "oai-upf", sbi_interface("SBI", "oai-upf", 80, "v1", "eth0"));
+      "UPF", "oai-upf", sbi_interface("SBI", "oai-upf", 80, "v1", "eth0"),
+      local_interface("N4", "oai-smf", 8805, "eth0"));
   add_nf(oai::config::UPF_CONFIG_NAME, m_upf);
 
   auto m_smf = std::make_shared<nf>(

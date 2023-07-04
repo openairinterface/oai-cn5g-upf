@@ -63,6 +63,7 @@ class upf_info_config : public config_type {
   int_config_value m_sst;
   snssai_t m_snssai;
   string_config_value m_dnn;
+  std::vector<interface_upf_info_item_t> m_interface_item_list;
   std::vector<snssai_upf_info_item_t> m_snssai_item_list;
 
  public:
@@ -91,11 +92,7 @@ class upf : public nf {
  public:
   explicit upf(
       const std::string& name, const std::string& host,
-      const sbi_interface& sbi);
-
-  // explicit upf(
-  //   const std::string& name, const std::string& host,
-  //   const sbi_interface& sbi, const std::string& n6);
+      const sbi_interface& sbi, const local_interface& local);
 
   void from_yaml(const YAML::Node& node) override;
 
