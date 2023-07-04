@@ -21,6 +21,7 @@ add_library(UPF_XDP STATIC
   UserPlaneComponent.cpp
   Configuration.cpp
   SignalHandler.cpp
+  NextHopFinder.cpp
   SessionProgramManager.cpp
   SessionManager.cpp
   SessionPrograms.cpp

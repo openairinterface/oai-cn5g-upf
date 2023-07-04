@@ -262,7 +262,6 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
     struct ethhdr* p_new_eth = p_data + GTP_ENCAPSULATED_SIZE;
 
     if ((void*) (p_new_eth + 1) > p_data_end) {
-      bpf_debug("+++++++++++++++++++++++++++++++++++++++++\n");
       return XDP_DROP;
     }
     

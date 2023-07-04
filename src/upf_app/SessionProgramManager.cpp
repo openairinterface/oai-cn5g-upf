@@ -1,7 +1,7 @@
 #include "SessionProgramManager.h"
 #include <far_ebpf_xdp_prgrm_user.h>
 #include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h>
-#include <SessionPrograms.h>
+#include "SessionPrograms.h"
 #include <pfcp_session_lookup_ebpf_xdp_prgrm_user.h>
 #include <UserPlaneComponent.h>
 #include <net/if.h>  // if_nametoindex
@@ -12,6 +12,7 @@
 #include <types.h>
 #include <wrappers/BPFMap.hpp>
 #include "logger.hpp"
+#include "NextHopFinder.hpp"
 
 #include <arpa/inet.h>
 
@@ -121,6 +122,14 @@ void SessionProgramManager::createPipeline(
   // it.
   mSessionProgramsMap[seid] =
       std::make_shared<SessionPrograms>(key, pFARProgram);
+  
+  NextHopFinder finder; 
+  uint32_t ipnexthop = finder.retrieveNextHopIP(ueIpAddress);
+ 
+  auto pMacAddress = finder.retrieveNextHopMAC(ipnexthop);
+  ipnexthop = (is_little_endian()) ? htonl(ipnexthop) : ipnexthop;
+  pFARProgram->getArpTableMap()->update(ipnexthop, pMacAddress->ether_addr_octet, BPF_ANY);
+  
 }
 
 /*****************************************************************************************************************/

@@ -232,7 +232,7 @@ void ProgramLifeCycle<BPFSkeletonType>::tearDown() {
 
   if (mState != ProgramState::IDLE) {
     if (mState == LINKED) {
-      Logger::upf_app().debug("There are some program in LINKED state.");
+      Logger::upf_app().debug("There are some programs in LINKED state");
       bpf_object__for_each_program(prog, mpSkeleton->obj) {
         // Get section name.
         section = std::string(bpf_program__section_name(prog));
