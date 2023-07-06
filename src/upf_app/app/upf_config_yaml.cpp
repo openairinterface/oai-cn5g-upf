@@ -158,13 +158,20 @@ const snssai_t& upf_info_config::get_snssai() const {
 //------------------------------------------------------------------------------
 upf::upf(
     const std::string& name, const std::string& host, const sbi_interface& sbi,
-    const local_interface& local)
+    const std::map<std::string, upf_interface_config>& interfaces)
     : nf(name, host, sbi),
       m_upf_support_features(false, false),
-      m_upf_info_config(DEFAULT_SNSSAI, DEFAULT_DNN_LIST) {}
+      m_upf_info_config(DEFAULT_SNSSAI, DEFAULT_DNN_LIST),
+      m_interfaces(interfaces) {}
 
 void upf::from_yaml(const YAML::Node& node) {
   nf::from_yaml(node);
+  create_or_update_interface(
+      UPF_CONFIG_N3_LABEL, node, upf_config_yaml::get_default_n3_interface());
+  create_or_update_interface(
+      UPF_CONFIG_N4_LABEL, node, upf_config_yaml::get_default_n4_interface());
+  create_or_update_interface(
+      UPF_CONFIG_N6_LABEL, node, upf_config_yaml::get_default_n6_interface());
 
   // Load UPF specified parameter
   for (const auto& elem : node) {
@@ -196,37 +203,36 @@ void upf::from_yaml(const YAML::Node& node) {
 
 //------------------------------------------------------------------------------
 std::string upf::to_string(const std::string& indent) const {
-  std::string out;
-  std::string inner_indent = indent + indent;
-  unsigned int inner_width = get_inner_width(inner_indent.length());
+  std::string out          = nf::to_string("");
+  unsigned int inner_width = get_inner_width(indent.length());
+  std::string inner_indent = add_indent(indent);
 
-  out.append(indent).append(nf::to_string(indent));
+  for (const auto& iface : m_interfaces) {
+    out.append(indent).append(fmt::format(
+        "{} {}:\n", OUTER_LIST_ELEM, iface.second.get_config_name()));
+    out.append(iface.second.to_string(inner_indent));
+  }
 
-  out.append(inner_indent)
-      .append(fmt::format(
-          BASE_FORMATTER, OUTER_LIST_ELEM, UPF_CONFIG_INSTANCE_ID_LABEL,
-          inner_width, m_instance_id.get_value()));
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, OUTER_LIST_ELEM, UPF_CONFIG_INSTANCE_ID_LABEL,
+      inner_width, m_instance_id.get_value()));
 
-  out.append(inner_indent)
-      .append(fmt::format(
-          BASE_FORMATTER, OUTER_LIST_ELEM, UPF_CONFIG_PID_DIRECTORY_LABEL,
-          inner_width, m_pid_directory.get_value()));
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, OUTER_LIST_ELEM, UPF_CONFIG_PID_DIRECTORY_LABEL,
+      inner_width, m_pid_directory.get_value()));
 
-  out.append(inner_indent)
-      .append(fmt::format(
-          BASE_FORMATTER, OUTER_LIST_ELEM, UPF_CONFIG_UPF_NAME_LABEL,
-          inner_width, m_upf_name.get_value()));
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, OUTER_LIST_ELEM, UPF_CONFIG_UPF_NAME_LABEL, inner_width,
+      m_upf_name.get_value()));
 
-  out.append(inner_indent)
-      .append(fmt::format(
-          "{} {}\n", OUTER_LIST_ELEM, UPF_CONFIG_SUPPORT_FEATURES_LABEL));
-  out.append(m_upf_support_features.to_string(inner_indent + indent));
+  out.append(indent).append(fmt::format(
+      "{} {}:\n", OUTER_LIST_ELEM, UPF_CONFIG_SUPPORT_FEATURES_LABEL));
+  out.append(m_upf_support_features.to_string(inner_indent));
 
-  out.append(inner_indent)
-      .append(
-          fmt::format("{} {}\n", OUTER_LIST_ELEM, UPF_CONFIG_UPF_INFO_LABEL));
+  out.append(
+      fmt::format("{} {}\n", OUTER_LIST_ELEM, UPF_CONFIG_UPF_INFO_LABEL));
 
-  out.append(m_upf_info_config.to_string(inner_indent + indent));
+  out.append(m_upf_info_config.to_string(inner_indent));
 
   return out;
 }
@@ -255,20 +261,48 @@ bool upf_support_features::get_option_enable_snat() const {
 }
 
 //------------------------------------------------------------------------------
-upf_support_features upf::get_support_features() const {
+const upf_support_features& upf::get_support_features() const {
   return m_upf_support_features;
 }
 
 //------------------------------------------------------------------------------
-upf_info_config upf::get_upf_info() const {
+const upf_info_config& upf::get_upf_info() const {
   return m_upf_info_config;
+}
+const std::map<std::string, upf_interface_config>& upf::get_interfaces() const {
+  return m_interfaces;
+}
+
+void upf::create_or_update_interface(
+    const std::string& iface_type, const YAML::Node& node,
+    const upf_interface_config& default_config) {
+  if (node[iface_type]) {
+    auto n3 = m_interfaces.find(iface_type);
+    if (n3 == m_interfaces.end()) {
+      // we use the default values as template, YAML only overwrites these
+      upf_interface_config new_cfg = default_config;
+      new_cfg.from_yaml(node[iface_type]);
+      m_interfaces.insert(std::make_pair(iface_type, new_cfg));
+    } else {
+      n3->second.from_yaml(node[iface_type]);
+    }
+  }
+}
+
+void upf::validate() {
+  nf::validate();
+  m_upf_support_features.validate();
+  for (auto& iface : m_interfaces) {
+    iface.second.validate();
+  }
 }
 
 //------------------------------------------------------------------------------
-std::vector<snssai_upf_info_item_t>&
-upf_info_config::get_snssai_upf_info_item() {
+const std::vector<snssai_upf_info_item_t>&
+upf_info_config::get_snssai_upf_info_item() const {
   return m_snssai_item_list;
 }
+
 //------------------------------------------------------------------------------
 upf_config_yaml::upf_config_yaml(
     const std::string& config_path, bool log_stdout, bool log_rot_file)
@@ -282,12 +316,22 @@ upf_config_yaml::upf_config_yaml(
       oai::config::NF_CONFIG_HTTP_NAME, oai::config::NF_LIST_CONFIG_NAME,
       oai::config::UPF_CONFIG_NAME};
 
+  m_nf_name = UPF_CONFIG_NAME;
+
   // TODO with NF_Type and switch
   // TODO: Still we need to add default NFs even we don't use this in all_in_one
   // use case
+  std::map<std::string, upf_interface_config> ifaces;
+  ifaces.insert(
+      std::make_pair(UPF_CONFIG_N3_LABEL, get_default_n3_interface()));
+  ifaces.insert(
+      std::make_pair(UPF_CONFIG_N4_LABEL, get_default_n4_interface()));
+  ifaces.insert(
+      std::make_pair(UPF_CONFIG_N6_LABEL, get_default_n6_interface()));
+
   auto m_upf = std::make_shared<upf>(
-      "UPF", "oai-upf", sbi_interface("SBI", "oai-upf", 80, "v1", "eth0"),
-      local_interface("N4", "oai-smf", 8805, "eth0"));
+      "UPF Configuration", "oai-upf",
+      sbi_interface("SBI", "oai-upf", 80, "v1", "eth0"), ifaces);
   add_nf(oai::config::UPF_CONFIG_NAME, m_upf);
 
   auto m_smf = std::make_shared<nf>(
@@ -342,6 +386,19 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
     Logger::upf_app().error(
         "%d, %d", snssai_item.snssai.sst, snssai_item.snssai.sd);
   }
+  // we set the local interfaces and also the UPF profile
+  for (const auto& iface : upf_local->get_interfaces()) {
+    if (iface.first == UPF_CONFIG_N3_LABEL) {
+      cfg.n3 = iface.second.to_interface_config();
+    } else if (iface.first == UPF_CONFIG_N6_LABEL) {
+      cfg.n6 = iface.second.to_interface_config();
+    } else if (iface.first == UPF_CONFIG_N4_LABEL) {
+      cfg.n4 = iface.second.to_interface_config();
+    }
+    cfg.upf_info.interface_upf_info_list.push_back(
+        iface.second.to_upf_info_item());
+  }
+
   if (get_nf(oai::config::NRF_CONFIG_NAME)) {
     cfg.nrf_addr.api_version = get_nf("nrf")->get_sbi().get_api_version();
     cfg.nrf_addr.uri_root    = get_nf(oai::config::NRF_CONFIG_NAME)->get_url();
@@ -352,4 +409,79 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
     cfg.smf_addr.uri_root    = get_nf(oai::config::SMF_CONFIG_NAME)->get_url();
   }
 }
+
+upf_interface_config upf_config_yaml::get_default_n3_interface() {
+  return upf_interface_config(
+      "N3", "oai-upf", 2152, "eth0", UPF_CONFIG_N3_LABEL, "access.oai.org");
+}
+
+upf_interface_config upf_config_yaml::get_default_n4_interface() {
+  return upf_interface_config(
+      "N4", "oai-upf", 8805, "eth0", UPF_CONFIG_N4_LABEL);
+}
+
+upf_interface_config upf_config_yaml::get_default_n6_interface() {
+  return upf_interface_config(
+      "N6", "oai-upf", 2152, "eth0", UPF_CONFIG_N6_LABEL, "core.oai.org");
+}
+
+upf_interface_config::upf_interface_config(
+    const std::string& name, const std::string& host, uint16_t port,
+    const std::string& if_name, const std::string& if_type)
+    : upf_interface_config(name, host, port, if_name, if_type, ""){};
+
+upf_interface_config::upf_interface_config(
+    const std::string& name, const std::string& host, uint16_t port,
+    const std::string& if_name, const std::string& if_type,
+    const std::string& nwi)
+    : local_interface(name, host, port, if_name) {
+  set_if_type(if_type);
+  m_nwi = string_config_value("Network Instance", nwi);
+}
+
+void upf_interface_config::from_yaml(const YAML::Node& node) {
+  local_interface::from_yaml(node);
+  if (node["nwi"]) {
+    m_nwi.from_yaml(node["nwi"]);
+  }
+}
+
+void upf_interface_config::set_if_type(const std::string& if_type) {
+  m_interface_type = string_config_value("Interface Type", if_type);
+}
+
+std::string upf_interface_config::to_string(const std::string& indent) const {
+  std::string out          = local_interface::to_string(indent);
+  unsigned int inner_width = get_inner_width(indent.length());
+
+  if (!m_nwi.get_value().empty()) {
+    out.append(indent).append(fmt::format(
+        BASE_FORMATTER, INNER_LIST_ELEM, m_nwi.get_config_name(), inner_width,
+        m_nwi.get_value()));
+  }
+  return out;
+}
+
+interface_upf_info_item_t upf_interface_config::to_upf_info_item() const {
+  interface_upf_info_item_t item{};
+  item.endpoint_fqdn  = m_host.get_value();
+  item.interface_type = m_interface_type.get_value();
+  item.ipv4_addresses = std::vector<struct in_addr>{m_addr4};
+  // TODO commented out because we should not send IPv6 to NRF if we do not
+  // support it
+  // item.ipv6_addresses = std::vector<struct in6_addr>{m_addr6};
+
+  return item;
+}
+interface_cfg_t upf_interface_config::to_interface_config() const {
+  // TODO this method is only temporary until we refactor the whole config
+  interface_cfg_t cfg;
+  cfg.addr4 = get_addr4();
+  cfg.addr6 = get_addr6();
+  cfg.mtu   = get_mtu();
+  cfg.port  = get_port();
+
+  return cfg;
+}
+
 }  // namespace oai::config
