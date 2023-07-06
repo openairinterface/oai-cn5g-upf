@@ -45,7 +45,7 @@
 //   void* p_mac_address;
 
 //   p_mac_address = bpf_map_lookup_elem(&m_arp_table, &p_ip->daddr);
-  
+
 //   if (!p_mac_address) {
 //     bpf_debug("MAC Address NOT Found!\n");
 //     return XDP_DROP;
@@ -110,8 +110,9 @@
 //   p_ip->check    = 0;
 
 //   e_reference_point reference = N3_INTERFACE;
-//   struct s_interface* map_element    = bpf_map_lookup_elem(&m_upf_interfaces, &reference);
-  
+//   struct s_interface* map_element    = bpf_map_lookup_elem(&m_upf_interfaces,
+//   &reference);
+
 //   if (!map_element) {
 //     bpf_debug("N3 Interface NOT Found!\n");
 //     return XDP_DROP;
@@ -151,7 +152,8 @@
 //   bpf_debug(
 //       "Destination MAC:%x:%x:%x:", p_eth->h_dest[0], p_eth->h_dest[1],
 //       p_eth->h_dest[2]);
-//   bpf_debug("%x:%x:%x\n", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
+//   bpf_debug("%x:%x:%x\n", p_eth->h_dest[3], p_eth->h_dest[4],
+//   p_eth->h_dest[5]);
 
 //   void* p_mac_address = bpf_map_lookup_elem(&m_arp_table, &p_ip->daddr);
 //   if (!p_mac_address) {
@@ -165,8 +167,8 @@
 //   bpf_debug(
 //       "Destination MAC:%x:%x:%x:", p_eth->h_dest[0], p_eth->h_dest[1],
 //       p_eth->h_dest[2]);
-//   bpf_debug("%x:%x:%x\n", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
-//   bpf_debug("Destination IP:%d, \t", p_ip->daddr);
+//   bpf_debug("%x:%x:%x\n", p_eth->h_dest[3], p_eth->h_dest[4],
+//   p_eth->h_dest[5]); bpf_debug("Destination IP:%d, \t", p_ip->daddr);
 //   bpf_debug(
 //       "Port:%d\n",
 //       p_far->forwarding_parameters.outer_header_creation.port_number);
@@ -182,18 +184,18 @@
 //   p_gtpuh->message_length = htons(
 //       ntohs(p_inner_ip->tot_len) +
 //       sizeof(struct gtpu_extn_pdu_session_container) + 4);
-//   p_gtpuh->teid       = p_far->forwarding_parameters.outer_header_creation.teid;
-//   p_gtpuh->sequence   = GTP_SEQ;
-//   p_gtpuh->pdu_number = GTP_PDU_NUMBER;
-//   p_gtpuh->next_ext_type = GTP_NEXT_EXT_TYPE;
+//   p_gtpuh->teid       =
+//   p_far->forwarding_parameters.outer_header_creation.teid; p_gtpuh->sequence
+//   = GTP_SEQ; p_gtpuh->pdu_number = GTP_PDU_NUMBER; p_gtpuh->next_ext_type =
+//   GTP_NEXT_EXT_TYPE;
 
 //   /*
 //   |----------------------------------------------------------------|
 //   |-------------------- Add GTP extension header ------------------|
 //   |----------------------------------------------------------------|
 //   */
-//   struct gtpu_extn_pdu_session_container* p_gtpu_ext_h = (void*) (p_gtpuh + 1);
-//   if ((void*) (p_gtpu_ext_h + 1) > p_data_end) {
+//   struct gtpu_extn_pdu_session_container* p_gtpu_ext_h = (void*) (p_gtpuh +
+//   1); if ((void*) (p_gtpu_ext_h + 1) > p_data_end) {
 //     return XDP_DROP;
 //   }
 
@@ -438,8 +440,6 @@ static u32 tail_call_next_prog(
   return 0;
 }
 
-
-
 /*****************************************************************************************************************/
 /**
  * @brief Lookup all PDRs based on teid.
@@ -455,15 +455,16 @@ static u32 tail_call_next_prog(
  * @return u32
  */
 static u32 pfcp_pdr_lookup_uplink(struct xdp_md* p_ctx) {
-  u32 i = 0;
+  u32 i            = 0;
   void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
 
-  u64 offset = sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr);
+  u64 offset =
+      sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr);
 
   if (p_data + offset + sizeof(struct gtpuhdr) > p_data_end) {
     bpf_debug("Invalid GTP packet!");
-    return XDP_DROP; //XDP_PASS;
+    return XDP_DROP;  // XDP_PASS;
   }
 
   // Get GTP base address.
@@ -480,7 +481,8 @@ static u32 pfcp_pdr_lookup_uplink(struct xdp_md* p_ctx) {
   }
 
   // We have already assumed that the packet is a GPDU.
-  struct iphdr* p_iph = (struct iphdr*)((u8*)p_gtpuh + GTPV1U_MSG_HEADER_MIN_SIZE);
+  struct iphdr* p_iph =
+      (struct iphdr*) ((u8*) p_gtpuh + GTPV1U_MSG_HEADER_MIN_SIZE);
 
   // Check if the IPv4 header extends beyond the data end.
   if ((void*) (p_iph + 1) > p_data_end) {
@@ -497,18 +499,16 @@ static u32 pfcp_pdr_lookup_uplink(struct xdp_md* p_ctx) {
   // Lets apply the forwarding actions rule.
   pfcp_far_t_* p_far = bpf_map_lookup_elem(&m_fars, &p_pdr->far_id.far_id);
   if (p_far) {
-    //return pfcp_far_apply(p_ctx, p_far, UPLINK);
+    // return pfcp_far_apply(p_ctx, p_far, UPLINK);
 
     // Jump to session context.
     tail_call_next_prog(p_ctx, teid, INTERFACE_VALUE_ACCESS, p_iph->saddr);
     bpf_debug("BPF tail call was not executed! teid %d\n", teid);
-  }  
-  
-  bpf_debug(
-    "FAR was NOT Found\n");
-  return XDP_DROP; //XDP_PASS;
-}
+  }
 
+  bpf_debug("FAR was NOT Found\n");
+  return XDP_DROP;  // XDP_PASS;
+}
 
 /*****************************************************************************************************************/
 /**
@@ -525,18 +525,20 @@ static u32 pfcp_pdr_lookup_uplink(struct xdp_md* p_ctx) {
  * @return u32
  */
 static u32 pfcp_pdr_lookup_downlink(struct xdp_md* p_ctx) {
-  u32 i = 0;
+  u32 i            = 0;
   void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
-  
-  if (p_data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) > p_data_end) {
+
+  if (p_data + sizeof(struct ethhdr) + sizeof(struct iphdr) +
+          sizeof(struct udphdr) >
+      p_data_end) {
     bpf_debug("Invalid GTP packet!\n");
-    return XDP_DROP; //XDP_PASS;
+    return XDP_DROP;  // XDP_PASS;
   }
 
   // Get GTP base address.
   struct iphdr* p_iph = p_data + sizeof(struct ethhdr);
-  
+
   // Check if the IPv4 header extends beyond the data end.
   if ((void*) (p_iph + 1) > p_data_end) {
     bpf_debug("Invalid IPv4 Packet\n");
@@ -559,20 +561,19 @@ static u32 pfcp_pdr_lookup_downlink(struct xdp_md* p_ctx) {
   // Lets apply the forwarding actions rule.
   pfcp_far_t_* p_far = bpf_map_lookup_elem(&m_fars, &p_pdr->far_id.far_id);
 
-   if (p_far) {
+  if (p_far) {
     bpf_debug(
-      "PDR associated with UP IP %d found! PDR id:%d and FAR id:%d\n",
-      htonl(p_iph->daddr), p_pdr->pdr_id.rule_id, p_pdr->far_id.far_id);
-    //return pfcp_far_apply(p_ctx, p_far, DOWNLINK);
+        "PDR associated with UP IP %d found! PDR id:%d and FAR id:%d\n",
+        htonl(p_iph->daddr), p_pdr->pdr_id.rule_id, p_pdr->far_id.far_id);
+    // return pfcp_far_apply(p_ctx, p_far, DOWNLINK);
 
     // Jump to session context.
     tail_call_next_prog(p_ctx, 0, INTERFACE_VALUE_CORE, p_iph->saddr);
     bpf_debug("BPF tail call was not executed!\n");
-   }
+  }
 
-   bpf_debug(
-      "FAR was NOT Found\n"); 
-  return XDP_DROP; //XDP_PASS;
+  bpf_debug("FAR was NOT Found\n");
+  return XDP_DROP;  // XDP_PASS;
 }
 /*****************************************************************************************************************/
 

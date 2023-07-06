@@ -18,12 +18,11 @@
 
 #define EMPTY_SLOT -1l
 
-
 /*****************************************************************************************************************/
 int is_little_endian() {
-    u32 value = 1;
-    u8* byte = (u8*) &value;
-    return (*byte == 1);
+  u32 value = 1;
+  u8* byte  = (u8*) &value;
+  return (*byte == 1);
 }
 
 /*****************************************************************************************************************/
@@ -62,15 +61,15 @@ void SessionProgramManager::createPipeline(
   __builtin_memset(&key, 0, sizeof(struct next_rule_prog_index_key));
 
   if (is_little_endian()) {
-    key.teid = htobe32(teid);
+    key.teid         = htobe32(teid);
     key.ipv4_address = htole32(ueIpAddress);
-    } else {
-      key.teid = htole32(teid);
-      key.ipv4_address = ueIpAddress;
-    }
+  } else {
+    key.teid         = htole32(teid);
+    key.ipv4_address = ueIpAddress;
+  }
 
   key.source_value = sourceInterface;
-    
+
   Logger::upf_app().debug("Instantiate a new FARProgram");
   std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
   pFARProgram->setup();
@@ -122,14 +121,14 @@ void SessionProgramManager::createPipeline(
   // it.
   mSessionProgramsMap[seid] =
       std::make_shared<SessionPrograms>(key, pFARProgram);
-  
-  NextHopFinder finder; 
+
+  NextHopFinder finder;
   uint32_t ipnexthop = finder.retrieveNextHopIP(ueIpAddress);
- 
+
   auto pMacAddress = finder.retrieveNextHopMAC(ipnexthop);
-  ipnexthop = (is_little_endian()) ? htonl(ipnexthop) : ipnexthop;
-  pFARProgram->getArpTableMap()->update(ipnexthop, pMacAddress->ether_addr_octet, BPF_ANY);
-  
+  ipnexthop        = (is_little_endian()) ? htonl(ipnexthop) : ipnexthop;
+  pFARProgram->getArpTableMap()->update(
+      ipnexthop, pMacAddress->ether_addr_octet, BPF_ANY);
 }
 
 /*****************************************************************************************************************/

@@ -17,7 +17,6 @@ extern upf_config upf_cfg;
 PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
     const std::string& gtpInterface, const std::string& udpInterface)
     : mGTPInterface(gtpInterface), mUDPInterface(udpInterface) {
-  
   mpLifeCycle = std::make_shared<PFCP_Session_LookupProgramLifeCycle>(
       pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__open,
       pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__load,

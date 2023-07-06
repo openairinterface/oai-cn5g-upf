@@ -45,7 +45,7 @@ static u32 update_dst_mac_address(struct iphdr* p_ip, struct ethhdr* p_eth) {
   void* p_mac_address;
 
   p_mac_address = bpf_map_lookup_elem(&m_arp_table, &p_ip->daddr);
-  
+
   if (!p_mac_address) {
     bpf_debug("MAC Address NOT Found!\n");
     return XDP_DROP;
@@ -110,8 +110,9 @@ static u32 create_outer_header_gtpu_ipv4(
   p_ip->check    = 0;
 
   e_reference_point reference = N3_INTERFACE;
-  struct s_interface* map_element    = bpf_map_lookup_elem(&m_upf_interfaces, &reference);
-  
+  struct s_interface* map_element =
+      bpf_map_lookup_elem(&m_upf_interfaces, &reference);
+
   if (!map_element) {
     bpf_debug("N3 Interface NOT Found!\n");
     return XDP_DROP;
@@ -214,7 +215,6 @@ static u32 create_outer_header_gtpu_ipv4(
   bpf_debug("GTPU header were pushed!\n");
 }
 
-
 /*****************************************************************************************************************/
 /**
  * @brief Apply forwarding action rules.
@@ -245,16 +245,16 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
 
   u8 dest_interface =
       p_far->forwarding_parameters.destination_interface.interface_value;
-  
+
   u16 outer_header_creation = p_far->forwarding_parameters.outer_header_creation
-                              .outer_header_creation_description;
-  
+                                  .outer_header_creation_description;
+
   // Check forwarding action
   if (!p_far->apply_action.forw) {
     bpf_debug("Forward Action Is NOT set");
     return XDP_PASS;
   }
-  
+
   if (dest_interface == INTERFACE_VALUE_CORE) {
     // Redirect to data network.
     bpf_debug("Destination is to INTERFACE_VALUE_CORE\n");
@@ -264,7 +264,7 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
     if ((void*) (p_new_eth + 1) > p_data_end) {
       return XDP_DROP;
     }
-    
+
     __builtin_memcpy(p_new_eth, p_eth, sizeof(*p_eth));
 
     // Update destination mac address.
@@ -275,35 +275,34 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
     }
 
     update_dst_mac_address(p_ip, p_new_eth);
-    
+
     // Adjust head to the right.
     bpf_xdp_adjust_head(p_ctx, GTP_ENCAPSULATED_SIZE);
     bpf_debug("GTP Header is removed\n");
     bpf_debug(
-      "The Packet is redirected to socket for transmission to DN ...\n");
+        "The Packet is redirected to socket for transmission to DN ...\n");
     return bpf_redirect_map(&m_redirect_interfaces, UPLINK, 0);
 
     bpf_debug("OUTER_HEADER_CREATION_UDP_IPV4 REDIRECT FAILED\n");
-    } else if (dest_interface == INTERFACE_VALUE_ACCESS) {
-      // Redirect to core network.
-      bpf_debug("Destination is to INTERFACE_VALUE_ACCESS\n");
-      switch (outer_header_creation) {
-        case OUTER_HEADER_CREATION_GTPU_UDP_IPV4:
-          bpf_debug("OUTER_HEADER_CREATION_GTPU_UDP_IPV4\n");
-          create_outer_header_gtpu_ipv4(p_ctx, p_far);
-          return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
-          break;
-        case OUTER_HEADER_CREATION_GTPU_UDP_IPV6:
-          bpf_debug("OUTER_HEADER_CREATION_GTPU_UDP_IPV6\n");
-          break;
-        default:
-          bpf_debug(
-              "In destination to ACCESS - Invalid option: %d\n",
-              outer_header_creation);
-      }
+  } else if (dest_interface == INTERFACE_VALUE_ACCESS) {
+    // Redirect to core network.
+    bpf_debug("Destination is to INTERFACE_VALUE_ACCESS\n");
+    switch (outer_header_creation) {
+      case OUTER_HEADER_CREATION_GTPU_UDP_IPV4:
+        bpf_debug("OUTER_HEADER_CREATION_GTPU_UDP_IPV4\n");
+        create_outer_header_gtpu_ipv4(p_ctx, p_far);
+        return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+        break;
+      case OUTER_HEADER_CREATION_GTPU_UDP_IPV6:
+        bpf_debug("OUTER_HEADER_CREATION_GTPU_UDP_IPV6\n");
+        break;
+      default:
+        bpf_debug(
+            "In destination to ACCESS - Invalid option: %d\n",
+            outer_header_creation);
     }
+  }
 }
-
 
 /*****************************************************************************************************************/
 // static u32 pfcp_far_apply(struct xdp_md *p_ctx, pfcp_far_t_ *p_far)
@@ -404,12 +403,12 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
 SEC("xdp_far")
 int far_entry_point(struct xdp_md* p_ctx) {
   bpf_debug("==========< FAR CONTEXT >==========\n");
- 
-  u32 key = 0;
+
+  u32 key            = 0;
   pfcp_far_t_* p_far = bpf_map_lookup_elem(&m_far, &key);
 
   if (p_far) {
-    return pfcp_far_apply(p_ctx, p_far);    
+    return pfcp_far_apply(p_ctx, p_far);
   }
 
   bpf_debug("FAR Program NOT Found!\n");

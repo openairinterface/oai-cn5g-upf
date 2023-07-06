@@ -148,12 +148,12 @@ upf_app::upf_app(const std::string& config_file) {
     Logger::upf_app().error("Cannot create UPF_N4: %s", e.what());
     throw;
   }
-  //try {
+  // try {
   //  upf_n3_inst = new upf_n3();
- // } catch (std::exception& e) {
+  // } catch (std::exception& e) {
   //  Logger::upf_app().error("Cannot create UPF_N3: %s", e.what());
-   // throw;
- // }
+  // throw;
+  // }
   try {
     pfcp_switch_inst = new pfcp_switch();
   } catch (std::exception& e) {

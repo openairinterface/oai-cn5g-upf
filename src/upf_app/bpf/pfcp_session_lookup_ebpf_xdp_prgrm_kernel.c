@@ -233,9 +233,9 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
 SEC("xdp_entry_point")
 int entry_point(struct xdp_md* p_ctx) {
   bpf_debug("==========< PFCP Session Lookup >==========\n");
-  
+
   struct ethhdr* ethh = (void*) (long) p_ctx->data;
-  
+
   if ((void*) (ethh + 1) > (void*) (long) p_ctx->data_end) {
     bpf_debug("Invalid Ethernet header\n");
     return XDP_DROP;
