@@ -422,6 +422,7 @@ int upf_config::load(const string& config_file) {
               "in " UPF_CONFIG_STRING_PDN_NETWORK_LIST);
         }
         pdn_cfg.prefix_ipv4          = std::stoul(ips.at(1), nullptr, 0);
+        Logger::upf_app().error("pdn prefix here %d", pdn_cfg.prefix_ipv4);
         pdn_cfg.network_ipv4_be      = htobe32(pdn_cfg.network_ipv4.s_addr);
         pdn_cfg.network_mask_ipv4    = 0xFFFFFFFF << (32 - pdn_cfg.prefix_ipv4);
         pdn_cfg.network_mask_ipv4_be = htobe32(pdn_cfg.network_mask_ipv4);

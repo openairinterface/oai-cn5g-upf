@@ -20,7 +20,8 @@
  */
 
 #include "upf_config_yaml.hpp"
-
+#include <regex>
+#include "fqdn.hpp"
 #include "conversions.hpp"
 #include "logger.hpp"
 #include <boost/algorithm/string.hpp>
@@ -136,7 +137,6 @@ std::string upf_info_config::to_string(const std::string& indent) const {
     inner_width  = get_inner_width(inner_indent.length());
 
     for (auto dnn : snssai_item.dnn_upf_info_list) {
-      Logger::upf_app().error("%s", dnn.dnn.c_str());
       out.append(inner_indent)
           .append(fmt::format(
               BASE_FORMATTER, OUTER_LIST_ELEM, "DNN", inner_width,
@@ -360,6 +360,30 @@ void upf_config_yaml::pre_process() {
 }
 
 //------------------------------------------------------------------------------
+in_addr upf_config_yaml::resolve_nf(const std::string& host) {
+  // we remove use_fqdn_dns towards the user, if it is an IPv4 we don't resolve
+  std::regex re(IPV4_ADDRESS_VALIDATOR_REGEX);
+  if (!std::regex_match(host, re)) {
+    logger::logger_registry::get_logger(LOGGER_NAME)
+        .info("Configured host %s is an FQDN. Resolve on SMF startup", host);
+    std::string ip_address;
+    // we ignore the port for now
+    uint32_t port;
+    uint8_t addr_type;
+    fqdn::resolve(host, ip_address, port, addr_type);
+    if (addr_type != 0) {
+      // TODO:
+      throw std::invalid_argument(fmt::format(
+          "IPv6 is not supported at the moment. Please provide a valid IPv4 "
+          "address in your DNS configuration for the host {}.",
+          host));
+    }
+    return conv::fromString(ip_address);
+  }
+  return conv::fromString(host);
+}
+
+//------------------------------------------------------------------------------
 void upf_config_yaml::to_upf_config(upf_config& cfg) {
   std::shared_ptr<upf> upf_local = std::static_pointer_cast<upf>(get_local());
   cfg.instance                   = upf_local->get_instance_id();
@@ -368,8 +392,19 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   cfg.log_level    = spdlog::level::from_str(log_level());
   cfg.register_nrf = register_nrf();
 
+
+  if (get_nf(NRF_CONFIG_NAME)->is_set()) {
+    nrf_addr.from_sbi_config_type(
+        get_nf(NRF_CONFIG_NAME)->get_sbi(), http_version);
+  }
+
+  cfg.nrf_addr.api_version = nrf_addr.api_version;
+  cfg.nrf_addr.http_version = nrf_addr.http_version;
+  cfg.nrf_addr.fqdn = nrf_addr.fqdn;
+  cfg.nrf_addr.ipv4_addr = nrf_addr.ipv4_addr;
+  
   cfg.use_fqdn_dns = false;  // TODO: to be removed
-  if (get_http_version() == 2) cfg.use_http2 = true;
+  cfg.http_version =  get_http_version();
 
   cfg.sbi_api_version = local().get_sbi().get_api_version();
   cfg.sbi_http2_port  = local().get_sbi().get_port();
@@ -382,12 +417,19 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   cfg.enable_snat = upf_local->get_support_features().get_option_enable_snat();
   cfg.upf_info.snssai_upf_info_list =
       upf_local->get_upf_info().get_snssai_upf_info_item();
-  for (auto snssai_item : cfg.upf_info.snssai_upf_info_list) {
-    Logger::upf_app().error(
-        "%d, %d", snssai_item.snssai.sst, snssai_item.snssai.sd);
-  }
+
+  //ToDo: Remove hardcoded pdn value here
+  pdn_cfg_t pdn_cfg              = {};
+  inet_aton("12.1.1.1", &pdn_cfg.network_ipv4);
+  pdn_cfg.prefix_ipv4          = 24;
+  pdn_cfg.network_ipv4_be      = htobe32(pdn_cfg.network_ipv4.s_addr);
+  pdn_cfg.network_mask_ipv4    = 0xFFFFFFFF << (32 - pdn_cfg.prefix_ipv4);
+  pdn_cfg.network_mask_ipv4_be = htobe32(pdn_cfg.network_mask_ipv4);
+  cfg.pdns.push_back(pdn_cfg);
+
   // we set the local interfaces and also the UPF profile
   for (const auto& iface : upf_local->get_interfaces()) {
+
     if (iface.first == UPF_CONFIG_N3_LABEL) {
       cfg.n3 = iface.second.to_interface_config();
     } else if (iface.first == UPF_CONFIG_N6_LABEL) {

@@ -299,7 +299,7 @@ void upf_nrf::send_curl(
         curl, CURLOPT_INTERFACE,
         upf_cfg.n4.if_name.c_str());  // TODO: use another interface for UPF
                                       // to communicate with NRF
-    if (upf_cfg.nrf_addr.http_version == 2) {
+    if (upf_cfg.http_version == 2) {
       if (Logger::should_log(spdlog::level::debug))
         curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
       // We use a self-signed test server, skip verification during debugging
@@ -336,7 +336,6 @@ void upf_nrf::send_curl(
 //---------------------------------------------------------------------------------------------
 void upf_nrf::get_nrf_api_root(std::string& api_root) {
   api_root =
-      std::string(inet_ntoa(*((struct in_addr*) &upf_cfg.nrf_addr.ipv4_addr))) +
-      ":" + std::to_string(upf_cfg.nrf_addr.port) + NNRF_NFM_BASE +
+      std::string(upf_cfg.nrf_addr.uri_root) + NNRF_NFM_BASE +
       upf_cfg.nrf_addr.api_version;
 }

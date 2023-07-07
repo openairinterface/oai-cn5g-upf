@@ -118,6 +118,36 @@ class upf_config_yaml : public config {
       const std::string& config_path, bool log_stdout, bool log_rot_file);
   virtual ~upf_config_yaml();
 
+  static in_addr resolve_nf(const std::string& host);
+  unsigned int http_version;
+
+  struct sbi_addr {
+    struct in_addr ipv4_addr;
+    unsigned int port;
+    unsigned int http_version;
+    std::string api_version;
+    std::string fqdn;
+
+    // TODO delete, just for now until we refactor the calling classes as well
+    void from_sbi_config_type(const sbi_interface& sbi_val, int http_vers) {
+      ipv4_addr    = resolve_nf(sbi_val.get_host());
+      port         = sbi_val.get_port();
+      http_version = http_vers;
+      api_version  = sbi_val.get_api_version();
+      fqdn         = sbi_val.get_host();
+    }
+
+    void from_sbi_config_type_no_resolving(
+        const sbi_interface& sbi_val, int http_vers) {
+      fqdn         = sbi_val.get_host();
+      api_version  = sbi_val.get_api_version();
+      port         = sbi_val.get_port();
+      http_version = http_vers;
+    }
+  };
+
+  sbi_addr nrf_addr;
+
   void to_upf_config(oai::config::upf_config& cfg);
   void pre_process();
 
