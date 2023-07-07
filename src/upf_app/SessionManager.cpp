@@ -85,6 +85,64 @@ void SessionManager::createBPFSession(
 }
 
 /*****************************************************************************************************************/
+void SessionManager::updateBPFSession(
+    std::shared_ptr<pfcp::pfcp_session> pSession) {
+  Logger::upf_app().debug("Session %d Received", pSession->get_up_seid());
+  Logger::upf_app().debug("Preparing the Datapath ...");
+  Logger::upf_app().debug("Find the PDR with Highest Precedence:");
+
+  std::sort(
+      pSession->pdrs.begin(), pSession->pdrs.end(), SessionManager::comparePDR);
+
+  Logger::upf_app().debug(
+      "Extract the key (PDI) from the highest priority PDR");
+  auto pPFCP_Session_LookupProgram =
+      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+
+  pfcp::pdi pdi;
+  pfcp::fteid_t fteid;
+  pfcp::source_interface_t sourceInterface;
+
+  if (pSession->pdrs.empty()) {
+    Logger::upf_app().error("No PDR was found in session %d", pSession->seid);
+    throw std::runtime_error("No PDR was found in session");
+  }
+
+  auto pdrHighPriority = pSession->pdrs[0];
+
+  Logger::upf_app().debug(
+      "PDI extracted from PDR %d", pdrHighPriority->pdr_id.rule_id);
+
+  // pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(&next_rule_prog_index_key)
+  Logger::upf_app().debug("Extract FAR from the highest priority PDR");
+  std::shared_ptr<pfcp::pfcp_far> pFar;
+  pfcp::far_id_t farId;
+
+  if (!(pdrHighPriority->get(farId) && pSession->get(farId.far_id, pFar))) {
+    throw std::runtime_error("No fields available");
+  }
+
+  pfcp::forwarding_parameters foward_param;
+  pFar->get(foward_param);
+  pfcp::ue_ip_address_t gNBIpAddress;
+  gNBIpAddress.v4 = 1;
+  gNBIpAddress.ipv4_address =
+      foward_param.outer_header_creation.second.ipv4_address;
+
+  SessionProgramManager::getInstance().updatePipeline(
+      pSession->get_up_seid(), fteid.teid, sourceInterface.interface_value,
+      gNBIpAddress.ipv4_address.s_addr, pFar);
+
+  if (!(pdrHighPriority->get(pdi) && pdi.get(fteid) &&
+        pdi.get(sourceInterface) && pdi.get(gNBIpAddress))) {
+    throw std::runtime_error("No fields available");
+  }
+
+  Logger::upf_app().info("Add Session");
+  mSeidToSession[pSession->get_up_seid()] = pSession;
+}
+
+/*****************************************************************************************************************/
 void SessionManager::removeBPFSession(uint64_t seid) {
   if (mSeidToSession.find(seid) == mSeidToSession.end()) {
     Logger::upf_app().error(

@@ -3,7 +3,7 @@
 #include <bpf/bpf.h>       // bpf calls
 #include <bpf/libbpf.h>    // bpf wrappers
 #include <sys/resource.h>  // rlimit
-#include <net/if.h>  // if_nametoindex
+#include <net/if.h>        // if_nametoindex
 #include <wrappers/BPFMaps.h>
 #include <wrappers/BPFMap.hpp>
 

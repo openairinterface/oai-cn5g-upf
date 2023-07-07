@@ -7,16 +7,14 @@
 
 #include "logger.hpp"
 
-
 class NextHopFinder {
-public:
-    NextHopFinder();
-    uint32_t retrieveNextHopIP(uint32_t destination_ip_);
-    ether_addr* retrieveNextHopMAC(uint32_t next_hop_ip_);
+ public:
+  NextHopFinder();
+  uint32_t retrieveNextHopIP(uint32_t destination_ip_);
+  ether_addr* retrieveNextHopMAC(uint32_t next_hop_ip_);
 
-private:
-    std::string executeCommand(const std::string& command);
-
+ private:
+  std::string executeCommand(const std::string& command);
 };
 
-#endif // NEXT_HOP_FINDER_HPP
+#endif  // NEXT_HOP_FINDER_HPP

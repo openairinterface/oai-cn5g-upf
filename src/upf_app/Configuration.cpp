@@ -10,8 +10,8 @@
 using namespace upf;
 extern upf_config upf_cfg;
 
-std::string Configuration::sGTPInterface = upf_cfg.n3.if_name;
-std::string Configuration::sUDPInterface = upf_cfg.n6.if_name;
+std::string Configuration::sGTPInterface            = upf_cfg.n3.if_name;
+std::string Configuration::sUDPInterface            = upf_cfg.n6.if_name;
 unsigned char Configuration::sIsSocketBufferEnabled = 0;
 
 Configuration::Configuration(int argc, char** argv) {
@@ -24,7 +24,7 @@ Configuration::Configuration(int argc, char** argv) {
       "GTP Inteface %s", Configuration::sGTPInterface.c_str());
   Logger::upf_app().debug(
       "UDPInteface %s", Configuration::sUDPInterface.c_str());
-  
+
   for (int i = 1; i < argc; ++i) {
     Logger::upf_app().debug("arg %d = %d", i, argv[i]);
   }

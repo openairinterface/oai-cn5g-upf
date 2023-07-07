@@ -11,7 +11,6 @@
  */
 class BPFMap {
  public:
-
   /**************************************************************************************************/
   /**
    * @brief Construct a new BPFMap object.
@@ -26,7 +25,7 @@ class BPFMap {
    * @brief Destroy the BPFMap object.
    */
   virtual ~BPFMap();
-  
+
   /**************************************************************************************************/
   /**
    * @brief Lookup a element in a specific position.
@@ -38,7 +37,7 @@ class BPFMap {
    */
   template<class KeyType>
   int lookup(KeyType& key, void* pValue);
-  
+
   /**************************************************************************************************/
   /**
    * @brief Update a element in a specific position.
@@ -70,7 +69,7 @@ class BPFMap {
    * @return std::string The name of the BPF map.
    */
   std::string getName() const;
-  
+
   /**************************************************************************************************/
  private:
   // TODO: Change to unique.
