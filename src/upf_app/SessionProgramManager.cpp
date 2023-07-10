@@ -143,12 +143,14 @@ void SessionProgramManager::updatePipeline(
 
   if (is_little_endian()) {
     key.teid         = htobe32(teid);
-    key.ipv4_address = htole32(gNBIpAddress);
+    key.ipv4_address = htobe32(gNBIpAddress);
   } else {
     key.teid         = htole32(teid);
     key.ipv4_address = gNBIpAddress;
   }
-
+  Logger::upf_app().debug("gnb1: %d", htobe32(gNBIpAddress));
+  Logger::upf_app().debug("gnb2: %d", htole32(gNBIpAddress));
+  Logger::upf_app().debug("gnb3: %d", gNBIpAddress);
   key.source_value = sourceInterface;
 
   Logger::upf_app().debug("Instantiate a new FARProgram");
@@ -204,10 +206,12 @@ void SessionProgramManager::updatePipeline(
       std::make_shared<SessionPrograms>(key, pFARProgram);
 
   NextHopFinder finder;
-  uint32_t ipnexthop = finder.retrieveNextHopIP(gNBIpAddress);
+  // uint32_t ipnexthop = finder.retrieveNextHopIP(gNBIpAddress);
 
-  auto pMacAddress = finder.retrieveNextHopMAC(ipnexthop);
-  ipnexthop        = (is_little_endian()) ? htonl(ipnexthop) : ipnexthop;
+  // auto pMacAddress = finder.retrieveNextHopMAC(ipnexthop);
+  auto pMacAddress = finder.retrieveNextHopMAC(gNBIpAddress);
+  uint32_t ipnexthop =
+      (is_little_endian()) ? htonl(gNBIpAddress) : gNBIpAddress;
   pFARProgram->getArpTableMap()->update(
       ipnexthop, pMacAddress->ether_addr_octet, BPF_ANY);
 }

@@ -91,8 +91,8 @@ void SessionManager::updateBPFSession(
   Logger::upf_app().debug("Preparing the Datapath ...");
   Logger::upf_app().debug("Find the PDR with Highest Precedence:");
 
-  std::sort(
-      pSession->pdrs.begin(), pSession->pdrs.end(), SessionManager::comparePDR);
+  // std::sort(
+  // pSession->pdrs.begin(), pSession->pdrs.end(), SessionManager::comparePDR);
 
   Logger::upf_app().debug(
       "Extract the key (PDI) from the highest priority PDR");
@@ -108,32 +108,43 @@ void SessionManager::updateBPFSession(
     throw std::runtime_error("No PDR was found in session");
   }
 
-  auto pdrHighPriority = pSession->pdrs[0];
+  auto pdrModificationRequest = pSession->pdrs[pSession->pdrs.size() - 1];
+  int vecSize                 = pSession->pdrs.size();
+  for (unsigned int i = 0; i < vecSize; i++) {
+    Logger::upf_app().debug(
+        "pSession->pdrs[%d] = %d", i, (pSession->pdrs[i])->pdr_id.rule_id);
+  }
 
   Logger::upf_app().debug(
-      "PDI extracted from PDR %d", pdrHighPriority->pdr_id.rule_id);
+      "PDI extracted from PDR %d", pdrModificationRequest->pdr_id.rule_id);
 
   // pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(&next_rule_prog_index_key)
   Logger::upf_app().debug("Extract FAR from the highest priority PDR");
   std::shared_ptr<pfcp::pfcp_far> pFar;
   pfcp::far_id_t farId;
 
-  if (!(pdrHighPriority->get(farId) && pSession->get(farId.far_id, pFar))) {
+  if (!(pdrModificationRequest->get(farId) &&
+        pSession->get(farId.far_id, pFar))) {
     throw std::runtime_error("No fields available");
   }
+  Logger::upf_app().debug("FAR ID %d", farId.far_id);
 
   pfcp::forwarding_parameters foward_param;
-  pFar->get(foward_param);
+  if (not pFar->get(foward_param)) {
+    Logger::upf_app().error("FAILURE");
+  }
   pfcp::ue_ip_address_t gNBIpAddress;
   gNBIpAddress.v4 = 1;
   gNBIpAddress.ipv4_address =
       foward_param.outer_header_creation.second.ipv4_address;
+  Logger::upf_app().debug(
+      "gNB IP address: %d", gNBIpAddress.ipv4_address.s_addr);
 
   SessionProgramManager::getInstance().updatePipeline(
       pSession->get_up_seid(), fteid.teid, sourceInterface.interface_value,
       gNBIpAddress.ipv4_address.s_addr, pFar);
 
-  if (!(pdrHighPriority->get(pdi) && pdi.get(fteid) &&
+  if (!(pdrModificationRequest->get(pdi) && pdi.get(fteid) &&
         pdi.get(sourceInterface) && pdi.get(gNBIpAddress))) {
     throw std::runtime_error("No fields available");
   }

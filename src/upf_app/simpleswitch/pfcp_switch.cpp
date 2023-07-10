@@ -797,15 +797,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         if (not session->create(cr_far, cause, offending_ie.offending_ie)) {
           break;
         }
-        if (upf_cfg.upf_5g_features.enable_bpf_datapath) {
-          std::shared_ptr<pfcp::pfcp_session> pSession =
-              std::make_shared<pfcp::pfcp_session>(*session);
-          spSessionManager =
-              UserPlaneComponent::getInstance().getSessionManager();
-          spSessionManager->updateBPFSession(pSession);
-        }
-        cr_far.forwarding_parameters.second.outer_header_creation.second
-            .ipv4_address;
       }
     }
 
@@ -844,6 +835,14 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           created_pdr.set(allocated_fteid);
         }
         resp->pfcp_ies.set(created_pdr);
+      }
+
+      if (upf_cfg.upf_5g_features.enable_bpf_datapath) {
+        std::shared_ptr<pfcp::pfcp_session> pSession =
+            std::make_shared<pfcp::pfcp_session>(*session);
+        spSessionManager =
+            UserPlaneComponent::getInstance().getSessionManager();
+        spSessionManager->updateBPFSession(pSession);
       }
     }
 

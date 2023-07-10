@@ -51,7 +51,7 @@ ether_addr* NextHopFinder::retrieveNextHopMAC(uint32_t next_hop_ip) {
   char command[COMMAND_MAX_LENGTH];
 
   struct in_addr addr;
-  addr.s_addr     = htonl(next_hop_ip);
+  addr.s_addr     = next_hop_ip;
   char* ipAddress = inet_ntoa(addr);
 
   if (ipAddress == nullptr) {
