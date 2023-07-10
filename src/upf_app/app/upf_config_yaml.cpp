@@ -308,9 +308,9 @@ upf_config_yaml::upf_config_yaml(
     const std::string& config_path, bool log_stdout, bool log_rot_file)
     : oai::config::config(
           config_path, oai::config::UPF_CONFIG_NAME, log_stdout, log_rot_file) {
-  m_used_sbi_values    = {oai::config::UPF_CONFIG_NAME,
-                       oai::config::SMF_CONFIG_NAME,
-                       oai::config::NRF_CONFIG_NAME};
+  m_used_sbi_values = {
+      oai::config::UPF_CONFIG_NAME, oai::config::SMF_CONFIG_NAME,
+      oai::config::NRF_CONFIG_NAME};
   m_used_config_values = {
       oai::config::LOG_LEVEL_CONFIG_NAME, oai::config::REGISTER_NF_CONFIG_NAME,
       oai::config::NF_CONFIG_HTTP_NAME, oai::config::NF_LIST_CONFIG_NAME,
@@ -392,19 +392,18 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   cfg.log_level    = spdlog::level::from_str(log_level());
   cfg.register_nrf = register_nrf();
 
-
   if (get_nf(NRF_CONFIG_NAME)->is_set()) {
     nrf_addr.from_sbi_config_type(
         get_nf(NRF_CONFIG_NAME)->get_sbi(), http_version);
   }
 
-  cfg.nrf_addr.api_version = nrf_addr.api_version;
+  cfg.nrf_addr.api_version  = nrf_addr.api_version;
   cfg.nrf_addr.http_version = nrf_addr.http_version;
-  cfg.nrf_addr.fqdn = nrf_addr.fqdn;
-  cfg.nrf_addr.ipv4_addr = nrf_addr.ipv4_addr;
-  
+  cfg.nrf_addr.fqdn         = nrf_addr.fqdn;
+  cfg.nrf_addr.ipv4_addr    = nrf_addr.ipv4_addr;
+
   cfg.use_fqdn_dns = false;  // TODO: to be removed
-  cfg.http_version =  get_http_version();
+  cfg.http_version = get_http_version();
 
   cfg.sbi_api_version = local().get_sbi().get_api_version();
   cfg.sbi_http2_port  = local().get_sbi().get_port();
@@ -418,9 +417,11 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   cfg.upf_info.snssai_upf_info_list =
       upf_local->get_upf_info().get_snssai_upf_info_item();
 
-  //ToDo: Remove hardcoded pdn value here
-  pdn_cfg_t pdn_cfg              = {};
-  inet_aton("12.1.1.1", &pdn_cfg.network_ipv4);
+  // ToDo: Remove hardcoded pdn value here
+  pdn_cfg_t pdn_cfg = {};
+  unsigned char buf_in_addr[sizeof(struct in_addr) + 1];
+  inet_pton(AF_INET, "12.1.1.0", buf_in_addr);
+  memcpy(&pdn_cfg.network_ipv4, buf_in_addr, sizeof(struct in_addr));
   pdn_cfg.prefix_ipv4          = 24;
   pdn_cfg.network_ipv4_be      = htobe32(pdn_cfg.network_ipv4.s_addr);
   pdn_cfg.network_mask_ipv4    = 0xFFFFFFFF << (32 - pdn_cfg.prefix_ipv4);
@@ -429,7 +430,6 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
 
   // we set the local interfaces and also the UPF profile
   for (const auto& iface : upf_local->get_interfaces()) {
-
     if (iface.first == UPF_CONFIG_N3_LABEL) {
       cfg.n3 = iface.second.to_interface_config();
     } else if (iface.first == UPF_CONFIG_N6_LABEL) {
@@ -518,10 +518,11 @@ interface_upf_info_item_t upf_interface_config::to_upf_info_item() const {
 interface_cfg_t upf_interface_config::to_interface_config() const {
   // TODO this method is only temporary until we refactor the whole config
   interface_cfg_t cfg;
-  cfg.addr4 = get_addr4();
-  cfg.addr6 = get_addr6();
-  cfg.mtu   = get_mtu();
-  cfg.port  = get_port();
+  cfg.addr4   = get_addr4();
+  cfg.addr6   = get_addr6();
+  cfg.mtu     = get_mtu();
+  cfg.port    = get_port();
+  cfg.if_name = get_if_name();
 
   return cfg;
 }
