@@ -217,7 +217,7 @@ bool pfcp_session::create(
     } else {
       // cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
       allocated_fteid = pdi.local_fteid.second;
-      /*Logger::spgwu_sx().info(
+      /*Logger::upf_n4().info(
           "Do not support IE FTEID managed by CP entity! Rejecting "
           "PFCP_XXX_REQUEST");
           */

@@ -55,6 +55,13 @@ class SessionManager {
    * @param pSession The session object to be created.
    */
   void createSession(std::shared_ptr<SessionBpf> pSession);
+
+  /**
+   * @brief Update a Session object in BPF map.
+   *
+   * @param pSession The session object to be updated.
+   */
+  void updateBPFSession(std::shared_ptr<pfcp::pfcp_session> pSession);
   /**
    * @brief Remove a session object from BPF map.
    *

@@ -4,7 +4,6 @@
  */
 #include "Configuration.h"
 #include <string>
-// #include <utils/LogDefines.h>
 #include "logger.hpp"
 
 // Values get from enviroment variable GTP_INTERFACE and UDP_INTERFACE
@@ -22,8 +21,7 @@ Configuration::Configuration(int argc, char **argv)
 
   Logger::upf_app().debug("GTP Inteface %s", Configuration::sGTPInterface.c_str());
   Logger::upf_app().debug("UDPInteface %s", Configuration::sUDPInterface.c_str());
-  // LOG_DBG("GTP Inteface {}", Configuration::sGTPInterface);
-  // LOG_DBG("UDP Inteface {}", Configuration::sUDPInterface);
+  
   for(int i = 1; i < argc; ++i) {
     Logger::upf_app().debug("arg %d = %d", i, argv[i]);
   }

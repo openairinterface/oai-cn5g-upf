@@ -4,7 +4,6 @@
 #include <bpf/libbpf.h>  // bpf wrappers
 #include <iostream>      // cout
 #include <stdexcept>     // exception
-// // #include <utils/LogDefines.h>
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
 #include "interfaces.h"
@@ -18,29 +17,6 @@ extern upf_config upf_cfg;
 PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
     const std::string& gtpInterface, const std::string& udpInterface)
     : mGTPInterface(gtpInterface), mUDPInterface(udpInterface) {
-  // // __builtin_memset(&gtp_interface, 0, sizeof(struct interface));
-  // // __builtin_memset(&udp_interface, 0, sizeof(struct interface));
-
-  // // if(mUDPInterface.empty() || mGTPInterface.empty()){
-  // //   LOG_ERROR("GTP and/or UDP interface(s) are not defined!");
-  // //   throw std::runtime_error("GTP and/or UDP interface(s) are not
-  // defined!");
-  // // }
-
-  // // gtp_interface.ipv4_address =
-  // atoi((conv::toString(upf_cfg.n3.addr4)).c_str());
-  // // LOG_DBG(".......................GTP Interface: %d\n",
-  // upf_cfg.n3.addr4.s_addr);
-  // // LOG_DBG("    Interface ipv4.addr ........: %s",
-  // inet_ntoa(upf_cfg.n3.addr4));
-  // // udp_interface.ipv4_address =
-  // atoi((conv::toString(upf_cfg.n6.addr4)).c_str());
-
-  // // LOG_DBG("GTP Interface: %s, IF_NAME: %d, IPv4: %d \n",
-  // gtp_interface.if_name, gtp_interface.ipv4_address);
-  // // LOG_DBG("UDP Interface: %s, IF_NAME: %d, IPv4: %d \n",
-  // udp_interface.if_name, udp_interface.ipv4_address);
-
   mpLifeCycle = std::make_shared<PFCP_Session_LookupProgramLifeCycle>(
       pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__open,
       pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__load,

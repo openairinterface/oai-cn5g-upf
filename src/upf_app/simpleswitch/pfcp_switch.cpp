@@ -837,6 +837,14 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
         resp->pfcp_ies.set(created_pdr);
       }
+
+      if (upf_cfg.enable_bpf_datapath) {
+        std::shared_ptr<pfcp::pfcp_session> pSession =
+            std::make_shared<pfcp::pfcp_session>(*session);
+        spSessionManager =
+            UserPlaneComponent::getInstance().getSessionManager();
+        spSessionManager->updateBPFSession(pSession);
+      }
     }
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
