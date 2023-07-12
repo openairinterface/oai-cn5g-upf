@@ -314,7 +314,7 @@ upf_config_yaml::upf_config_yaml(
   m_used_config_values = {
       oai::config::LOG_LEVEL_CONFIG_NAME, oai::config::REGISTER_NF_CONFIG_NAME,
       oai::config::NF_CONFIG_HTTP_NAME, oai::config::NF_LIST_CONFIG_NAME,
-      oai::config::UPF_CONFIG_NAME};
+      oai::config::UPF_CONFIG_NAME, oai::config::DNNS_CONFIG_NAME};
 
   m_nf_name = UPF_CONFIG_NAME;
 
@@ -341,6 +341,11 @@ upf_config_yaml::upf_config_yaml(
   auto m_nrf = std::make_shared<nf>(
       "NRF", "oai-nrf", sbi_interface("SBI", "oai-nrf", 80, "v1", "eth0"));
   add_nf(oai::config::NRF_CONFIG_NAME, m_nrf);
+
+
+  // DNN default values
+  dnn_config dnn("default", "IPV4", "12.1.1.0 - 12.1.1.255", "");
+  m_dnns.push_back(dnn);
 
   update_used_nfs();
 }
