@@ -206,7 +206,7 @@ void gtpu_l4_stack::send_g_pdu(
 
     gtpu_ext_hdr->message_length = 0x01;
     gtpu_ext_hdr->pdu_type       = GTPU_DL_PDU_SESSION_INFORMATION;
-    gtpu_ext_hdr->qfi            = qfi;  // Taken from uplink PDR
+    gtpu_ext_hdr->qfi            = 0x01;  // ToDo: Taken from uplink PDR
     gtpu_ext_hdr->next_ext_type  = GTPU_NO_MORE_EXTENSION_HEADER;
 
     udp_s.async_send_to(
