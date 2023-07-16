@@ -25,6 +25,7 @@
 #include "conversions.hpp"
 #include "logger.hpp"
 #include <boost/algorithm/string.hpp>
+#include "conversions.hpp"
 
 namespace oai::config {
 
@@ -313,8 +314,8 @@ upf_config_yaml::upf_config_yaml(
       oai::config::NRF_CONFIG_NAME};
   m_used_config_values = {
       oai::config::LOG_LEVEL_CONFIG_NAME, oai::config::REGISTER_NF_CONFIG_NAME,
-      oai::config::NF_CONFIG_HTTP_NAME, oai::config::NF_LIST_CONFIG_NAME,
-      oai::config::UPF_CONFIG_NAME, oai::config::DNNS_CONFIG_NAME};
+      oai::config::NF_CONFIG_HTTP_NAME,   oai::config::NF_LIST_CONFIG_NAME,
+      oai::config::UPF_CONFIG_NAME,       oai::config::DNNS_CONFIG_NAME};
 
   m_nf_name = UPF_CONFIG_NAME;
 
@@ -342,9 +343,8 @@ upf_config_yaml::upf_config_yaml(
       "NRF", "oai-nrf", sbi_interface("SBI", "oai-nrf", 80, "v1", "eth0"));
   add_nf(oai::config::NRF_CONFIG_NAME, m_nrf);
 
-
   // DNN default values
-  dnn_config dnn("default", "IPV4", "12.1.1.0 - 12.1.1.255", "");
+  dnn_config dnn("default", "IPV4", "12.1.1.0 - 12.1.1.255", "", "");
   m_dnns.push_back(dnn);
 
   update_used_nfs();
@@ -423,15 +423,25 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
       upf_local->get_upf_info().get_snssai_upf_info_item();
 
   // ToDo: Remove hardcoded pdn value here
-  pdn_cfg_t pdn_cfg = {};
-  unsigned char buf_in_addr[sizeof(struct in_addr) + 1];
-  inet_pton(AF_INET, "12.1.1.0", buf_in_addr);
-  memcpy(&pdn_cfg.network_ipv4, buf_in_addr, sizeof(struct in_addr));
-  pdn_cfg.prefix_ipv4          = 24;
-  pdn_cfg.network_ipv4_be      = htobe32(pdn_cfg.network_ipv4.s_addr);
-  pdn_cfg.network_mask_ipv4    = 0xFFFFFFFF << (32 - pdn_cfg.prefix_ipv4);
-  pdn_cfg.network_mask_ipv4_be = htobe32(pdn_cfg.network_mask_ipv4);
-  cfg.pdns.push_back(pdn_cfg);
+  for (const auto& cfg_dnn : get_dnns()) {
+    pdn_cfg_t pdn_cfg = {};
+    unsigned char buf_in_addr[sizeof(struct in_addr) + 1];
+    inet_pton(AF_INET, inet_ntoa(cfg_dnn.get_ipv4_subnet()), buf_in_addr);
+    memcpy(&pdn_cfg.network_ipv4, buf_in_addr, sizeof(struct in_addr));
+    pdn_cfg.prefix_ipv4          = cfg_dnn.get_ipv4_subnet_prefix();
+    pdn_cfg.network_ipv4_be      = htobe32(pdn_cfg.network_ipv4.s_addr);
+    pdn_cfg.network_mask_ipv4    = 0xFFFFFFFF << (32 - pdn_cfg.prefix_ipv4);
+    pdn_cfg.network_mask_ipv4_be = htobe32(pdn_cfg.network_mask_ipv4);
+    logger::logger_registry::get_logger(LOGGER_NAME)
+        .debug(
+            "PDN Network Added for UE Subnet:  %s ",
+            conv::toString(cfg_dnn.get_ipv4_subnet()));
+    logger::logger_registry::get_logger(LOGGER_NAME)
+        .debug(
+            "IP Pool :  %s - %s", conv::toString(cfg_dnn.get_ipv4_pool_start()),
+            conv::toString(cfg_dnn.get_ipv4_pool_end()));
+    cfg.pdns.push_back(pdn_cfg);
+  }
 
   // we set the local interfaces and also the UPF profile
   for (const auto& iface : upf_local->get_interfaces()) {
@@ -454,6 +464,16 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   if (get_nf(oai::config::SMF_CONFIG_NAME)) {
     cfg.smf_addr.api_version = get_nf("smf")->get_sbi().get_api_version();
     cfg.smf_addr.uri_root    = get_nf(oai::config::SMF_CONFIG_NAME)->get_url();
+  }
+
+  for (int i = 0; i < m_dnns.size(); i++) {
+    bool m_dnn_matched = false;
+    for (auto s : cfg.upf_info.snssai_upf_info_list) {
+      for (auto d : s.dnn_upf_info_list) {
+        if (d.dnn == m_dnns[i].get_dnn()) m_dnn_matched = true;
+      }
+    }
+    if (!m_dnn_matched) m_dnns[i].unset_config();
   }
 }
 

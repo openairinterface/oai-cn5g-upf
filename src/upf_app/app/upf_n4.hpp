@@ -51,6 +51,7 @@ class upf_n4 : public pfcp::pfcp_l4_stack {
 
   uint64_t recovery_time_stamp;  // timestamp in seconds
   pfcp::up_function_features_s up_function_features;
+  pfcp::enterprise_specific_s enterprise_specific;
 
   void start_association(const pfcp::node_id_t& node_id);
 

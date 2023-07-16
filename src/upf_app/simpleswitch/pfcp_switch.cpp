@@ -285,7 +285,7 @@ void pfcp_switch::setup_pdn_interfaces() {
 
   int index = 0;
   // TODO for loop on pdns
-  {
+  for (index = 0; index < upf_cfg.pdns.size(); index++) {
     pdn_cfg_t it = upf_cfg.pdns[index];
     int sock_r   = 0;
 
