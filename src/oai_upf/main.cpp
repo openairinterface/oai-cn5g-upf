@@ -49,7 +49,7 @@ using namespace oai::config;
 using namespace util;
 using namespace std;
 
-static std::shared_ptr<SessionManager> spSessionManager;
+// static std::shared_ptr<SessionManager> spSessionManager;
 
 itti_mw* itti_inst                    = nullptr;
 async_shell_cmd* async_shell_cmd_inst = nullptr;
@@ -180,7 +180,6 @@ int main(int argc, char** argv) {
     // Convert from YAML to internal structure
     upf_cfg_yaml->to_upf_config(upf_cfg);
     upf_cfg_yaml->display();
-
   }
 
   // upf_cfg.load(Options::getlibconfigConfig());

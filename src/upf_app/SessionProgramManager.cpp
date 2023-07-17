@@ -13,7 +13,7 @@
 #include <wrappers/BPFMap.hpp>
 #include "logger.hpp"
 #include "NextHopFinder.hpp"
-
+#include <errno.h>
 #include <arpa/inet.h>
 
 #define EMPTY_SLOT -1l
@@ -119,9 +119,10 @@ void SessionProgramManager::createPipeline(
 
   // Map the pipeline deployed to the seid. The seid will be used to detroyed
   // it.
+  Logger::upf_app().debug("--------------------------------------------------");
   mSessionProgramsMap[seid] =
       std::make_shared<SessionPrograms>(key, pFARProgram);
-
+  Logger::upf_app().debug("--------------------------------------------------");
   // NextHopFinder finder;
   // uint32_t ipnexthop = finder.retrieveNextHopIP(ueIpAddress);
 
@@ -133,87 +134,72 @@ void SessionProgramManager::createPipeline(
 
 /*****************************************************************************************************************/
 void SessionProgramManager::updatePipeline(
-    uint32_t seid, uint32_t teid, uint8_t sourceInterface,
-    uint32_t gNBIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar) {
-  struct next_rule_prog_index_key key;
+    uint32_t seid, uint32_t teid, uint32_t gNBIpAddress) {
+  struct next_rule_prog_index_key keyToFound;
   u32 id;
   s32 fd;
 
-  __builtin_memset(&key, 0, sizeof(struct next_rule_prog_index_key));
+  __builtin_memset(&keyToFound, 0, sizeof(struct next_rule_prog_index_key));
 
   if (is_little_endian()) {
-    key.teid         = htobe32(teid);
-    key.ipv4_address = htobe32(gNBIpAddress);
+    keyToFound.teid         = htobe32(teid);
+    keyToFound.ipv4_address = htobe32(gNBIpAddress);
   } else {
-    key.teid         = htole32(teid);
-    key.ipv4_address = gNBIpAddress;
+    keyToFound.teid         = htole32(teid);
+    keyToFound.ipv4_address = gNBIpAddress;
   }
-  Logger::upf_app().debug("gnb1: %d", htobe32(gNBIpAddress));
-  Logger::upf_app().debug("gnb2: %d", htole32(gNBIpAddress));
-  Logger::upf_app().debug("gnb3: %d", gNBIpAddress);
-  key.source_value = sourceInterface;
 
-  Logger::upf_app().debug("Instantiate a new FARProgram");
-  std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
-  pFARProgram->setup();
+  keyToFound.source_value = INTERFACE_VALUE_ACCESS;
 
-  Logger::upf_app().debug("Store FARProgram index in the UPFProgram");
+  // Logger::upf_app().debug("Instantiate a new FARProgram");
+  // std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
+  // pFARProgram->setup();
+
+  // Logger::upf_app().debug("Store FARProgram index in the UPFProgram");
   auto pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
-  id = pFARProgram->getId();
-  fd = pFARProgram->getFd();
+  // id = pFARProgram->getId();
+  // fd = pFARProgram->getFd();
 
   // TODO: Get the nextProgRule index from a pool of values.
-  pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->update(
-      key, id, BPF_ANY);
-  pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
+  struct next_rule_prog_index_key key = {}, next_key;
+  // auto fd_next_rule_key =
+  // pPFCP_Session_LookupProgram->getNextProgRuleIndexMap();
 
-  Logger::upf_app().debug("Store FAR in the FAR program");
-  uint8_t index = 0;
+  while (
+      (pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->get_next_elem(
+           key, next_key)) == 0) {
+    key = next_key;
+    void* value;
+    
+    if ((keyToFound.teid == next_key.teid) &&
+        (keyToFound.source_value == next_key.source_value) && (keyToFound.ipv4_address != next_key.ipv4_address)) {
+      
+      Logger::upf_app().debug("Looking for the Key <%d, %d, %d>", next_key.teid, next_key.source_value, next_key.ipv4_address);
 
-  // TODO: Create a method to encapuslate.
-  pfcp_far_t_ far;
-  // FAR ID
-  far.far_id.far_id = pFar->far_id.far_id;
-  // FORWARDING PARAMETERS INTERFACE VALUE
-  far.forwarding_parameters.destination_interface.interface_value =
-      pFar->forwarding_parameters.second.destination_interface.second
-          .interface_value;
-  // FORWARDING PARAMETERS TEID
-  far.forwarding_parameters.outer_header_creation.teid =
-      pFar->forwarding_parameters.second.outer_header_creation.second.teid;
-  // FORWARDING PARAMETERS PORT NUMBER
-  far.forwarding_parameters.outer_header_creation.port_number =
-      pFar->forwarding_parameters.second.outer_header_creation.second
-          .port_number;
-  // FORWARDING PARAMETERS HEADER CREATION
-  far.forwarding_parameters.outer_header_creation
-      .outer_header_creation_description =
-      pFar->forwarding_parameters.second.outer_header_creation.second
-          .outer_header_creation_description;
-  // FORWARDING PARAMETERS SOURCE IP ADDRESS
-  far.forwarding_parameters.outer_header_creation.ipv4_address.s_addr =
-      pFar->forwarding_parameters.second.outer_header_creation.second
-          .ipv4_address.s_addr;
-  // FORWARDING PARAMETERS ACTIONS
-  memcpy(&far.apply_action, &pFar->apply_action, sizeof(apply_action_t_));
+      u_int32_t ret_val =
+          pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->lookup(
+              next_key, &value);
+              
+      if (ret_val == 0) {
+        Logger::upf_app().debug("Updating the Key <%d, %d, %d>", next_key.teid, next_key.source_value, next_key.ipv4_address);
+        pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->update(
+            keyToFound, value, BPF_ANY);
+        
+        Logger::upf_app().debug("Deleting the Key <%d, %d, %d>", next_key.teid, next_key.source_value, next_key.ipv4_address);
+        pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->remove(next_key);
+        }
+    }
+  }
 
-  pFARProgram->getFARMap()->update(index, far, BPF_ANY);
-
-  // Map the pipeline deployed to the seid. The seid will be used to detroyed
-  // it.
-  mSessionProgramsMap[seid] =
-      std::make_shared<SessionPrograms>(key, pFARProgram);
-
+  //Logger::upf_app().debug("Store FAR in the FAR program");
+  
   NextHopFinder finder;
-  // uint32_t ipnexthop = finder.retrieveNextHopIP(gNBIpAddress);
-
-  // auto pMacAddress = finder.retrieveNextHopMAC(ipnexthop);
   auto pMacAddress = finder.retrieveNextHopMAC(gNBIpAddress);
   uint32_t ipnexthop =
       (is_little_endian()) ? htonl(gNBIpAddress) : gNBIpAddress;
-  pFARProgram->getArpTableMap()->update(
-      ipnexthop, pMacAddress->ether_addr_octet, BPF_ANY);
+  // pFARProgram->getArpTableMap()->update(
+  //     ipnexthop, pMacAddress->ether_addr_octet, BPF_ANY);
 }
 
 /*****************************************************************************************************************/

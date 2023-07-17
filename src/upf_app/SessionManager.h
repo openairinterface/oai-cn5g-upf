@@ -76,6 +76,23 @@ class SessionManager {
    * deployed.
    */
   void createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSession);
+
+  void createBPFSessionUL(
+      std::shared_ptr<pfcp::pfcp_session> pSession,
+      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl);
+
+  void createBPFSessionDL(
+      std::shared_ptr<pfcp::pfcp_session> pSession,
+      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl);
+
+  void updateBPFSessionUL(
+      std::shared_ptr<pfcp::pfcp_session> pSession,
+      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl);
+
+  void updateBPFSessionDL(
+      std::shared_ptr<pfcp::pfcp_session> pSession,
+      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl);
+
   /**
    * @brief Remove BPF pipeline.
    *
@@ -89,6 +106,8 @@ class SessionManager {
   static bool comparePDR(
       const std::shared_ptr<pfcp::pfcp_pdr>& first,
       const std::shared_ptr<pfcp::pfcp_pdr>& second);
+
+  std::vector<std::shared_ptr<pfcp::pfcp_session>> sessions;
 };
 
 #endif  // __SESSIONMANAGER_H__

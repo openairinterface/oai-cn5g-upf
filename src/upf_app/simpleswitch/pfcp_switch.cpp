@@ -669,6 +669,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             std::make_shared<pfcp::pfcp_session>(*session);
         spSessionManager =
             UserPlaneComponent::getInstance().getSessionManager();
+        spSessionManager->sessions.push_back(pSession);
         spSessionManager->createBPFSession(pSession);
       }
 
@@ -755,8 +756,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     cause.cause_value = CAUSE_VALUE_SESSION_CONTEXT_NOT_FOUND;
   } else {
     pfcp::pfcp_session* session = s.get();
-
-    pfcp::fseid_t fseid = {};
+    pfcp::fseid_t fseid         = {};
     if (req->pfcp_ies.get(fseid)) {
       Logger::pfcp_switch().warn(
           "TODO check carrefully update fseid in "
@@ -843,6 +843,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
             std::make_shared<pfcp::pfcp_session>(*session);
         spSessionManager =
             UserPlaneComponent::getInstance().getSessionManager();
+        spSessionManager->sessions.push_back(pSession);
         spSessionManager->updateBPFSession(pSession);
       }
     }

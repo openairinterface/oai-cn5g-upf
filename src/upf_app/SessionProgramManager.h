@@ -92,9 +92,7 @@ class SessionProgramManager {
       uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar);
 
   /*****************************************************************************************************************/
-  void updatePipeline(
-      uint32_t seid, uint32_t teid, uint8_t sourceInterface,
-      uint32_t gNBIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar);
+  void updatePipeline(uint32_t seid, uint32_t teid, uint32_t gNBIpAddress);
 
   /*****************************************************************************************************************/
   void removePipeline(uint32_t seid);
