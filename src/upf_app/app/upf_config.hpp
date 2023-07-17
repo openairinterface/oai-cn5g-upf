@@ -42,8 +42,14 @@
 #include <stdbool.h>
 #include <string>
 #include "logger.hpp"
+// #include "upf.h"
 
-namespace upf {
+// const uint32_t SD_NO_VALUE = 0xFFFFFF;
+
+constexpr auto UPF_CONFIG_OPTION_YES_STR = "Yes";
+constexpr auto UPF_CONFIG_OPTION_NO_STR  = "No";
+const snssai_t DEFAULT_SNSSAI{1, 0xFFFFFF};
+const std::vector<std::string> DEFAULT_DNN_LIST = {"default"};
 
 #define UPF_CONFIG_STRING_UPF_CONFIG "UPF"
 #define UPF_CONFIG_STRING_PID_DIRECTORY "PID_DIRECTORY"
@@ -78,7 +84,6 @@ namespace upf {
 #define UPF_CONFIG_STRING_BYPASS_UL_PFCP_RULES "BYPASS_UL_PFCP_RULES"
 
 #define UPF_CONFIG_STRING_5G_FEATURES "SUPPORT_5G_FEATURES"
-#define UPF_CONFIG_STRING_ENABLE_5G_FEATURES "ENABLE_5G_FEATURES"
 #define UPF_CONFIG_STRING_ENABLE_BPF_DATAPATH "ENABLE_BPF_DATAPATH"
 #define UPF_CONFIG_STRING_5G_FEATURES_REGISTER_NRF "REGISTER_NRF"
 #define UPF_CONFIG_STRING_5G_FEATURES_UPF_FQDN "UPF_FQDN_5G"
@@ -95,9 +100,13 @@ namespace upf {
 #define UPF_CONFIG_STRING_5G_FEATURES_UPF_INFO_DNN_LIST "DNN_LIST"
 #define UPF_CONFIG_STRING_LOG_LEVEL "LOG_LEVEL"
 
+#define UPF_CONFIG_REMOTE_N6_GW_CONFIG "REMOTE_N6_GW"
+
 #define UPF_ABORT_ON_ERROR true
 #define UPG_WARN_ON_ERROR false
+using namespace libconfig;
 
+namespace oai::config {
 typedef struct interface_cfg_s {
   std::string if_name;
   struct in_addr addr4;
@@ -155,24 +164,43 @@ class upf_config {
 
   uint32_t max_pfcp_sessions;
 
-  bool snat;
+  typedef struct nf_addr_s {
+    struct in_addr ipv4_addr;
+    unsigned int port;
+    std::string api_version;
+    std::string fqdn;
+    std::string uri_root;
+    unsigned int http_version;
+
+  } nf_addr;
+
+  bool enable_snat;
   std::vector<pdn_cfg_t> pdns;
   std::vector<pfcp::node_id_t> smfs;
 
-  struct {
-    bool enable_5g_features;
-    bool enable_bpf_datapath;
-    bool register_nrf;
-    upf_info_t upf_info;
-    bool use_fqdn_nrf;
-    struct {
-      struct in_addr ipv4_addr;
-      unsigned int port;
-      unsigned int http_version;
-      std::string api_version;
-      std::string fqdn;
-    } nrf_addr;
-  } upf_5g_features;
+  bool enable_5g_features;
+  bool enable_bpf_datapath;
+  bool register_nrf;
+  struct in_addr remote_n6;
+  upf_info_t upf_info;
+  bool use_fqdn_dns;
+
+  unsigned int http_version;
+
+  nf_addr smf_addr;
+  nf_addr nrf_addr;
+
+  // struct {
+  //   struct in_addr ipv4_addr;
+  //   unsigned int port;
+  //   unsigned int http_version;
+  //   std::string api_version;
+  //   std::string fqdn;
+  // } nrf_addr;
+
+  interface_cfg_t sbi;
+  unsigned int sbi_http2_port;
+  std::string sbi_api_version;
 
   upf_config()
       : m_rw_lock(),
@@ -188,7 +216,7 @@ class upf_config {
         smfs(),
         max_pfcp_sessions(100),
         nsf(),
-        snat(false) {
+        enable_snat(false) {
     itti.itti_timer_sched_params.sched_priority = 85;
     itti.s1u_sched_params.sched_priority        = 84;
     itti.sx_sched_params.sched_priority         = 84;
@@ -203,15 +231,15 @@ class upf_config {
     n4.thread_rd_sched_params.sched_priority = 95;
     n4.port                                  = pfcp::default_port;
 
-    upf_5g_features.enable_5g_features        = false;
-    upf_5g_features.enable_bpf_datapath       = false;
-    upf_5g_features.register_nrf              = false;
-    upf_5g_features.upf_info                  = {};
-    upf_5g_features.use_fqdn_nrf              = false;
-    upf_5g_features.nrf_addr.ipv4_addr.s_addr = INADDR_ANY;
-    upf_5g_features.nrf_addr.port             = 80;
-    upf_5g_features.nrf_addr.api_version      = "v1";
-    upf_5g_features.nrf_addr.fqdn             = {};
+    enable_5g_features        = true;
+    enable_bpf_datapath       = false;
+    register_nrf              = false;
+    upf_info                  = {};
+    use_fqdn_dns              = false;
+    nrf_addr.ipv4_addr.s_addr = INADDR_ANY;
+    nrf_addr.port             = 80;
+    nrf_addr.api_version      = "v1";
+    nrf_addr.fqdn             = {};
 
     log_level = spdlog::level::debug;
   };
@@ -224,6 +252,6 @@ class upf_config {
   int get_pfcp_node_id(pfcp::node_id_t& node_id);
   int get_pfcp_fseid(pfcp::fseid_t& fseid);
 };
-}  // namespace upf
+}  // namespace oai::config
 
 #endif /* FILE_UPF_CONFIG_HPP_SEEN */

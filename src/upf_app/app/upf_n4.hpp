@@ -36,7 +36,9 @@
 
 #include <thread>
 
+namespace oai {
 namespace upf {
+namespace app {
 
 #define TASK_UPF_N4_TRIGGER_HEARTBEAT_REQUEST (0)
 #define TASK_UPF_N4_TIMEOUT_HEARTBEAT_REQUEST (1)
@@ -49,6 +51,7 @@ class upf_n4 : public pfcp::pfcp_l4_stack {
 
   uint64_t recovery_time_stamp;  // timestamp in seconds
   pfcp::up_function_features_s up_function_features;
+  pfcp::enterprise_specific_s enterprise_specific;
 
   void start_association(const pfcp::node_id_t& node_id);
 
@@ -123,5 +126,7 @@ class upf_n4 : public pfcp::pfcp_l4_stack {
 
   void time_out_itti_event(const uint32_t timer_id);
 };
+}  // namespace app
 }  // namespace upf
+}  // namespace oai
 #endif /* FILE_SGWU_SX_HPP_SEEN */

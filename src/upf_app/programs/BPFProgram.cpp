@@ -1,12 +1,10 @@
 #include "BPFProgram.h"
-// // #include <utils/LogDefines.h>
 #include "logger.hpp"
 
 /*****************************************************************************************************************/
 u_int32_t BPFProgram::sIdCounter = 1;
 BPFProgram::BPFProgram(/* args */) : mId(sIdCounter) {
   sIdCounter++;
-  // LOG_INF("BPFProgram {} is created!!!", mId);
   Logger::upf_app().info("BPFProgram %d is created!!!", mId);
 }
 

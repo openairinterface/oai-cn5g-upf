@@ -4,13 +4,13 @@
 #include <types.h>
 #include <stdint.h>
 
-enum e_reference_point {
+typedef enum {
   N3_INTERFACE,
   N6_INTERFACE,
   N4_INTERFACE,
   N9_INTERFACE,
   N19_INTERFACE
-};
+} e_reference_point;
 
 struct s_interface {
   u32 ipv4_address;

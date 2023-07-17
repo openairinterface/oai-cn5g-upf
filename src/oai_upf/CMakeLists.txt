@@ -281,6 +281,7 @@ include_directories(${SRC_TOP_DIR}/common)
 include_directories(${SRC_TOP_DIR}/itti)
 include_directories(${SRC_TOP_DIR}/common/msg)
 include_directories(${SRC_TOP_DIR}/common/utils)
+include_directories(${SRC_TOP_DIR}/common/utils/bstr)
 include_directories(${SRC_TOP_DIR}/gtpv1u)
 include_directories(${SRC_TOP_DIR}/pfcp)
 include_directories(${SRC_TOP_DIR}/udp)
@@ -290,6 +291,8 @@ include_directories(${SRC_TOP_DIR}/upf_app/app)
 include_directories(${SRC_TOP_DIR}/upf_app/interfaces)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/config)
+
 include_directories(${SRC_TOP_DIR}/../build/ext/libbpf)
 link_directories(${SRC_TOP_DIR}/../build/ext/libbpf/src)
 
@@ -309,6 +312,7 @@ ENDIF(STATIC_LINKING)
 
 ## Common modules
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger/logger.cmake)
+include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/config/config.cmake)
 
 # folly glog dl double-conversion for FB folly library
 target_link_libraries (upf 
@@ -327,6 +331,6 @@ pfcp_session_lookup_ebpf_xdp
 UPF_XDP
 gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group
 pthread m rt config++
-event boost_system curl
+event boost_system curl yaml-cpp
 )
 

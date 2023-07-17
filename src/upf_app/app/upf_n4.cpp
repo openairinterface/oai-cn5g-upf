@@ -38,7 +38,8 @@
 #include <stdexcept>
 
 using namespace pfcp;
-using namespace upf;
+using namespace oai::upf::app;
+using namespace oai::config;
 using namespace std;
 
 extern itti_mw* itti_inst;
@@ -238,12 +239,15 @@ upf_n4::upf_n4()
   up_function_features.trace = 0;
   up_function_features.frrt  = 0;
 
+  enterprise_specific.enterprise_id    = OAI_PRIVATE_ENTERPRISE_NUMBER;
+  enterprise_specific.proprietary_data = "OAI UPF";
+
   if (itti_inst->create_task(
           TASK_UPF_N4, upf_n4_task, &upf_cfg.itti.sx_sched_params)) {
     Logger::upf_n4().error("Cannot create task TASK_UPF_N4");
     throw std::runtime_error("Cannot create task TASK_UPF_N4");
   }
-  if (!upf_cfg.upf_5g_features.register_nrf) {
+  if (!upf_cfg.register_nrf) {
     for (std::vector<pfcp::node_id_t>::const_iterator it = upf_cfg.smfs.begin();
          it != upf_cfg.smfs.end(); ++it) {
       start_association(*it);
@@ -383,6 +387,7 @@ void upf_n4::handle_receive_association_setup_request(
           .recovery_time_stamp = (uint32_t) recovery_time_stamp};
       a.pfcp_ies.set(r);
       a.pfcp_ies.set(up_function_features);
+      a.pfcp_ies.set(enterprise_specific);
       if (node_id.node_id_type != pfcp::NODE_ID_TYPE_IPV6_ADDRESS) {
         a.r_endpoint = remote_endpoint;
         send_sx_msg(a);

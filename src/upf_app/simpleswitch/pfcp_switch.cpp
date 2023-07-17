@@ -55,7 +55,8 @@ static std::shared_ptr<SessionManager> spSessionManager;
 
 using namespace pfcp;
 using namespace gtpv1u;
-using namespace upf;
+using namespace oai::config;
+using namespace oai::upf::app;
 using namespace std;
 
 extern itti_mw* itti_inst;
@@ -284,7 +285,7 @@ void pfcp_switch::setup_pdn_interfaces() {
 
   int index = 0;
   // TODO for loop on pdns
-  {
+  for (index = 0; index < upf_cfg.pdns.size(); index++) {
     pdn_cfg_t it = upf_cfg.pdns[index];
     int sock_r   = 0;
 
@@ -305,7 +306,7 @@ void pfcp_switch::setup_pdn_interfaces() {
           it.prefix_ipv4, index);
       rc = system((const char*) cmd.c_str());
 
-      if (upf_cfg.snat) {
+      if (upf_cfg.enable_snat) {
         cmd = fmt::format(
             "iptables -t nat -A POSTROUTING -s {}/{} -o {} -j SNAT --to-source "
             "{}",
@@ -326,7 +327,7 @@ void pfcp_switch::setup_pdn_interfaces() {
           "ip -6 addr add {}/{} dev tun{}", conv::toString(addr6).c_str(),
           it.prefix_ipv6, index);
       rc = system((const char*) cmd.c_str());
-      // if ((it.snat) && (/* SGI has IPv6 address*/)){
+      // if ((it.enable_snat) && (/* SGI has IPv6 address*/)){
       //    cmd = fmt::format("ip6tables -t nat -A POSTROUTING -s {}/{} -o {} -j
       //    SNAT --to-source {}", conv::toString(addr6).c_str(), it.prefix_ipv6,
       //    xxx); rc = system ((const char*)cmd.c_str());
@@ -663,7 +664,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         }
       }
 
-      if (upf_cfg.upf_5g_features.enable_bpf_datapath) {
+      if (upf_cfg.enable_bpf_datapath) {
         std::shared_ptr<pfcp::pfcp_session> pSession =
             std::make_shared<pfcp::pfcp_session>(*session);
         spSessionManager =
@@ -835,6 +836,14 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           created_pdr.set(allocated_fteid);
         }
         resp->pfcp_ies.set(created_pdr);
+      }
+
+      if (upf_cfg.enable_bpf_datapath) {
+        std::shared_ptr<pfcp::pfcp_session> pSession =
+            std::make_shared<pfcp::pfcp_session>(*session);
+        spSessionManager =
+            UserPlaneComponent::getInstance().getSessionManager();
+        spSessionManager->updateBPFSession(pSession);
       }
     }
 

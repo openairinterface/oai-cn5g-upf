@@ -4,7 +4,6 @@
 #include <bpf/libbpf.h>  // bpf wrappers
 #include <iostream>      // cout
 #include <stdexcept>     // exception
-// // #include <utils/LogDefines.h>
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
 #include "logger.hpp"
@@ -27,7 +26,6 @@ void FARProgram::setup() {
   mpLifeCycle->load();
   mpLifeCycle->attach();
 
-  // LOG_DBG("Configure redirect interface");
   Logger::upf_app().debug("Configure redirect interface");
   auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
   auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();

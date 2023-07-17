@@ -38,7 +38,9 @@
 #include <netinet/in.h>
 #include <thread>
 
+namespace oai {
 namespace upf {
+namespace app {
 
 class upf_n3 : public gtpv1u::gtpu_l4_stack {
  private:
@@ -86,5 +88,7 @@ class upf_n3 : public gtpv1u::gtpu_l4_stack {
   void report_error_indication(
       const endpoint& r_endpoint, const uint32_t tunnel_id);
 };
+}  // namespace app
 }  // namespace upf
+}  // namespace oai
 #endif /* FILE_SGWU_S1U_HPP_SEEN */

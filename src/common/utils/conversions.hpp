@@ -49,6 +49,7 @@ class conv {
   static int ascii_to_hex(uint8_t* dst, const char* h);
   static struct in_addr fromString(const std::string addr4);
   static std::string toString(const struct in_addr& inaddr);
+  static struct in6_addr fromStringV6(const std::string& addr6);
   static std::string toString(const struct in6_addr& in6addr);
   static std::string mccToString(
       const uint8_t digit1, const uint8_t digit2, const uint8_t digit3);

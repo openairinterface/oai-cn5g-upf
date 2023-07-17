@@ -90,6 +90,13 @@ class SessionProgramManager {
   void createPipeline(
       uint32_t seid, uint32_t teid, uint8_t sourceInterface,
       uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar);
+
+  /*****************************************************************************************************************/
+  void updatePipeline(
+      uint32_t seid, uint32_t teid, uint8_t sourceInterface,
+      uint32_t gNBIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar);
+
+  /*****************************************************************************************************************/
   void removePipeline(uint32_t seid);
   std::shared_ptr<SessionPrograms> findSessionPrograms(uint32_t seid);
 
