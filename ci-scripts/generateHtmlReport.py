@@ -399,7 +399,7 @@ class HtmlReport():
 			if os.path.isfile(cwd + '/archives/' + logFileName):
 				status = False
 				section_start_pattern = 'git config --global http'
-				section_end_pattern = 'WORKDIR /oai-upf/build/scripts'
+				section_end_pattern = 'WORKDIR /openair-upf/build/scripts'
 				section_status = False
 				with open(cwd + '/archives/' + logFileName, 'r') as logfile:
 					for line in logfile:
@@ -663,7 +663,7 @@ class HtmlReport():
 			logFileName = 'upf_' + variant + '_image_build.log'
 			if os.path.isfile(cwd + '/archives/' + logFileName):
 				section_start_pattern = 'FROM .* as oai-upf$'
-				section_end_pattern = 'WORKDIR /oai-upf/etc'
+				section_end_pattern = 'WORKDIR /openair-upf/etc'
 				section_status = False
 				status = False
 				with open(cwd + '/archives/' + logFileName, 'r') as logfile:
@@ -707,7 +707,7 @@ class HtmlReport():
 		for variant in variants:
 			logFileName = 'upf_' + variant + '_image_build.log'
 			if os.path.isfile(cwd + '/archives/' + logFileName):
-				section_start_pattern = 'WORKDIR /oai-upf/etc'
+				section_start_pattern = 'WORKDIR /openair-upf/etc'
 				if variant == 'docker':
 					section_end_pattern = 'naming to docker.io/library/oai-upf'
 				else:

@@ -55,11 +55,11 @@ RUN rm /etc/rhsm-host && \
     echo "/usr/local/lib64" >> /etc/ld.so.conf.d/local-lib.conf
 
 # Copy the workspace as is
-WORKDIR /oai-upf
-COPY . /oai-upf
+WORKDIR /openair-upf
+COPY . /openair-upf
 
 # Installing and Building UPF
-WORKDIR /oai-upf/build/scripts
+WORKDIR /openair-upf/build/scripts
 RUN ./build_upf --install-deps --force && \
     # Remove entitlements and Subscription Manager configs
     rm -rf /etc/pki/entitlement && \
@@ -70,8 +70,8 @@ RUN ./build_upf --install-deps --force && \
 #---------------------------------------------------------------------
 FROM oai-upf-base as oai-upf-builder
 RUN ./build_upf --clean --build-type Release --jobs --Verbose && \
-    ldd /oai-upf/build/upf/build/upf && \
-    mv /oai-upf/build/upf/build/upf /oai-upf/build/upf/build/oai_upf && \
+    ldd /openair-upf/build/upf/build/upf && \
+    mv /openair-upf/build/upf/build/upf /openair-upf/build/upf/build/oai_upf && \
     echo "end of UPF build"
 
 #---------------------------------------------------------------------
@@ -101,7 +101,6 @@ RUN rm -f /etc/rhsm-host && \
       iptables \
       initscripts \
       libicu \
-      libasan \
       boost \
       libevent \
       findutils \
@@ -114,11 +113,11 @@ RUN rm -f /etc/rhsm-host && \
     rm -rf /etc/rhsm
 
 # Copying executable and generated libraries
-WORKDIR /oai-upf/bin
+WORKDIR /openair-upf/bin
 COPY --from=oai-upf-builder \
-    /oai-upf/build/upf/build/oai_upf \
-    /oai-upf/scripts/entrypoint.py \
-    /oai-upf/scripts/healthcheck.sh \
+    /openair-upf/build/upf/build/oai_upf \
+    /openair-upf/scripts/entrypoint.py \
+    /openair-upf/scripts/healthcheck.sh \
     ./
 
 # Copying installed libraries from builder
@@ -131,14 +130,14 @@ COPY --from=oai-upf-builder \
     /usr/local/lib64/libfmt.so \
     /lib64/
 RUN ldconfig && \
-    ldd /oai-upf/bin/oai_upf
+    ldd /openair-upf/bin/oai_upf
 
 # Copying template configuration files
 # The configuration folder will be flat
-WORKDIR /oai-upf/etc
-COPY --from=oai-upf-builder /oai-upf/etc/upf.conf .
+WORKDIR /openair-upf/etc
+COPY --from=oai-upf-builder /openair-upf/etc/upf.conf .
 
-WORKDIR /oai-upf
+WORKDIR /openair-upf
 
 # expose ports
 EXPOSE 2152/udp 8805/udp
@@ -146,7 +145,7 @@ EXPOSE 2152/udp 8805/udp
 HEALTHCHECK --interval=10s \
             --timeout=15s \
             --retries=6 \
-    CMD /oai-upf/bin/healthcheck.sh
+    CMD /openair-upf/bin/healthcheck.sh
 
-CMD ["/oai-upf/bin/oai_upf", "-c", "/oai-upf/etc/upf.conf", "-o"]
-ENTRYPOINT ["python3", "/oai-upf/bin/entrypoint.py"]
+CMD ["/openair-upf/bin/oai_upf", "-c", "/openair-upf/etc/upf.conf", "-o"]
+ENTRYPOINT ["python3", "/openair-upf/bin/entrypoint.py"]
