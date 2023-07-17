@@ -47,13 +47,13 @@ RUN git config --global https.postBuffer 123289600 && \
     git config --global http.sslverify false
 
 # Copy installation scripts
-WORKDIR /oai-upf
-COPY ./build/scripts /oai-upf/build/scripts/
-COPY ./build/upf/CMakeLists.txt /oai-upf/build/upf/CMakeLists.txt
-COPY ./build/cmake_modules /oai-upf/cmake_modules/
+WORKDIR /openair-upf
+COPY ./build/scripts /openair-upf/build/scripts/
+COPY ./build/upf/CMakeLists.txt /openair-upf/build/upf/CMakeLists.txt
+COPY ./build/cmake_modules /openair-upf/cmake_modules/
 
 # Installing all the needed libraries/packages to build and run UPF
-WORKDIR /oai-upf/build/scripts
+WORKDIR /openair-upf/build/scripts
 RUN ./build_upf --install-deps --force
 
 #---------------------------------------------------------------------
@@ -61,12 +61,12 @@ RUN ./build_upf --install-deps --force
 #---------------------------------------------------------------------
 FROM oai-upf-base as oai-upf-builder
 # Copy the rest of source code
-COPY . /oai-upf
+COPY . /openair-upf
 # Building UPF
-WORKDIR /oai-upf/build/scripts
+WORKDIR /openair-upf/build/scripts
 RUN ./build_upf --clean --build-type Release --jobs --Verbose && \
-    ldd /oai-upf/build/upf/build/upf && \
-    mv /oai-upf/build/upf/build/upf /oai-upf/build/upf/build/oai_upf && \
+    ldd /openair-upf/build/upf/build/upf && \
+    mv /openair-upf/build/upf/build/upf /openair-upf/build/upf/build/oai_upf && \
     echo "end of UPF build"
 
 #---------------------------------------------------------------------
@@ -108,11 +108,11 @@ RUN apt-get update && \
        /lib/x86_64-linux-gnu/libboost_thread.so.1.6*.0
 
 # Copying executable and generated libraries
-WORKDIR /oai-upf/bin
+WORKDIR /openair-upf/bin
 COPY --from=oai-upf-builder \
-    /oai-upf/build/upf/build/oai_upf \
-    /oai-upf/scripts/entrypoint.py \
-    /oai-upf/scripts/healthcheck.sh \
+    /openair-upf/build/upf/build/oai_upf \
+    /openair-upf/scripts/entrypoint.py \
+    /openair-upf/scripts/healthcheck.sh \
     ./
 
 WORKDIR /usr/local/lib
@@ -124,19 +124,19 @@ COPY --from=oai-upf-builder \
     /usr/lib/x86_64-linux-gnu/libasan.so.5 \
 # Ubuntu 18 --> boost 67 will be copied
     /usr/lib/libboost_system.so.1.6*.0 \
-    /oai-upf/build/ext/libbpf/src/libbpf.so.0 \
-    # /oai-upf/build/upf/build/upf_app/utils/libupfutils.so \
+    /openair-upf/build/ext/libbpf/src/libbpf.so.0 \
+    # /openair-upf/build/upf/build/upf_app/utils/libupfutils.so \
     ./
 
 RUN ldconfig && \
-    ldd /oai-upf/bin/oai_upf
+    ldd /openair-upf/bin/oai_upf
 
 # Copying template configuration files
 # The configuration folder will be flat
-WORKDIR /oai-upf/etc
-COPY --from=oai-upf-builder /oai-upf/etc/upf.conf .
+WORKDIR /openair-upf/etc
+COPY --from=oai-upf-builder /openair-upf/etc/upf.conf .
 
-WORKDIR /oai-upf
+WORKDIR /openair-upf
 
 # use these labels for CI purpose
 LABEL support-multi-sgwu-instances="true"
@@ -148,7 +148,7 @@ EXPOSE 2152/udp 8805/udp
 HEALTHCHECK --interval=10s \
             --timeout=15s \
             --retries=6 \
-    CMD /oai-upf/bin/healthcheck.sh
+    CMD /openair-upf/bin/healthcheck.sh
 
-CMD ["/oai-upf/bin/oai_upf", "-c", "/oai-upf/etc/upf.conf", "-o"]
-ENTRYPOINT ["python3", "/oai-upf/bin/entrypoint.py"]
+CMD ["/openair-upf/bin/oai_upf", "-c", "/openair-upf/etc/upf.conf", "-o"]
+ENTRYPOINT ["python3", "/openair-upf/bin/entrypoint.py"]

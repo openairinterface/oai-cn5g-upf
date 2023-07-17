@@ -205,6 +205,14 @@ function main()
   fi
 
   cd ./build
+  OS_BASE=$(grep "^ID_LIKE=" /etc/os-release | sed "s/ID_LIKE=//" | sed "s/\"//g")
+  echo "OS_BASE = ${OS_BASE}"
+  # Currently the gcc-c++ version 12 is not compatible w/ libasan
+  if [[ "$OS_BASE" == "fedora" ]] ; then
+    export SANITIZE_OPTIONS=""
+  else
+    export SANITIZE_OPTIONS="-fsanitize=address"
+  fi
   $CMAKE $cmake_args .. > /dev/null
   ret=$?;[[ $ret -ne 0 ]] && return $ret
 

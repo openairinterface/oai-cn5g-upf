@@ -74,14 +74,14 @@ def perform_flattening(tag):
       cmd += ' --change "ENV PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" '
     else:
       cmd += ' --change "ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" '
-    cmd += ' --change "WORKDIR /oai-upf" '
+    cmd += ' --change "WORKDIR /openair-upf" '
     cmd += ' --change "EXPOSE 2152/udp" '
     cmd += ' --change "EXPOSE 8805/udp" '
     cmd += ' --change "LABEL support-multi-sgwu-instances=\\"true\\"" '
     cmd += ' --change "LABEL support-nrf-fdqn=\\"true\\"" '
-    cmd += ' --change "HEALTHCHECK --interval=10s --timeout=15s --retries=6 CMD /oai-upf/bin/healthcheck.sh" '
-    cmd += ' --change "CMD [\\"/oai-upf/bin/oai_upf\\", \\"-c\\", \\"/oai-upf/etc/upf.conf\\", \\"-o\\"]" '
-    cmd += ' --change "ENTRYPOINT [\\"python3\\", \\"/oai-upf/bin/entrypoint.py\\"]" '
+    cmd += ' --change "HEALTHCHECK --interval=10s --timeout=15s --retries=6 CMD /openair-upf/bin/healthcheck.sh" '
+    cmd += ' --change "CMD [\\"/openair-upf/bin/oai_upf\\", \\"-c\\", \\"/openair-upf/etc/upf.conf\\", \\"-o\\"]" '
+    cmd += ' --change "ENTRYPOINT [\\"python3\\", \\"/openair-upf/bin/entrypoint.py\\"]" '
     cmd += ' - ' + image_prefix + tag
     print (cmd)
     subprocess.check_output(cmd, shell=True, universal_newlines=True)
