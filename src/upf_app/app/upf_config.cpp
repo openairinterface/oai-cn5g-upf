@@ -626,14 +626,14 @@ int upf_config::load(const string& config_file) {
               UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SST, nssai_sst))) {
         Logger::upf_app().error(UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SST
                                 "failed");
-        throw(UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SST "failed");
+        throw(UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SST " failed");
       }
 
       if (!(upf_info_item_cfg.lookupValue(
               UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SD, nssai_sd))) {
         Logger::upf_app().error(UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SD
                                 "failed");
-        throw(UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SD "failed");
+        throw(UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SD " failed");
       }
 
       snssai_upf_info_item_t snssai_item = {};
