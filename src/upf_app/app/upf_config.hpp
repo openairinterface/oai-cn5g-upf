@@ -84,7 +84,6 @@ const std::vector<std::string> DEFAULT_DNN_LIST = {"default"};
 #define UPF_CONFIG_STRING_BYPASS_UL_PFCP_RULES "BYPASS_UL_PFCP_RULES"
 
 #define UPF_CONFIG_STRING_5G_FEATURES "SUPPORT_5G_FEATURES"
-#define UPF_CONFIG_STRING_ENABLE_5G_FEATURES "ENABLE_5G_FEATURES"
 #define UPF_CONFIG_STRING_ENABLE_BPF_DATAPATH "ENABLE_BPF_DATAPATH"
 #define UPF_CONFIG_STRING_5G_FEATURES_REGISTER_NRF "REGISTER_NRF"
 #define UPF_CONFIG_STRING_5G_FEATURES_UPF_FQDN "UPF_FQDN_5G"
@@ -100,6 +99,8 @@ const std::vector<std::string> DEFAULT_DNN_LIST = {"default"};
 #define UPF_CONFIG_STRING_5G_FEATURES_USE_FQDN_NRF "USE_FQDN_NRF"
 #define UPF_CONFIG_STRING_5G_FEATURES_UPF_INFO_DNN_LIST "DNN_LIST"
 #define UPF_CONFIG_STRING_LOG_LEVEL "LOG_LEVEL"
+
+#define UPF_CONFIG_REMOTE_N6_GW_CONFIG "REMOTE_N6_GW"
 
 #define UPF_ABORT_ON_ERROR true
 #define UPG_WARN_ON_ERROR false
@@ -180,6 +181,7 @@ class upf_config {
   bool enable_5g_features;
   bool enable_bpf_datapath;
   bool register_nrf;
+  struct in_addr remote_n6;
   upf_info_t upf_info;
   bool use_fqdn_dns;
 

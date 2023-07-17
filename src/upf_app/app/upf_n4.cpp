@@ -239,7 +239,7 @@ upf_n4::upf_n4()
   up_function_features.trace = 0;
   up_function_features.frrt  = 0;
 
-  enterprise_specific.enterprise_id    = 56701;
+  enterprise_specific.enterprise_id    = OAI_PRIVATE_ENTERPRISE_NUMBER;
   enterprise_specific.proprietary_data = "OAI UPF";
 
   if (itti_inst->create_task(

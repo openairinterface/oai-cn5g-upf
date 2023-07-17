@@ -82,12 +82,12 @@ class pfcp_tlv : public stream_serializable {
     os.write(reinterpret_cast<const char*>(&ns_type), sizeof(ns_type));
     auto ns_length = htobe16(length);
     os.write(reinterpret_cast<const char*>(&ns_length), sizeof(ns_length));
-    if (type & 0x8000) {
-      auto ns_enterprise_id = htobe16(enterprise_id);
-      os.write(
-          reinterpret_cast<const char*>(&ns_enterprise_id),
-          sizeof(ns_enterprise_id));
-    }
+    // if (type & 0x8000) {
+    //   auto ns_enterprise_id = htobe16(enterprise_id);
+    //   os.write(
+    //       reinterpret_cast<const char*>(&ns_enterprise_id),
+    //       sizeof(ns_enterprise_id));
+    // }
   }
 
   void load_from(std::istream& is) {
@@ -635,9 +635,11 @@ class pfcp_enterprise_specific_ie : public pfcp_ie {
   //--------
   void dump_to(std::ostream& os) {
     tlv.dump_to(os);
+    auto be_enterprise_id = htobe16(enterprise_id);
     os.write(
-        reinterpret_cast<const char*>(&enterprise_id), sizeof(enterprise_id));
-    os << enterprise_id;
+        reinterpret_cast<const char*>(&be_enterprise_id),
+        sizeof(be_enterprise_id));
+    os << proprietary_data;
   }
   //--------
   void load_from(std::istream& is) {
@@ -8797,7 +8799,8 @@ class pfcp_user_id_ie : public pfcp_ie {
 //  uint8_t todo;
 //
 //  //--------
-//  pfcp_event_id_ie(const pfcp::event_id_t& b) : pfcp_ie(PFCP_IE_SUBSEQUENT_EVENT_QUOTA){
+//  pfcp_event_id_ie(const pfcp::event_id_t& b) :
+//  pfcp_ie(PFCP_IE_SUBSEQUENT_EVENT_QUOTA){
 //    todo = 0;
 //    tlv.set_length(1);
 //  }

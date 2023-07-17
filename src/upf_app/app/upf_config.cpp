@@ -532,6 +532,19 @@ int upf_config::load(const string& config_file) {
       use_fqdn_dns = false;
     }
 
+    support_features.lookupValue(UPF_CONFIG_REMOTE_N6_GW_CONFIG, opt);
+    std::string remote_n6_addr;
+    uint8_t addr_type = {};
+    unsigned int port = 0;
+    fqdn::resolve(opt, remote_n6_addr, port, addr_type);
+    if (addr_type != 0) {  // IPv6: TODO
+      throw("DO NOT SUPPORT IPV6 ADDR FOR NRF!");
+    } else {  // IPv4
+      IPV4_STR_ADDR_TO_INADDR(
+          util::trim(remote_n6_addr).c_str(), remote_n6,
+          "BAD IPv4 ADDRESS FORMAT FOR N6 DN !");
+    }
+
     // NRF
     const Setting& nrf_cfg =
         support_features[UPF_CONFIG_STRING_5G_FEATURES_NRF];
@@ -774,6 +787,9 @@ void upf_config::display() {
   Logger::upf_app().info(
       "    bypass_ul_pfcp_rules: %s",
       (nsf.bypass_ul_pfcp_rules) ? "yes" : "no");
+
+  Logger::upf_app().info(
+      "- Remote N6 Address .......: %s", inet_ntoa(remote_n6));
 
   Logger::upf_app().info("- SUPPORT_5G_FEATURES:");
 

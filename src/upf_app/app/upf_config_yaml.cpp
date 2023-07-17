@@ -194,6 +194,10 @@ void upf::from_yaml(const YAML::Node& node) {
       m_upf_support_features.from_yaml(elem.second);
     }
 
+    if (key == UPF_CONFIG_REMOTE_N6_GW) {
+      m_remote_n6.from_yaml(elem.second);
+    }
+
     if (key == UPF_CONFIG_UPF_INFO) {
       for (const auto& yaml_sub : node[UPF_CONFIG_UPF_INFO]) {
         m_upf_info_config.from_yaml(yaml_sub);
@@ -227,6 +231,10 @@ std::string upf::to_string(const std::string& indent) const {
       m_upf_name.get_value()));
 
   out.append(indent).append(fmt::format(
+      BASE_FORMATTER, OUTER_LIST_ELEM, UPF_CONFIG_REMOTE_N6_GW_LABEL,
+      inner_width, m_remote_n6.get_value()));
+
+  out.append(indent).append(fmt::format(
       "{} {}:\n", OUTER_LIST_ELEM, UPF_CONFIG_SUPPORT_FEATURES_LABEL));
   out.append(m_upf_support_features.to_string(inner_indent));
 
@@ -249,6 +257,11 @@ const std::string upf::get_pid_directory() const {
 //------------------------------------------------------------------------------
 const std::string upf::get_upf_name() const {
   return m_upf_name.get_value();
+}
+
+//------------------------------------------------------------------------------
+const std::string upf::get_remote_n6() const {
+  return m_remote_n6.get_value();
 }
 
 //------------------------------------------------------------------------------
@@ -344,7 +357,7 @@ upf_config_yaml::upf_config_yaml(
   add_nf(oai::config::NRF_CONFIG_NAME, m_nrf);
 
   // DNN default values
-  dnn_config dnn("default", "IPV4", "12.1.1.0 - 12.1.1.255", "", "");
+  dnn_config dnn("default", "IPV4", "12.1.1.0/24", "");
   m_dnns.push_back(dnn);
 
   update_used_nfs();
@@ -397,6 +410,18 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   cfg.log_level    = spdlog::level::from_str(log_level());
   cfg.register_nrf = register_nrf();
 
+  std::string remote_n6_addr;
+  uint8_t addr_type = {};
+  unsigned int port = 0;
+  fqdn::resolve(upf_local->get_remote_n6(), remote_n6_addr, port, addr_type);
+  if (addr_type != 0) {  // IPv6: TODO
+    throw("DO NOT SUPPORT IPV6 ADDR FOR NRF!");
+  } else {  // IPv4
+    IPV4_STR_ADDR_TO_INADDR(
+        util::trim(remote_n6_addr).c_str(), cfg.remote_n6,
+        "BAD IPv4 ADDRESS FORMAT FOR N6 DN !");
+  }
+
   if (get_nf(NRF_CONFIG_NAME)->is_set()) {
     nrf_addr.from_sbi_config_type(
         get_nf(NRF_CONFIG_NAME)->get_sbi(), http_version);
@@ -434,7 +459,7 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
     pdn_cfg.network_mask_ipv4_be = htobe32(pdn_cfg.network_mask_ipv4);
     logger::logger_registry::get_logger(LOGGER_NAME)
         .debug(
-            "PDN Network Added for UE Subnet:  %s ",
+            "PDN Network validation for UE Subnet:  %s ",
             conv::toString(cfg_dnn.get_ipv4_subnet()));
     logger::logger_registry::get_logger(LOGGER_NAME)
         .debug(

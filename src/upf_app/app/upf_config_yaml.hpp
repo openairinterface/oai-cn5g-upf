@@ -23,6 +23,7 @@
 
 #include "config.hpp"
 #include "upf_config.hpp"
+#include "common_defs.h"
 
 constexpr auto UPF_CONFIG_INSTANCE_ID            = "instance_id";
 constexpr auto UPF_CONFIG_INSTANCE_ID_LABEL      = "Instance ID";
@@ -40,6 +41,9 @@ constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF_LABEL =
     "Enable BPF Datapath";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT       = "enable_snat";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT_LABEL = "Enable SNAT";
+
+constexpr auto UPF_CONFIG_REMOTE_N6_GW       = "remote_n6_gw";
+constexpr auto UPF_CONFIG_REMOTE_N6_GW_LABEL = "Remote N6 Gateway";
 
 constexpr auto UPF_CONFIG_N3_LABEL = "n3";
 constexpr auto UPF_CONFIG_N6_LABEL = "n6";
@@ -165,6 +169,7 @@ class upf : public nf {
   string_config_value m_upf_name;
   upf_support_features m_upf_support_features;
   upf_info_config m_upf_info_config;
+  string_config_value m_remote_n6;
   // the reason to use a map is to have support for different interfaces in the
   // future now we use N3, N6 or N4 as key, but then we can have N3_NWI to
   // support multiple use cases or several N6/N9 (e.g. for UL CL)
@@ -188,6 +193,7 @@ class upf : public nf {
   [[nodiscard]] const uint32_t get_instance_id() const;
   [[nodiscard]] const std::string get_pid_directory() const;
   [[nodiscard]] const std::string get_upf_name() const;
+  [[nodiscard]] const std::string get_remote_n6() const;
   [[nodiscard]] const upf_support_features& get_support_features() const;
   [[nodiscard]] const upf_info_config& get_upf_info() const;
   [[nodiscard]] const std::map<std::string, upf_interface_config>&
