@@ -19,6 +19,7 @@
 #      contact@openairinterface.org
 ################################################################################
 cmake_minimum_required (VERSION 3.0.2)
+project(OpenAirInterface)
 set (  PACKAGE_NAME                    "UPF" )
 set (  STATIC_LINKING                   False )
 #############################################

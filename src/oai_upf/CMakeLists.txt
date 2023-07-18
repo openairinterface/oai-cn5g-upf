@@ -129,11 +129,14 @@ if (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
 endif()
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_boolean_option(LOG_OAI True "Thread safe logging API")
-  # Set it manually if needed: SET(ASAN asan)
-  SET(ASAN)
 endif()
 if (CMAKE_BUILD_TYPE STREQUAL "")
    set(CMAKE_BUILD_TYPE "MinSizeRel")
+endif()
+# Currently the gcc-c++ version 12 is not compatible w/ libasan
+if ("$ENV{SANITIZE_OPTIONS}" STREQUAL "-fsanitize=address")
+  # Set it manually if needed: SET(ASAN asan)
+  SET(ASAN asan)
 endif()
 
 ################################################################
@@ -303,11 +306,11 @@ add_executable(upf
   ${SRC_TOP_DIR}/itti/itti_msg.cpp
   )
 
-  IF(STATIC_LINKING)
+IF(STATIC_LINKING)
   SET(CMAKE_EXE_LINKER_FLAGS "-static")
   SET_TARGET_PROPERTIES(spgwc PROPERTIES LINK_SEARCH_END_STATIC 1)
   # asan do not support static linking
-  SET(ASAN)
+  SET(ASAN asan)
 ENDIF(STATIC_LINKING)
 
 ## Common modules
@@ -315,12 +318,11 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger/logger.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/config/config.cmake)
 
 # folly glog dl double-conversion for FB folly library
-target_link_libraries (upf 
-${ASAN}  -Wl,--start-group CN_UTILS 
-${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so 
+target_link_libraries (upf
+${ASAN}  -Wl,--start-group CN_UTILS
+${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so
 APP
 SIMPLE_SWITCH
-asan
 interfaces
 UDP
 GTPV1U
