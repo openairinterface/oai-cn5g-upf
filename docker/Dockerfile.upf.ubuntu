@@ -49,6 +49,7 @@ RUN git config --global https.postBuffer 123289600 && \
 # Copy installation scripts
 WORKDIR /openair-upf
 COPY ./build/scripts /openair-upf/build/scripts/
+COPY ./build/common-build /openair-upf/build/common-build
 COPY ./build/upf/CMakeLists.txt /openair-upf/build/upf/CMakeLists.txt
 COPY ./build/cmake_modules /openair-upf/cmake_modules/
 
