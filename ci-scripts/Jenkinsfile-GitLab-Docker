@@ -115,10 +115,10 @@ pipeline {
             shortenShaOne = sh returnStdout: true, script: 'git log -1 --pretty=format:"%h" --abbrev=8 ' + env.GIT_COMMIT
             shortenShaOne = shortenShaOne.trim()
             upf_tag       = 'develop-' + shortenShaOne
-            upf_branch    = env.GIT_COMMIT
+            upf_branch    = env.GIT_BRANCH.replace("origin/", "")
 
             echo "======== THIS IS A PUSH REQUEST ========"
-            echo "Git Branch      is ${GIT_BRANCH}"
+            echo "Git Branch      is ${GIT_BRANCH} -- ${upf_branch}"
             echo "Git Commit      is ${GIT_COMMIT}"
             echo "CI  Usermail    is ${gitCommittorEmailAddr}"
             echo "CI develop TAG  is ${upf_tag}"
@@ -345,8 +345,8 @@ pipeline {
               gitlabCommitStatus(name: "Test with COTS-UE") {
                 localStatus = build job: 'OAI-CN5G-COTS-UE-Test-New-UPF',
                   parameters: [
-                    string(name: 'UPF_TAG', value: String.valueOf(amf_tag)),
-                    string(name: 'UPF_BRANCH', value: String.valueOf(amf_branch))
+                    string(name: 'UPF_TAG', value: String.valueOf(upf_tag)),
+                    string(name: 'UPF_BRANCH', value: String.valueOf(upf_branch))
                   ], propagate: false
                 localResult = localStatus.getResult()
 
@@ -374,8 +374,8 @@ pipeline {
               gitlabCommitStatus(name: "Load Testing") {
                 localStatus = build job: 'OAI-CN5G-Load-Test-New-UPF',
                   parameters: [
-                    string(name: 'UPF_TAG', value: String.valueOf(amf_tag)),
-                    string(name: 'UPF_BRANCH', value: String.valueOf(amf_branch))
+                    string(name: 'UPF_TAG', value: String.valueOf(upf_tag)),
+                    string(name: 'UPF_BRANCH', value: String.valueOf(upf_branch))
                   ], propagate: false
                 localResult = localStatus.getResult()
 
@@ -404,8 +404,8 @@ pipeline {
               gitlabCommitStatus(name: "NGAP-Tester") {
                 localStatus = build job: 'OAI-CN5G-NGAP-Tester-New-UPF',
                   parameters: [
-                    string(name: 'UPF_TAG', value: String.valueOf(amf_tag)),
-                    string(name: 'UPF_BRANCH', value: String.valueOf(amf_branch))
+                    string(name: 'UPF_TAG', value: String.valueOf(upf_tag)),
+                    string(name: 'UPF_BRANCH', value: String.valueOf(upf_branch))
                   ], propagate: false
                 localResult = localStatus.getResult()
 
