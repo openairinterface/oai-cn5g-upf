@@ -12,6 +12,11 @@
 
 #include <next_prog_rule_key.h>
 
+#include "upf_config.hpp"
+
+using namespace oai::config;
+extern upf_config upf_cfg;
+
 /*****************************************************************************************************************/
 SessionManager::SessionManager() {}
 
@@ -27,7 +32,7 @@ void SessionManager::createSession(std::shared_ptr<SessionBpf> pSession) {
 
 /*****************************************************************************************************************/
 void SessionManager::createBPFSession(
-    std::shared_ptr<pfcp::pfcp_session> pSession) {
+    std::shared_ptr<pfcp::pfcp_session> pSession, bool isModification) {
   Logger::upf_app().debug("Session %d Received", pSession->get_up_seid());
   Logger::upf_app().debug("Preparing the Datapath ...");
   Logger::upf_app().debug("Find the PDR with Highest Precedence:");
@@ -82,7 +87,7 @@ void SessionManager::createBPFSession(
     pdi.get(pSession->teid_uplink);
     Logger::upf_app().info(
         "TEID for Uplink Session: %d", pSession->teid_uplink.teid);
-    createBPFSessionUL(pSession, pdrHighPrecedenceUl);
+    createBPFSessionUL(pSession, pdrHighPrecedenceUl, isModification);
   }
 
   if (not(pSession->pdrs_downlink.empty())) {
@@ -94,7 +99,7 @@ void SessionManager::createBPFSession(
     Logger::upf_app().debug(
         "Extract PDI from the Downlink PDR %d",
         pdrHighPrecedenceDl->pdr_id.rule_id);
-    createBPFSessionDL(pSession, pdrHighPrecedenceDl);
+    createBPFSessionDL(pSession, pdrHighPrecedenceDl, isModification);
   }
 
   mSeidToSession[pSession->get_up_seid()] = pSession;
@@ -102,7 +107,7 @@ void SessionManager::createBPFSession(
 /*****************************************************************************************************************/
 void SessionManager::createBPFSessionUL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
-    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl) {
+    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl, bool isModification) {
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
   pfcp::ue_ip_address_t ueIpAddress;
@@ -130,9 +135,15 @@ void SessionManager::createBPFSessionUL(
     throw std::runtime_error("No fields available For Uplink Create FAR Check");
   }
 
+  uint32_t ipnexthop = upf_cfg.remote_n6.s_addr;
+
+  // SessionProgramManager::getInstance().createPipeline(
+  //     pSession->get_up_seid(), fteid.teid, sourceInterface.interface_value,
+  //     ueIpAddress.ipv4_address.s_addr, pFar);
+
   SessionProgramManager::getInstance().createPipeline(
       pSession->get_up_seid(), fteid.teid, sourceInterface.interface_value,
-      ueIpAddress.ipv4_address.s_addr, pFar);
+      ipnexthop, pFar, isModification);
 
   // Logger::upf_app().info("Add Session For Uplink");
 }
@@ -140,7 +151,7 @@ void SessionManager::createBPFSessionUL(
 /*****************************************************************************************************************/
 void SessionManager::createBPFSessionDL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
-    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl) {
+    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl, bool isModification) {
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
   pfcp::ue_ip_address_t ueIpAddress;
@@ -172,14 +183,14 @@ void SessionManager::createBPFSessionDL(
 
   SessionProgramManager::getInstance().createPipeline(
       pSession->get_up_seid(), fteid.teid, sourceInterface.interface_value,
-      ueIpAddress.ipv4_address.s_addr, pFar);
+      ueIpAddress.ipv4_address.s_addr, pFar, isModification);
 
   // Logger::upf_app().info("Add Session For Downlink");
 }
 
 /*****************************************************************************************************************/
 void SessionManager::updateBPFSession(
-    std::shared_ptr<pfcp::pfcp_session> pSession) {
+    std::shared_ptr<pfcp::pfcp_session> pSession, bool isModification) {
   Logger::upf_app().debug(
       "Session %d Will be updated", pSession->get_up_seid());
   Logger::upf_app().debug("Find the PDR with Highest Precedence:");
@@ -227,7 +238,7 @@ void SessionManager::updateBPFSession(
         "Extract PDI from the Downlink PDR %d",
         pdrHighPrecedenceDl->pdr_id.rule_id);
 
-    updateBPFSessionDL(pSession, pdrHighPrecedenceDl);
+    updateBPFSessionDL(pSession, pdrHighPrecedenceDl, isModification);
   }
 
   if (not(pSession->pdrs_uplink.empty())) {
@@ -240,7 +251,7 @@ void SessionManager::updateBPFSession(
         "Extract PDI from the Uplink PDR %d",
         pdrHighPrecedenceUl->pdr_id.rule_id);
 
-    updateBPFSessionUL(pSession, pdrHighPrecedenceUl);
+    updateBPFSessionUL(pSession, pdrHighPrecedenceUl, isModification);
   }
 
   //  mSeidToSession[pSession->get_up_seid()] = pSession;
@@ -249,7 +260,7 @@ void SessionManager::updateBPFSession(
 /*****************************************************************************************************************/
 void SessionManager::updateBPFSessionUL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
-    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl) {
+    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl, bool isModification) {
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
   pfcp::ue_ip_address_t ueIpAddress;
@@ -288,7 +299,7 @@ void SessionManager::updateBPFSessionUL(
 /*****************************************************************************************************************/
 void SessionManager::updateBPFSessionDL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
-    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl) {
+    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl, bool isModification) {
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
   pfcp::ue_ip_address_t ueIpAddress;
@@ -341,9 +352,11 @@ void SessionManager::updateBPFSessionDL(
       pFar->forwarding_parameters.second.outer_header_creation.second.teid;
 
   /* Create eBPF programs and Maps for Downlink*/
+  uint32_t ipnexthop = upf_cfg.remote_n6.s_addr;
+
   SessionProgramManager::getInstance().createPipeline(
-      seidul, fteid.teid, sourceInterface.interface_value,
-      ueIpAddress.ipv4_address.s_addr, pFar);
+      seidul, fteid.teid, sourceInterface.interface_value, ipnexthop, pFar,
+      isModification);
 
   uint32_t teidToUpdate = -1;
 
@@ -363,7 +376,7 @@ void SessionManager::updateBPFSessionDL(
   /* Update Maps for Uplink*/
   if (teidToUpdate) {
     SessionProgramManager::getInstance().updatePipeline(
-        seidul, teidToUpdate, gNBIpAddress.ipv4_address.s_addr);
+        seidul, teidToUpdate, gNBIpAddress.ipv4_address.s_addr, isModification);
   } else {
     Logger::upf_app().error(
         "TEID to update not found for session: %d ", seidul);

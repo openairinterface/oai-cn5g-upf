@@ -23,6 +23,27 @@
 NextHopFinder::NextHopFinder() {}
 
 /*****************************************************************************************************************/
+int NextHopFinder::calculateSubnetMask(uint32_t ip) {
+  int mask      = 0;
+  uint32_t temp = ip;
+
+  while (temp & 0x80000000U) {
+    mask++;
+    temp <<= 1;
+  }
+
+  return mask;
+}
+
+/*****************************************************************************************************************/
+int NextHopFinder::sameSubnet(uint32_t ip1, uint32_t ip2) {
+  int subnet_mask = calculateSubnetMask(ip1);
+  uint32_t mask   = 0xFFFFFFFFU << (32 - subnet_mask);
+
+  return (ip1 & mask) == (ip2 & mask);
+}
+
+/*****************************************************************************************************************/
 u_int32_t NextHopFinder::retrieveNextHopIP(uint32_t destination_ip) {
   char command[COMMAND_MAX_LENGTH];
 
