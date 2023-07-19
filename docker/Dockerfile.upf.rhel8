@@ -128,6 +128,7 @@ COPY --from=oai-upf-builder \
     /lib64/libdouble-conversion.so.3 \
     /usr/local/lib64/libspdlog.so \
     /usr/local/lib64/libfmt.so \
+    /usr/local/lib64/libyaml-cpp.so.0.* \
     /lib64/
 RUN ldconfig && \
     ldd /openair-upf/bin/oai_upf
@@ -135,7 +136,7 @@ RUN ldconfig && \
 # Copying template configuration files
 # The configuration folder will be flat
 WORKDIR /openair-upf/etc
-COPY --from=oai-upf-builder /openair-upf/etc/upf.conf .
+COPY --from=oai-upf-builder /openair-upf/etc/config.yaml.conf .
 
 WORKDIR /openair-upf
 
@@ -147,5 +148,4 @@ HEALTHCHECK --interval=10s \
             --retries=6 \
     CMD /openair-upf/bin/healthcheck.sh
 
-CMD ["/openair-upf/bin/oai_upf", "-c", "/openair-upf/etc/upf.conf", "-o"]
-ENTRYPOINT ["python3", "/openair-upf/bin/entrypoint.py"]
+CMD ["/openair-upf/bin/oai_upf", "-c", "/openair-upf/etc/config.yaml", "-o"]
