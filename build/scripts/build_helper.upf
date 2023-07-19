@@ -395,19 +395,6 @@ check_install_upf_deps() {
     ret=$?;[[ $ret -ne 0 ]] && return $ret
   fi
 
-  if [[ $OS_DISTRO == "ubuntu" ]]; then
-    case "$(get_distribution_release)" in
-      "ubuntu20.04")
-        $SUDO $INSTALLER install $OPTION libyaml-cpp0.6 libyaml-cpp-dev
-        ;;
-      "ubuntu22.04")
-        $SUDO $INSTALLER install $OPTION libyaml-cpp0.7 libyaml-cpp-dev
-        ;;
-    esac
-  elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
-    $SUDO $INSTALLER install $OPTION yaml-cpp yaml-cpp-devel
-  fi
-
   if [[ "$OS_BASEDISTRO" == "fedora" ]]; then
     rm -f /usr/bin/g++ /usr/bin/gcc
     update-alternatives --install /usr/bin/gcc gcc /opt/rh/gcc-toolset-12/root/bin/gcc 20
