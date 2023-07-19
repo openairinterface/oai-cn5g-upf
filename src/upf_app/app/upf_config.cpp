@@ -545,6 +545,8 @@ int upf_config::load(const string& config_file) {
           "BAD IPv4 ADDRESS FORMAT FOR N6 DN !");
     }
 
+    support_features.lookupValue(UPF_CONFIG_STRING_HTTP_VERSION, http_version);
+
     // NRF
     const Setting& nrf_cfg =
         support_features[UPF_CONFIG_STRING_5G_FEATURES_NRF];

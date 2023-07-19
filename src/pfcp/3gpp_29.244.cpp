@@ -1027,6 +1027,11 @@ pfcp_msg::pfcp_msg(const pfcp_association_setup_response& pfcp_ies)
             pfcp_ies.user_plane_ip_resource_information.second));
     add_ie(sie);
   }
+  if (pfcp_ies.enterprise_specific.first) {
+    std::shared_ptr<pfcp_enterprise_specific_ie> sie(
+        new pfcp_enterprise_specific_ie(pfcp_ies.enterprise_specific.second));
+    add_ie(sie);
+  }
 }
 //------------------------------------------------------------------------------
 pfcp_msg::pfcp_msg(const pfcp_association_release_request& pfcp_ies)
