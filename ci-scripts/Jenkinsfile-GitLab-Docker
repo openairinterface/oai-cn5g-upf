@@ -308,6 +308,127 @@ pipeline {
         }
       }
     }
+    stage('Testing whole 5g Core Network Functions') {
+      parallel {
+        stage ('Testing the tutorials') {
+          steps {
+            script {
+              gitlabCommitStatus(name: "Test tutorials") {
+                localStatus = build job: 'OAI-CN5G-Tutorials-Check-New-UPF',
+                  parameters: [
+                    string(name: 'UPF_TAG', value: String.valueOf(upf_tag)),
+                    string(name: 'UPF_BRANCH', value: String.valueOf(upf_branch))
+                  ], propagate: false
+                localResult = localStatus.getResult()
+
+                if (localStatus.resultIsBetterOrEqualTo('SUCCESS')) {
+                  echo "Tutorials Test Job is OK"
+                } else {
+                  error "Tutorials Test Job is KO"
+                }
+              }
+            }
+          }
+          post {
+            always {
+              script {
+                copyArtifacts(projectName: 'OAI-CN5G-Tutorials-Check-New-UPF',
+                              filter: '*_results_oai_cn5g*.html',
+                              selector: lastCompleted())
+              }
+            }
+          }
+        }
+        stage ('Testing with COTS-UE') {
+          steps {
+            script {
+              gitlabCommitStatus(name: "Test with COTS-UE") {
+                localStatus = build job: 'OAI-CN5G-COTS-UE-Test-New-UPF',
+                  parameters: [
+                    string(name: 'UPF_TAG', value: String.valueOf(amf_tag)),
+                    string(name: 'UPF_BRANCH', value: String.valueOf(amf_branch))
+                  ], propagate: false
+                localResult = localStatus.getResult()
+
+                if (localStatus.resultIsBetterOrEqualTo('SUCCESS')) {
+                  echo "Test Job with COTS-UE is OK"
+                } else {
+                  error "Test Job with COTS-UE is is KO"
+                }
+              }
+            }
+          }
+          post {
+            always {
+              script {
+                copyArtifacts(projectName: 'OAI-CN5G-COTS-UE-Test-New-UPF',
+                              filter: '*_results_oai_cn5g*.html',
+                              selector: lastCompleted())
+              }
+            }
+          }
+        }
+        stage ('Load Testing') {
+          steps {
+            script {
+              gitlabCommitStatus(name: "Load Testing") {
+                localStatus = build job: 'OAI-CN5G-Load-Test-New-UPF',
+                  parameters: [
+                    string(name: 'UPF_TAG', value: String.valueOf(amf_tag)),
+                    string(name: 'UPF_BRANCH', value: String.valueOf(amf_branch))
+                  ], propagate: false
+                localResult = localStatus.getResult()
+
+                if (localStatus.resultIsBetterOrEqualTo('SUCCESS')) {
+                  echo "Load Testing is OK"
+                } else {
+                  error "Load Testing is is KO"
+                }
+              }
+            }
+          }
+          post {
+            always {
+              script {
+                copyArtifacts(projectName: 'OAI-CN5G-Load-Test-New-UPF',
+                              filter: '*_results_oai_cn5g*.html',
+                              selector: lastCompleted())
+              }
+            }
+          }
+        }
+        // Home-made RAN emulator
+        stage ('NGAP-Tester') {
+          steps {
+            script {
+              gitlabCommitStatus(name: "NGAP-Tester") {
+                localStatus = build job: 'OAI-CN5G-NGAP-Tester-New-UPF',
+                  parameters: [
+                    string(name: 'UPF_TAG', value: String.valueOf(amf_tag)),
+                    string(name: 'UPF_BRANCH', value: String.valueOf(amf_branch))
+                  ], propagate: false
+                localResult = localStatus.getResult()
+
+                if (localStatus.resultIsBetterOrEqualTo('SUCCESS')) {
+                  echo "NGAP-Tester is OK"
+                } else {
+                  error "NGAP-Tester is is KO"
+                }
+              }
+            }
+          }
+          post {
+            always {
+              script {
+                copyArtifacts(projectName: 'OAI-CN5G-NGAP-Tester-New-UPF',
+                              filter: '*_results_oai_cn5g*.html',
+                              selector: lastCompleted())
+              }
+            }
+          }
+        }
+      }
+    }
     // We are only publishing the Ubuntu image to Docker-Hub
     // For Post-Merge events.
     // Temporary Images from Merge-Request Runs are kept in local private registry
