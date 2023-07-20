@@ -308,7 +308,7 @@ void pfcp_switch::setup_pdn_interfaces() {
 
       if (upf_cfg.enable_snat) {
         cmd = fmt::format(
-            "iptables -t nat -A POSTROUTING -s {}/{} -o {} -j SNAT --to-source "
+            "iptables -t nat -A POSTROUTING -s {}/{} -o {} -j SNAT --to "
             "{}",
             conv::toString(it.network_ipv4).c_str(), it.prefix_ipv4,
             upf_cfg.n6.if_name.c_str(),
