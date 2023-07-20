@@ -283,20 +283,20 @@ void pfcp_switch::setup_pdn_interfaces() {
   int rc          = 0;
   int if_index    = 0;
 
-  int index = 0;
   // TODO for loop on pdns
-  for (index = 0; index < upf_cfg.pdns.size(); index++) {
+  for (int index = 0; index < upf_cfg.pdns.size(); index++) {
     pdn_cfg_t it = upf_cfg.pdns[index];
     int sock_r   = 0;
+    if (index == 0) {
+      cmd = fmt::format("ip tuntap add mode tun dev tun{}", index);
+      rc  = system((const char*) cmd.c_str());
 
-    cmd = fmt::format("ip tuntap add mode tun dev tun{}", index);
-    rc  = system((const char*) cmd.c_str());
+      cmd = fmt::format("ip link set dev tun{} up", index);
+      rc  = system((const char*) cmd.c_str());
 
-    cmd = fmt::format("ip link set dev tun{} up", index);
-    rc  = system((const char*) cmd.c_str());
-
-    cmd = fmt::format("ethtool -K tun{0} tx-checksum-ip-generic off;", index);
-    rc  = system((const char*) cmd.c_str());
+      cmd = fmt::format("ethtool -K tun{0} tx-checksum-ip-generic off;", index);
+      rc  = system((const char*) cmd.c_str());
+    }
     if (it.prefix_ipv4) {
       struct in_addr address4 = {};
       address4.s_addr         = it.network_ipv4.s_addr + be32toh(1);
@@ -305,6 +305,24 @@ void pfcp_switch::setup_pdn_interfaces() {
           "ip addr add {}/{} dev tun{}", conv::toString(address4).c_str(),
           it.prefix_ipv4, index);
       rc = system((const char*) cmd.c_str());
+
+      if (index != 0) {
+        // Remove defult route
+        cmd = fmt::format(
+            "ip route del {}/{}", conv::toString(it.network_ipv4).c_str(),
+            it.prefix_ipv4);
+        rc = system((const char*) cmd.c_str());
+
+        // Add first pdn as gateway for additional PDNs
+        struct in_addr address4_gw = {};
+        address4_gw.s_addr = upf_cfg.pdns[0].network_ipv4.s_addr + be32toh(1);
+
+        cmd = fmt::format(
+            "ip route add {}/{} via {} dev tun0",
+            conv::toString(it.network_ipv4).c_str(), it.prefix_ipv4,
+            conv::toString(address4_gw).c_str());
+        rc = system((const char*) cmd.c_str());
+      }
 
       if (upf_cfg.enable_snat) {
         cmd = fmt::format(
@@ -346,21 +364,23 @@ void pfcp_switch::setup_pdn_interfaces() {
     // fmt::format("/sbin/sysctl -w net.ipv4.conf.tun{}.accept_redirects=0",
     // index); rc = system ((const char*)cmd.c_str());
 
-    cmd = fmt::format("tun{}", index);
-    if ((sock_r = tun_open((char*) cmd.c_str(), O_RDWR)) == RETURNerror) {
-      Logger::pfcp_switch().error("Could not set PDN interface read socket");
-      sleep(2);
-      exit(EXIT_FAILURE);
+    if (index == 0) {
+      cmd = fmt::format("tun{}", index);
+      if ((sock_r = tun_open((char*) cmd.c_str(), O_RDWR)) == RETURNerror) {
+        Logger::pfcp_switch().error("Could not set PDN interface read socket");
+        sleep(2);
+        exit(EXIT_FAILURE);
+      }
+
+      sock_w = sock_r;
+
+      std::thread t = thread(
+          &pfcp_switch::pdn_read_loop, this, sock_r,
+          upf_cfg.n6.thread_rd_sched_params);
+      t.detach();
+      threads_.push_back(std::move(t));
+      socks_r.push_back(sock_r);
     }
-
-    sock_w = sock_r;
-
-    std::thread t = thread(
-        &pfcp_switch::pdn_read_loop, this, sock_r,
-        upf_cfg.n6.thread_rd_sched_params);
-    t.detach();
-    threads_.push_back(std::move(t));
-    socks_r.push_back(sock_r);
   }
 
   rc = system("/sbin/sysctl -w net.ipv4.conf.all.forwarding=1");
