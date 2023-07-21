@@ -87,6 +87,8 @@ RUN apt-get update && \
       net-tools \
       iproute2 \
       ethtool \
+      arping \
+      sudo \
       iptables \
       netbase \
       libgssapi-krb5-2 \
