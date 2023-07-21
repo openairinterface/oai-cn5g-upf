@@ -1018,7 +1018,7 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
     }
   } else {
     // Do not check PFCP rules for all UL data packet
-    if (no_internal_loop(iph, num_bytes)) {
+    if (no_internal_loop(iph, num_bytes) & !upf_cfg.enable_bpf_datapath) {
       pfcp_switch_inst->send_to_core(
           reinterpret_cast<char* const>(iph), num_bytes);
     }
