@@ -195,40 +195,55 @@ void SessionManager::updateBPFSession(
       "Session %d Will be updated", pSession->get_up_seid());
   Logger::upf_app().debug("Find the PDR with Highest Precedence:");
 
+  uint32_t pdrs_downlink_size = pSession->pdrs_downlink.size();
+  uint32_t pdrs_uplink_size   = pSession->pdrs_uplink.size();
+  // Logger::upf_app().debug(
+  //       "The PDRs_UPLINK SIZE %d Before
+  //       ++++++++++++++++++++++++++++++++++++++", pdrs_uplink_size);
+
+  //   Logger::upf_app().debug(
+  //       "The PDRs_Downlink SIZE %d Before
+  //       ++++++++++++++++++++++++++++++++++++++", pdrs_downlink_size);
+
   for (int i = 0; i < pSession->pdrs.size(); i++) {
     pfcp::pdi pdi;
     pfcp::source_interface_t sourceInterface;
 
+    Logger::upf_app().debug("The PDRs SIZE %d *******", pSession->pdrs.size());
+
     pSession->pdrs[i]->get(pdi);
     pdi.get(sourceInterface);
 
+    Logger::upf_app().debug(
+        "The PDRs ID %d //////", pSession->pdrs[i]->pdr_id.rule_id);
+
     if (sourceInterface.interface_value == INTERFACE_VALUE_CORE) {
       pSession->pdrs_downlink.push_back(pSession->pdrs[i]);
-    } else if (sourceInterface.interface_value == INTERFACE_VALUE_ACCESS) {
-      pSession->pdrs_uplink.push_back(pSession->pdrs[i]);
     }
+
+    // if (sourceInterface.interface_value == INTERFACE_VALUE_ACCESS) {
+    //   pSession->pdrs_uplink.push_back(pSession->pdrs[i]);
+    // }
   }
 
-  std::sort(
-      pSession->pdrs_downlink.begin(), pSession->pdrs_downlink.end(),
-      SessionManager::comparePDR);
-
-  std::sort(
-      pSession->pdrs_uplink.begin(), pSession->pdrs_uplink.end(),
-      SessionManager::comparePDR);
+  Logger::upf_app().debug(
+      "The PDRs_UPLINK SIZE %d After ++++++++++++++++++++++++++++++++++++++",
+      pSession->pdrs_uplink.size());
 
   Logger::upf_app().debug(
-      "Extract the key (PDI) from the highest priority PDR");
-
-  // auto pPFCP_Session_LookupProgram =
-  //   UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+      "The PDRs_downlink SIZE %d After ++++++++++++++++++++++++++++++++++++++",
+      pSession->pdrs_downlink.size());
 
   if ((pSession->pdrs_uplink.empty()) && (pSession->pdrs_downlink.empty())) {
     Logger::upf_app().error("No PDR was found in session %d", pSession->seid);
     throw std::runtime_error("No PDR was found in session");
   }
 
-  if (not(pSession->pdrs_downlink.empty())) {
+  if (pdrs_downlink_size != pSession->pdrs_downlink.size()) {
+    std::sort(
+        pSession->pdrs_downlink.begin(), pSession->pdrs_downlink.end(),
+        SessionManager::comparePDR);
+
     auto pdrHighPrecedenceDl = pSession->pdrs_downlink[0];
     Logger::upf_app().debug(
         "The Downlink PDR %d has the Highest Precedence",
@@ -241,7 +256,11 @@ void SessionManager::updateBPFSession(
     updateBPFSessionDL(pSession, pdrHighPrecedenceDl, isModification);
   }
 
-  if (not(pSession->pdrs_uplink.empty())) {
+  if (pdrs_uplink_size != pSession->pdrs_uplink.size()) {
+    std::sort(
+        pSession->pdrs_uplink.begin(), pSession->pdrs_uplink.end(),
+        SessionManager::comparePDR);
+
     auto pdrHighPrecedenceUl = pSession->pdrs_uplink[0];
     Logger::upf_app().debug(
         "The Uplink PDR %d has the Highest Precedence",
@@ -253,6 +272,9 @@ void SessionManager::updateBPFSession(
 
     updateBPFSessionUL(pSession, pdrHighPrecedenceUl, isModification);
   }
+
+  // auto pPFCP_Session_LookupProgram =
+  //   UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
   //  mSeidToSession[pSession->get_up_seid()] = pSession;
 }
