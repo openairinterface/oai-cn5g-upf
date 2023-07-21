@@ -339,6 +339,35 @@ pipeline {
             }
           }
         }
+        stage ('Testing the tutorials with eBPF') {
+          steps {
+            script {
+              gitlabCommitStatus(name: "Test eBPF tutorials") {
+                localStatus = build job: 'OAI-CN5G-Tutorials-Check-New-UPF-eBPF',
+                  parameters: [
+                    string(name: 'UPF_TAG', value: String.valueOf(upf_tag)),
+                    string(name: 'UPF_BRANCH', value: String.valueOf(upf_branch))
+                  ], propagate: false
+                localResult = localStatus.getResult()
+
+                if (localStatus.resultIsBetterOrEqualTo('SUCCESS')) {
+                  echo "Tutorials Test Job is OK"
+                } else {
+                  error "Tutorials Test Job is KO"
+                }
+              }
+            }
+          }
+          post {
+            always {
+              script {
+                copyArtifacts(projectName: 'OAI-CN5G-Tutorials-Check-New-UPF-eBPF',
+                              filter: '*_results_oai_cn5g*.html',
+                              selector: lastCompleted())
+              }
+            }
+          }
+        }
         stage ('Testing with COTS-UE') {
           steps {
             script {
