@@ -411,16 +411,18 @@ pfcp_switch::pfcp_switch()
     v->msg.msg_controllen = 0;
     free_pool_->blockingWrite(v);
   }
-  for (int i = 0; i < num_threads_; i++) {
-    std::thread t = std::thread(
-        &pfcp_switch::pdn_worker, this, i, upf_cfg.n6.thread_rd_sched_params);
-    threads_.push_back(std::move(t));
+  if (upf_cfg.enable_bpf_datapath) {
+    for (int i = 0; i < num_threads_; i++) {
+      std::thread t = std::thread(
+          &pfcp_switch::pdn_worker, this, i, upf_cfg.n6.thread_rd_sched_params);
+      threads_.push_back(std::move(t));
+    }
+    timer_min_commit_interval_id = 0;
+    timer_max_commit_interval_id = 0;
+    cp_fseid2pfcp_sessions = {}, sock_w = -1;
+    pdn_if_index = -1;
+    setup_pdn_interfaces();
   }
-  timer_min_commit_interval_id = 0;
-  timer_max_commit_interval_id = 0;
-  cp_fseid2pfcp_sessions = {}, sock_w = -1;
-  pdn_if_index = -1;
-  setup_pdn_interfaces();
 }
 //------------------------------------------------------------------------------
 bool pfcp_switch::get_pfcp_session_by_cp_fseid(
