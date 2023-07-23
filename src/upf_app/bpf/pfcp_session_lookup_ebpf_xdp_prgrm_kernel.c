@@ -12,6 +12,8 @@
 #include <protocols/gtpu.h>
 #include <protocols/ip.h>
 #include <protocols/udp.h>
+#include <linux/icmp.h>
+#include <linux/tcp.h>
 #include <pfcp_session_lookup_maps.h>
 #include <utils/logger.h>
 #include <utils/utils.h>
@@ -48,6 +50,9 @@ static u32 tail_call_next_prog(
     bpf_tail_call(p_ctx, &m_next_rule_prog, *index_prog);
     bpf_debug("BPF tail call was not executed!\n");
   }
+
+  return XDP_DROP;
+
   bpf_debug("BPF tail call was not executed!\n");
   bpf_debug("One reason could be:\n");
   bpf_debug(
@@ -57,7 +62,7 @@ static u32 tail_call_next_prog(
              \t\t\t\t\t\t Map and Key values are saved in different endianess!\n\
              \t\t\t\t\t\t Map Hash Key and Key not matching\n");
 
-  return 0;
+  // return XDP_DROP;
 }
 
 /*****************************************************************************************************************/
@@ -73,17 +78,17 @@ static u32 tail_call_next_prog(
  * @return u32 The XDP action.
  */
 static u32 gtp_handle(
-    struct xdp_md* p_ctx, struct gtpuhdr* p_gtpuh, u32 src_ue_ip) {
+    struct xdp_md* p_ctx, struct gtpuhdr* p_gtpuh, u32 src_ip) {
   // TODO: Handle other PDU.
   if (p_gtpuh->message_type != GTPU_G_PDU) {
     bpf_debug(
         "Message type 0x%x is not GTPU GPDU(0x%x)\n", p_gtpuh->message_type,
         GTPU_G_PDU);
     return XDP_PASS;
+    // return XDP_DROP;
   }
 
-  bpf_debug(
-      "GTP GPDU received with Valid GTP Packet (SRC IP:0x%x)\n", src_ue_ip);
+  bpf_debug("GTP GPDU received with Valid GTP Packet (SRC IP:0x%x)\n", src_ip);
 
   // Check if the Inner IPv4 header extends beyond the data end.
   if ((void*) ((struct gtpu_extn_pdu_session_container*) (p_gtpuh + 1) + 1) >
@@ -93,10 +98,11 @@ static u32 gtp_handle(
   }
 
   // Jump to session context.
-  tail_call_next_prog(p_ctx, p_gtpuh->teid, INTERFACE_VALUE_ACCESS, src_ue_ip);
+  tail_call_next_prog(p_ctx, p_gtpuh->teid, INTERFACE_VALUE_ACCESS, src_ip);
   bpf_debug("BPF tail call was not executed! teid %d\n", p_gtpuh->teid);
 
   return XDP_PASS;
+  // return XDP_DROP;
 }
 
 /*****************************************************************************************************************/
@@ -115,7 +121,7 @@ static u32 udp_handle(
     struct xdp_md* p_ctx, struct udphdr* udph, u32 src_ip, u32 dest_ip) {
   void* p_data_end = (void*) (long) p_ctx->data_end;
 
-  bpf_debug("Valid UDP Packet (SRC IP:0x%x, DEST IP:0x%x)\n", src_ip, src_ip);
+  bpf_debug("Valid UDP Packet (SRC IP:0x%x, DEST IP:0x%x)\n", src_ip, dest_ip);
   u32 dport = htons(udph->dest);
 
   switch (dport) {
@@ -126,6 +132,7 @@ static u32 udp_handle(
         bpf_debug("Invalid GTPU packet\n");
         return XDP_DROP;
       }
+      bpf_debug("TEID FOUND = %d", p_gtpuh->teid);
       return gtp_handle(p_ctx, p_gtpuh, src_ip);
     }
     default:
@@ -133,10 +140,72 @@ static u32 udp_handle(
       tail_call_next_prog(p_ctx, 0, INTERFACE_VALUE_CORE, dest_ip);
 
       return XDP_PASS;
+      // return XDP_DROP;
   }
 }
 
 /*****************************************************************************************************************/
+/**
+ * TCP SECTION.
+ */
+
+/**
+ * @brief Handle TCP header.
+ *
+ * @param p_ctx The user accessible metadata for xdp packet hook.
+ * @param tcph The TCP header.
+ * @return u32 The XDP action.
+ */
+static u32 tcp_handle(
+    struct xdp_md* p_ctx, struct tcphdr* tcph, u32 src_ip, u32 dest_ip) {
+  // void* p_data_end = (void*) (long) p_ctx->data_end;
+
+  bpf_debug("Valid TCP Packet (SRC IP:0x%x, DEST IP:0x%x)\n", src_ip, dest_ip);
+  tail_call_next_prog(p_ctx, 0, INTERFACE_VALUE_CORE, src_ip);
+
+  return XDP_PASS;
+  // return XDP_DROP;
+}
+
+/*****************************************************************************************************************/
+/**
+ * ICMP SECTION.
+ */
+
+/**
+ * @brief Handle ICMP header.
+ *
+ * @param p_ctx The user accessible metadata for xdp packet hook.
+ * @param icmph The icmp header.
+ * @return u32 The XDP action.
+ */
+static u32 icmp_handle(
+    struct xdp_md* p_ctx, struct icmphdr* icmph, u32 src_ip, u32 dest_ip) {
+  // void *data = (void *)(long)p_ctx->data;
+  // void *data_end = (void *)(long)p_ctx->data_end;
+  // 34 = sizeof(eth_hdr) + sizeof(ip_hdr)
+
+  if (icmph->type == ICMP_ECHO) {
+    bpf_debug(
+        "Valid ICMP REQUEST Packet (SRC IP:0x%x, DEST IP:0x%x)\n", src_ip,
+        dest_ip);
+    // tail_call_next_prog(p_ctx, 0, INTERFACE_VALUE_ACCESS, dest_ip);
+    return XDP_DROP;
+  }
+
+  if (icmph->type == ICMP_ECHOREPLY) {
+    bpf_debug(
+        "Valid ICMP REPLY Packet (SRC IP:0x%x, DEST IP:0x%x)\n", src_ip,
+        dest_ip);
+    // tail_call_next_prog(p_ctx, 0, INTERFACE_VALUE_CORE, dest_ip);
+    return XDP_DROP;
+  }
+
+  return XDP_PASS;
+  // return XDP_DROP;
+}
+/*****************************************************************************************************************/
+
 /**
  * IP SECTION.
  */
@@ -148,11 +217,72 @@ static u32 udp_handle(
  * @param iph The IP header.
  * @return u32 The XDP action.
  */
+// static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph_outer, struct
+// iphdr* iph_inner) {
+//   void* p_data_end = (void*) (long) p_ctx->data_end;
+
+//   u32 ip_src  = iph_inner->saddr;
+//   u32 ip_dest = iph_inner->daddr;
+
+//   bpf_debug("Valid IPv4 Packet (SRC IP:0x%x, DEST IP:0x%x)\n", ip_src,
+//   ip_dest); switch (iph_outer->protocol) {
+//     case IPPROTO_UDP: {
+//       struct udphdr* udph = (struct udphdr*) (iph_outer + 1);
+
+//       // Check if the UDP header extends beyond the data end.
+//       if ((void*) (udph + 1) > p_data_end) {
+//         bpf_debug("Invalid UDP packet\n");
+//         return XDP_DROP;
+//       }
+//       return udp_handle(p_ctx, udph, ip_src, ip_dest);
+//     }
+//     // case IPPROTO_TCP:{
+//     //   struct tcphdr* tcph = (struct tcphdr*)(iph + 1);
+
+//     //   // Check if the TCP header extends beyond the data end.
+//     //   if ((void*)(tcph + 1) > p_data_end) {
+//     //     bpf_debug("Invalid TCP packet\n");
+//     //     return XDP_DROP;
+//     //   }
+//     //   return tcp_handle(p_ctx, tcph, ip_src, ip_dest);
+//     // }
+//      case IPPROTO_ICMP: {
+//       struct icmphdr* icmph = (struct icmphdr*) (iph_outer + 1);
+//       bpf_debug("*** This is an ICMP packet ***\n");
+//        // Check if the ICMP header extends beyond the data end.
+//       if ((void*)(icmph + 1) > p_data_end) {
+//         bpf_debug("Invalid ICMP packet\n");
+//         return XDP_DROP;
+//       }
+//       return icmp_handle(p_ctx, icmph, ip_src, ip_dest);
+//     }
+//     default:{
+//       bpf_debug("Non UDP/TCP/ICMP protocols \n");
+//       //return XDP_PASS;
+//       return XDP_DROP;
+//     }
+//   }
+// }
+
+/*****************************************************************************************************************/
 static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
+  void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
 
-  u32 ip_src  = iph->saddr;
-  u32 ip_dest = iph->daddr;
+  struct ethhdr* p_new_eth = p_data + GTP_ENCAPSULATED_SIZE;
+
+  if ((void*) (p_new_eth + 1) > p_data_end) {
+    return XDP_DROP;
+  }
+
+  struct iphdr* p_ip_inner = (void*) (p_new_eth + 1);
+
+  if ((void*) (p_ip_inner + 1) > p_data_end) {
+    return XDP_DROP;
+  }
+
+  u32 ip_src  = p_ip_inner->saddr;
+  u32 ip_dest = p_ip_inner->daddr;
 
   bpf_debug("Valid IPv4 Packet (SRC IP:0x%x, DEST IP:0x%x)\n", ip_src, ip_dest);
   switch (iph->protocol) {
@@ -166,10 +296,31 @@ static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
       }
       return udp_handle(p_ctx, udph, ip_src, ip_dest);
     }
-    case IPPROTO_TCP:
-    default:
-      bpf_debug("TCP protocol L4\n");
-      return XDP_PASS;
+      // case IPPROTO_TCP:{
+      //   struct tcphdr* tcph = (struct tcphdr*)(iph + 1);
+
+      //   // Check if the TCP header extends beyond the data end.
+      //   if ((void*)(tcph + 1) > p_data_end) {
+      //     bpf_debug("Invalid TCP packet\n");
+      //     return XDP_DROP;
+      //   }
+      //   return tcp_handle(p_ctx, tcph, ip_src, ip_dest);
+      // }
+    case IPPROTO_ICMP: {
+      struct icmphdr* icmph = (struct icmphdr*) (iph + 1);
+      bpf_debug("*** This is an ICMP packet ***\n");
+      // Check if the ICMP header extends beyond the data end.
+      if ((void*) (icmph + 1) > p_data_end) {
+        bpf_debug("Invalid ICMP packet\n");
+        return XDP_DROP;
+      }
+      return icmp_handle(p_ctx, icmph, ip_src, ip_dest);
+    }
+    default: {
+      bpf_debug("Non UDP/TCP/ICMP protocols \n");
+      // return XDP_PASS;
+      return XDP_DROP;
+    }
   }
 }
 
@@ -215,6 +366,7 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
         bpf_debug("Invalid IPv4 Packet\n");
         return XDP_DROP;
       }
+
       return ipv4_handle(p_ctx, iph);
     }
     case ETH_P_IPV6:
@@ -225,6 +377,7 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
     default:
       bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x\n", offset, eth_type);
       return XDP_PASS;
+      // return XDP_DROP;
   }
 }
 
@@ -246,3 +399,66 @@ int entry_point(struct xdp_md* p_ctx) {
 
 char _license[] SEC("license") = "GPL";
 /*****************************************************************************************************************/
+
+// /*****************************************************************************************************************/
+// /**
+//  * IP SECTION.
+//  */
+
+// /**
+//  * @brief Handle IPv4 header.
+//  *
+//  * @param p_ctx The user accessible metadata for xdp packet hook.
+//  * @param iph The IP header.
+//  * @return u32 The XDP action.
+//  */
+// static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
+//   void* p_data_end = (void*) (long) p_ctx->data_end;
+
+//   u32 ip_src  = iph->saddr;
+//   u32 ip_dest = iph->daddr;
+
+//   bpf_debug("Valid IPv4 Packet (SRC IP:0x%x, DEST IP:0x%x)\n", ip_src,
+//   ip_dest); switch (iph->protocol) {
+//     case IPPROTO_UDP: {
+//       struct udphdr* udph = (struct udphdr*) (iph + 1);
+
+//       // Check if the UDP header extends beyond the data end.
+//       if ((void*) (udph + 1) > p_data_end) {
+//         bpf_debug("Invalid UDP packet\n");
+//         return XDP_DROP;
+//       }
+//       return udp_handle(p_ctx, udph, ip_src, ip_dest);
+//     }
+//     case IPPROTO_TCP:
+//     default:
+//       bpf_debug("TCP protocol L4\n");
+//       return XDP_PASS;
+//   }
+// }
+
+// #define IPPROTO_IP		IPPROTO_IP
+// #define IPPROTO_ICMP		IPPROTO_ICMP
+// #define IPPROTO_IGMP		IPPROTO_IGMP
+// #define IPPROTO_IPIP		IPPROTO_IPIP
+// #define IPPROTO_TCP		IPPROTO_TCP
+// #define IPPROTO_EGP		IPPROTO_EGP
+// #define IPPROTO_PUP		IPPROTO_PUP
+// #define IPPROTO_UDP		IPPROTO_UDP
+// #define IPPROTO_IDP		IPPROTO_IDP
+// #define IPPROTO_TP		IPPROTO_TP
+// #define IPPROTO_DCCP		IPPROTO_DCCP
+// #define IPPROTO_IPV6		IPPROTO_IPV6
+// #define IPPROTO_RSVP		IPPROTO_RSVP
+// #define IPPROTO_GRE		IPPROTO_GRE
+// #define IPPROTO_ESP		IPPROTO_ESP
+// #define IPPROTO_AH		IPPROTO_AH
+// #define IPPROTO_MTP		IPPROTO_MTP
+// #define IPPROTO_BEETPH		IPPROTO_BEETPH
+// #define IPPROTO_ENCAP		IPPROTO_ENCAP
+// #define IPPROTO_PIM		IPPROTO_PIM
+// #define IPPROTO_COMP		IPPROTO_COMP
+// #define IPPROTO_SCTP		IPPROTO_SCTP
+// #define IPPROTO_UDPLITE		IPPROTO_UDPLITE
+// #define IPPROTO_MPLS		IPPROTO_MPLS
+// #define IPPROTO_RAW		IPPROTO_RAW

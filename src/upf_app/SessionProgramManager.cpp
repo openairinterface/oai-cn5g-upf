@@ -207,8 +207,9 @@ pfcp_far_t_ SessionProgramManager::createFar(
 //   updateArpTableMap(pFARProgram, upfn6IP, ipnexthop);
 // }
 
+/*****************************************************************************************************************/
 void SessionProgramManager::createPipeline(
-    uint32_t seid, uint32_t teid, uint8_t sourceInterface, uint32_t ipnexthop,
+    uint32_t seid, uint32_t teid, uint8_t sourceInterface, uint32_t ueIpaddress,
     std::shared_ptr<pfcp::pfcp_far> pFar, bool isModification) {
   struct next_rule_prog_index_key key;
   u32 id;
@@ -218,10 +219,10 @@ void SessionProgramManager::createPipeline(
 
   if (is_little_endian()) {
     key.teid         = htobe32(teid);
-    key.ipv4_address = htole32(ipnexthop);
+    key.ipv4_address = htole32(ueIpaddress);
   } else {
     key.teid         = htole32(teid);
-    key.ipv4_address = ipnexthop;
+    key.ipv4_address = ueIpaddress;
   }
 
   key.source_value = sourceInterface;
@@ -273,31 +274,33 @@ void SessionProgramManager::createPipeline(
       } catch (const std::exception& ex) {
         // Handle the exception here or log it for debugging
         // Note: It's better to handle exceptions rather than ignoring them.
-        Logger::upf_app().error("Error: The ARP table was not updated");
+        Logger::upf_app().error(
+            "Error: The ARP table was not updated for N3 Next HOP");
       }
     });
     // Detach the thread since we don't need to join it
     arpUpdateThread1.detach();
   } else {
+    // Launch a separate thread to update ARP table map
+    uint32_t ipnexthop = upf_cfg.remote_n6.s_addr;
+    std::thread arpUpdateThread2([this, pFARProgram, ipnexthop]() {
+      try {
+        uint32_t upfn6IP = upf_cfg.n6.addr4.s_addr;
+        updateArpTableMap(pFARProgram, upfn6IP, ipnexthop);
+      } catch (const std::exception& ex) {
+        // Handle the exception here or log it for debugging
+        // Note: It's better to handle exceptions rather than ignoring them.
+        Logger::upf_app().error(
+            "Error: The ARP table was not updated for N6 Next HOP");
+      }
+    });
+    arpUpdateThread2.detach();
     // Map the pipeline deployed to the seid. The seid will be used to detroyed
     // it.
     mSessionProgramsMap[seid] =
         std::make_shared<SessionPrograms>(key, pFARProgram);
     addFarProgram(seid, pFARProgram);
   }
-
-  // Launch a separate thread to update ARP table map
-  std::thread arpUpdateThread2([this, pFARProgram, ipnexthop]() {
-    try {
-      uint32_t upfn6IP = upf_cfg.n6.addr4.s_addr;
-      updateArpTableMap(pFARProgram, upfn6IP, ipnexthop);
-    } catch (const std::exception& ex) {
-      // Handle the exception here or log it for debugging
-      // Note: It's better to handle exceptions rather than ignoring them.
-      Logger::upf_app().error("Error: The ARP table was not updated");
-    }
-  });
-  arpUpdateThread2.detach();
 }
 
 /*****************************************************************************************************************/
@@ -365,19 +368,6 @@ void SessionProgramManager::updatePipeline(
       }
     }
   }
-
-  // Logger::upf_app().debug("Store FAR in the FAR program");
-
-  // NextHopFinder finder;
-  // auto pMacAddress = finder.retrieveNextHopMAC(gNBIpAddress);
-  // uint32_t ipnexthop =
-  //     (is_little_endian()) ? htonl(gNBIpAddress) : gNBIpAddress;
-
-  // auto pFARProgram =
-  //     UserPlaneComponent::getInstance().get;
-
-  //  pFARProgram->getArpTableMap()->update(
-  //      ipnexthop, pMacAddress->ether_addr_octet, BPF_ANY);
 }
 
 /*****************************************************************************************************************/
