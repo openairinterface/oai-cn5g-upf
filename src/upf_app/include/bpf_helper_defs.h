@@ -48,6 +48,8 @@ struct file;
  */
 static void* (*bpf_map_lookup_elem)(void* map, const void* key) = (void*) 1;
 
+static void* (*bpf_map_get_next_key)(void* map, const void* key, const void* next_key) = (void*) 1;
+
 /*
  * bpf_map_update_elem
  *
@@ -3873,3 +3875,5 @@ static long (*bpf_ima_inode_hash)(struct inode* inode, void* dst, __u32 size) =
  * 	not a socket.
  */
 static struct socket* (*bpf_sock_from_file)(struct file* file) = (void*) 162;
+
+
