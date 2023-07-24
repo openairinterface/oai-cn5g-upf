@@ -414,7 +414,7 @@ pfcp_switch::pfcp_switch()
     v->msg.msg_controllen = 0;
     free_pool_->blockingWrite(v);
   }
-  if (upf_cfg.enable_bpf_datapath) {
+  if (!upf_cfg.enable_bpf_datapath) {
     for (int i = 0; i < num_threads_; i++) {
       std::thread t = std::thread(
           &pfcp_switch::pdn_worker, this, i, upf_cfg.n6.thread_rd_sched_params);

@@ -4,3 +4,6 @@
 [submodule "ci-scripts/common-ci"]
 	path = ci-scripts/common-ci
 	url = https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-common-ci.git
+[submodule "src/common-src"]
+	path = src/common-src
+	url = https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-common-src
