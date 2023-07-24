@@ -125,4 +125,5 @@ HEALTHCHECK --interval=10s \
             --retries=6 \
     CMD /openair-upf/bin/healthcheck.sh
 
-CMD ["/openair-upf/bin/oai_upf", "-c", "/openair-upf/etc/config.yaml", "-o"]
+CMD ["/openair-upf/bin/oai_upf", "-c", "/openair-upf/etc/upf.conf", "-o"]
+ENTRYPOINT ["python3", "/openair-upf/bin/entrypoint.py"]

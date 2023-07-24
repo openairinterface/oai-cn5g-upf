@@ -28,7 +28,7 @@
 #---------------------------------------------------------------------
 # BUILDER IMAGE
 #---------------------------------------------------------------------
-FROM registry.access.redhat.com/ubi8/ubi:latest as oai-upf-builder
+FROM registry.access.redhat.com/ubi8/ubi:latest as oai-upf-base
 
 # Entitlements and RHSM configurations are Open-Shift Secret and ConfigMaps
 # It is pre-requisite
@@ -50,7 +50,9 @@ RUN rm /etc/rhsm-host && \
        file \
        wget \
        psmisc \
-       git
+       git && \
+    echo "/usr/local/lib" > /etc/ld.so.conf.d/local-lib.conf && \
+    echo "/usr/local/lib64" >> /etc/ld.so.conf.d/local-lib.conf
 
 # Copy the workspace as is
 WORKDIR /openair-upf
@@ -123,7 +125,7 @@ COPY --from=oai-upf-builder \
 # Currently we keep these folly dependencies from the builder
     /lib64/libgflags.so.2.1 \
     /lib64/libglog.so.0 \
-    /lib64/libdouble-conversion.so.1 \
+    /lib64/libdouble-conversion.so.3 \
     /usr/local/lib64/libspdlog.so \
     /usr/local/lib64/libfmt.so \
     /usr/local/lib64/libyaml-cpp.so.0.* \
