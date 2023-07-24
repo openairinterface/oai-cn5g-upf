@@ -6,7 +6,7 @@
 #include <pfcp/pfcp_far.h>
 #include <types.h>
 
-#define MAX_LENGTH 5000  // 10
+#define MAX_LENGTH 10
 #define ARP_ENTRIES_MAX_SIZE 12
 #define FAR_TAILS_MAX 1
 

@@ -40,6 +40,18 @@ class BPFMap {
 
   /**************************************************************************************************/
   /**
+   * @brief Get the nex element in the map.
+   * Wrappers the bpf_get_next_key function.
+   *
+   * @param key The key to be used to find the element.
+   * @param next_key a pointer to the next element in the map.
+   * @return 0 if it is success, cc. != 0.
+   */
+  template<class KeyType>
+  int get_next_elem(KeyType& key, KeyType& next_key);
+
+  /**************************************************************************************************/
+  /**
    * @brief Update a element in a specific position.
    * Wrappers the bpf_map_update function.
    *
@@ -88,11 +100,10 @@ int BPFMap::lookup(KeyType& key, void* pValue) {
   int lookupReturn = bpf_map_lookup_elem(mapFd, &key, pValue);
 
   if (lookupReturn != 0) {
-    Logger::upf_app().info(
-        "The key %d cannot be found in map %s", key, mName.c_str());
+    Logger::upf_app().warn(
+        "The key is not found in the map: %s", mName.c_str());
   } else {
-    Logger::upf_app().info(
-        "The key %d was found at %s map!", key, mName.c_str());
+    Logger::upf_app().debug("The key is found in the map: %s", mName.c_str());
   }
   return lookupReturn;
 }
@@ -105,10 +116,10 @@ int BPFMap::update(KeyType& key, ValueType& value, int flags) {
 
   if (updateReturn != 0) {
     // FIXME: Maybe Key is not support by fmt.
-    Logger::upf_app().error("The key cannot be updated in map ");
+    Logger::upf_app().error("The key cannot be updated in map");
     throw std::runtime_error("The BPF map cannot be updated");
   } else {
-    Logger::upf_app().debug("The key was updated at %s map! ", mName.c_str());
+    Logger::upf_app().debug("The key is updated in the map: %s", mName.c_str());
   }
   return updateReturn;
 }
@@ -124,10 +135,25 @@ int BPFMap::remove(KeyType& key) {
     Logger::upf_app().error("The key cannot be removed in map ");
     throw std::runtime_error("The BPF map cannot be removed");
   } else {
-    Logger::upf_app().error("The key was updated at %s map! ", mName.c_str());
+    Logger::upf_app().debug(
+        "The key is removed from the map: %s", mName.c_str());
   }
 
   return deleteReturn;
+}
+
+/**************************************************************************************************/
+template<class KeyType>
+int BPFMap::get_next_elem(KeyType& key, KeyType& next_key) {
+  int mapFd   = bpf_map__fd(mpBPFMap);
+  int ret_val = bpf_map_get_next_key(mapFd, &key, &next_key);
+
+  if ((ret_val != 0) && (ret_val != -1)) {
+    Logger::upf_app().warn(
+        "The key is not found in the map: %s\n", mName.c_str());
+  }
+
+  return ret_val;
 }
 
 /**************************************************************************************************/

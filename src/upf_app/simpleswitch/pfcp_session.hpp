@@ -56,6 +56,14 @@ class pfcp_session {
   std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs;
   std::vector<std::shared_ptr<pfcp::pfcp_far>> fars;
 
+  std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs_uplink;
+  std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs_downlink;
+
+  std::vector<std::shared_ptr<pfcp::pfcp_pdr>> fars_uplink;
+  std::vector<std::shared_ptr<pfcp::pfcp_pdr>> fars_downlink;
+
+  pfcp::fteid_t teid_uplink = {};
+
   pfcp_session() : cp_fseid(), seid(0), pdrs(), fars() {
     pdrs.reserve(8);
     fars.reserve(8);

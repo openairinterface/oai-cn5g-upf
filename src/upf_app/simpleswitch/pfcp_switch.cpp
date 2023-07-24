@@ -283,8 +283,9 @@ void pfcp_switch::setup_pdn_interfaces() {
   int rc          = 0;
   int if_index    = 0;
 
+  int index = 0;
   // TODO for loop on pdns
-  for (int index = 0; index < upf_cfg.pdns.size(); index++) {
+  for (index = 0; index < upf_cfg.pdns.size(); index++) {
     pdn_cfg_t it = upf_cfg.pdns[index];
     int sock_r   = 0;
     if (index == 0) {
@@ -305,24 +306,6 @@ void pfcp_switch::setup_pdn_interfaces() {
           "ip addr add {}/{} dev tun{}", conv::toString(address4).c_str(),
           it.prefix_ipv4, index);
       rc = system((const char*) cmd.c_str());
-
-      if (index != 0) {
-        // Remove defult route
-        cmd = fmt::format(
-            "ip route del {}/{}", conv::toString(it.network_ipv4).c_str(),
-            it.prefix_ipv4);
-        rc = system((const char*) cmd.c_str());
-
-        // Add first pdn as gateway for additional PDNs
-        struct in_addr address4_gw = {};
-        address4_gw.s_addr = upf_cfg.pdns[0].network_ipv4.s_addr + be32toh(1);
-
-        cmd = fmt::format(
-            "ip route add {}/{} via {} dev tun0",
-            conv::toString(it.network_ipv4).c_str(), it.prefix_ipv4,
-            conv::toString(address4_gw).c_str());
-        rc = system((const char*) cmd.c_str());
-      }
 
       if (upf_cfg.enable_snat) {
         cmd = fmt::format(
@@ -431,16 +414,18 @@ pfcp_switch::pfcp_switch()
     v->msg.msg_controllen = 0;
     free_pool_->blockingWrite(v);
   }
-  for (int i = 0; i < num_threads_; i++) {
-    std::thread t = std::thread(
-        &pfcp_switch::pdn_worker, this, i, upf_cfg.n6.thread_rd_sched_params);
-    threads_.push_back(std::move(t));
+  if (upf_cfg.enable_bpf_datapath) {
+    for (int i = 0; i < num_threads_; i++) {
+      std::thread t = std::thread(
+          &pfcp_switch::pdn_worker, this, i, upf_cfg.n6.thread_rd_sched_params);
+      threads_.push_back(std::move(t));
+    }
+    timer_min_commit_interval_id = 0;
+    timer_max_commit_interval_id = 0;
+    cp_fseid2pfcp_sessions = {}, sock_w = -1;
+    pdn_if_index = -1;
+    setup_pdn_interfaces();
   }
-  timer_min_commit_interval_id = 0;
-  timer_max_commit_interval_id = 0;
-  cp_fseid2pfcp_sessions = {}, sock_w = -1;
-  pdn_if_index = -1;
-  setup_pdn_interfaces();
 }
 //------------------------------------------------------------------------------
 bool pfcp_switch::get_pfcp_session_by_cp_fseid(
@@ -689,7 +674,9 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             std::make_shared<pfcp::pfcp_session>(*session);
         spSessionManager =
             UserPlaneComponent::getInstance().getSessionManager();
-        spSessionManager->createBPFSession(pSession);
+        spSessionManager->sessions.push_back(pSession);
+        // bool isModification = false;
+        spSessionManager->createBPFSession(pSession, false);
       }
 
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
@@ -775,8 +762,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     cause.cause_value = CAUSE_VALUE_SESSION_CONTEXT_NOT_FOUND;
   } else {
     pfcp::pfcp_session* session = s.get();
-
-    pfcp::fseid_t fseid = {};
+    pfcp::fseid_t fseid         = {};
     if (req->pfcp_ies.get(fseid)) {
       Logger::pfcp_switch().warn(
           "TODO check carrefully update fseid in "
@@ -863,7 +849,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
             std::make_shared<pfcp::pfcp_session>(*session);
         spSessionManager =
             UserPlaneComponent::getInstance().getSessionManager();
-        spSessionManager->updateBPFSession(pSession);
+        spSessionManager->sessions.push_back(pSession);
+        spSessionManager->updateBPFSession(pSession, true);
       }
     }
 

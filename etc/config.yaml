@@ -64,17 +64,17 @@ nfs:
     sbi:
       port_http1: 80
       api_version: v1
-      interface_name: eth0
+      interface_name: demo-oai
     n3:
-      interface_name: eth0
+      interface_name: demo-oai
       port: 2152
     n4:
-      interface_name: eth0
+      interface_name: demo-oai
       port: 8805
     n6:
-      interface_name: eth0
+      interface_name: demo-oai
     n9:
-      interface_name: eth0
+      interface_name: demo-oai
       port: 2152
   udm:
     host: oai-udm

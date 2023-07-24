@@ -23,6 +23,27 @@
 NextHopFinder::NextHopFinder() {}
 
 /*****************************************************************************************************************/
+int NextHopFinder::calculateSubnetMask(uint32_t ip) {
+  int mask      = 0;
+  uint32_t temp = ip;
+
+  while (temp & 0x80000000U) {
+    mask++;
+    temp <<= 1;
+  }
+
+  return mask;
+}
+
+/*****************************************************************************************************************/
+int NextHopFinder::sameSubnet(uint32_t ip1, uint32_t ip2) {
+  int subnet_mask = calculateSubnetMask(ip1);
+  uint32_t mask   = 0xFFFFFFFFU << (32 - subnet_mask);
+
+  return (ip1 & mask) == (ip2 & mask);
+}
+
+/*****************************************************************************************************************/
 u_int32_t NextHopFinder::retrieveNextHopIP(uint32_t destination_ip) {
   char command[COMMAND_MAX_LENGTH];
 
@@ -60,9 +81,10 @@ ether_addr* NextHopFinder::retrieveNextHopMAC(uint32_t next_hop_ip) {
   }
 
   sprintf(command, "sudo arping -c 1 %s | awk '/from/ {print $4}'", ipAddress);
-  Logger::upf_app().debug("Next Hop SRC IP = %s", ipAddress);
+  // Logger::upf_app().debug("Next Hop SRC IP = %s", ipAddress);
   Logger::upf_app().debug(
-      "Next Hop SRC MAC = %s", executeCommand(command).c_str());
+      "Next Hop <SRC IP, MAC Address> = <%s, %s>", ipAddress,
+      executeCommand(command).c_str());
 
   ether_addr* next_hop_mac;
   __builtin_memset(&next_hop_mac, 0, sizeof(ether_addr));

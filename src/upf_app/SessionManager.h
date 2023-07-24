@@ -57,12 +57,6 @@ class SessionManager {
   void createSession(std::shared_ptr<SessionBpf> pSession);
 
   /**
-   * @brief Update a Session object in BPF map.
-   *
-   * @param pSession The session object to be updated.
-   */
-  void updateBPFSession(std::shared_ptr<pfcp::pfcp_session> pSession);
-  /**
    * @brief Remove a session object from BPF map.
    *
    * @param seid The session endpoint identifier representing the session to be
@@ -75,7 +69,33 @@ class SessionManager {
    * @param pSession The PFCP session which contains the context that will be
    * deployed.
    */
-  void createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSession);
+  void createBPFSession(
+      std::shared_ptr<pfcp::pfcp_session> pSession, bool isModification);
+
+  /**
+   * @brief Update a Session object in BPF map.
+   *
+   * @param pSession The session object to be updated.
+   */
+  void updateBPFSession(
+      std::shared_ptr<pfcp::pfcp_session> pSession, bool isModification);
+
+  void createBPFSessionUL(
+      std::shared_ptr<pfcp::pfcp_session> pSession,
+      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl, bool isModification);
+
+  void createBPFSessionDL(
+      std::shared_ptr<pfcp::pfcp_session> pSession,
+      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl, bool isModification);
+
+  void updateBPFSessionUL(
+      std::shared_ptr<pfcp::pfcp_session> pSession,
+      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl, bool isModification);
+
+  void updateBPFSessionDL(
+      std::shared_ptr<pfcp::pfcp_session> pSession,
+      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl, bool isModification);
+
   /**
    * @brief Remove BPF pipeline.
    *
@@ -89,6 +109,8 @@ class SessionManager {
   static bool comparePDR(
       const std::shared_ptr<pfcp::pfcp_pdr>& first,
       const std::shared_ptr<pfcp::pfcp_pdr>& second);
+
+  std::vector<std::shared_ptr<pfcp::pfcp_session>> sessions;
 };
 
 #endif  // __SESSIONMANAGER_H__

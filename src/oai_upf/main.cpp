@@ -49,7 +49,7 @@ using namespace oai::config;
 using namespace util;
 using namespace std;
 
-static std::shared_ptr<SessionManager> spSessionManager;
+// static std::shared_ptr<SessionManager> spSessionManager;
 
 itti_mw* itti_inst                    = nullptr;
 async_shell_cmd* async_shell_cmd_inst = nullptr;

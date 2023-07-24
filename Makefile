@@ -34,7 +34,7 @@ install:
 #############################################################################
 clean:
 	echo "Cleaning UPF: generated configuration files, skeleton, obj files, executable" && \
-    rm -Rf build/spgw_u/build  2>&1 && \
+    rm -Rf build/upf/build  2>&1 && \
     mkdir -m 777 -p -v build && \
 	rm -rf src/upf_app/skel
 

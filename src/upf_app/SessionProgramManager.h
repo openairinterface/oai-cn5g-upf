@@ -6,6 +6,7 @@
 #include <map>
 #include <pfcp_far.hpp>
 #include <array>
+#include <pfcp/pfcp_far.h>
 
 class BPFMap;
 class OnStateChangeSessionProgramObserver;
@@ -18,6 +19,12 @@ class FARProgram;
  * kernel space. It store all the BPFProgram that was loaded on the datapath.
  *
  */
+
+struct farprograms {
+  uint32_t seid;
+  std::shared_ptr<FARProgram> pFARProgram;
+};
+
 class SessionProgramManager {
  public:
   /**
@@ -87,18 +94,32 @@ class SessionProgramManager {
       uint32_t seid);
 
   /*****************************************************************************************************************/
+  void addFarProgram(uint32_t seid, std::shared_ptr<FARProgram> pFARProgram);
+  /*****************************************************************************************************************/
+
+  void updateArpTableMap(
+      std::shared_ptr<FARProgram> pFARProgram, uint32_t upfIP,
+      uint32_t remoteIP);
+  /*****************************************************************************************************************/
+  pfcp_far_t_ createFar(std::shared_ptr<pfcp::pfcp_far> pFar);
+
+  /*****************************************************************************************************************/
   void createPipeline(
       uint32_t seid, uint32_t teid, uint8_t sourceInterface,
-      uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar);
+      uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
+      bool isModification);
 
   /*****************************************************************************************************************/
   void updatePipeline(
-      uint32_t seid, uint32_t teid, uint8_t sourceInterface,
-      uint32_t gNBIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar);
+      uint32_t seid, uint32_t teid, uint32_t gNBIpAddress, bool isModification);
 
   /*****************************************************************************************************************/
   void removePipeline(uint32_t seid);
   std::shared_ptr<SessionPrograms> findSessionPrograms(uint32_t seid);
+
+  // std::shared_ptr<vector><struct farprograms> farPrograms;
+
+  std::shared_ptr<std::vector<struct farprograms>> farPrograms;
 
  private:
   /**
