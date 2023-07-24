@@ -283,9 +283,7 @@ void pfcp_switch::setup_pdn_interfaces() {
   int rc          = 0;
   int if_index    = 0;
 
-  int index = 0;
-  // TODO for loop on pdns
-  for (index = 0; index < upf_cfg.pdns.size(); index++) {
+  for (int index = 0; index < upf_cfg.pdns.size(); index++) {
     pdn_cfg_t it = upf_cfg.pdns[index];
     int sock_r   = 0;
     if (index == 0) {
@@ -306,6 +304,24 @@ void pfcp_switch::setup_pdn_interfaces() {
           "ip addr add {}/{} dev tun{}", conv::toString(address4).c_str(),
           it.prefix_ipv4, index);
       rc = system((const char*) cmd.c_str());
+
+      if (index != 0) {
+        // Remove defult route
+        cmd = fmt::format(
+            "ip route del {}/{}", conv::toString(it.network_ipv4).c_str(),
+            it.prefix_ipv4);
+        rc = system((const char*) cmd.c_str());
+
+        // Add first pdn as gateway for additional PDNs
+        struct in_addr address4_gw = {};
+        address4_gw.s_addr = upf_cfg.pdns[0].network_ipv4.s_addr + be32toh(1);
+
+        cmd = fmt::format(
+            "ip route add {}/{} via {} dev tun0",
+            conv::toString(it.network_ipv4).c_str(), it.prefix_ipv4,
+            conv::toString(address4_gw).c_str());
+        rc = system((const char*) cmd.c_str());
+      }
 
       if (upf_cfg.enable_snat) {
         cmd = fmt::format(
