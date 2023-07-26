@@ -72,51 +72,40 @@ static u32 tail_call_next_prog(
 // static u32 get_teid_downlink_session(uint32_t dest_ip) {
   
 //   struct next_rule_prog_index_key key = {}, next_key  = {};
+//   int err;
 //   u32 teid = -1;
 
-//   while (bpf_map_get_next_key(&m_next_rule_prog_index, &key, &next_key) == 0) {
-//       key = next_key;
+//   // while (bpf_map_get_next_key(&m_next_rule_prog_index, &key, &next_key) == 0) {
+//   //     key = next_key;
       
-//       if ((next_key.source_value == INTERFACE_VALUE_CORE) &&
-//           (next_key.ipv4_address == dest_ip)) {
+//   //     if ((next_key.source_value == INTERFACE_VALUE_CORE) &&
+//   //         (next_key.ipv4_address == dest_ip)) {
         
-//         bpf_debug(
-//             "Looking for the Key <?, %d, %d>", next_key.source_value, next_key.ipv4_address);
+//   //       bpf_debug(
+//   //           "Looking for the Key <?, %d, %d>", next_key.source_value, next_key.ipv4_address);
 
-//         //u32* ret_val = bpf_map_lookup_elem(&m_next_rule_prog_index, &next_key);
+//   //       u32* ret_val = bpf_map_lookup_elem(&m_next_rule_prog_index, &next_key);
 
-//         //if (ret_val == 0) {
-//         teid = next_key.teid;  
-//         bpf_debug(
-//             "I found TEID %d", teid);
-//         //}
-//       } 
-//     break;  
+//   //       if (ret_val == 0) {
+//   //       teid = next_key.teid;  
+//   //       bpf_debug(
+//   //           "I found TEID %d", teid);
+//   //       }
+//   //     } 
+//   for (;;) {
+//     err = bpf_map_get_next_key(&m_next_rule_prog_index, &key, &next_key);
+//     if (err)
+//       break;
+
+//     u32* ret_val = bpf_map_lookup_elem(&m_next_rule_prog_index, &next_key);
+
+//     // Use key and value here
+
+//     key = next_key;
 //   }
+  
 //   return teid;
 // }
-
-
-
-//  struct key *cur_key = NULL;
-//             struct key next_key;
-//             struct value value;
-//             int err;
-
-//             for (;;) {
-//                     err = bpf_map_get_next_key(map_fd, cur_key, &next_key);
-//                     if (err)
-//                             break;
-
-//                     bpf_map_lookup_elem(map_fd, &next_key, &value);
-
-//                     // Use key and value here
-
-//                     cur_key = &next_key;
-//             }
-
-
-
 
 /*****************************************************************************************************************/
 /**
