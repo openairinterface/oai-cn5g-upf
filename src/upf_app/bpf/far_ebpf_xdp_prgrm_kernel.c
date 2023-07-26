@@ -142,8 +142,8 @@ static u32 create_outer_header_gtpu_ipv4(
   }
 
   p_udp->source = htons(GTP_UDP_PORT);
-  p_udp->dest =
-      htons(p_far->forwarding_parameters.outer_header_creation.port_number);
+  p_udp->dest = htons(GTP_UDP_PORT);
+      //htons(p_far->forwarding_parameters.outer_header_creation.port_number);
   p_udp->len = htons(
       ntohs(p_inner_ip->tot_len) + sizeof(*p_udp) + sizeof(struct gtpuhdr) +
       sizeof(struct gtpu_extn_pdu_session_container));
