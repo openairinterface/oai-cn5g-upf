@@ -6,7 +6,7 @@
 #include <pfcp/pfcp_far.h>
 #include <types.h>
 
-#define MAX_LENGTH 10
+#define MAX_INTERFACES 10
 #define ARP_ENTRIES_MAX_SIZE 12
 #define FAR_TAILS_MAX 1
 
@@ -24,7 +24,7 @@ struct bpf_map_def SEC("maps") m_redirect_interfaces = {
     .type        = BPF_MAP_TYPE_DEVMAP,
     .key_size    = sizeof(u32),  // id
     .value_size  = sizeof(u32),  // tx port
-    .max_entries = MAX_LENGTH,   // 10,
+    .max_entries = MAX_INTERFACES,   // 10,
 };
 
 /*****************************************************************************************************************/
