@@ -10,8 +10,6 @@
 #include <pfcp_session_lookup_ebpf_xdp_prgrm_kernel_skel.h>
 #include <wrappers/BPFMap.hpp>
 
-#include "interfaces.h"
-
 class BPFMaps;
 class BPFMap;
 class SessionManager;
@@ -37,14 +35,6 @@ class PFCP_Session_LookupProgram {
    * @brief Destroy the PFCP_Session_LookupProgram object
    */
   virtual ~PFCP_Session_LookupProgram();
-
-  /*****************************************************************************************************************/
-  /**
-   * @brief Insert one UPF reference point interface into a map.
-   *
-   */
-
-  void create_upf_interface_map_entry(e_reference_point s);
 
   /*****************************************************************************************************************/
   /**
@@ -118,12 +108,6 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> getNextProgRuleIndexMap() const;
 
   /*****************************************************************************************************************/
-  /**
-   * @brief Get the iface Map object.
-   *
-   * @return std::shared_ptr<BPFMap> The iface_name.
-   */
-  std::shared_ptr<BPFMap> getIfaceMap() const;
 
  private:
   /**
@@ -159,11 +143,6 @@ class PFCP_Session_LookupProgram {
 
   // The UDP interface.
   std::string mUDPInterface;
-
-  // The iface map.
-  std::shared_ptr<BPFMap> mpUPFIfaceMap;
-
-  // struct interface gtp_interface, udp_interface;
 };
 
 #endif  // __PFCP_SESSION_LOOKUP_EBPF_XDP_PRGRM_USER_H__

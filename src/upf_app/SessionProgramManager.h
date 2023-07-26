@@ -100,6 +100,8 @@ class SessionProgramManager {
   void updateArpTableMap(
       std::shared_ptr<FARProgram> pFARProgram, uint32_t upfIP,
       uint32_t remoteIP);
+
+  uint32_t getRemoteIP(uint32_t upfIP, uint32_t remoteIP);
   /*****************************************************************************************************************/
   pfcp_far_t_ createFar(std::shared_ptr<pfcp::pfcp_far> pFar);
 
