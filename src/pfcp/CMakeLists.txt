@@ -27,6 +27,7 @@ include_directories(${SRC_TOP_DIR}/oai_spgwc)
 include_directories(${SRC_TOP_DIR}/pfcp)
 include_directories(${SRC_TOP_DIR}/udp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
 
 add_library(PFCP STATIC
     3gpp_29.244.cpp

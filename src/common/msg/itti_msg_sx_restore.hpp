@@ -29,7 +29,7 @@
 #ifndef ITTI_MSG_SX_RESTORE_HPP_INCLUDED_
 #define ITTI_MSG_SX_RESTORE_HPP_INCLUDED_
 
-#include "3gpp_29.244.h"
+// #include "3gpp_29.244.h"
 #include "itti_msg.hpp"
 #include <set>
 

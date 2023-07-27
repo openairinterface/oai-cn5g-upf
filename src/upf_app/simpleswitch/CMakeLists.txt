@@ -33,7 +33,7 @@ include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/pfcp)
 include_directories(${SRC_TOP_DIR}/udp) 
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
-
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
 
 #find_library(FOLLY folly)
 

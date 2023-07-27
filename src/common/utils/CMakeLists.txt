@@ -25,7 +25,7 @@ include_directories(${SRC_TOP_DIR}/common/utils)
 include_directories(${SRC_TOP_DIR}/common/utils/bstr)
 include_directories(${SRC_TOP_DIR}/itti)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
-
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
 
 set(CN_UTILS_SRC STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/3gpp_conversions.cpp
