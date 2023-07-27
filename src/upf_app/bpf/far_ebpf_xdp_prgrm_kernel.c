@@ -56,14 +56,31 @@ static u32 update_dst_mac_address(struct iphdr* p_ip, struct ethhdr* p_eth) {
 }
 
 /*****************************************************************************************************************/
+static u32 get_ip_address_from_map(e_reference_point key) {
+  struct s_interface* map_element =
+      bpf_map_lookup_elem(&m_upf_interfaces, &key);
+
+  if (map_element) {
+    bpf_debug(
+        "Map Values: IP:%d, port:%d\n", map_element->ipv4_address,
+        map_element->port);
+    return map_element->ipv4_address;
+  }
+
+  bpf_debug("No IP address was found in the map, Drop the packet");
+  return XDP_DROP;
+}
+
+/*****************************************************************************************************************/
 static u32 create_outer_header_gtpu_ipv4(
     struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
   bpf_debug("Create Outer Header GTPU_IPv4\n");
-  bpf_debug("Original Packet: Data/UDP/IP/ETH\n");
+  // bpf_debug("Original Packet: Data/UDP/IP/ETH\n");
 
   // Adjust space to the left.
   bpf_xdp_adjust_head(p_ctx, (int32_t) -GTP_ENCAPSULATED_SIZE);
 
+  void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
 
   /*
@@ -71,17 +88,18 @@ static u32 create_outer_header_gtpu_ipv4(
   |----------------------- Update ETH header ----------------------|
   |----------------------------------------------------------------|
   */
-  struct ethhdr* p_eth = (void*) (long) p_ctx->data;
+  struct ethhdr* p_eth = p_data;
   if ((void*) (p_eth + 1) > p_data_end) {
     bpf_debug("Invalid pointer\n");
     return XDP_DROP;
   }
 
-  struct ethhdr* p_orig_eth = p_eth + GTP_ENCAPSULATED_SIZE;
+  struct ethhdr* p_orig_eth = p_data + GTP_ENCAPSULATED_SIZE;
+
   if ((void*) (p_orig_eth + 1) > p_data_end) {
+    bpf_debug("Invalid Pointer\n");
     return XDP_DROP;
   }
-
   __builtin_memcpy(p_eth, p_orig_eth, sizeof(*p_eth));
 
   /*
@@ -108,23 +126,11 @@ static u32 create_outer_header_gtpu_ipv4(
   p_ip->ttl      = 64;
   p_ip->protocol = IPPROTO_UDP;
   p_ip->check    = 0;
-
-  e_reference_point reference = N3_INTERFACE;
-  struct s_interface* map_element =
-      bpf_map_lookup_elem(&m_upf_interfaces, &reference);
-
-  if (!map_element) {
-    bpf_debug("N3 Interface NOT Found!\n");
-    return XDP_DROP;
-  }
-
-  p_ip->saddr = map_element->ipv4_address;
-  bpf_debug(
-      "Map Values: IP:%d, port:%d\n", map_element->ipv4_address,
-      map_element->port);
-  bpf_debug("IP SRC:%d\n", p_ip->saddr);
+  p_ip->saddr    = get_ip_address_from_map(N3_INTERFACE);
   p_ip->daddr =
       p_far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
+
+  bpf_debug("IP SRC: %d, IP DST:%d\n", p_ip->saddr, p_ip->daddr);
 
   /*
   |----------------------------------------------------------------|
@@ -137,8 +143,8 @@ static u32 create_outer_header_gtpu_ipv4(
   }
 
   p_udp->source = htons(GTP_UDP_PORT);
-  p_udp->dest =
-      htons(p_far->forwarding_parameters.outer_header_creation.port_number);
+  p_udp->dest   = htons(GTP_UDP_PORT);
+  // htons(p_far->forwarding_parameters.outer_header_creation.port_number);
   p_udp->len = htons(
       ntohs(p_inner_ip->tot_len) + sizeof(*p_udp) + sizeof(struct gtpuhdr) +
       sizeof(struct gtpu_extn_pdu_session_container));
@@ -291,6 +297,8 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
       case OUTER_HEADER_CREATION_GTPU_UDP_IPV4:
         bpf_debug("OUTER_HEADER_CREATION_GTPU_UDP_IPV4\n");
         create_outer_header_gtpu_ipv4(p_ctx, p_far);
+        bpf_debug(
+            "The Packet is redirected to socket for transmission to AN ...\n");
         return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
         break;
       case OUTER_HEADER_CREATION_GTPU_UDP_IPV6:
