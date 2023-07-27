@@ -3,6 +3,7 @@
 #include <cassert>
 #include <string>
 
+/**************************************************************************************************/
 BPFMaps::BPFMaps(bpf_object_skeleton* pBPFObjectSkeleton)
     : mpBPFObjectSkeleton(pBPFObjectSkeleton) {
   // Check if there is at least one element.
@@ -14,8 +15,10 @@ BPFMaps::BPFMaps(bpf_object_skeleton* pBPFObjectSkeleton)
   }
 }
 
+/**************************************************************************************************/
 BPFMaps::~BPFMaps() {}
 
+/**************************************************************************************************/
 BPFMap& BPFMaps::getMap(const char* pName) {
   // Check if is not NULL.
   assert(pName != NULL);
@@ -32,6 +35,6 @@ BPFMap& BPFMaps::getMap(const char* pName) {
     }
   }
   Logger::upf_app().error("Map %s not found", pName);
-  // LOG_ERROR("Map {} not found", pName)
   throw std::runtime_error("Map was not found");
 }
+/**************************************************************************************************/

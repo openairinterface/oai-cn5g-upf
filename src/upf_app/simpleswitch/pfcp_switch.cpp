@@ -55,7 +55,8 @@ static std::shared_ptr<SessionManager> spSessionManager;
 
 using namespace pfcp;
 using namespace gtpv1u;
-using namespace upf;
+using namespace oai::config;
+using namespace oai::upf::app;
 using namespace std;
 
 extern itti_mw* itti_inst;
@@ -282,20 +283,19 @@ void pfcp_switch::setup_pdn_interfaces() {
   int rc          = 0;
   int if_index    = 0;
 
-  int index = 0;
-  // TODO for loop on pdns
-  {
+  for (int index = 0; index < upf_cfg.pdns.size(); index++) {
     pdn_cfg_t it = upf_cfg.pdns[index];
     int sock_r   = 0;
+    if (index == 0) {
+      cmd = fmt::format("ip tuntap add mode tun dev tun{}", index);
+      rc  = system((const char*) cmd.c_str());
 
-    cmd = fmt::format("ip tuntap add mode tun dev tun{}", index);
-    rc  = system((const char*) cmd.c_str());
+      cmd = fmt::format("ip link set dev tun{} up", index);
+      rc  = system((const char*) cmd.c_str());
 
-    cmd = fmt::format("ip link set dev tun{} up", index);
-    rc  = system((const char*) cmd.c_str());
-
-    cmd = fmt::format("ethtool -K tun{0} tx-checksum-ip-generic off;", index);
-    rc  = system((const char*) cmd.c_str());
+      cmd = fmt::format("ethtool -K tun{0} tx-checksum-ip-generic off;", index);
+      rc  = system((const char*) cmd.c_str());
+    }
     if (it.prefix_ipv4) {
       struct in_addr address4 = {};
       address4.s_addr         = it.network_ipv4.s_addr + be32toh(1);
@@ -305,9 +305,27 @@ void pfcp_switch::setup_pdn_interfaces() {
           it.prefix_ipv4, index);
       rc = system((const char*) cmd.c_str());
 
-      if (upf_cfg.snat) {
+      if (index != 0) {
+        // Remove defult route
         cmd = fmt::format(
-            "iptables -t nat -A POSTROUTING -s {}/{} -o {} -j SNAT --to-source "
+            "ip route del {}/{}", conv::toString(it.network_ipv4).c_str(),
+            it.prefix_ipv4);
+        rc = system((const char*) cmd.c_str());
+
+        // Add first pdn as gateway for additional PDNs
+        struct in_addr address4_gw = {};
+        address4_gw.s_addr = upf_cfg.pdns[0].network_ipv4.s_addr + be32toh(1);
+
+        cmd = fmt::format(
+            "ip route add {}/{} via {} dev tun0",
+            conv::toString(it.network_ipv4).c_str(), it.prefix_ipv4,
+            conv::toString(address4_gw).c_str());
+        rc = system((const char*) cmd.c_str());
+      }
+
+      if (upf_cfg.enable_snat) {
+        cmd = fmt::format(
+            "iptables -t nat -A POSTROUTING -s {}/{} -o {} -j SNAT --to "
             "{}",
             conv::toString(it.network_ipv4).c_str(), it.prefix_ipv4,
             upf_cfg.n6.if_name.c_str(),
@@ -326,7 +344,7 @@ void pfcp_switch::setup_pdn_interfaces() {
           "ip -6 addr add {}/{} dev tun{}", conv::toString(addr6).c_str(),
           it.prefix_ipv6, index);
       rc = system((const char*) cmd.c_str());
-      // if ((it.snat) && (/* SGI has IPv6 address*/)){
+      // if ((it.enable_snat) && (/* SGI has IPv6 address*/)){
       //    cmd = fmt::format("ip6tables -t nat -A POSTROUTING -s {}/{} -o {} -j
       //    SNAT --to-source {}", conv::toString(addr6).c_str(), it.prefix_ipv6,
       //    xxx); rc = system ((const char*)cmd.c_str());
@@ -345,21 +363,23 @@ void pfcp_switch::setup_pdn_interfaces() {
     // fmt::format("/sbin/sysctl -w net.ipv4.conf.tun{}.accept_redirects=0",
     // index); rc = system ((const char*)cmd.c_str());
 
-    cmd = fmt::format("tun{}", index);
-    if ((sock_r = tun_open((char*) cmd.c_str(), O_RDWR)) == RETURNerror) {
-      Logger::pfcp_switch().error("Could not set PDN interface read socket");
-      sleep(2);
-      exit(EXIT_FAILURE);
+    if (index == 0) {
+      cmd = fmt::format("tun{}", index);
+      if ((sock_r = tun_open((char*) cmd.c_str(), O_RDWR)) == RETURNerror) {
+        Logger::pfcp_switch().error("Could not set PDN interface read socket");
+        sleep(2);
+        exit(EXIT_FAILURE);
+      }
+
+      sock_w = sock_r;
+
+      std::thread t = thread(
+          &pfcp_switch::pdn_read_loop, this, sock_r,
+          upf_cfg.n6.thread_rd_sched_params);
+      t.detach();
+      threads_.push_back(std::move(t));
+      socks_r.push_back(sock_r);
     }
-
-    sock_w = sock_r;
-
-    std::thread t = thread(
-        &pfcp_switch::pdn_read_loop, this, sock_r,
-        upf_cfg.n6.thread_rd_sched_params);
-    t.detach();
-    threads_.push_back(std::move(t));
-    socks_r.push_back(sock_r);
   }
 
   rc = system("/sbin/sysctl -w net.ipv4.conf.all.forwarding=1");
@@ -410,16 +430,18 @@ pfcp_switch::pfcp_switch()
     v->msg.msg_controllen = 0;
     free_pool_->blockingWrite(v);
   }
-  for (int i = 0; i < num_threads_; i++) {
-    std::thread t = std::thread(
-        &pfcp_switch::pdn_worker, this, i, upf_cfg.n6.thread_rd_sched_params);
-    threads_.push_back(std::move(t));
+  if (!upf_cfg.enable_bpf_datapath) {
+    for (int i = 0; i < num_threads_; i++) {
+      std::thread t = std::thread(
+          &pfcp_switch::pdn_worker, this, i, upf_cfg.n6.thread_rd_sched_params);
+      threads_.push_back(std::move(t));
+    }
+    timer_min_commit_interval_id = 0;
+    timer_max_commit_interval_id = 0;
+    cp_fseid2pfcp_sessions = {}, sock_w = -1;
+    pdn_if_index = -1;
+    setup_pdn_interfaces();
   }
-  timer_min_commit_interval_id = 0;
-  timer_max_commit_interval_id = 0;
-  cp_fseid2pfcp_sessions = {}, sock_w = -1;
-  pdn_if_index = -1;
-  setup_pdn_interfaces();
 }
 //------------------------------------------------------------------------------
 bool pfcp_switch::get_pfcp_session_by_cp_fseid(
@@ -663,12 +685,14 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         }
       }
 
-      if (upf_cfg.upf_5g_features.enable_bpf_datapath) {
+      if (upf_cfg.enable_bpf_datapath) {
         std::shared_ptr<pfcp::pfcp_session> pSession =
             std::make_shared<pfcp::pfcp_session>(*session);
         spSessionManager =
             UserPlaneComponent::getInstance().getSessionManager();
-        spSessionManager->createBPFSession(pSession);
+        spSessionManager->sessions.push_back(pSession);
+        // bool isModification = false;
+        spSessionManager->createBPFSession(pSession, false);
       }
 
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
@@ -754,8 +778,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     cause.cause_value = CAUSE_VALUE_SESSION_CONTEXT_NOT_FOUND;
   } else {
     pfcp::pfcp_session* session = s.get();
-
-    pfcp::fseid_t fseid = {};
+    pfcp::fseid_t fseid         = {};
     if (req->pfcp_ies.get(fseid)) {
       Logger::pfcp_switch().warn(
           "TODO check carrefully update fseid in "
@@ -835,6 +858,15 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           created_pdr.set(allocated_fteid);
         }
         resp->pfcp_ies.set(created_pdr);
+      }
+
+      if (upf_cfg.enable_bpf_datapath) {
+        std::shared_ptr<pfcp::pfcp_session> pSession =
+            std::make_shared<pfcp::pfcp_session>(*session);
+        spSessionManager =
+            UserPlaneComponent::getInstance().getSessionManager();
+        spSessionManager->sessions.push_back(pSession);
+        spSessionManager->updateBPFSession(pSession, true);
       }
     }
 

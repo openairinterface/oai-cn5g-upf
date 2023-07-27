@@ -48,6 +48,9 @@ struct file;
  */
 static void* (*bpf_map_lookup_elem)(void* map, const void* key) = (void*) 1;
 
+static void* (*bpf_map_get_next_key)(
+    void* map, const void* key, const void* next_key) = (void*) 1;
+
 /*
  * bpf_map_update_elem
  *

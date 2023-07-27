@@ -86,3 +86,60 @@ std::string& util::rtrim(std::string& s) {
 std::string& util::trim(std::string& s) {
   return util::ltrim(util::rtrim(s));
 }
+
+bool util::string_to_dotted(const std::string& str, std::string& dotted) {
+  uint8_t offset = 0;
+  uint8_t* last_size;
+  uint8_t word_length = 0;
+
+  uint8_t value[str.length() + 1];
+  dotted    = {};
+  last_size = &value[0];
+
+  while (str[offset]) {
+    // We replace the . by the length of the word
+    if (str[offset] == '.') {
+      *last_size  = word_length;
+      word_length = 0;
+      last_size   = &value[offset + 1];
+    } else {
+      word_length++;
+      value[offset + 1] = str[offset];
+    }
+
+    offset++;
+  }
+
+  *last_size = word_length;
+  dotted.assign((const char*) value, str.length() + 1);
+  return true;
+};
+
+bool util::dotted_to_string(const std::string& dot, std::string& no_dot) {
+  // uint8_t should be enough, but uint16 if length > 255.
+  uint16_t offset = 0;
+  bool result     = true;
+  no_dot          = {};
+
+  while (offset < dot.length()) {
+    if (dot[offset] < 64) {
+      if ((offset + dot[offset]) <= dot.length()) {
+        if (offset) {
+          no_dot.push_back('.');
+        }
+        no_dot.append(&dot[offset + 1], dot[offset]);
+      }
+      offset = offset + 1 + dot[offset];
+    } else {
+      // should not happen, consume bytes
+      no_dot.push_back(dot[offset++]);
+      result = false;
+    }
+  }
+  return result;
+};
+
+void util::string_to_dnn(const std::string& str, bstring bstr) {
+  bstr->slen = str.length();
+  memcpy((void*) bstr->data, (void*) str.c_str(), str.length());
+}

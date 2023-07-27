@@ -31,7 +31,8 @@
 #include "upf_pfcp_association.hpp"
 #include "upf_n4.hpp"
 
-using namespace upf;
+using namespace oai::upf::app;
+// using namespace oai::config;
 using namespace std;
 
 extern itti_mw* itti_inst;

@@ -21,7 +21,7 @@
 
 #include "logger_base.hpp"
 
-static const std::string ASYNC_CMD   = "async_cmd";
+static const std::string ASYNC_CMD   = "asc_cmd";
 static const std::string GTPV1_U     = "gtpv1_u";
 static const std::string ITTI        = "itti   ";
 static const std::string UPF_APP     = "upf_app";

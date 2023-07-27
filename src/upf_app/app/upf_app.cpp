@@ -40,7 +40,8 @@
 #include <stdexcept>
 
 using namespace pfcp;
-using namespace upf;
+using namespace oai::upf::app;
+using namespace oai::config;
 using namespace std;
 
 // C includes
@@ -148,11 +149,13 @@ upf_app::upf_app(const std::string& config_file) {
     Logger::upf_app().error("Cannot create UPF_N4: %s", e.what());
     throw;
   }
-  try {
-    upf_n3_inst = new upf_n3();
-  } catch (std::exception& e) {
-    Logger::upf_app().error("Cannot create UPF_N3: %s", e.what());
-    throw;
+  if (not upf_cfg.enable_bpf_datapath) {
+    try {
+      upf_n3_inst = new upf_n3();
+    } catch (std::exception& e) {
+      Logger::upf_app().error("Cannot create UPF_N3: %s", e.what());
+      throw;
+    }
   }
   try {
     pfcp_switch_inst = new pfcp_switch();
@@ -161,8 +164,7 @@ upf_app::upf_app(const std::string& config_file) {
     throw;
   }
   try {
-    if (upf_cfg.upf_5g_features.enable_5g_features and
-        upf_cfg.upf_5g_features.register_nrf)
+    if (upf_cfg.enable_5g_features and upf_cfg.register_nrf)
       upf_nrf_inst = new upf_nrf();
   } catch (std::exception& e) {
     Logger::upf_app().error("Cannot create UPF_NRF: %s", e.what());

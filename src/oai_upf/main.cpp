@@ -23,6 +23,7 @@
 #include "pid_file.hpp"
 #include "upf_app.hpp"
 #include "upf_config.hpp"
+#include "upf_config_yaml.hpp"
 
 #include <boost/asio.hpp>
 #include <iostream>
@@ -41,14 +42,14 @@
 #include <SessionProgramManager.h>
 #include <UserPlaneComponent.h>
 
-//#include "upf_config.hpp"
-// extern upf::upf_config upf_cfg;
-
-using namespace upf;
+// #include "upf_config.hpp"
+//  extern oai::config::upf_config upf_cfg;
+using namespace oai::upf::app;
+using namespace oai::config;
 using namespace util;
 using namespace std;
 
-static std::shared_ptr<SessionManager> spSessionManager;
+// static std::shared_ptr<SessionManager> spSessionManager;
 
 itti_mw* itti_inst                    = nullptr;
 async_shell_cmd* async_shell_cmd_inst = nullptr;
@@ -64,6 +65,8 @@ boost::asio::io_service io_service;
 #ifndef N6_IF_NAME
 #define N6_IF_NAME upf_cfg.n6.if_name
 #endif
+
+std::unique_ptr<upf_config_yaml> upf_cfg_yaml = nullptr;
 
 //------------------------------------------------------------------------------
 void my_app_signal_handler(int s) {
@@ -157,9 +160,31 @@ int main(int argc, char** argv) {
   std::signal(SIGINT, my_app_signal_handler);
 
   // Config
-  upf_cfg.load(Options::getlibconfigConfig());
-  upf_cfg.display();
-  Logger::set_level(upf_cfg.log_level);
+  std::string conf_file_name = Options::getlibconfigConfig();
+  std::string file_ext       = ".conf";
+  if (conf_file_name.find(file_ext) != std::string::npos) {
+    Logger::upf_app().debug("Parsing the configuration file, file type CONF.");
+    upf_cfg.load(conf_file_name);
+    Logger::set_level(upf_cfg.log_level);
+    upf_cfg.display();
+  } else {
+    // By default, considering the config file as yaml
+    Logger::upf_app().debug("Parsing the configuration file, file type YAML.");
+    upf_cfg_yaml = std::make_unique<upf_config_yaml>(
+        conf_file_name, Options::getlogStdout(), Options::getlogRotFilelog());
+    if (!upf_cfg_yaml->init()) {
+      Logger::upf_app().error("Reading the configuration failed. Exiting.");
+      return 1;
+    }
+    upf_cfg_yaml->pre_process();
+    // Convert from YAML to internal structure
+    upf_cfg_yaml->to_upf_config(upf_cfg);
+    upf_cfg_yaml->display();
+  }
+
+  // upf_cfg.load(Options::getlibconfigConfig());
+  // upf_cfg.display();
+  // Logger::set_level(upf_cfg.log_level);
 
   // Inter task Interface
   itti_inst = new itti_mw();
@@ -187,7 +212,7 @@ int main(int argc, char** argv) {
   fflush(fp);
   fclose(fp);
 
-  if (upf_cfg.upf_5g_features.enable_bpf_datapath) setup_bpf();
+  if (upf_cfg.enable_bpf_datapath) setup_bpf();
   // once all udp servers initialized
   io_service.run();
 

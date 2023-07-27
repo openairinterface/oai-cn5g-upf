@@ -25,7 +25,7 @@
 #endif
 
 static void swap_src_dst_mac(void* data) {
-  bpf_debug("Swapping MAC address...");
+  bpf_debug("Swapping MAC address...\n");
   unsigned short* p = data;
   unsigned short dst[3];
 
@@ -38,7 +38,7 @@ static void swap_src_dst_mac(void* data) {
   p[3]   = dst[0];
   p[4]   = dst[1];
   p[5]   = dst[2];
-  bpf_debug("Swapping MAC address...DONE!");
+  bpf_debug("Swapping MAC address...DONE!\n");
 }
 
 #endif

@@ -30,6 +30,10 @@
 
 #include <string>
 
+extern "C" {
+#include "bstrlib.h"
+}
+
 namespace util {
 
 std::string string_format(const char* format, ...);
@@ -39,5 +43,8 @@ std::string& ltrim(std::string& s);
 std::string& rtrim(std::string& s);
 // trim from both ends
 std::string& trim(std::string& s);
+bool string_to_dotted(const std::string& str, std::string& dotted);
+bool dotted_to_string(const std::string& dot, std::string& no_dot);
+void string_to_dnn(const std::string& str, bstring bstr);
 }  // namespace util
 #endif

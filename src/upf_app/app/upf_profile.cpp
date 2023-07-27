@@ -33,8 +33,9 @@
 #include "logger.hpp"
 #include "upf_profile.hpp"
 #include "string.hpp"
+#include "3gpp_conversions.hpp"
 
-using namespace upf;
+using namespace oai::upf::app;
 
 //------------------------------------------------------------------------------
 void upf_nf_profile::set_nf_instance_id(const std::string& instance_id) {
@@ -207,7 +208,7 @@ void upf_nf_profile::display() const {
     Logger::upf_app().debug("    SNSSAI:");
   }
   for (auto s : snssais) {
-    Logger::upf_app().debug("        SST, SD: %d, %s", s.sST, s.sD.c_str());
+    Logger::upf_app().debug("        SST, SD: %d, %d", s.sst, s.sd);
   }
 
   // IPv4 Addresses
@@ -224,7 +225,7 @@ void upf_nf_profile::display() const {
   }
   for (auto s : upf_info.snssai_upf_info_list) {
     Logger::upf_app().debug(
-        "        SNSSAI (SST %d, SD %s)", s.snssai.sST, s.snssai.sD.c_str());
+        "        SNSSAI (SST %d, SD %d)", s.snssai.sst, s.snssai.sd);
     for (auto d : s.dnn_upf_info_list) {
       Logger::upf_app().debug("            DNN %s", d.dnn.c_str());
     }
@@ -242,8 +243,8 @@ void upf_nf_profile::to_json(nlohmann::json& data) const {
   data["sNssais"] = nlohmann::json::array();
   for (auto s : snssais) {
     nlohmann::json tmp = {};
-    tmp["sst"]         = s.sST;
-    tmp["sd"]          = s.sD;
+    tmp["sst"]         = s.sst;
+    tmp["sd"]          = std::to_string(s.sd);
     data["sNssais"].push_back(tmp);
   }
   data["fqdn"] = fqdn;
@@ -262,8 +263,8 @@ void upf_nf_profile::to_json(nlohmann::json& data) const {
   data["upfInfo"]["sNssaiUpfInfoList"] = nlohmann::json::array();
   for (auto s : upf_info.snssai_upf_info_list) {
     nlohmann::json tmp    = {};
-    tmp["sNssai"]["sst"]  = s.snssai.sST;
-    tmp["sNssai"]["sd"]   = s.snssai.sD;
+    tmp["sNssai"]["sst"]  = s.snssai.sst;
+    tmp["sNssai"]["sd"]   = std::to_string(s.snssai.sd);
     tmp["dnnUpfInfoList"] = nlohmann::json::array();
     for (auto d : s.dnn_upf_info_list) {
       nlohmann::json dnn_json = {};
@@ -301,8 +302,11 @@ void upf_nf_profile::from_json(const nlohmann::json& data) {
   if (data.find("sNssais") != data.end()) {
     for (auto it : data["sNssais"]) {
       snssai_t s = {};
-      s.sST      = it["sst"].get<int>();
-      s.sD       = it["sd"].get<std::string>();
+      s.sst      = it["sst"].get<int>();
+      if (it["sNssai"].find("sd") != it["sNssai"].end()) {
+        xgpp_conv::sd_string_to_int(
+            it["sNssai"]["sd"].get<std::string>(), s.sd);
+      }
       snssais.push_back(s);
     }
   }
@@ -346,15 +350,17 @@ void upf_nf_profile::from_json(const nlohmann::json& data) {
         snssai_upf_info_item_t upf_info_item = {};
         if (it.find("sNssai") != it.end()) {
           if (it["sNssai"].find("sst") != it["sNssai"].end())
-            upf_info_item.snssai.sST = it["sNssai"]["sst"].get<int>();
-          if (it["sNssai"].find("sd") != it["sNssai"].end())
-            upf_info_item.snssai.sD = it["sNssai"]["sd"].get<std::string>();
+            upf_info_item.snssai.sst = it["sNssai"]["sst"].get<int>();
+          if (it["sNssai"].find("sd") != it["sNssai"].end()) {
+            xgpp_conv::sd_string_to_int(
+                it["sNssai"]["sd"].get<std::string>(), upf_info_item.snssai.sd);
+          }
         }
         if (it.find("dnnUpfInfoList") != it.end()) {
           for (auto d : it["dnnUpfInfoList"]) {
             if (d.find("dnn") != d.end()) {
               dnn_item.dnn = d["dnn"].get<std::string>();
-              upf_info_item.dnn_upf_info_list.push_back(dnn_item);
+              upf_info_item.dnn_upf_info_list.insert(dnn_item);
             }
           }
         }

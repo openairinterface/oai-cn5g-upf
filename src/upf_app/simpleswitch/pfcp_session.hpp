@@ -48,12 +48,21 @@ class pfcp_session {
  public:
   pfcp::fseid_t cp_fseid;
   uint64_t seid;  // User plane
-  uint8_t qfi;
+  uint8_t qfi =
+      0x05;  // Set to default qfi if first ue packet is originated from DN
 
   // TO DO better than this :(sooner the better)  when inserting or removing new
   // PDRs, FARS, should not conflict with switching operations
   std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs;
   std::vector<std::shared_ptr<pfcp::pfcp_far>> fars;
+
+  std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs_uplink;
+  std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs_downlink;
+
+  std::vector<std::shared_ptr<pfcp::pfcp_pdr>> fars_uplink;
+  std::vector<std::shared_ptr<pfcp::pfcp_pdr>> fars_downlink;
+
+  pfcp::fteid_t teid_uplink = {};
 
   pfcp_session() : cp_fseid(), seid(0), pdrs(), fars() {
     pdrs.reserve(8);

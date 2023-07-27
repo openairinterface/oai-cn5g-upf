@@ -47,7 +47,7 @@
 
 using namespace std;
 using namespace libconfig;
-using namespace upf;
+using namespace oai::config;
 
 // C includes
 #include <arpa/inet.h>
@@ -57,6 +57,7 @@ using namespace upf;
 #include <sys/types.h>
 #include <unistd.h>
 
+namespace oai::config {
 //------------------------------------------------------------------------------
 int upf_config::execute() {
   return RETURNok;
@@ -465,11 +466,11 @@ int upf_config::load(const string& config_file) {
       pdns.push_back(pdn_cfg);
     }
 
-    snat                = false;
+    enable_snat         = false;
     std::string astring = {};
     if (upf_cfg.lookupValue(UPF_CONFIG_STRING_SNAT, astring)) {
       if (boost::iequals(astring, "yes")) {
-        snat = true;
+        enable_snat = true;
       }
     }
 
@@ -504,158 +505,163 @@ int upf_config::load(const string& config_file) {
     // Support 5G features
     const Setting& support_features = upf_cfg[UPF_CONFIG_STRING_5G_FEATURES];
     string opt;
-    support_features.lookupValue(UPF_CONFIG_STRING_ENABLE_5G_FEATURES, opt);
+
+    support_features.lookupValue(UPF_CONFIG_STRING_5G_FEATURES_UPF_FQDN, fqdn);
+    enable_5g_features = true;
+
+    support_features.lookupValue(
+        UPF_CONFIG_STRING_5G_FEATURES_REGISTER_NRF, opt);
     if (boost::iequals(opt, "yes")) {
-      upf_5g_features.enable_5g_features = true;
-      std::string upf_fqdn               = {};
-      support_features.lookupValue(
-          UPF_CONFIG_STRING_5G_FEATURES_UPF_FQDN, upf_fqdn);
-      fqdn = upf_fqdn;
+      register_nrf = true;
     } else {
-      upf_5g_features.enable_5g_features = false;
+      register_nrf = false;
     }
 
-    if (upf_5g_features.enable_5g_features) {
-      support_features.lookupValue(
-          UPF_CONFIG_STRING_5G_FEATURES_REGISTER_NRF, opt);
-      if (boost::iequals(opt, "yes")) {
-        upf_5g_features.register_nrf = true;
-      } else {
-        upf_5g_features.register_nrf = false;
-      }
+    support_features.lookupValue(UPF_CONFIG_STRING_ENABLE_BPF_DATAPATH, opt);
+    if (boost::iequals(opt, "yes")) {
+      enable_bpf_datapath = true;
+    } else {
+      enable_bpf_datapath = false;
+    }
 
-      support_features.lookupValue(UPF_CONFIG_STRING_ENABLE_BPF_DATAPATH, opt);
-      if (boost::iequals(opt, "yes")) {
-        upf_5g_features.enable_bpf_datapath = true;
-      } else {
-        upf_5g_features.enable_bpf_datapath = false;
-      }
+    support_features.lookupValue(
+        UPF_CONFIG_STRING_5G_FEATURES_USE_FQDN_NRF, opt);
+    if (boost::iequals(opt, "yes")) {
+      use_fqdn_dns = true;
+    } else {
+      use_fqdn_dns = false;
+    }
 
-      support_features.lookupValue(
-          UPF_CONFIG_STRING_5G_FEATURES_USE_FQDN_NRF, opt);
-      if (boost::iequals(opt, "yes")) {
-        upf_5g_features.use_fqdn_nrf = true;
-      } else {
-        upf_5g_features.use_fqdn_nrf = false;
-      }
+    support_features.lookupValue(UPF_CONFIG_REMOTE_N6_GW_CONFIG, opt);
+    std::string remote_n6_addr;
+    uint8_t addr_type = {};
+    unsigned int port = 0;
+    fqdn::resolve(opt, remote_n6_addr, port, addr_type);
+    if (addr_type != 0) {  // IPv6: TODO
+      throw("DO NOT SUPPORT IPV6 ADDR FOR NRF!");
+    } else {  // IPv4
+      IPV4_STR_ADDR_TO_INADDR(
+          util::trim(remote_n6_addr).c_str(), remote_n6,
+          "BAD IPv4 ADDRESS FORMAT FOR N6 DN !");
+    }
 
-      // NRF
-      const Setting& nrf_cfg =
-          support_features[UPF_CONFIG_STRING_5G_FEATURES_NRF];
-      struct in_addr nrf_ipv4_addr;
-      unsigned int nrf_port    = 0;
-      unsigned int httpVersion = 0;
-      std::string nrf_api_version;
-      string nrf_address = {};
+    support_features.lookupValue(UPF_CONFIG_STRING_HTTP_VERSION, http_version);
+
+    // NRF
+    const Setting& nrf_cfg =
+        support_features[UPF_CONFIG_STRING_5G_FEATURES_NRF];
+    struct in_addr nrf_ipv4_addr;
+    unsigned int nrf_port    = 0;
+    unsigned int httpVersion = 0;
+    std::string nrf_api_version;
+    string nrf_address = {};
+
+    if (!(nrf_cfg.lookupValue(
+            UPF_CONFIG_STRING_5G_FEATURES_NRF_HTTP_VERSION, httpVersion))) {
+      Logger::upf_app().error(UPF_CONFIG_STRING_5G_FEATURES_NRF_HTTP_VERSION
+                              "failed");
+      throw(UPF_CONFIG_STRING_5G_FEATURES_NRF_HTTP_VERSION "failed");
+    }
+    nrf_addr.http_version = httpVersion;
+
+    if (!use_fqdn_dns) {
+      nrf_cfg.lookupValue(
+          UPF_CONFIG_STRING_5G_FEATURES_NRF_IPV4_ADDRESS, nrf_address);
+      IPV4_STR_ADDR_TO_INADDR(
+          util::trim(nrf_address).c_str(), nrf_ipv4_addr,
+          "BAD IPv4 ADDRESS FORMAT FOR NRF !");
+      nrf_addr.ipv4_addr = nrf_ipv4_addr;
+      if (!(nrf_cfg.lookupValue(
+              UPF_CONFIG_STRING_5G_FEATURES_NRF_PORT, nrf_port))) {
+        Logger::upf_app().error(UPF_CONFIG_STRING_5G_FEATURES_NRF_PORT
+                                "failed");
+        throw(UPF_CONFIG_STRING_5G_FEATURES_NRF_PORT "failed");
+      }
+      nrf_addr.port = nrf_port;
 
       if (!(nrf_cfg.lookupValue(
-              UPF_CONFIG_STRING_5G_FEATURES_NRF_HTTP_VERSION, httpVersion))) {
-        Logger::upf_app().error(UPF_CONFIG_STRING_5G_FEATURES_NRF_HTTP_VERSION
+              UPF_CONFIG_STRING_5G_FEATURES_NRF_API_VERSION,
+              nrf_api_version))) {
+        Logger::upf_app().error(UPF_CONFIG_STRING_5G_FEATURES_NRF_API_VERSION
                                 "failed");
-        throw(UPF_CONFIG_STRING_5G_FEATURES_NRF_HTTP_VERSION "failed");
+        throw(UPF_CONFIG_STRING_5G_FEATURES_NRF_API_VERSION "failed");
       }
-      upf_5g_features.nrf_addr.http_version = httpVersion;
-
-      if (!upf_5g_features.use_fqdn_nrf) {
-        nrf_cfg.lookupValue(
-            UPF_CONFIG_STRING_5G_FEATURES_NRF_IPV4_ADDRESS, nrf_address);
+      nrf_addr.api_version = nrf_api_version;
+    } else {
+      Logger::upf_app().info("USE FQDN");
+      std::string nrf_fqdn = {};
+      nrf_cfg.lookupValue(UPF_CONFIG_STRING_FQDN, nrf_fqdn);
+      nrf_addr.fqdn     = nrf_fqdn;  // TODO: Resolve FQDN at runtime
+      uint8_t addr_type = {};
+      fqdn::resolve(nrf_fqdn, nrf_address, nrf_port, addr_type);
+      if (addr_type != 0) {  // IPv6: TODO
+        throw("DO NOT SUPPORT IPV6 ADDR FOR NRF!");
+      } else {  // IPv4
         IPV4_STR_ADDR_TO_INADDR(
             util::trim(nrf_address).c_str(), nrf_ipv4_addr,
             "BAD IPv4 ADDRESS FORMAT FOR NRF !");
-        upf_5g_features.nrf_addr.ipv4_addr = nrf_ipv4_addr;
+        nrf_addr.ipv4_addr = nrf_ipv4_addr;
+
+        // We hardcode nrf port from config for the moment
         if (!(nrf_cfg.lookupValue(
                 UPF_CONFIG_STRING_5G_FEATURES_NRF_PORT, nrf_port))) {
           Logger::upf_app().error(UPF_CONFIG_STRING_5G_FEATURES_NRF_PORT
                                   "failed");
           throw(UPF_CONFIG_STRING_5G_FEATURES_NRF_PORT "failed");
         }
-        upf_5g_features.nrf_addr.port = nrf_port;
+        nrf_addr.port = nrf_port;
 
-        if (!(nrf_cfg.lookupValue(
-                UPF_CONFIG_STRING_5G_FEATURES_NRF_API_VERSION,
-                nrf_api_version))) {
-          Logger::upf_app().error(UPF_CONFIG_STRING_5G_FEATURES_NRF_API_VERSION
-                                  "failed");
-          throw(UPF_CONFIG_STRING_5G_FEATURES_NRF_API_VERSION "failed");
-        }
-        upf_5g_features.nrf_addr.api_version = nrf_api_version;
-      } else {
-        Logger::upf_app().info("USE FQDN");
-        std::string nrf_fqdn = {};
-        nrf_cfg.lookupValue(UPF_CONFIG_STRING_FQDN, nrf_fqdn);
-        upf_5g_features.nrf_addr.fqdn =
-            nrf_fqdn;  // TODO: Resolve FQDN at runtime
-        uint8_t addr_type = {};
-        fqdn::resolve(nrf_fqdn, nrf_address, nrf_port, addr_type);
-        if (addr_type != 0) {  // IPv6: TODO
-          throw("DO NOT SUPPORT IPV6 ADDR FOR NRF!");
-        } else {  // IPv4
-          IPV4_STR_ADDR_TO_INADDR(
-              util::trim(nrf_address).c_str(), nrf_ipv4_addr,
-              "BAD IPv4 ADDRESS FORMAT FOR NRF !");
-          upf_5g_features.nrf_addr.ipv4_addr = nrf_ipv4_addr;
+        nrf_addr.api_version = "v1";  // TODO: get API version
+      }
+    }
 
-          // We hardcode nrf port from config for the moment
-          if (!(nrf_cfg.lookupValue(
-                  UPF_CONFIG_STRING_5G_FEATURES_NRF_PORT, nrf_port))) {
-            Logger::upf_app().error(UPF_CONFIG_STRING_5G_FEATURES_NRF_PORT
-                                    "failed");
-            throw(UPF_CONFIG_STRING_5G_FEATURES_NRF_PORT "failed");
-          }
-          upf_5g_features.nrf_addr.port = nrf_port;
+    // UPF info
+    const Setting& upf_info_cfg =
+        support_features[UPF_CONFIG_STRING_5G_FEATURES_UPF_INFO];
+    count = upf_info_cfg.getLength();
+    for (int i = 0; i < count; i++) {
+      const Setting& upf_info_item_cfg = upf_info_cfg[i];
+      unsigned int nssai_sst           = 0;
+      unsigned int nssai_sd            = 0;
 
-          upf_5g_features.nrf_addr.api_version = "v1";  // TODO: get API version
-        }
+      if (!(upf_info_item_cfg.lookupValue(
+              UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SST, nssai_sst))) {
+        Logger::upf_app().error(UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SST
+                                "failed");
+        throw(UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SST " failed");
       }
 
-      // UPF info
-      const Setting& upf_info_cfg =
-          support_features[UPF_CONFIG_STRING_5G_FEATURES_UPF_INFO];
-      count = upf_info_cfg.getLength();
-      for (int i = 0; i < count; i++) {
-        const Setting& upf_info_item_cfg = upf_info_cfg[i];
-        unsigned int nssai_sst           = 0;
-        string nssai_sd                  = {};
-
-        if (!(upf_info_item_cfg.lookupValue(
-                UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SST, nssai_sst))) {
-          Logger::upf_app().error(UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SST
-                                  "failed");
-          throw(UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SST "failed");
-        }
-
-        if (!(upf_info_item_cfg.lookupValue(
-                UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SD, nssai_sd))) {
-          Logger::upf_app().error(UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SD
-                                  "failed");
-          throw(UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SD "failed");
-        }
-
-        snssai_upf_info_item_t snssai_item = {};
-        snssai_t snssai                    = {};
-        snssai.sST                         = nssai_sst;
-        snssai.sD                          = nssai_sd;
-        snssai_item.snssai                 = snssai;
-
-        const Setting& dnn_cfg =
-            upf_info_item_cfg[UPF_CONFIG_STRING_5G_FEATURES_UPF_INFO_DNN_LIST];
-        uint8_t number_dnns = dnn_cfg.getLength();
-        for (int i = 0; i < number_dnns; i++) {
-          string dnn                  = {};
-          const Setting& dnn_item_cfg = dnn_cfg[i];
-          if (!(dnn_item_cfg.lookupValue(
-                  UPF_CONFIG_STRING_5G_FEATURES_DNN, dnn))) {
-            Logger::upf_app().error(UPF_CONFIG_STRING_5G_FEATURES_DNN "failed");
-            throw(UPF_CONFIG_STRING_5G_FEATURES_DNN "failed");
-          }
-
-          dnn_upf_info_item_t dnn_item = {};
-          dnn_item.dnn                 = dnn;
-          snssai_item.dnn_upf_info_list.push_back(dnn_item);
-        }
-
-        upf_5g_features.upf_info.snssai_upf_info_list.push_back(snssai_item);
+      if (!(upf_info_item_cfg.lookupValue(
+              UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SD, nssai_sd))) {
+        Logger::upf_app().error(UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SD
+                                "failed");
+        throw(UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SD " failed");
       }
+
+      snssai_upf_info_item_t snssai_item = {};
+      snssai_t snssai                    = {};
+      snssai.sst                         = nssai_sst;
+      snssai.sd                          = nssai_sd;
+      snssai_item.snssai                 = snssai;
+
+      const Setting& dnn_cfg =
+          upf_info_item_cfg[UPF_CONFIG_STRING_5G_FEATURES_UPF_INFO_DNN_LIST];
+      uint8_t number_dnns = dnn_cfg.getLength();
+      for (int i = 0; i < number_dnns; i++) {
+        string dnn                  = {};
+        const Setting& dnn_item_cfg = dnn_cfg[i];
+        if (!(dnn_item_cfg.lookupValue(
+                UPF_CONFIG_STRING_5G_FEATURES_DNN, dnn))) {
+          Logger::upf_app().error(UPF_CONFIG_STRING_5G_FEATURES_DNN "failed");
+          throw(UPF_CONFIG_STRING_5G_FEATURES_DNN "failed");
+        }
+
+        dnn_upf_info_item_t dnn_item = {};
+        dnn_item.dnn                 = dnn;
+        snssai_item.dnn_upf_info_list.insert(dnn_item);
+      }
+
+      upf_info.snssai_upf_info_list.push_back(snssai_item);
     }
 
   } catch (const SettingNotFoundException& nfex) {
@@ -763,7 +769,8 @@ void upf_config::display() {
   //     "      thread pool size: %d",
   //     n6.thread_rd_sched_params.thread_pool_size);
   Logger::upf_app().info("- PDN networks:");
-  Logger::upf_app().info("    SNAT .............: %s", (snat) ? "yes" : "no");
+  Logger::upf_app().info(
+      "    SNAT .............: %s", (enable_snat) ? "yes" : "no");
   int i = 1;
   for (auto it : pdns) {
     if (it.prefix_ipv4) {
@@ -783,48 +790,40 @@ void upf_config::display() {
       "    bypass_ul_pfcp_rules: %s",
       (nsf.bypass_ul_pfcp_rules) ? "yes" : "no");
 
-  Logger::upf_app().info("- SUPPORT_5G_FEATURES:");
   Logger::upf_app().info(
-      "    enable_5g_features: %s",
-      (upf_5g_features.enable_5g_features) ? "yes" : "no");
+      "- Remote N6 Address .......: %s", inet_ntoa(remote_n6));
 
-  if (upf_5g_features.enable_5g_features) {
-    Logger::upf_app().info(
-        "    register_nrf: %s", (upf_5g_features.register_nrf) ? "yes" : "no");
-    Logger::upf_app().info(
-        "    enable_bpf_datapath: %s",
-        (upf_5g_features.enable_bpf_datapath) ? "yes" : "no");
-    Logger::upf_app().info(
-        "    use_fqdn_nrf: %s", (upf_5g_features.use_fqdn_nrf) ? "yes" : "no");
-    if (upf_5g_features.register_nrf) {
-      Logger::upf_app().info("    NRF:");
-      Logger::upf_app().info(
-          "        IPv4 Addr .......: %s",
-          inet_ntoa(*((struct in_addr*) &upf_5g_features.nrf_addr.ipv4_addr)));
-      Logger::upf_app().info(
-          "        Port ............: %lu  ", upf_5g_features.nrf_addr.port);
-      Logger::upf_app().info(
-          "        API version .....: %s",
-          upf_5g_features.nrf_addr.api_version.c_str());
-      if (upf_5g_features.use_fqdn_nrf)
-        Logger::upf_app().info(
-            "        FQDN ............: %s",
-            upf_5g_features.nrf_addr.fqdn.c_str());
+  Logger::upf_app().info("- SUPPORT_5G_FEATURES:");
 
-      if (upf_5g_features.upf_info.snssai_upf_info_list.size() > 0) {
-        Logger::upf_app().info("    UPF Info:");
+  Logger::upf_app().info("    register_nrf: %s", (register_nrf) ? "yes" : "no");
+  Logger::upf_app().info(
+      "    enable_bpf_datapath: %s", (enable_bpf_datapath) ? "yes" : "no");
+  Logger::upf_app().info("    use_fqdn_dns: %s", (use_fqdn_dns) ? "yes" : "no");
+  if (register_nrf) {
+    Logger::upf_app().info("    NRF:");
+    Logger::upf_app().info(
+        "        IPv4 Addr .......: %s",
+        inet_ntoa(*((struct in_addr*) &nrf_addr.ipv4_addr)));
+    Logger::upf_app().info("        Port ............: %lu  ", nrf_addr.port);
+    Logger::upf_app().info(
+        "        API version .....: %s", nrf_addr.api_version.c_str());
+    if (use_fqdn_dns)
+      Logger::upf_app().info(
+          "        FQDN ............: %s", nrf_addr.fqdn.c_str());
 
-        for (auto s : upf_5g_features.upf_info.snssai_upf_info_list) {
-          // Logger::upf_app().debug(" Parameters supported by the UPF:");
-          if (s.snssai.sD.compare(std::to_string(SD_NO_VALUE)))
-            Logger::upf_app().info(
-                "        SNSSAI (SST %d, SD %s)", s.snssai.sST,
-                s.snssai.sD.c_str());
-          else
-            Logger::upf_app().info("        SNSSAI (SST %d)", s.snssai.sST);
-          for (auto d : s.dnn_upf_info_list) {
-            Logger::upf_app().info("            DNN %s", d.dnn.c_str());
-          }
+    if (upf_info.snssai_upf_info_list.size() > 0) {
+      Logger::upf_app().info("    UPF Info:");
+
+      for (auto s : upf_info.snssai_upf_info_list) {
+        // Logger::upf_app().debug(" Parameters supported by the UPF:");
+        // if (s.snssai.sd.compare(std::to_string(SD_NO_VALUE)))
+        //   Logger::upf_app().info(
+        //       "        SNSSAI (SST %d, SD %d)", s.snssai.sst,
+        //       s.snssai.sd);
+        // else
+        Logger::upf_app().info("        SNSSAI (SST %d)", s.snssai.sst);
+        for (auto d : s.dnn_upf_info_list) {
+          Logger::upf_app().info("            DNN %s", d.dnn.c_str());
         }
       }
     }
@@ -833,3 +832,4 @@ void upf_config::display() {
       "- Log Level will be .......: %s",
       spdlog::level::to_string_view(log_level));
 }
+}  // namespace oai::config

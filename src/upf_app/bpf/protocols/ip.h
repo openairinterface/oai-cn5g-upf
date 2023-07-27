@@ -8,7 +8,9 @@
 
 #define IP_CSUM_OFFSET (sizeof(struct ethhdr) + offsetof(struct iphdr, check))
 
-static u32 ipv4_handle(struct xdp_md* ctx, struct iphdr* iph);
+// static u32 ipv4_handle(struct xdp_md* ctx, struct iphdr* iph_outer, struct
+// iphdr* iph_inner);
+static u32 ipv4_handle(struct xdp_md* ctx, struct iphdr* iph_outer);
 static u8 ip_inner_check_ipv4(struct xdp_md* ctx, struct iphdr* iph);
 
 #endif  // PROTOCOLS_IP_H
