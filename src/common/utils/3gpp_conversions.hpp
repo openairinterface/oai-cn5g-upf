@@ -35,8 +35,8 @@
 
 namespace xgpp_conv {
 
-void paa_to_pfcp_ue_ip_address(
-    const paa_t& paa, pfcp::ue_ip_address_t& ue_ip_address);
+//void paa_to_pfcp_ue_ip_address(
+//    const paa_t& paa, pfcp::ue_ip_address_t& ue_ip_address);
 void pdn_ip_to_pfcp_ue_ip_address(
     const pdn_type_t& pdn_type, const struct in_addr& ipv4_address,
     const struct in6_addr ipv6_address, pfcp::ue_ip_address_t& ue_ip_address);

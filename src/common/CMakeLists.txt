@@ -23,6 +23,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/itti)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/msg)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/..)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
 
 add_library(3GPP_COMMON_TYPES STATIC
 )

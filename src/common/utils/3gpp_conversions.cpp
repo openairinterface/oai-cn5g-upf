@@ -36,7 +36,7 @@
 #include <inttypes.h>
 
 //------------------------------------------------------------------------------
-void xgpp_conv::paa_to_pfcp_ue_ip_address(
+/*void xgpp_conv::paa_to_pfcp_ue_ip_address(
     const paa_t& paa, pfcp::ue_ip_address_t& ue_ip_address) {
   switch (paa.pdn_type.pdn_type) {
     case PDN_TYPE_E_IPV4:
@@ -56,7 +56,7 @@ void xgpp_conv::paa_to_pfcp_ue_ip_address(
     case PDN_TYPE_E_NON_IP:
     default:;
   }
-}
+}*/
 //------------------------------------------------------------------------------
 void xgpp_conv::pdn_ip_to_pfcp_ue_ip_address(
     const pdn_type_t& pdn_type, const struct in_addr& ipv4_address,
