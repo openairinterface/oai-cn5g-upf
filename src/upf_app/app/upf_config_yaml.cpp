@@ -383,7 +383,7 @@ in_addr upf_config_yaml::resolve_nf(const std::string& host) {
   std::regex re(IPV4_ADDRESS_VALIDATOR_REGEX);
   if (!std::regex_match(host, re)) {
     logger::logger_registry::get_logger(LOGGER_NAME)
-        .info("Configured host %s is an FQDN. Resolve on SMF startup", host);
+        .info("Configured host %s is an FQDN. Resolve on NF startup", host);
     std::string ip_address;
     // we ignore the port for now
     uint32_t port;
@@ -422,7 +422,7 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
         "BAD IPv4 ADDRESS FORMAT FOR N6 DN !");
   }
 
-  if (get_nf(NRF_CONFIG_NAME)->is_set()) {
+  if (get_nf(NRF_CONFIG_NAME)->is_set() & register_nrf()) {
     nrf_addr.from_sbi_config_type(
         get_nf(NRF_CONFIG_NAME)->get_sbi(), http_version);
   }
