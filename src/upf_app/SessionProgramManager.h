@@ -12,6 +12,7 @@
 
 class BPFMap;
 class OnStateChangeSessionProgramObserver;
+class PFCP_Session_LookupProgram;
 class PFCP_Session_PDR_LookupProgram;
 class SessionPrograms;
 class FARProgram;
@@ -124,7 +125,14 @@ class SessionProgramManager {
   /*****************************************************************************************************************/
   void storeFarProgramIndexInNextProgRuleIndexMap(
       std::shared_ptr<FARProgram> pFARProgram,
-      const next_rule_prog_index_key& key);
+      const next_rule_prog_index_key& key,
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
+
+  /*****************************************************************************************************************/
+  void storeSessionMappingMap(
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+      uint32_t sied, uint32_t teid_ul, uint32_t teid_dl);
+
   /*****************************************************************************************************************/
   void storeFARInFARMap(
       std::shared_ptr<FARProgram> pFARProgram,

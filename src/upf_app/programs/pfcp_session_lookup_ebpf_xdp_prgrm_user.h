@@ -116,6 +116,14 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> getTrafficMap() const;
 
   /*****************************************************************************************************************/
+  /**
+   * @brief Get the Session Mapping Map object.
+   *
+   * @return std::shared_ptr<BPFMap> mpSessionMappingMap;
+   */
+  std::shared_ptr<BPFMap> getSessionMappingMap() const;
+
+  /*****************************************************************************************************************/
 
  private:
   /**
@@ -150,8 +158,12 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> mpNextProgRuleMap;
 
   /*****************************************************************************************************************/
-  // The iface map.
+  // The traffic map.
   std::shared_ptr<BPFMap> mpTrafficMap;
+
+  /*****************************************************************************************************************/
+  // The session mapping map.
+  std::shared_ptr<BPFMap> mpSessionMappingMap;
 
   /*****************************************************************************************************************/
   // The BPF lifecycle program.
