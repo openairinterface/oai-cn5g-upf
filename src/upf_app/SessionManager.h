@@ -39,22 +39,29 @@ class SessionManager {
  public:
   // Set of PDRs.
   using pdrs_t = std::vector<std::shared_ptr<PacketDetectionRules>>;
+  /*****************************************************************************************************************/
+
   /**
    * @brief Construct a new Session Manager object.
    *
    */
   SessionManager();
+
+  /*****************************************************************************************************************/
   /**
    * @brief Destroy the Session Manager object.
    *
    */
   virtual ~SessionManager();
+
+  /*****************************************************************************************************************/
   /**
    * @brief Create a Session object in BPF map.
    *
    * @param pSession The session object to be created.
    */
   void createSession(std::shared_ptr<SessionBpf> pSession);
+  /*****************************************************************************************************************/
 
   /**
    * @brief Remove a session object from BPF map.
@@ -63,39 +70,67 @@ class SessionManager {
    * removed.
    */
   void removeSession(uint64_t seid);
+
+  /*****************************************************************************************************************/
   /**
    * @brief  Creates BPF pipeline.
    *
    * @param pSession The PFCP session which contains the context that will be
    * deployed.
    */
-  void createBPFSession(
-      std::shared_ptr<pfcp::pfcp_session> pSession, bool isModification);
+  void createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSession);
+  /*****************************************************************************************************************/
 
   /**
    * @brief Update a Session object in BPF map.
    *
    * @param pSession The session object to be updated.
    */
-  void updateBPFSession(
-      std::shared_ptr<pfcp::pfcp_session> pSession, bool isModification);
+  void updateBPFSession(std::shared_ptr<pfcp::pfcp_session> pSession);
 
+  /*****************************************************************************************************************/
   void createBPFSessionUL(
       std::shared_ptr<pfcp::pfcp_session> pSession,
-      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl, bool isModification);
+      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl);
 
+  /*****************************************************************************************************************/
   void createBPFSessionDL(
       std::shared_ptr<pfcp::pfcp_session> pSession,
-      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl, bool isModification);
+      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl);
 
+  /*****************************************************************************************************************/
   void updateBPFSessionUL(
       std::shared_ptr<pfcp::pfcp_session> pSession,
-      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl, bool isModification);
+      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl);
 
+  /*****************************************************************************************************************/
   void updateBPFSessionDL(
       std::shared_ptr<pfcp::pfcp_session> pSession,
-      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl, bool isModification);
+      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl);
 
+  /*****************************************************************************************************************/
+  bool extractPdiAndInterface(
+      std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi,
+      pfcp::source_interface_t& sourceInterface,
+      pfcp::ue_ip_address_t& ueIpAddress);
+
+  /*****************************************************************************************************************/
+  bool extractFar(
+      std::shared_ptr<pfcp::pfcp_pdr> pdr,
+      std::shared_ptr<pfcp::pfcp_session> session,
+      std::shared_ptr<pfcp::pfcp_far>& outFar);
+
+  /*****************************************************************************************************************/
+  bool extractForwardingParameters(
+      std::shared_ptr<pfcp::pfcp_far> far,
+      pfcp::forwarding_parameters& forwardingParams);
+
+  /*****************************************************************************************************************/
+  uint32_t findUplinkTeid(
+      uint32_t seid,
+      const std::vector<std::shared_ptr<pfcp::pfcp_session>>& sessions);
+
+  /*****************************************************************************************************************/
   /**
    * @brief Remove BPF pipeline.
    *
@@ -104,13 +139,16 @@ class SessionManager {
    */
   void removeBPFSession(uint64_t seid);
 
-  std::unordered_map<uint64_t, std::shared_ptr<pfcp::pfcp_session>>
-      mSeidToSession;
+  /*****************************************************************************************************************/
   static bool comparePDR(
       const std::shared_ptr<pfcp::pfcp_pdr>& first,
       const std::shared_ptr<pfcp::pfcp_pdr>& second);
 
   std::vector<std::shared_ptr<pfcp::pfcp_session>> sessions;
+
+  /*****************************************************************************************************************/
+  std::unordered_map<uint64_t, std::shared_ptr<pfcp::pfcp_session>>
+      mSeidToSession;
 };
 
 #endif  // __SESSIONMANAGER_H__

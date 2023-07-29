@@ -92,6 +92,11 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getNextProgRuleIndexMap()
 }
 
 /*****************************************************************************************************************/
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getTrafficMap() const {
+  return mpTrafficMap;
+}
+
+/*****************************************************************************************************************/
 void PFCP_Session_LookupProgram::initializeMaps() {
   // Store all maps available in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
@@ -103,5 +108,7 @@ void PFCP_Session_LookupProgram::initializeMaps() {
       std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_prog"));
   mpNextProgRuleIndexMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_prog_index"));
+  mpTrafficMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_traffic_classification"));
 }
 /*****************************************************************************************************************/

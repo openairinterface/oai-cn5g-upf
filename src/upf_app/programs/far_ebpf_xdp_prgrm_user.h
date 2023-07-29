@@ -10,7 +10,6 @@
 #include <far_ebpf_xdp_prgrm_kernel_skel.h>
 #include <wrappers/BPFMap.hpp>
 #include <BPFProgram.h>
-
 #include "interfaces.h"
 
 class BPFMaps;

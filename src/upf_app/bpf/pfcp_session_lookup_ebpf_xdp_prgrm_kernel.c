@@ -18,7 +18,6 @@
 #include <utils/logger.h>
 #include <utils/utils.h>
 #include <next_prog_rule_key.h>
-//#include <bpf/bpf.h>
 
 #ifdef KERNEL_SPACE
 #include <linux/in.h>
@@ -43,8 +42,8 @@ static u32 tail_call_next_prog(
   bpf_debug(
       "Packet Informations (TEID: %d, SRC INTERFACE: %d, IP SRC: 0x%x)\n", teid,
       source_value, ipv4_address);
-  
-  //return XDP_DROP;
+
+  // return XDP_DROP;
 
   u32* index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
 
@@ -54,7 +53,7 @@ static u32 tail_call_next_prog(
     bpf_debug("BPF tail call was not executed!\n");
   }
 
-  //return XDP_DROP;
+  // return XDP_DROP;
 
   bpf_debug("BPF tail call was not executed!\n");
   bpf_debug("One reason could be:\n");
@@ -69,43 +68,57 @@ static u32 tail_call_next_prog(
 }
 
 /*****************************************************************************************************************/
-// static u32 get_teid_downlink_session(uint32_t dest_ip) {
-  
-//   struct next_rule_prog_index_key key = {}, next_key  = {};
-//   int err;
-//   u32 teid = -1;
+static u32 get_teid_downlink_session(uint32_t dest_ip) {
+  // struct next_rule_prog_index_key key = {}, next_key = {};
+  // int err;
+  u32 teid = 1107610522;
 
-//   // while (bpf_map_get_next_key(&m_next_rule_prog_index, &key, &next_key) == 0) {
-//   //     key = next_key;
-      
-//   //     if ((next_key.source_value == INTERFACE_VALUE_CORE) &&
-//   //         (next_key.ipv4_address == dest_ip)) {
-        
-//   //       bpf_debug(
-//   //           "Looking for the Key <?, %d, %d>", next_key.source_value, next_key.ipv4_address);
+  // for (;;) {
+  //   err = bpf_map_get_next_key(&m_next_rule_prog_index, &key, &next_key);
+  //   if (err) break;
 
-//   //       u32* ret_val = bpf_map_lookup_elem(&m_next_rule_prog_index, &next_key);
+  //   if ((next_key.source_value == INTERFACE_VALUE_CORE) &&
+  //         (next_key.ipv4_address == dest_ip)) {
+  //     bpf_debug(
+  //        "Looking for the Key <?, %d, %d>", next_key.source_value,
+  //         next_key.ipv4_address);
 
-//   //       if (ret_val == 0) {
-//   //       teid = next_key.teid;  
-//   //       bpf_debug(
-//   //           "I found TEID %d", teid);
-//   //       }
-//   //     } 
-//   for (;;) {
-//     err = bpf_map_get_next_key(&m_next_rule_prog_index, &key, &next_key);
-//     if (err)
-//       break;
+  //     u32* ret_val = bpf_map_lookup_elem(&m_next_rule_prog_index, &next_key);
 
-//     u32* ret_val = bpf_map_lookup_elem(&m_next_rule_prog_index, &next_key);
+  //     if (ret_val == 0) {
+  //       teid = next_key.teid;
+  //       bpf_debug("I found TEID %d", teid);
+  //       break;
+  //     }
 
-//     // Use key and value here
+  //   }
 
+  //   key = next_key;
+  // }
+
+  return teid;
+}
+
+// while (bpf_map_get_next_key(&m_next_rule_prog_index, &key, &next_key) == 0)
+// {
 //     key = next_key;
-//   }
-  
-//   return teid;
-// }
+
+//     if ((next_key.source_value == INTERFACE_VALUE_CORE) &&
+//         (next_key.ipv4_address == dest_ip)) {
+
+//       bpf_debug(
+//           "Looking for the Key <?, %d, %d>", next_key.source_value,
+//           next_key.ipv4_address);
+
+//       u32* ret_val = bpf_map_lookup_elem(&m_next_rule_prog_index,
+//       &next_key);
+
+//       if (ret_val == 0) {
+//       teid = next_key.teid;
+//       bpf_debug(
+//           "I found TEID %d", teid);
+//       }
+//     }
 
 /*****************************************************************************************************************/
 /**
@@ -161,8 +174,7 @@ static u32 gtp_handle(
  * @return u32 The XDP action.
  */
 
-static u32 udp_handle(
-    struct xdp_md* p_ctx, struct udphdr* udph, u32 dest_ip) {
+static u32 udp_handle(struct xdp_md* p_ctx, struct udphdr* udph, u32 dest_ip) {
   void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
 
@@ -194,18 +206,17 @@ static u32 udp_handle(
 
       return gtp_handle(p_ctx, p_gtpuh, p_ip_inner->saddr);
     }
-    default:{
+    default: {
       // The destination IP is the UE IP address (donwlink).
-      //u32 teid = get_teid_downlink_session(dest_ip);
-        u32 teid = 1107610522;
-      //if (teid){
+      u32 teid = get_teid_downlink_session(dest_ip);
+      // u32 teid = 1107610522;
+      if (teid) {
         tail_call_next_prog(p_ctx, teid, INTERFACE_VALUE_CORE, dest_ip);
-      //}
-      
+      }
+
       return XDP_PASS;
       // return XDP_DROP;
     }
-      
   }
 }
 
@@ -226,8 +237,12 @@ static u32 tcp_handle(
   // void* p_data_end = (void*) (long) p_ctx->data_end;
 
   bpf_debug("Valid TCP Packet (SRC IP:0x%x, DEST IP:0x%x)\n", src_ip, dest_ip);
-  u32 teid = 1107610522;
-  tail_call_next_prog(p_ctx, teid, INTERFACE_VALUE_CORE, src_ip);
+  u32 teid = get_teid_downlink_session(dest_ip);
+  // u32 teid = 1107610522;
+
+  if (teid) {
+    tail_call_next_prog(p_ctx, teid, INTERFACE_VALUE_CORE, dest_ip);
+  }
 
   return XDP_PASS;
   // return XDP_DROP;
@@ -247,14 +262,15 @@ static u32 tcp_handle(
  */
 
 static u32 icmp_handle(
-    struct xdp_md* p_ctx, struct icmphdr* icmph, u32 dest_ip) { 
-    //u32 teid = get_teid_downlink_session(dest_ip);
-      u32 teid = 1107610522;
-      // if (teid){
-        tail_call_next_prog(p_ctx, teid, INTERFACE_VALUE_CORE, dest_ip);
-      // }
+    struct xdp_md* p_ctx, struct icmphdr* icmph, u32 dest_ip) {
+  u32 teid = get_teid_downlink_session(dest_ip);
+  // u32 teid = 1107610522;
 
-    return XDP_DROP;
+  if (teid) {
+    tail_call_next_prog(p_ctx, teid, INTERFACE_VALUE_CORE, dest_ip);
+  }
+
+  return XDP_DROP;
 }
 
 /*****************************************************************************************************************/
@@ -271,14 +287,14 @@ static u32 icmp_handle(
  */
 
 static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
-  //void* p_data     = (void*) (long) p_ctx->data;
+  // void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
 
   u32 ip_dest = iph->daddr;
 
   switch (iph->protocol) {
     case IPPROTO_UDP: {
-       bpf_debug("*** This is a UDP packet ***\n");
+      bpf_debug("*** This is a UDP packet ***\n");
       struct udphdr* udph = (struct udphdr*) (iph + 1);
 
       // Check if the UDP header extends beyond the data end.
@@ -300,7 +316,7 @@ static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
       //   return tcp_handle(p_ctx, tcph, ip_src, ip_dest);
       // }
     case IPPROTO_ICMP: {
-       bpf_debug("*** This is an ICMP packet ***\n");
+      bpf_debug("*** This is an ICMP packet ***\n");
       struct icmphdr* icmph = (struct icmphdr*) (iph + 1);
       // Check if the ICMP header extends beyond the data end.
       if ((void*) (icmph + 1) > p_data_end) {

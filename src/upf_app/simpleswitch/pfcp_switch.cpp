@@ -673,7 +673,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             UserPlaneComponent::getInstance().getSessionManager();
         spSessionManager->sessions.push_back(pSession);
         // bool isModification = false;
-        spSessionManager->createBPFSession(pSession, false);
+        spSessionManager->createBPFSession(pSession);
       }
 
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
@@ -847,7 +847,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         spSessionManager =
             UserPlaneComponent::getInstance().getSessionManager();
         spSessionManager->sessions.push_back(pSession);
-        spSessionManager->updateBPFSession(pSession, true);
+        spSessionManager->updateBPFSession(pSession);
       }
     }
 

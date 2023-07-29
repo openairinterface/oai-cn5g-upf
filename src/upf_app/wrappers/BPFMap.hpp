@@ -100,7 +100,8 @@ int BPFMap::lookup(KeyType& key, void* pValue) {
   int lookupReturn = bpf_map_lookup_elem(mapFd, &key, pValue);
 
   if (lookupReturn != 0) {
-    Logger::upf_app().warn("The key is not found in the map: %s", mName.c_str());
+    Logger::upf_app().warn(
+        "The key is not found in the map: %s", mName.c_str());
   } else {
     Logger::upf_app().debug("The key is found in the map: %s", mName.c_str());
   }
@@ -134,7 +135,8 @@ int BPFMap::remove(KeyType& key) {
     Logger::upf_app().error("The key cannot be removed in map ");
     throw std::runtime_error("The BPF map cannot be removed");
   } else {
-    Logger::upf_app().debug("The key is removed from the map: %s", mName.c_str());
+    Logger::upf_app().debug(
+        "The key is removed from the map: %s", mName.c_str());
   }
 
   return deleteReturn;

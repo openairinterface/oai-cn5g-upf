@@ -10,6 +10,7 @@
 #include <next_prog_rule_map.h>
 #include <next_prog_rule_key.h>
 #include "interfaces.h"
+#include "traffic.h"
 
 #define MAX_LENGTH 5000  // 10
 #define INTERFACE_ENTRIES_MAX 12
@@ -63,7 +64,13 @@ struct bpf_map_def SEC("maps") m_upf_interfaces = {
     .value_size  = sizeof(struct s_interface),
     .max_entries = INTERFACE_ENTRIES_MAX,  // 6,
 };
-// BPF_ANNOTATE_KV_PAIR(m_next_rule_prog_index, struct next_rule_prog_index_key,
-// u32);
+
+/*****************************************************************************************************************/
+struct bpf_map_def SEC("maps") m_traffic_classification = {
+    .type        = BPF_MAP_TYPE_HASH,
+    .key_size    = sizeof(struct s_traffic),
+    .value_size  = sizeof(u32),
+    .max_entries = INTERFACE_ENTRIES_MAX,  // 6,
+};
 
 #endif  // __PFCP_SESSION_LOOKUP_MAPS_H__

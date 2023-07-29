@@ -24,6 +24,67 @@ SessionManager::SessionManager() {}
 SessionManager::~SessionManager() {}
 
 /*****************************************************************************************************************/
+// Helper function to extract PDI and source interface
+bool SessionManager::extractPdiAndInterface(
+    std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi,
+    pfcp::source_interface_t& sourceInterface,
+    pfcp::ue_ip_address_t& ueIpAddress) {
+  return (pdr->get(pdi) && pdi.get(sourceInterface) && pdi.get(ueIpAddress));
+}
+
+/*****************************************************************************************************************/
+// Helper function to extract FAR
+bool SessionManager::extractFar(
+    std::shared_ptr<pfcp::pfcp_pdr> pdr,
+    std::shared_ptr<pfcp::pfcp_session> session,
+    std::shared_ptr<pfcp::pfcp_far>& outFar) {
+  pfcp::far_id_t farId;
+  if (pdr->get(farId) && session->get(farId.far_id, outFar)) {
+    return true;
+  }
+  return false;
+}
+
+/*****************************************************************************************************************/
+// Helper function to extract Forwarding Parameters
+bool SessionManager::extractForwardingParameters(
+    std::shared_ptr<pfcp::pfcp_far> far,
+    pfcp::forwarding_parameters& forwardingParams) {
+  return far->get(forwardingParams);
+}
+
+/*****************************************************************************************************************/
+// Helper function to find the Uplink TEID to update
+uint32_t SessionManager::findUplinkTeid(
+    uint32_t seid,
+    const std::vector<std::shared_ptr<pfcp::pfcp_session>>& sessions) {
+  uint32_t teidToUpdate = 0;
+
+  for (const auto& session : sessions) {
+    pfcp::pdi pdi;
+    pfcp::source_interface_t sourceInterface;
+
+    if (session->get_up_seid() == seid) {
+      for (const auto& pdr : session->pdrs) {
+        if (pdr->get(pdi)) {
+          pdi.get(sourceInterface);
+          if (sourceInterface.interface_value == INTERFACE_VALUE_ACCESS) {
+            teidToUpdate = session->teid_uplink.teid;
+            break;
+          }
+        }
+      }
+    }
+
+    if (teidToUpdate != 0) {
+      break;
+    }
+  }
+
+  return teidToUpdate;
+}
+
+/*****************************************************************************************************************/
 void SessionManager::createSession(std::shared_ptr<SessionBpf> pSession) {
   SessionProgramManager::getInstance().create(pSession->getSeid());
   Logger::upf_app().debug(
@@ -32,8 +93,7 @@ void SessionManager::createSession(std::shared_ptr<SessionBpf> pSession) {
 
 /*****************************************************************************************************************/
 void SessionManager::createBPFSession(
-    std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
-    bool isModification) {
+    std::shared_ptr<pfcp::pfcp_session> pSession_establishment) {
   Logger::upf_app().debug(
       "Session %d Received", pSession_establishment->get_up_seid());
   Logger::upf_app().debug("Preparing the Datapath ...");
@@ -43,15 +103,15 @@ void SessionManager::createBPFSession(
   // higher precedence values indicate lower precedence of the PDR when matching
   // a packet.
 
-  uint32_t pdrs_downlink_size = pSession_establishment->pdrs_downlink.size();
-  uint32_t pdrs_uplink_size   = pSession_establishment->pdrs_uplink.size();
-  Logger::upf_app().debug(
-      "The PDRs_UPLINK SIZE %d Before ++++++++++++++++++++++++++++++++++++++",
-      pdrs_uplink_size);
+  //   uint32_t pdrs_downlink_size =
+  //   pSession_establishment->pdrs_downlink.size(); uint32_t pdrs_uplink_size
+  //   = pSession_establishment->pdrs_uplink.size(); Logger::upf_app().debug(
+  //       "The PDRs_UPLINK SIZE %d Before
+  //       ++++++++++++++++++++++++++++++++++++++", pdrs_uplink_size);
 
-  Logger::upf_app().debug(
-      "The PDRs_Downlink SIZE %d Before ++++++++++++++++++++++++++++++++++++++",
-      pdrs_downlink_size);
+  //   Logger::upf_app().debug(
+  //       "The PDRs_Downlink SIZE %d Before
+  //       ++++++++++++++++++++++++++++++++++++++", pdrs_downlink_size);
 
   for (int i = 0; i < pSession_establishment->pdrs.size(); i++) {
     pfcp::pdi pdi;
@@ -60,11 +120,11 @@ void SessionManager::createBPFSession(
     pSession_establishment->pdrs[i]->get(pdi);
     pdi.get(sourceInterface);
 
-    Logger::upf_app().debug(
-        "The PDRs SIZE %d *******", pSession_establishment->pdrs.size());
-    Logger::upf_app().debug(
-        "The PDRs ID %d //////",
-        pSession_establishment->pdrs[i]->pdr_id.rule_id);
+    // Logger::upf_app().debug(
+    //     "The PDRs SIZE %d *******", pSession_establishment->pdrs.size());
+    // Logger::upf_app().debug(
+    //     "The PDRs ID %d //////",
+    //     pSession_establishment->pdrs[i]->pdr_id.rule_id);
 
     if (sourceInterface.interface_value == INTERFACE_VALUE_ACCESS) {
       pSession_establishment->pdrs_uplink.push_back(
@@ -77,13 +137,15 @@ void SessionManager::createBPFSession(
     }
   }
 
-  Logger::upf_app().debug(
-      "The PDRs_UPLINK SIZE %d After ++++++++++++++++++++++++++++++++++++++",
-      pSession_establishment->pdrs_uplink.size());
+  //   Logger::upf_app().debug(
+  //       "The PDRs_UPLINK SIZE %d After
+  //       ++++++++++++++++++++++++++++++++++++++",
+  //       pSession_establishment->pdrs_uplink.size());
 
-  Logger::upf_app().debug(
-      "The PDRs_downlink SIZE %d After ++++++++++++++++++++++++++++++++++++++",
-      pSession_establishment->pdrs_downlink.size());
+  //   Logger::upf_app().debug(
+  //       "The PDRs_downlink SIZE %d After
+  //       ++++++++++++++++++++++++++++++++++++++",
+  //       pSession_establishment->pdrs_downlink.size());
 
   std::sort(
       pSession_establishment->pdrs_uplink.begin(),
@@ -117,11 +179,12 @@ void SessionManager::createBPFSession(
     pfcp::pdi pdi;
     pdrHighPrecedenceUl->get(pdi);
     pdi.get(pSession_establishment->teid_uplink);
+
     Logger::upf_app().info(
         "TEID for Uplink Session: %d",
         pSession_establishment->teid_uplink.teid);
-    createBPFSessionUL(
-        pSession_establishment, pdrHighPrecedenceUl, isModification);
+
+    createBPFSessionUL(pSession_establishment, pdrHighPrecedenceUl);
   }
 
   if (not(pSession_establishment->pdrs_downlink.empty())) {
@@ -133,8 +196,8 @@ void SessionManager::createBPFSession(
     Logger::upf_app().debug(
         "Extract PDI from the Downlink PDR %d",
         pdrHighPrecedenceDl->pdr_id.rule_id);
-    createBPFSessionDL(
-        pSession_establishment, pdrHighPrecedenceDl, isModification);
+
+    createBPFSessionDL(pSession_establishment, pdrHighPrecedenceDl);
   }
 
   mSeidToSession[pSession_establishment->get_up_seid()] =
@@ -143,7 +206,7 @@ void SessionManager::createBPFSession(
 /*****************************************************************************************************************/
 void SessionManager::createBPFSessionUL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
-    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl, bool isModification) {
+    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl) {
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
   pfcp::ue_ip_address_t ueIpAddress;
@@ -158,6 +221,12 @@ void SessionManager::createBPFSessionUL(
     throw std::runtime_error("No fields available For Uplink Create PDI Check");
   }
 
+  //  if (!extractPdiAndInterface(pdrHighPrecedenceUl, pdi, sourceInterface,
+  //  ueIpAddress)) {
+  //       throw std::runtime_error("No fields available For Uplink Create PDI
+  //       Check");
+  // }
+
   Logger::upf_app().debug(
       "PDI extracted from Uplink PDR %d", pdrHighPrecedenceUl->pdr_id.rule_id);
 
@@ -165,15 +234,25 @@ void SessionManager::createBPFSessionUL(
   Logger::upf_app().debug(
       "Extract Uplink FAR from the highest precedence Uplink PDR");
   std::shared_ptr<pfcp::pfcp_far> pFar;
-  pfcp::far_id_t farId;
+  //   pfcp::far_id_t farId;
 
-  if (!(pdrHighPrecedenceUl->get(farId) && pSession->get(farId.far_id, pFar))) {
+  //   if (!(pdrHighPrecedenceUl->get(farId) && pSession->get(farId.far_id,
+  //   pFar))) {
+  //     throw std::runtime_error("No fields available For Uplink Create FAR
+  //     Check");
+  //   }
+
+  if (!extractFar(pdrHighPrecedenceUl, pSession, pFar)) {
     throw std::runtime_error("No fields available For Uplink Create FAR Check");
   }
 
+  //   SessionProgramManager::getInstance().createPipeline(
+  //       pSession->get_up_seid(), fteid.teid, sourceInterface.interface_value,
+  //       ueIpAddress.ipv4_address.s_addr, pFar, isModification);
+
   SessionProgramManager::getInstance().createPipeline(
-      pSession->get_up_seid(), fteid.teid, sourceInterface.interface_value,
-      ueIpAddress.ipv4_address.s_addr, pFar, isModification);
+      pSession->get_up_seid(), fteid.teid, INTERFACE_VALUE_ACCESS,
+      ueIpAddress.ipv4_address.s_addr, pFar, false, 0);
 
   // SessionProgramManager::getInstance().createPipeline(
   //     pSession->get_up_seid(), fteid.teid, sourceInterface.interface_value,
@@ -185,7 +264,7 @@ void SessionManager::createBPFSessionUL(
 /*****************************************************************************************************************/
 void SessionManager::createBPFSessionDL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
-    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl, bool isModification) {
+    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl) {
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
   pfcp::ue_ip_address_t ueIpAddress;
@@ -208,48 +287,59 @@ void SessionManager::createBPFSessionDL(
   Logger::upf_app().debug(
       "Extract Downlink FAR from the highest precedence Downlink PDR");
   std::shared_ptr<pfcp::pfcp_far> pFar;
-  pfcp::far_id_t farId;
+  // pfcp::far_id_t farId;
 
-  if (!(pdrHighPrecedenceDl->get(farId) && pSession->get(farId.far_id, pFar))) {
+  //   if (!(pdrHighPrecedenceDl->get(farId) && pSession->get(farId.far_id,
+  //   pFar))) {
+  //     throw std::runtime_error(
+  //         "No fields available for Downlink Create FAR Check");
+  //   }
+
+  if (!extractFar(pdrHighPrecedenceDl, pSession, pFar)) {
     throw std::runtime_error(
-        "No fields available for Downlink Create FAR Check");
+        "No fields available For Downlink Create FAR Check");
   }
 
+  //   SessionProgramManager::getInstance().createPipeline(
+  //       pSession->get_up_seid(), fteid.teid, sourceInterface.interface_value,
+  //       ueIpAddress.ipv4_address.s_addr, pFar, isModification);
+
   SessionProgramManager::getInstance().createPipeline(
-      pSession->get_up_seid(), fteid.teid, sourceInterface.interface_value,
-      ueIpAddress.ipv4_address.s_addr, pFar, isModification);
+      pSession->get_up_seid(), fteid.teid, INTERFACE_VALUE_CORE,
+      ueIpAddress.ipv4_address.s_addr, pFar, false, 0);
 
   // Logger::upf_app().info("Add Session For Downlink");
 }
 
 /*****************************************************************************************************************/
 void SessionManager::updateBPFSession(
-    std::shared_ptr<pfcp::pfcp_session> pSession, bool isModification) {
+    std::shared_ptr<pfcp::pfcp_session> pSession) {
   Logger::upf_app().debug(
       "Session %d Will be updated", pSession->get_up_seid());
   Logger::upf_app().debug("Find the PDR with Highest Precedence:");
 
   uint32_t pdrs_downlink_size = pSession->pdrs_downlink.size();
   uint32_t pdrs_uplink_size   = pSession->pdrs_uplink.size();
-  Logger::upf_app().debug(
-      "The PDRs_UPLINK SIZE %d Before ++++++++++++++++++++++++++++++++++++++",
-      pdrs_uplink_size);
+  //   Logger::upf_app().debug(
+  //       "The PDRs_UPLINK SIZE %d Before
+  //       ++++++++++++++++++++++++++++++++++++++", pdrs_uplink_size);
 
-  Logger::upf_app().debug(
-      "The PDRs_Downlink SIZE %d Before ++++++++++++++++++++++++++++++++++++++",
-      pdrs_downlink_size);
+  //   Logger::upf_app().debug(
+  //       "The PDRs_Downlink SIZE %d Before
+  //       ++++++++++++++++++++++++++++++++++++++", pdrs_downlink_size);
 
   for (int i = 0; i < pSession->pdrs.size(); i++) {
     pfcp::pdi pdi;
     pfcp::source_interface_t sourceInterface;
 
-    Logger::upf_app().debug("The PDRs SIZE %d *******", pSession->pdrs.size());
+    // Logger::upf_app().debug("The PDRs SIZE %d *******",
+    // pSession->pdrs.size());
 
     pSession->pdrs[i]->get(pdi);
     pdi.get(sourceInterface);
 
-    Logger::upf_app().debug(
-        "The PDRs ID %d //////", pSession->pdrs[i]->pdr_id.rule_id);
+    // Logger::upf_app().debug(
+    //     "The PDRs ID %d //////", pSession->pdrs[i]->pdr_id.rule_id);
 
     if (sourceInterface.interface_value == INTERFACE_VALUE_CORE) {
       pSession->pdrs_downlink.push_back(pSession->pdrs[i]);
@@ -260,13 +350,15 @@ void SessionManager::updateBPFSession(
     }
   }
 
-  Logger::upf_app().debug(
-      "The PDRs_UPLINK SIZE %d After ++++++++++++++++++++++++++++++++++++++",
-      pSession->pdrs_uplink.size());
+  //   Logger::upf_app().debug(
+  //       "The PDRs_UPLINK SIZE %d After
+  //       ++++++++++++++++++++++++++++++++++++++",
+  //       pSession->pdrs_uplink.size());
 
-  Logger::upf_app().debug(
-      "The PDRs_downlink SIZE %d After ++++++++++++++++++++++++++++++++++++++",
-      pSession->pdrs_downlink.size());
+  //   Logger::upf_app().debug(
+  //       "The PDRs_downlink SIZE %d After
+  //       ++++++++++++++++++++++++++++++++++++++",
+  //       pSession->pdrs_downlink.size());
 
   if ((pSession->pdrs_uplink.empty()) && (pSession->pdrs_downlink.empty())) {
     Logger::upf_app().error("No PDR was found in session %d", pSession->seid);
@@ -287,7 +379,7 @@ void SessionManager::updateBPFSession(
         "Extract PDI from the Downlink PDR %d",
         pdrHighPrecedenceDl->pdr_id.rule_id);
 
-    updateBPFSessionDL(pSession, pdrHighPrecedenceDl, isModification);
+    updateBPFSessionDL(pSession, pdrHighPrecedenceDl);
   }
 
   if (pdrs_uplink_size != pSession->pdrs_uplink.size()) {
@@ -304,7 +396,7 @@ void SessionManager::updateBPFSession(
         "Extract PDI from the Uplink PDR %d",
         pdrHighPrecedenceUl->pdr_id.rule_id);
 
-    updateBPFSessionUL(pSession, pdrHighPrecedenceUl, isModification);
+    updateBPFSessionUL(pSession, pdrHighPrecedenceUl);
   }
 
   // auto pPFCP_Session_LookupProgram =
@@ -316,7 +408,7 @@ void SessionManager::updateBPFSession(
 /*****************************************************************************************************************/
 void SessionManager::updateBPFSessionUL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
-    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl, bool isModification) {
+    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl) {
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
   pfcp::ue_ip_address_t ueIpAddress;
@@ -326,8 +418,8 @@ void SessionManager::updateBPFSessionUL(
       "Update the Uplink Direction Datapath For Session %d",
       pSession->get_up_seid());
 
-  if (!(pdrHighPrecedenceUl->get(pdi) && pdi.get(sourceInterface) &&
-        pdi.get(ueIpAddress))) {
+  if (!extractPdiAndInterface(
+          pdrHighPrecedenceUl, pdi, sourceInterface, ueIpAddress)) {
     throw std::runtime_error("No fields available For Uplink Update PDI Check");
   }
 
@@ -337,10 +429,10 @@ void SessionManager::updateBPFSessionUL(
   // pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(&next_rule_prog_index_key)
   Logger::upf_app().debug(
       "Extract Uplink FAR from the highest precedence Uplink PDR");
-  std::shared_ptr<pfcp::pfcp_far> pFar;
-  pfcp::far_id_t farId;
 
-  if (!(pdrHighPrecedenceUl->get(farId) && pSession->get(farId.far_id, pFar))) {
+  std::shared_ptr<pfcp::pfcp_far> pFar;
+
+  if (!extractFar(pdrHighPrecedenceUl, pSession, pFar)) {
     throw std::runtime_error("No fields available For Uplink Update FAR Check");
   }
 
@@ -353,103 +445,64 @@ void SessionManager::updateBPFSessionUL(
 }
 
 /*****************************************************************************************************************/
+
+// Function to update the Downlink Direction of a session
 void SessionManager::updateBPFSessionDL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
-    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl, bool isModification) {
+    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl) {
+  uint32_t seidul = pSession->get_up_seid();
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
   pfcp::ue_ip_address_t ueIpAddress;
   pfcp::source_interface_t sourceInterface;
 
-  uint32_t seidul = pSession->get_up_seid();
-
-  //  if (!(pdrHighPrecedenceDl->get(pdi) && pdi.get(fteid) &&
-  //         pdi.get(sourceInterface) && pdi.get(ueIpAddress))) {
-
-  Logger::upf_app().debug(
-      "Create the Downlink Direction Datapath for Session %d", seidul);
-
-  if (!(pdrHighPrecedenceDl->get(pdi) && pdi.get(sourceInterface) &&
-        pdi.get(ueIpAddress))) {
+  if (!extractPdiAndInterface(
+          pdrHighPrecedenceDl, pdi, sourceInterface, ueIpAddress)) {
     throw std::runtime_error(
         "No fields available For Downlink Update PDI Check");
   }
 
   Logger::upf_app().debug(
+      "Create the Downlink Direction Datapath for Session %d", seidul);
+  Logger::upf_app().debug(
       "PDI extracted from Downlink PDR %d",
       pdrHighPrecedenceDl->pdr_id.rule_id);
-
   Logger::upf_app().debug(
       "Extract FAR from the highest Precedence Downlink PDR");
 
   std::shared_ptr<pfcp::pfcp_far> pFar;
-  pfcp::far_id_t farId;
 
-  if (!(pdrHighPrecedenceDl->get(farId) && pSession->get(farId.far_id, pFar))) {
+  if (!extractFar(pdrHighPrecedenceDl, pSession, pFar)) {
     throw std::runtime_error(
         "No fields available For Downlink Update FAR Check");
   }
-  Logger::upf_app().debug("FAR ID %d", farId.far_id);
 
-  pfcp::forwarding_parameters foward_param;
-  if (not pFar->get(foward_param)) {
-    Logger::upf_app().error("FAILURE");
+  Logger::upf_app().debug("FAR ID %d", pFar->far_id.far_id);
+
+  pfcp::forwarding_parameters forwardingParams;
+
+  if (!extractForwardingParameters(pFar, forwardingParams)) {
+    Logger::upf_app().error(
+        "Forwarding parameters were not found for Downlink Update");
   }
-  pfcp::ue_ip_address_t gNBIpAddress;
-  gNBIpAddress.v4 = 1;
-  gNBIpAddress.ipv4_address =
-      foward_param.outer_header_creation.second.ipv4_address;
 
-  struct in_addr addr;
-  addr.s_addr = gNBIpAddress.ipv4_address.s_addr;
-  char* gnbIP = inet_ntoa(addr);
-
-  fteid.teid =
-      pFar->forwarding_parameters.second.outer_header_creation.second.teid;
-
-  /* Create eBPF programs and Maps for Downlink*/
-  uint32_t ipnexthop = upf_cfg.remote_n6.s_addr;
+  fteid.teid = forwardingParams.outer_header_creation.second.teid;
 
   // SessionProgramManager::getInstance().createPipeline(
-  //     seidul, fteid.teid, sourceInterface.interface_value, ipnexthop, pFar,
-  //     isModification);
+  //   seidul, fteid.teid, sourceInterface.interface_value,
+  //   ueIpAddress.ipv4_address.s_addr, pFar, isModification);
 
-  SessionProgramManager::getInstance().createPipeline(
-      seidul, fteid.teid, sourceInterface.interface_value,
-      ueIpAddress.ipv4_address.s_addr, pFar, isModification);
-
-  // uint32_t teidToUpdate = -1;
-
-  // for (int i = 0; i < sessions.size(); i++) {
-  //   pfcp::pdi pdi;
-  //   pfcp::source_interface_t sourceInterface;
-
-  //   sessions[i]->pdrs[i]->get(pdi);
-  //   pdi.get(sourceInterface);
-
-  //   if ((sessions[i]->get_up_seid() == seidul) &&
-  //       (sourceInterface.interface_value == INTERFACE_VALUE_ACCESS)) {
-  //     teidToUpdate = sessions[i]->teid_uplink.teid;
-  //   }
-  // }
-
-  // /* Update Maps for Uplink*/
-  // if (teidToUpdate) {
-  //   SessionProgramManager::getInstance().updatePipeline(
-  //       seidul, teidToUpdate, gNBIpAddress.ipv4_address.s_addr,
-  //       isModification);
-  // } else {
-  //   Logger::upf_app().error(
-  //       "TEID to update not found for session: %d ", seidul);
-  // }
-
-  if (!(pdrHighPrecedenceDl->get(pdi) && pdi.get(sourceInterface) &&
-        pdi.get(gNBIpAddress))) {
-    throw std::runtime_error(
-        "No fields available For Downlink Update PDI Check and gnb");
+  uint32_t teid_ul = findUplinkTeid(seidul, sessions);
+  if (teid_ul) {
+    SessionProgramManager::getInstance().createPipeline(
+        seidul, fteid.teid, INTERFACE_VALUE_CORE,
+        ueIpAddress.ipv4_address.s_addr, pFar, true, teid_ul);
+  } else {
+    Logger::upf_app().error("Uplink TEID not found for session: %d", seidul);
+    SessionProgramManager::getInstance().createPipeline(
+        seidul, fteid.teid, INTERFACE_VALUE_CORE,
+        ueIpAddress.ipv4_address.s_addr, pFar, true, 0);
   }
-
-  Logger::upf_app().info("Update Session");
 }
 
 /*****************************************************************************************************************/
@@ -480,3 +533,106 @@ void SessionManager::removeSession(uint64_t seid) {
   SessionProgramManager::getInstance().remove(seid);
   Logger::upf_app().debug("Session %d has been removed", seid);
 }
+
+/*****************************************************************************************************************/
+
+// void SessionManager::updateBPFSessionDL(
+//     std::shared_ptr<pfcp::pfcp_session> pSession,
+//     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl, bool isModification)
+//     {
+//   pfcp::pdi pdi;
+//   pfcp::fteid_t fteid;
+//   pfcp::ue_ip_address_t ueIpAddress;
+//   pfcp::source_interface_t sourceInterface;
+
+//   uint32_t seidul = pSession->get_up_seid();
+
+//   //  if (!(pdrHighPrecedenceDl->get(pdi) && pdi.get(fteid) &&
+//   //         pdi.get(sourceInterface) && pdi.get(ueIpAddress))) {
+
+//   Logger::upf_app().debug(
+//       "Create the Downlink Direction Datapath for Session %d", seidul);
+
+//   if (!(pdrHighPrecedenceDl->get(pdi) && pdi.get(sourceInterface) &&
+//         pdi.get(ueIpAddress))) {
+//     throw std::runtime_error(
+//         "No fields available For Downlink Update PDI Check");
+//   }
+
+//   Logger::upf_app().debug(
+//       "PDI extracted from Downlink PDR %d",
+//       pdrHighPrecedenceDl->pdr_id.rule_id);
+
+//   Logger::upf_app().debug(
+//       "Extract FAR from the highest Precedence Downlink PDR");
+
+//   std::shared_ptr<pfcp::pfcp_far> pFar;
+//   pfcp::far_id_t farId;
+
+//   if (!(pdrHighPrecedenceDl->get(farId) && pSession->get(farId.far_id,
+//   pFar))) {
+//     throw std::runtime_error(
+//         "No fields available For Downlink Update FAR Check");
+//   }
+//   Logger::upf_app().debug("FAR ID %d", farId.far_id);
+
+//   pfcp::forwarding_parameters foward_param;
+//   if (not pFar->get(foward_param)) {
+//     Logger::upf_app().error("FAILURE");
+//   }
+//   pfcp::ue_ip_address_t gNBIpAddress;
+//   gNBIpAddress.v4 = 1;
+//   gNBIpAddress.ipv4_address =
+//       foward_param.outer_header_creation.second.ipv4_address;
+
+//   struct in_addr addr;
+//   addr.s_addr = gNBIpAddress.ipv4_address.s_addr;
+//   char* gnbIP = inet_ntoa(addr);
+
+//   fteid.teid =
+//       pFar->forwarding_parameters.second.outer_header_creation.second.teid;
+
+//   /* Create eBPF programs and Maps for Downlink*/
+//   //uint32_t ipnexthop = upf_cfg.remote_n6.s_addr;
+
+//   // SessionProgramManager::getInstance().createPipeline(
+//   //     seidul, fteid.teid, sourceInterface.interface_value, ipnexthop,
+//   pFar,
+//   //     isModification);
+
+//   SessionProgramManager::getInstance().createPipeline(
+//       seidul, fteid.teid, sourceInterface.interface_value,
+//       ueIpAddress.ipv4_address.s_addr, pFar, isModification);
+
+//   uint32_t teid_to_update = -1;
+
+//   for (int i = 0; i < sessions.size(); i++) {
+//     pfcp::pdi pdi;
+//     pfcp::source_interface_t sourceInterface;
+
+//     sessions[i]->pdrs[i]->get(pdi);
+//     pdi.get(sourceInterface);
+
+//     if ((sessions[i]->get_up_seid() == seidul) &&
+//         (sourceInterface.interface_value == INTERFACE_VALUE_ACCESS)) {
+//       teid_to_update = sessions[i]->teid_uplink.teid;
+//     }
+//   }
+
+//   /* Update Maps for Uplink*/
+//   if (teid_to_update) {
+//     SessionProgramManager::getInstance().updateMap(
+//         seidul, teid_to_update, ueIpAddress.ipv4_address.s_addr);
+//   } else {
+//     Logger::upf_app().error(
+//         "TEID to update not found for session: %d ", seidul);
+//   }
+
+//   if (!(pdrHighPrecedenceDl->get(pdi) && pdi.get(sourceInterface) &&
+//         pdi.get(gNBIpAddress))) {
+//     throw std::runtime_error(
+//         "No fields available For Downlink Update PDI Check and gnb");
+//   }
+
+//   Logger::upf_app().info("Update Session");
+// }
