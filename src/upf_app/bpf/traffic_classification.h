@@ -7,11 +7,10 @@
 struct s_traffic {
   u32 src_ip;
   u32 dest_ip;
-  u16 src_port;
-  u16 dest_port;
-  u8 dscp;
   u8 protocol;
-  u32 teid_ul;
+  //u16 dscp_dl_or_qfi_ul; TODO: add this field when it works
+  //u16 src_port;
+  //u16 dest_port;
   // Add other relevant parameters as needed
 };
 

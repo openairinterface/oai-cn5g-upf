@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 struct s_session_mapping {
-  u32 seid;
+  u32 ue_ip_address;
   u32 teid_ul;
 };
 
