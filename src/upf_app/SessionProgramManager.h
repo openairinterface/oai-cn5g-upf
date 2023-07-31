@@ -131,7 +131,7 @@ class SessionProgramManager {
   /*****************************************************************************************************************/
   void storeSessionMappingMap(
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-      uint32_t teid_ul, uint32_t teid_dl);
+      uint32_t sied, uint32_t teid_ul, uint32_t teid_dl);
 
   /*****************************************************************************************************************/
   void storeFARInFARMap(

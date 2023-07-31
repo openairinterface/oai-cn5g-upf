@@ -11,6 +11,7 @@
 #include <next_prog_rule_key.h>
 #include "interfaces.h"
 #include "traffic.h"
+#include "session_mapping.h"
 
 #define MAX_LENGTH 5000  // 10
 #define INTERFACE_ENTRIES_MAX 12
@@ -76,7 +77,7 @@ struct bpf_map_def SEC("maps") m_traffic_classification = {
 /*****************************************************************************************************************/
 struct bpf_map_def SEC("maps") m_session_mapping = {
     .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(u32),
+    .key_size    = sizeof(struct s_session_mapping),
     .value_size  = sizeof(u32),  // teid_dl
     .max_entries = MAX_LENGTH,
 };

@@ -16,6 +16,7 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <traffic.h>
+#include <session_mapping.h>
 #include "upf_config.hpp"
 #include <thread>
 
@@ -141,12 +142,10 @@ void SessionProgramManager::initializeNextRuleProgIndexKey(
 }
 
 /*****************************************************************************************************************/
-// Helper function to store the FARProgram index in the LookupProgram
-// std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram
+// Helper function to store the FARProgram index in the LookupProgram std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram
 void SessionProgramManager::storeFarProgramIndexInNextProgRuleIndexMap(
     std::shared_ptr<FARProgram> pFARProgram,
-    const next_rule_prog_index_key& key,
-    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
+    const next_rule_prog_index_key& key, std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
   // auto pPFCP_Session_LookupProgram =
   //     UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
   u32 id = pFARProgram->getId();
@@ -157,23 +156,15 @@ void SessionProgramManager::storeFarProgramIndexInNextProgRuleIndexMap(
   pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
 }
 
+
 /*****************************************************************************************************************/
 // Helper function to store Session mapping
-void SessionProgramManager::storeSessionMappingMap(
-    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-    uint32_t teid_ul, uint32_t teid_dl) {
-  // uint32_t teid_ul_big_endian, teid_dl_big_endian;
-
-  if (is_little_endian()) {
-    teid_ul = htobe32(teid_ul);
-    teid_dl = htobe32(teid_dl);
-  } else {
-    teid_ul = htobe32(teid_ul);
-    teid_dl = htobe32(teid_dl);
-  }
+void SessionProgramManager::storeSessionMappingMap(std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram, uint32_t seid, uint32_t teid_ul, uint32_t teid_dl) {
+  
+  s_session_mapping key = {.seid = seid, .teid_ul = teid_ul};
 
   pPFCP_Session_LookupProgram->getSessionMappingMap()->update(
-      teid_ul, teid_dl, BPF_ANY);
+      key, teid_dl, BPF_ANY);
 }
 
 /*****************************************************************************************************************/
@@ -286,8 +277,7 @@ void SessionProgramManager::createPipeline(
   auto pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
-  storeFarProgramIndexInNextProgRuleIndexMap(
-      pFARProgram, key, pPFCP_Session_LookupProgram);
+  storeFarProgramIndexInNextProgRuleIndexMap(pFARProgram, key, pPFCP_Session_LookupProgram);
 
   Logger::upf_app().debug("Store FAR in the FAR program");
   storeFARInFARMap(pFARProgram, pFar);
@@ -306,7 +296,7 @@ void SessionProgramManager::createPipeline(
   // arpUpdateThread2.detach();
 
   if (isModification) {
-    storeSessionMappingMap(pPFCP_Session_LookupProgram, teid2, teid1);
+    storeSessionMappingMap(pPFCP_Session_LookupProgram, seid, teid1, teid2);
     uint32_t gNodeBIP = getGnodebIp(pFar);
 
     std::thread arpUpdateThread1(
