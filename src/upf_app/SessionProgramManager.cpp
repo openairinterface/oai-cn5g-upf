@@ -165,6 +165,8 @@ void SessionProgramManager::storeSessionMappingMap(
     uint32_t ue_ip_address, uint32_t teid_dl, uint32_t teid_ul) {
   s_session_mapping key;
 
+  __builtin_memset(&key, 0, sizeof(struct s_session_mapping));
+
   if (is_little_endian()) {
     key.ue_ip_address = htole32(ue_ip_address);
     key.teid_ul       = htobe32(teid_ul);

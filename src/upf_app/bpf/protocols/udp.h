@@ -6,7 +6,11 @@
 
 // static u32 udp_handle(
 //     struct xdp_md* ctx, struct udphdr* udph, u32 src_ip, u32 dest_ip);
+// static u32 udp_handle(
+//     struct xdp_md* ctx, struct udphdr* udph, u32 dest_ip);
+
 static u32 udp_handle(
-    struct xdp_md* ctx, struct udphdr* udph, u32 dest_ip);
+    struct xdp_md* p_ctx, struct udphdr* udph, u32 src_ip, u32 dest_ip,
+    u8 dscp);
 
 #endif  // PROTOCOLS_UDP_H

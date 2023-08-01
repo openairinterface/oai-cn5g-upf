@@ -124,6 +124,21 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> getSessionMappingMap() const;
 
   /*****************************************************************************************************************/
+  /**
+   * @brief Get the UE QFI TEID Map object.
+   *
+   * @return std::shared_ptr<BPFMap> mpUeQfiTeidMap;
+   */
+  std::shared_ptr<BPFMap> getUeQfiTeidMap() const;
+
+  /**
+   * @brief Get theQoS Flow Map object.
+   *
+   * @return std::shared_ptr<BPFMap> mpQosFlowMap;
+   */
+  std::shared_ptr<BPFMap> getQosFlowMap() const;
+
+  /*****************************************************************************************************************/
 
  private:
   /**
@@ -131,6 +146,9 @@ class PFCP_Session_LookupProgram {
    *
    */
   void initializeMaps();
+
+  void instrementQfiFlowMappingTable(
+      const char* type, uint32_t qos, uint8_t qfi, uint8_t dscp);
 
   /*****************************************************************************************************************/
   // The reference of the bpf maps.
@@ -164,6 +182,16 @@ class PFCP_Session_LookupProgram {
   /*****************************************************************************************************************/
   // The session mapping map.
   std::shared_ptr<BPFMap> mpSessionMappingMap;
+
+  /*****************************************************************************************************************/
+
+  // The UE-QFI-TEID map.
+  std::shared_ptr<BPFMap> mpUeQfiTeidMap;
+
+  /*****************************************************************************************************************/
+
+  // The QOS Flow map.
+  std::shared_ptr<BPFMap> mpQosFlowMap;
 
   /*****************************************************************************************************************/
   // The BPF lifecycle program.

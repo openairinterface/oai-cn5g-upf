@@ -18,7 +18,8 @@
 #include <utils/logger.h>
 #include <utils/utils.h>
 #include <next_prog_rule_key.h>
-
+#include <traffic_classification.h>
+#include <qfi_flow_mapping_table.h>
 #ifdef KERNEL_SPACE
 #include <linux/in.h>
 #else
@@ -68,59 +69,66 @@ static u32 tail_call_next_prog(
 }
 
 /*****************************************************************************************************************/
-static u32 get_teid_downlink_session(uint32_t dest_ip) {
-  // struct next_rule_prog_index_key key = {}, next_key = {};
-  // int err;
-  u32 teid = 1107610522;
 
-  // for (;;) {
-  //   err = bpf_map_get_next_key(&m_next_rule_prog_index, &key, &next_key);
-  //   if (err) break;
+static u32 update_map_traffic_classification(
+    u32 src_ip, u32 dest_ip, u8 protocol, u32 teid) {
+  struct s_traffic key;
+  __builtin_memset(&key, 0, sizeof(struct s_traffic));
 
-  //   if ((next_key.source_value == INTERFACE_VALUE_CORE) &&
-  //         (next_key.ipv4_address == dest_ip)) {
-  //     bpf_debug(
-  //        "Looking for the Key <?, %d, %d>", next_key.source_value,
-  //         next_key.ipv4_address);
-
-  //     u32* ret_val = bpf_map_lookup_elem(&m_next_rule_prog_index, &next_key);
-
-  //     if (ret_val == 0) {
-  //       teid = next_key.teid;
-  //       bpf_debug("I found TEID %d", teid);
-  //       break;
-  //     }
-
-  //   }
-
-  //   key = next_key;
-  // }
-
-  return teid;
+  key.src_ip   = src_ip;
+  key.dest_ip  = dest_ip;
+  key.protocol = protocol;
+  bpf_map_update_elem(&m_traffic_classification, &key, &teid, BPF_ANY);
+  return 0;
 }
 
-// while (bpf_map_get_next_key(&m_next_rule_prog_index, &key, &next_key) == 0)
-// {
-//     key = next_key;
+/*****************************************************************************************************************/
 
-//     if ((next_key.source_value == INTERFACE_VALUE_CORE) &&
-//         (next_key.ipv4_address == dest_ip)) {
+static u32 get_teid_downlink_session(
+    u32 src_ip, u32 dest_ip, u8 protocol, u8 dscp) {
+  struct s_traffic key_traffic_class;
+  __builtin_memset(&key_traffic_class, 0, sizeof(struct s_traffic));
 
-//       bpf_debug(
-//           "Looking for the Key <?, %d, %d>", next_key.source_value,
-//           next_key.ipv4_address);
+  key_traffic_class.src_ip   = src_ip;
+  key_traffic_class.dest_ip  = dest_ip;
+  key_traffic_class.protocol = protocol;
 
-//       u32* ret_val = bpf_map_lookup_elem(&m_next_rule_prog_index,
-//       &next_key);
+  u32* teid_ul =
+      bpf_map_lookup_elem(&m_traffic_classification, &key_traffic_class);
 
-//       if (ret_val == 0) {
-//       teid = next_key.teid;
-//       bpf_debug(
-//           "I found TEID %d", teid);
-//       }
-//     }
+  if (!teid_ul) {
+    u8* key_dscp = &dscp;
+    struct s_qfi_parameters* qfi_parameters;
+    __builtin_memset(&qfi_parameters, 0, sizeof(struct s_qfi_parameters));
+    qfi_parameters = bpf_map_lookup_elem(&m_qos_flow_map, &key_dscp);
+
+    struct s_ue_qfi key_ue_qfi;
+    __builtin_memset(&key_ue_qfi, 0, sizeof(struct s_ue_qfi));
+    key_ue_qfi.src_ip = src_ip;
+    key_ue_qfi.qfi    = qfi_parameters->qfi;
+    teid_ul           = bpf_map_lookup_elem(&m_ue_qfi_teid, &key_ue_qfi);
+
+    update_map_traffic_classification(src_ip, dest_ip, protocol, *teid_ul);
+    bpf_debug("New entry to traffic classification");
+  }
+
+  // struct s_session_mapping key_session_mapping = {.teid_ul = *teid_ul,
+  // .ue_ip_address = src_ip}; u32* teid_dl =
+  // bpf_map_lookup_elem(&m_session_mapping, &key_session_mapping);
+
+  // if(teid_dl){
+  //   bpf_debug("teid for downlink = %d\n", *teid_dl);
+  //   return *teid_dl;
+  // }
+
+  // bpf_debug("No Session was established for downlink direction");
+  // return XDP_PASS;
+
+  return 1107610522;
+}
 
 /*****************************************************************************************************************/
+
 /**
  * GTP SECTION.
  */
@@ -174,7 +182,9 @@ static u32 gtp_handle(
  * @return u32 The XDP action.
  */
 
-static u32 udp_handle(struct xdp_md* p_ctx, struct udphdr* udph, u32 dest_ip) {
+static u32 udp_handle(
+    struct xdp_md* p_ctx, struct udphdr* udph, u32 src_ip, u32 dest_ip,
+    u8 dscp) {
   void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
 
@@ -190,7 +200,8 @@ static u32 udp_handle(struct xdp_md* p_ctx, struct udphdr* udph, u32 dest_ip) {
         return XDP_DROP;
       }
 
-      bpf_debug("TEID FOUND = %d", p_gtpuh->teid);
+      // u32 teid_ul = p_gtpuh->teid;
+      // bpf_debug("TEID FOUND = %d", teid_ul);
 
       struct ethhdr* p_new_eth = p_data + GTP_ENCAPSULATED_SIZE;
 
@@ -204,16 +215,25 @@ static u32 udp_handle(struct xdp_md* p_ctx, struct udphdr* udph, u32 dest_ip) {
         return XDP_DROP;
       }
 
-      return gtp_handle(p_ctx, p_gtpuh, p_ip_inner->saddr);
+      u32 src_ip_in = p_ip_inner->saddr;
+      u32 teid_ul   = p_gtpuh->teid;
+
+      update_map_traffic_classification(
+          src_ip_in, dest_ip, IPPROTO_UDP, teid_ul);
+      bpf_debug("New entry to traffic classification");
+
+      return gtp_handle(p_ctx, p_gtpuh, src_ip_in);
     }
     default: {
       // The destination IP is the UE IP address (donwlink).
-      u32 teid = get_teid_downlink_session(dest_ip);
+      u32 teid = get_teid_downlink_session(src_ip, dest_ip, IPPROTO_UDP, dscp);
       // u32 teid = 1107610522;
+
       if (teid) {
         tail_call_next_prog(p_ctx, teid, INTERFACE_VALUE_CORE, dest_ip);
       }
 
+      bpf_debug("Downlink teid was not retrieved");
       return XDP_PASS;
       // return XDP_DROP;
     }
@@ -233,17 +253,19 @@ static u32 udp_handle(struct xdp_md* p_ctx, struct udphdr* udph, u32 dest_ip) {
  * @return u32 The XDP action.
  */
 static u32 tcp_handle(
-    struct xdp_md* p_ctx, struct tcphdr* tcph, u32 src_ip, u32 dest_ip) {
+    struct xdp_md* p_ctx, struct tcphdr* tcph, u32 src_ip, u32 dest_ip,
+    u8 dscp) {
   // void* p_data_end = (void*) (long) p_ctx->data_end;
 
   bpf_debug("Valid TCP Packet (SRC IP:0x%x, DEST IP:0x%x)\n", src_ip, dest_ip);
-  u32 teid = get_teid_downlink_session(dest_ip);
+  u32 teid = get_teid_downlink_session(src_ip, dest_ip, IPPROTO_TCP, dscp);
   // u32 teid = 1107610522;
 
   if (teid) {
     tail_call_next_prog(p_ctx, teid, INTERFACE_VALUE_CORE, dest_ip);
   }
 
+  bpf_debug("Downlink teid was not retrieved");
   return XDP_PASS;
   // return XDP_DROP;
 }
@@ -262,8 +284,9 @@ static u32 tcp_handle(
  */
 
 static u32 icmp_handle(
-    struct xdp_md* p_ctx, struct icmphdr* icmph, u32 dest_ip) {
-  u32 teid = get_teid_downlink_session(dest_ip);
+    struct xdp_md* p_ctx, struct icmphdr* icmph, u32 src_ip, u32 dest_ip,
+    u8 dscp) {
+  u32 teid = get_teid_downlink_session(src_ip, dest_ip, IPPROTO_ICMP, dscp);
   // u32 teid = 1107610522;
 
   if (teid) {
@@ -291,6 +314,8 @@ static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
   void* p_data_end = (void*) (long) p_ctx->data_end;
 
   u32 ip_dest = iph->daddr;
+  u32 ip_src  = iph->saddr;
+  u8 dscp     = iph->tos;
 
   switch (iph->protocol) {
     case IPPROTO_UDP: {
@@ -302,7 +327,7 @@ static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
         bpf_debug("Invalid UDP packet\n");
         return XDP_DROP;
       }
-      return udp_handle(p_ctx, udph, ip_dest);
+      return udp_handle(p_ctx, udph, ip_src, ip_dest, dscp);
     }
       // case IPPROTO_TCP:{
       //   bpf_debug("*** This is a TCP packet ***\n");
@@ -313,7 +338,7 @@ static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
       //     bpf_debug("Invalid TCP packet\n");
       //     return XDP_DROP;
       //   }
-      //   return tcp_handle(p_ctx, tcph, ip_src, ip_dest);
+      //   return tcp_handle(p_ctx, tcph, ip_src, ip_dest, dscp);
       // }
     case IPPROTO_ICMP: {
       bpf_debug("*** This is an ICMP packet ***\n");
@@ -323,7 +348,7 @@ static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
         bpf_debug("Invalid ICMP packet\n");
         return XDP_DROP;
       }
-      return icmp_handle(p_ctx, icmph, ip_dest);
+      return icmp_handle(p_ctx, icmph, ip_src, ip_dest, dscp);
     }
     default: {
       bpf_debug("Non UDP/TCP/ICMP protocols \n");
@@ -409,43 +434,6 @@ int entry_point(struct xdp_md* p_ctx) {
 char _license[] SEC("license") = "GPL";
 
 /*****************************************************************************************************************/
-
-// /*****************************************************************************************************************/
-// /**
-//  * IP SECTION.
-//  */
-
-// /**
-//  * @brief Handle IPv4 header.
-//  *
-//  * @param p_ctx The user accessible metadata for xdp packet hook.
-//  * @param iph The IP header.
-//  * @return u32 The XDP action.
-//  */
-// static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
-//   void* p_data_end = (void*) (long) p_ctx->data_end;
-
-//   u32 ip_src  = iph->saddr;
-//   u32 ip_dest = iph->daddr;
-
-//   bpf_debug("Valid IPv4 Packet (SRC IP:0x%x, DEST IP:0x%x)\n", ip_src,
-//   ip_dest); switch (iph->protocol) {
-//     case IPPROTO_UDP: {
-//       struct udphdr* udph = (struct udphdr*) (iph + 1);
-
-//       // Check if the UDP header extends beyond the data end.
-//       if ((void*) (udph + 1) > p_data_end) {
-//         bpf_debug("Invalid UDP packet\n");
-//         return XDP_DROP;
-//       }
-//       return udp_handle(p_ctx, udph, ip_src, ip_dest);
-//     }
-//     case IPPROTO_TCP:
-//     default:
-//       bpf_debug("TCP protocol L4\n");
-//       return XDP_PASS;
-//   }
-// }
 
 // #define IPPROTO_IP		IPPROTO_IP
 // #define IPPROTO_ICMP		IPPROTO_ICMP

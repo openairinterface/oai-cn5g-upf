@@ -68,7 +68,7 @@ static void* (*bpf_map_lookup_elem)(void* map, const void* key) = (void*) 1;
  * Returns
  * 	0 on success, or a negative error in case of failure.
  */
-static long (*bpf_map_update_elem2)(
+static long (*bpf_map_update_elem)(
     void* map, const void* key, const void* value, __u64 flags) = (void*) 2;
 
 /*
@@ -79,7 +79,7 @@ static long (*bpf_map_update_elem2)(
  * Returns
  * 	0 on success, or a negative error in case of failure.
  */
-static long (*bpf_map_delete_elem2)(void* map, const void* key) = (void*) 3;
+static long (*bpf_map_delete_elem)(void* map, const void* key) = (void*) 3;
 
 /*
  * bpf_probe_read
