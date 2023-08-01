@@ -113,6 +113,7 @@ RUN apt-get update && \
 # Copying executable and generated libraries
 WORKDIR /openair-upf/bin
 COPY --from=oai-upf-builder \
+    /usr/local/sbin/bpftool \
     /openair-upf/build/upf/build/oai_upf \
     /openair-upf/scripts/entrypoint.py \
     /openair-upf/scripts/healthcheck.sh \
@@ -126,6 +127,8 @@ COPY --from=oai-upf-builder \
     /usr/local/lib/libfmt.so \
     /usr/local/lib/libyaml-cpp.so.0.? \
     /usr/lib/x86_64-linux-gnu/libasan.so.5 \
+    /usr/lib/x86_64-linux-gnu/libbfd-2.34-system.so \
+    /usr/lib/x86_64-linux-gnu/libopcodes-2.34-system.so \
 # Ubuntu 18 --> boost 67 will be copied
     /usr/lib/libboost_system.so.1.6*.0 \
     /openair-upf/build/ext/libbpf/src/libbpf.so.0 \
@@ -133,7 +136,7 @@ COPY --from=oai-upf-builder \
     ./
 
 RUN ldconfig && \
-    ldd /openair-upf/bin/oai_upf
+    ldd /openair-upf/bin/oai_upf && ldd /openair-upf/bin/bpftool
 
 # Copying template configuration files
 # The configuration folder will be flat
