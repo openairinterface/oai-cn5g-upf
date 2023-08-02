@@ -115,7 +115,7 @@ class SessionProgramManager {
   void createPipeline(
       uint32_t seid, uint32_t teid1, uint8_t sourceInterface,
       uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
-      bool isModification, uint32_t teid2);
+      bool isModification, uint32_t teid2, uint8_t qfi);
 
   /*****************************************************************************************************************/
   void initializeNextRuleProgIndexKey(
@@ -154,6 +154,11 @@ class SessionProgramManager {
 
   /*****************************************************************************************************************/
   uint32_t getGnodebIp(std::shared_ptr<pfcp::pfcp_far> pFar);
+
+  /*****************************************************************************************************************/
+  void storeUeQfiTeidMap(
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+      uint32_t ue_ip_address, uint8_t qfi, uint32_t teid_ul);
 
   /*****************************************************************************************************************/
   void updatePipeline(

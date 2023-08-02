@@ -16,6 +16,7 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <traffic_classification.h>
+#include <ue_teid_qfi_matching.h>
 #include <session_mapping.h>
 #include "upf_config.hpp"
 #include <thread>
@@ -182,6 +183,24 @@ void SessionProgramManager::storeSessionMappingMap(
 }
 
 /*****************************************************************************************************************/
+// Helper function to store UE QFI
+void SessionProgramManager::storeUeQfiTeidMap(
+    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+    uint32_t ue_ip_address, uint8_t qfi, uint32_t teid_ul) {
+  s_ue_qfi key;
+
+  __builtin_memset(&key, 0, sizeof(struct s_ue_qfi));
+
+  if (is_little_endian()) {
+    key.src_ip = htole32(ue_ip_address);
+  } else {
+    key.src_ip = ue_ip_address;
+  }
+
+  pPFCP_Session_LookupProgram->getUeQfiTeidMap()->update(key, teid_ul, BPF_ANY);
+}
+
+/*****************************************************************************************************************/
 // Helper function to store the FAR in the FAR program
 void SessionProgramManager::storeFARInFARMap(
     std::shared_ptr<FARProgram> pFARProgram,
@@ -280,7 +299,7 @@ uint32_t SessionProgramManager::getGnodebIp(
 void SessionProgramManager::createPipeline(
     uint32_t seid, uint32_t teid1, uint8_t sourceInterface,
     uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
-    bool isModification, uint32_t teid2) {
+    bool isModification, uint32_t teid2, uint8_t qfi) {
   next_rule_prog_index_key key;
   initializeNextRuleProgIndexKey(key, teid1, ueIpAddress, sourceInterface);
 
@@ -330,6 +349,7 @@ void SessionProgramManager::createPipeline(
     });
 
     arpUpdateThread2.detach();
+    storeUeQfiTeidMap(pPFCP_Session_LookupProgram, ueIpAddress, qfi, teid1);
 
     saveSeidWithinFARProgram(seid, pFARProgram, key);
   }

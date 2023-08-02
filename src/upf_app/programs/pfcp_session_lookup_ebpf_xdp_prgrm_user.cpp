@@ -23,6 +23,7 @@
 #define QOS_1000 1000
 #define QOS_5000 5000
 #define QOS_10000 10000
+#define QOS_DEFAULT 5000
 
 #define QFI_1 1
 #define QFI_2 2
@@ -32,15 +33,17 @@
 #define QFI_6 6
 #define QFI_7 7
 #define QFI_8 8
+#define QFI_DEFALUT 1
 
-#define DSCP_39 39  // 100111
-#define DSCP_38 38  // 100110
-#define DSCP_21 21  // 010101
-#define DSCP_20 20  // 010100
-#define DSCP_19 19  // 010011
-#define DSCP_10 10  // 001010
-#define DSCP_9 9    // 001001
-#define DSCP_8 8    // 001000
+#define DSCP_39 39      // 100111
+#define DSCP_38 38      // 100110
+#define DSCP_21 21      // 010101
+#define DSCP_20 20      // 010100
+#define DSCP_19 19      // 010011
+#define DSCP_10 10      // 001010
+#define DSCP_9 9        // 001001
+#define DSCP_8 8        // 001000
+#define DSCP_DEFAULT 0  // 000000
 
 /*****************************************************************************************************************/
 PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
@@ -87,6 +90,8 @@ void PFCP_Session_LookupProgram::setup() {
   instrementQfiFlowMappingTable(TYPE_NON_GBR, QOS_1000, QFI_6, DSCP_10);
   instrementQfiFlowMappingTable(TYPE_NON_GBR, QOS_5000, QFI_7, DSCP_9);
   instrementQfiFlowMappingTable(TYPE_NON_GBR, QOS_10000, QFI_8, DSCP_8);
+  instrementQfiFlowMappingTable(
+      TYPE_NON_GBR, QOS_DEFAULT, QFI_DEFALUT, DSCP_DEFAULT);
 }
 
 /*****************************************************************************************************************/
