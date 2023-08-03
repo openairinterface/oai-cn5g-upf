@@ -22,8 +22,8 @@
 #define QOS_300 300
 #define QOS_1000 1000
 #define QOS_5000 5000
-#define QOS_10000 10000
-#define QOS_DEFAULT 5000
+//#define QOS_10000 10000
+#define QOS_DEFAULT 10000
 
 #define QFI_1 1
 #define QFI_2 2
@@ -32,18 +32,26 @@
 #define QFI_5 5
 #define QFI_6 6
 #define QFI_7 7
-#define QFI_8 8
-#define QFI_DEFALUT 1
+//#define QFI_8 8
+#define QFI_DEFALUT 8
 
-#define DSCP_39 39      // 100111
-#define DSCP_38 38      // 100110
-#define DSCP_21 21      // 010101
-#define DSCP_20 20      // 010100
-#define DSCP_19 19      // 010011
-#define DSCP_10 10      // 001010
-#define DSCP_9 9        // 001001
-#define DSCP_8 8        // 001000
+#define DSCP_39 39  // 100111
+#define DSCP_38 38  // 100110
+#define DSCP_21 21  // 010101
+#define DSCP_20 20  // 010100
+#define DSCP_19 19  // 010011
+#define DSCP_10 10  // 001010
+#define DSCP_9 9    // 001001
+//#define DSCP_8 8        // 001000
 #define DSCP_DEFAULT 0  // 000000
+
+/*****************************************************************************************************************/
+
+int is_little_endian2() {
+  u32 value = 1;
+  u8* byte  = (u8*) &value;
+  return (*byte == 1);
+}
 
 /*****************************************************************************************************************/
 PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
@@ -89,7 +97,7 @@ void PFCP_Session_LookupProgram::setup() {
   instrementQfiFlowMappingTable(TYPE_GBR, QOS_300, QFI_5, DSCP_19);
   instrementQfiFlowMappingTable(TYPE_NON_GBR, QOS_1000, QFI_6, DSCP_10);
   instrementQfiFlowMappingTable(TYPE_NON_GBR, QOS_5000, QFI_7, DSCP_9);
-  instrementQfiFlowMappingTable(TYPE_NON_GBR, QOS_10000, QFI_8, DSCP_8);
+  // instrementQfiFlowMappingTable(TYPE_NON_GBR, QOS_10000, QFI_8, DSCP_8);
   instrementQfiFlowMappingTable(
       TYPE_NON_GBR, QOS_DEFAULT, QFI_DEFALUT, DSCP_DEFAULT);
 }
@@ -190,12 +198,17 @@ void PFCP_Session_LookupProgram::initializeMaps() {
 
 void PFCP_Session_LookupProgram::instrementQfiFlowMappingTable(
     const char* type, uint32_t qos, uint8_t qfi, uint8_t dscp) {
-  struct s_qfi_parameters key;
-  __builtin_memset(&key, 0, sizeof(struct s_qfi_parameters));
+  struct s_qfi_parameters value;
+  __builtin_memset(&value, 0, sizeof(struct s_qfi_parameters));
 
-  key.resource_type = type;
-  key.qos           = qos;
-  key.qfi           = qfi;
+  if (is_little_endian2()) {
+    value.qos = htole32(qos);
+  } else {
+    value.qos = qos;
+  }
 
-  getQosFlowMap()->update(key, dscp, BPF_ANY);
+  value.resource_type = type;
+  value.qfi           = qfi;
+
+  getQosFlowMap()->update(dscp, value, BPF_ANY);
 }

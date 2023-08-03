@@ -104,7 +104,7 @@ struct bpf_map_def SEC("maps") m_ue_qfi_teid = {
 
 struct bpf_map_def SEC("maps") m_qos_flow_map = {
     .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(u8),
+    .key_size    = sizeof(u8),  // dscp
     .value_size  = sizeof(struct s_qfi_parameters),
     .max_entries = MAX_LENGTH,
 };

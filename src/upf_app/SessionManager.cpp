@@ -252,6 +252,7 @@ void SessionManager::createBPFSessionUL(
   //       ueIpAddress.ipv4_address.s_addr, pFar, isModification);
 
   if (pdi.get(qfi)) {
+    Logger::upf_app().debug("############ QFI1 %u ###########", qfi.qfi);
     SessionProgramManager::getInstance().createPipeline(
         pSession->get_up_seid(), fteid.teid, INTERFACE_VALUE_ACCESS,
         ueIpAddress.ipv4_address.s_addr, pFar, false, 0, qfi.qfi);

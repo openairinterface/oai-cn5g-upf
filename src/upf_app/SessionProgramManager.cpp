@@ -193,9 +193,13 @@ void SessionProgramManager::storeUeQfiTeidMap(
 
   if (is_little_endian()) {
     key.src_ip = htole32(ue_ip_address);
+    teid_ul    = htobe32(teid_ul);
   } else {
     key.src_ip = ue_ip_address;
+    teid_ul    = htole32(teid_ul);
   }
+
+  key.qfi = qfi;
 
   pPFCP_Session_LookupProgram->getUeQfiTeidMap()->update(key, teid_ul, BPF_ANY);
 }
@@ -314,6 +318,7 @@ void SessionProgramManager::createPipeline(
       pFARProgram, key, pPFCP_Session_LookupProgram);
 
   Logger::upf_app().debug("Store FAR in the FAR program");
+  Logger::upf_app().debug("############ QFI2 %u ###########", qfi);
   storeFARInFARMap(pFARProgram, pFar);
 
   uint32_t dnIP    = upf_cfg.remote_n6.s_addr;
