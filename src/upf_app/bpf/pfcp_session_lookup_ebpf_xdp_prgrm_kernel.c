@@ -273,10 +273,20 @@ static u32 udp_handle(
     }
     default: {
       // The destination IP is the UE IP address (donwlink).
-      // u8 qfi      = get_qfi_from_qos_flow_map(p_ctx, dscp);
-      // u32 teid_ul = get_teid_uplink_from_ue_qfi_teid_map(p_ctx, dest_ip,
-      // qfi); u32 teid_dl = get_teid_downlink_session(p_ctx, dest_ip, teid_ul);
-      // tail_call_next_prog(p_ctx, teid_dl, INTERFACE_VALUE_CORE, dest_ip);
+      u32* teid_dl = retreive_teid_downlink(src_ip, dest_ip, dscp, IPPROTO_UDP);
+
+      if (teid_dl) {
+        bpf_debug("The teid for downlink: %d", *teid_dl);
+        update_map_traffic_classification(
+            src_ip, dest_ip, IPPROTO_UDP, *teid_dl);
+        tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE, dest_ip);
+      }
+
+      bpf_debug(
+          "No TEID Downlink was foud for (src ip, dest ip) = (%d, %d)", src_ip,
+          dest_ip);
+      bpf_debug("and for (protocol, dscp) = (%u, %u)", IPPROTO_UDP, dscp);
+      return XDP_DROP;
     }
   }
 }
@@ -296,8 +306,6 @@ static u32 udp_handle(
 static u32 tcp_handle(
     struct xdp_md* p_ctx, struct tcphdr* tcph, u32 src_ip, u32 dest_ip,
     u8 dscp) {
-  // void* p_data_end = (void*) (long) p_ctx->data_end;
-
   bpf_debug("Valid TCP Packet (SRC IP:0x%x, DEST IP:0x%x)\n", src_ip, dest_ip);
   // The destination IP is the UE IP address (donwlink).
   // u8 qfi      = get_qfi_from_qos_flow_map(p_ctx, dscp);
@@ -319,58 +327,11 @@ static u32 tcp_handle(
  * @return u32 The XDP action.
  */
 
-// static u32 icmp_handle(
-//     struct xdp_md* p_ctx, struct icmphdr* icmph, u32 src_ip, u32 dest_ip,
-//     u8 dscp) {
-//   // The destination IP is the UE IP address (donwlink).
-//   u32* teid_dl = get_teid_downlink_from_traffic_class_map(src_ip, dest_ip,
-//   IPPROTO_ICMP);
-
-//   if (teid_dl) {
-//     bpf_debug("Teid Downlink %d was found", *teid_dl);
-//     bpf_debug("In Traffic Class: (src ip, dst IP, protocol) = (%d, %d, %u)",
-//     src_ip, dest_ip, IPPROTO_ICMP); tail_call_next_prog(p_ctx, *teid_dl,
-//     INTERFACE_VALUE_CORE, dest_ip);
-//   }
-
-//   bpf_debug("No TEID Downlink was found for (src ip, dst IP, protocol) = (%d,
-//   %d, %u)", src_ip, dest_ip, IPPROTO_ICMP); struct s_qfi_parameters*
-//   qfi_params = get_qfi_params_from_qos_flow_map(dscp);
-
-//     if (qfi_params) {
-//       u8 qfi = qfi_params->qfi;
-//       bpf_debug("QFI %d was found for dscp %d", qfi, dscp);
-//       u32* teid_ul = get_teid_uplink_from_ue_qfi_teid_map(dest_ip, qfi);
-
-//       if (teid_ul) {
-//         bpf_debug(
-//          "Teid Uplink %d was found in QFI Flow Table (src ip, qfi) = (%d,
-//          %u)\n", *teid_ul, dest_ip, qfi);
-//         teid_dl = get_teid_downlink_session(dest_ip, *teid_ul);
-
-//         if (teid_dl) {
-//           bpf_debug("The teid for downlink: %d", *teid_dl);
-//           update_map_traffic_classification(src_ip, dest_ip, IPPROTO_ICMP,
-//           *teid_dl); tail_call_next_prog(p_ctx, *teid_dl,
-//           INTERFACE_VALUE_CORE, dest_ip);
-//         }
-
-//         bpf_debug("No TEID Downlink was found for (src ip, teid_ul) = (%d,
-//         %d)", dest_ip, *teid_ul); return XDP_DROP;
-//       }
-
-//       bpf_debug("No TEID Uplink was found for (src ip, qfi) = (%d, %u)",
-//       dest_ip, qfi); return XDP_DROP;
-//     }
-
-//     bpf_debug("No QFI was foud for dscp %d", dscp);
-//     return XDP_DROP;
-// }
-
 static u32 icmp_handle(
     struct xdp_md* p_ctx, struct icmphdr* icmph, u32 src_ip, u32 dest_ip,
     u8 dscp) {
   u32* teid_dl = retreive_teid_downlink(src_ip, dest_ip, dscp, IPPROTO_ICMP);
+
   if (teid_dl) {
     bpf_debug("The teid for downlink: %d", *teid_dl);
     update_map_traffic_classification(src_ip, dest_ip, IPPROTO_ICMP, *teid_dl);
