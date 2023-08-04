@@ -307,11 +307,19 @@ static u32 tcp_handle(
     struct xdp_md* p_ctx, struct tcphdr* tcph, u32 src_ip, u32 dest_ip,
     u8 dscp) {
   bpf_debug("Valid TCP Packet (SRC IP:0x%x, DEST IP:0x%x)\n", src_ip, dest_ip);
-  // The destination IP is the UE IP address (donwlink).
-  // u8 qfi      = get_qfi_from_qos_flow_map(p_ctx, dscp);
-  // u32 teid_ul = get_teid_uplink_from_ue_qfi_teid_map(p_ctx, dest_ip, qfi);
-  // u32 teid_dl = get_teid_downlink_session(p_ctx, dest_ip, teid_ul);
-  // tail_call_next_prog(p_ctx, teid_dl, INTERFACE_VALUE_CORE, dest_ip);
+  u32* teid_dl = retreive_teid_downlink(src_ip, dest_ip, dscp, IPPROTO_TCP);
+
+  if (teid_dl) {
+    bpf_debug("The teid for downlink: %d", *teid_dl);
+    update_map_traffic_classification(src_ip, dest_ip, IPPROTO_TCP, *teid_dl);
+    tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE, dest_ip);
+  }
+
+  bpf_debug(
+      "No TEID Downlink was foud for (src ip, dest ip) = (%d, %d)", src_ip,
+      dest_ip);
+  bpf_debug("and for (protocol, dscp) = (%u, %u)", IPPROTO_TCP, dscp);
+  return XDP_DROP;
 }
 
 /*****************************************************************************************************************/
@@ -381,17 +389,17 @@ static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
       }
       return udp_handle(p_ctx, udph, ip_src, ip_dest, dscp);
     }
-      // case IPPROTO_TCP:{
-      //   bpf_debug("*** This is a TCP packet ***\n");
-      //   struct tcphdr* tcph = (struct tcphdr*)(iph + 1);
+    case IPPROTO_TCP: {
+      bpf_debug("*** This is a TCP packet ***\n");
+      struct tcphdr* tcph = (struct tcphdr*) (iph + 1);
 
-      //   // Check if the TCP header extends beyond the data end.
-      //   if ((void*)(tcph + 1) > p_data_end) {
-      //     bpf_debug("Invalid TCP packet\n");
-      //     return XDP_DROP;
-      //   }
-      //   return tcp_handle(p_ctx, tcph, ip_src, ip_dest, dscp);
-      // }
+      // Check if the TCP header extends beyond the data end.
+      if ((void*) (tcph + 1) > p_data_end) {
+        bpf_debug("Invalid TCP packet\n");
+        return XDP_DROP;
+      }
+      return tcp_handle(p_ctx, tcph, ip_src, ip_dest, dscp);
+    }
     case IPPROTO_ICMP: {
       bpf_debug("*** This is an ICMP packet ***\n");
       struct icmphdr* icmph = (struct icmphdr*) (iph + 1);
