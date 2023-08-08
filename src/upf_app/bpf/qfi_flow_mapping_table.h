@@ -4,10 +4,12 @@
 #include <types.h>
 #include <stdint.h>
 
+typedef enum { DELAY_CRITICAL_GBR, GBR, NON_GBR } e_resource_type;
+
 struct s_qfi_parameters {
-  const char* resource_type;
-  u32 qos;
+  e_resource_type resource_type;
   u8 qfi;
+  u32 qos;
 };
 
 #endif  // __QFI_FLOW_MAPPING_TABLE_H__

@@ -8,12 +8,11 @@
 #include <wrappers/BPFMaps.h>
 #include "interfaces.h"
 #include "logger.hpp"
-#include "qfi_flow_mapping_table.h"
 
 // Define constants for the parameters
-#define TYPE_DELAY_CRITICAL_GBR "Delay Critical GBR"
-#define TYPE_GBR "GBR"
-#define TYPE_NON_GBR "Non-GBR"
+// #define TYPE_DELAY_CRITICAL_GBR "Delay Critical GBR"
+// #define TYPE_GBR "GBR"
+// #define TYPE_NON_GBR "Non-GBR"
 
 #define QOS_3 3
 #define QOS_10 10
@@ -89,17 +88,16 @@ void PFCP_Session_LookupProgram::setup() {
   mpLifeCycle->link("xdp_entry_point", mGTPInterface.c_str());
 
   // Use the defined constants in the function calls
-  instrementQfiFlowMappingTable(TYPE_DELAY_CRITICAL_GBR, QOS_3, QFI_1, DSCP_39);
+  instrementQfiFlowMappingTable(DELAY_CRITICAL_GBR, QOS_3, QFI_1, DSCP_39);
+  instrementQfiFlowMappingTable(DELAY_CRITICAL_GBR, QOS_10, QFI_2, DSCP_38);
+  instrementQfiFlowMappingTable(GBR, QOS_30, QFI_3, DSCP_21);
+  instrementQfiFlowMappingTable(GBR, QOS_100, QFI_4, DSCP_20);
+  instrementQfiFlowMappingTable(GBR, QOS_300, QFI_5, DSCP_19);
+  instrementQfiFlowMappingTable(NON_GBR, QOS_1000, QFI_6, DSCP_10);
+  instrementQfiFlowMappingTable(NON_GBR, QOS_5000, QFI_7, DSCP_9);
+  // instrementQfiFlowMappingTable(NON_GBR, QOS_10000, QFI_8, DSCP_8);
   instrementQfiFlowMappingTable(
-      TYPE_DELAY_CRITICAL_GBR, QOS_10, QFI_2, DSCP_38);
-  instrementQfiFlowMappingTable(TYPE_GBR, QOS_30, QFI_3, DSCP_21);
-  instrementQfiFlowMappingTable(TYPE_GBR, QOS_100, QFI_4, DSCP_20);
-  instrementQfiFlowMappingTable(TYPE_GBR, QOS_300, QFI_5, DSCP_19);
-  instrementQfiFlowMappingTable(TYPE_NON_GBR, QOS_1000, QFI_6, DSCP_10);
-  instrementQfiFlowMappingTable(TYPE_NON_GBR, QOS_5000, QFI_7, DSCP_9);
-  // instrementQfiFlowMappingTable(TYPE_NON_GBR, QOS_10000, QFI_8, DSCP_8);
-  instrementQfiFlowMappingTable(
-      TYPE_NON_GBR, QOS_DEFAULT, QFI_DEFALUT, DSCP_DEFAULT);
+      NON_GBR, QOS_DEFAULT, QFI_DEFALUT, DSCP_DEFAULT);
 }
 
 /*****************************************************************************************************************/
@@ -197,7 +195,7 @@ void PFCP_Session_LookupProgram::initializeMaps() {
 /*****************************************************************************************************************/
 
 void PFCP_Session_LookupProgram::instrementQfiFlowMappingTable(
-    const char* type, uint32_t qos, uint8_t qfi, uint8_t dscp) {
+    e_resource_type type, uint32_t qos, uint8_t qfi, uint8_t dscp) {
   struct s_qfi_parameters value;
   __builtin_memset(&value, 0, sizeof(struct s_qfi_parameters));
 
