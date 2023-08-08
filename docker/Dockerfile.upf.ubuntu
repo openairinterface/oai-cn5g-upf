@@ -115,7 +115,6 @@ WORKDIR /openair-upf/bin
 COPY --from=oai-upf-builder \
     /usr/local/sbin/bpftool \
     /openair-upf/build/upf/build/oai_upf \
-    /openair-upf/scripts/entrypoint.py \
     /openair-upf/scripts/healthcheck.sh \
     ./
 
@@ -141,7 +140,7 @@ RUN ldconfig && \
 # Copying template configuration files
 # The configuration folder will be flat
 WORKDIR /openair-upf/etc
-COPY --from=oai-upf-builder /openair-upf/etc/upf.conf .
+COPY --from=oai-upf-builder /openair-upf/etc/config.yaml .
 
 WORKDIR /openair-upf
 
@@ -157,5 +156,4 @@ HEALTHCHECK --interval=10s \
             --retries=6 \
     CMD /openair-upf/bin/healthcheck.sh
 
-CMD ["/openair-upf/bin/oai_upf", "-c", "/openair-upf/etc/upf.conf", "-o"]
-ENTRYPOINT ["python3", "/openair-upf/bin/entrypoint.py"]
+CMD ["/openair-upf/bin/oai_upf", "-c", "/openair-upf/etc/config.yaml", "-o"]
