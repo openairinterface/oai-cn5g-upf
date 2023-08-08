@@ -80,8 +80,7 @@ def perform_flattening(tag):
     cmd += ' --change "LABEL support-multi-sgwu-instances=\\"true\\"" '
     cmd += ' --change "LABEL support-nrf-fdqn=\\"true\\"" '
     cmd += ' --change "HEALTHCHECK --interval=10s --timeout=15s --retries=6 CMD /openair-upf/bin/healthcheck.sh" '
-    cmd += ' --change "CMD [\\"/openair-upf/bin/oai_upf\\", \\"-c\\", \\"/openair-upf/etc/upf.conf\\", \\"-o\\"]" '
-    cmd += ' --change "ENTRYPOINT [\\"python3\\", \\"/openair-upf/bin/entrypoint.py\\"]" '
+    cmd += ' --change "CMD [\\"/openair-upf/bin/oai_upf\\", \\"-c\\", \\"/openair-upf/etc/config.yaml\\", \\"-o\\"]" '
     cmd += ' - ' + image_prefix + tag
     print (cmd)
     subprocess.check_output(cmd, shell=True, universal_newlines=True)

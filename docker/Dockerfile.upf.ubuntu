@@ -115,7 +115,6 @@ WORKDIR /openair-upf/bin
 COPY --from=oai-upf-builder \
     /usr/local/sbin/bpftool \
     /openair-upf/build/upf/build/oai_upf \
-    /openair-upf/scripts/entrypoint.py \
     /openair-upf/scripts/healthcheck.sh \
     ./
 
