@@ -108,35 +108,6 @@ static u32* get_teid_uplink_from_ue_qfi_teid_map(u32 dest_ip, u8 qfi) {
 
 /*****************************************************************************************************************/
 
-// static u32* get_teid_uplink_from_ue_qfi_teid_map(u32 dest_ip, u8 dscp) {
-//   struct s_qfi_parameters* qfi_params =
-//   get_qfi_params_from_qos_flow_map(dscp);
-
-//   if (qfi_params) {
-//     u8 qfi = qfi_params->qfi;
-//     bpf_debug("QFI %d was found for dscp %d", qfi, dscp);
-//      struct s_ue_qfi key_ue_qfi = {0};
-//     key_ue_qfi.src_ip          = dest_ip;
-//     key_ue_qfi.qfi             = qfi;
-
-//     u32* teid_ul = bpf_map_lookup_elem(&m_ue_qfi_teid, &key_ue_qfi);
-//     u32 teid_val = 1;
-//     teid_ul = &teid_val;
-//     return teid_ul;
-//   }
-// }
-/*****************************************************************************************************************/
-
-// static u32* get_teid_downlink_session(u32 dest_ip, u32 teid_ul) {
-//   struct s_session_mapping key_session_mapping;
-//   __builtin_memset(&key_session_mapping, 0, sizeof(struct
-//   s_session_mapping)); key_session_mapping.ue_ip_address = dest_ip;
-//   key_session_mapping.teid_ul       = teid_ul;
-
-//   u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping,
-//   &key_session_mapping); return teid_dl;
-// }
-
 static u32* get_teid_downlink_session(u32 dest_ip, u32 teid_ul) {
   struct s_session_mapping key_session_mapping;
   __builtin_memset(&key_session_mapping, 0, sizeof(struct s_session_mapping));
@@ -147,39 +118,17 @@ static u32* get_teid_downlink_session(u32 dest_ip, u32 teid_ul) {
 
 /*****************************************************************************************************************/
 
-// static u32* get_teid_downlink_from_qfi_and_teid_ul_(
-//     u32 src_ip, u32 dest_ip, u8 dscp, u8 protocol) {
-//   u32* teid_dl = NULL;
-//   u32* teid_ul = get_teid_uplink_from_ue_qfi_teid_map(dest_ip, dscp);
-
-//     if (teid_ul) {
-//       bpf_debug(
-//           "Teid Uplink %d was found in QFI Flow Table (src ip, dscp) = (%d, "
-//           "%u)",
-//           *teid_ul, dest_ip, dscp);
-//       teid_dl = get_teid_downlink_session(dest_ip, *teid_ul);
-
-//       if (teid_dl) {
-//         update_map_traffic_classification(src_ip, protocol, dest_ip,
-//         *teid_dl);
-//         //bpf_debug("The teid for downlink: %d", *teid_dl);
-//       }
-//     }
-
-//   return teid_dl;
-// }
-/*****************************************************************************************************************/
-
-static u32 retreive_teid_downlink(
+static u32* retreive_teid_downlink(
     struct xdp_md* p_ctx, u32 src_ip, u32 dest_ip, u8 dscp, u8 protocol) {
   u32* teid_dl = NULL;
 
   teid_dl = get_teid_downlink_from_traffic_class_map(src_ip, dest_ip, protocol);
 
   if (teid_dl) {
-    tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE, dest_ip);
-    bpf_printk("Tail call was not executed, drop the packet");
-    return XDP_DROP;
+    //tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE, dest_ip);
+    //bpf_printk("Tail call was not executed, drop the packet");
+    //return XDP_DROP;
+    return teid_dl;
   }
 
   bpf_printk("No TEID Downlink was found for traffic class");
@@ -189,79 +138,68 @@ static u32 retreive_teid_downlink(
 
   if (!qfi_params) {
     bpf_printk("QFI was not found for dscp %d", dscp);
-    return XDP_DROP;
+    //return XDP_DROP;
+    return NULL;
   }
 
   u8 qfi       = qfi_params->qfi;
-  u32* teid_ul = get_teid_uplink_from_ue_qfi_teid_map(dest_ip, qfi);
+  struct s_ue_qfi key_ue_qfi = {0};
+  key_ue_qfi.src_ip          = dest_ip;
+  key_ue_qfi.qfi             = qfi;
+  
+  u32* teid_ul = bpf_map_lookup_elem(&m_ue_qfi_teid, &key_ue_qfi);
+  // get_teid_uplink_from_ue_qfi_teid_map(dest_ip, qfi);
 
   if (!teid_ul) {
-    bpf_printk(
-        "Teid Uplink was not found in QFI Flow Table (src ip, dscp) =(%d, %u)",
-        dest_ip, dscp);
-    return XDP_DROP;
+    // bpf_printk(
+    //     "Teid Uplink was not found in QFI Flow Table (src ip, dscp) =(%d, %u)",
+    //     dest_ip, dscp);
+    //return XDP_DROP;
+    return NULL;
   }
 
-  bpf_printk("Teid Uplink %d was found in ...", *teid_ul);
+ // bpf_printk("Teid Uplink %d was found in ...", *teid_ul);
+  struct s_session_mapping key_session_mapping = {0};
+  key_session_mapping.teid_ul       = *teid_ul,
+  key_session_mapping.ue_ip_address = dest_ip;
 
-  teid_dl = get_teid_downlink_session(dest_ip, *teid_ul);
+  teid_dl = bpf_map_lookup_elem(&m_session_mapping, &key_session_mapping);
+  //get_teid_downlink_session(dest_ip, *teid_ul);
 
   if (!teid_dl) {
-    bpf_printk("No TEID downlink found for UE IP SRC: %d", dest_ip);
-    bpf_printk("And for TEID_UL: %d", *teid_ul);
-    return XDP_DROP;
+  //  bpf_printk("No TEID downlink found for UE IP SRC: %d", dest_ip);
+   // bpf_printk("And for TEID_UL: %d", *teid_ul);
+    //return XDP_DROP;
+    return NULL;
   }
 
   update_map_traffic_classification(src_ip, protocol, dest_ip, *teid_dl);
-
-  tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE, dest_ip);
-  bpf_printk("Tail call was not executed, drop the packet");
-  return XDP_DROP;
+  return teid_dl; 
+  // tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE, dest_ip);
+  // bpf_printk("Tail call was not executed, drop the packet");
+  //return XDP_DROP;
 }
 
 // u32 teid_value = 1107610522;
 // u32* teid_dl = &teid_value;
 
+
 /*****************************************************************************************************************/
 
-/**
- * GTP SECTION.
- */
+static u32 downlink_traffic_handle(struct xdp_md* p_ctx, u32 src_ip, u32 dest_ip, u8 dscp, u8 protocol) {
+  // The destination IP is the UE IP address (donwlink).
+  u32* teid_dl = retreive_teid_downlink(p_ctx, src_ip, dest_ip, dscp, protocol);
 
-/**
- * @brief Check if GTP packet is a GPDU. If so, process the next block chain.
- *
- * @param p_ctx The user accessible metadata for xdp packet hook.
- * @param p_gtpuh The GTP header.
- * @return u32 The XDP action.
- */
-
-static u32 gtp_handle(
-    struct xdp_md* p_ctx, struct gtpuhdr* p_gtpuh, u32 src_ip) {
-  // TODO: Handle other PDU.
-  if (p_gtpuh->message_type != GTPU_G_PDU) {
-    bpf_debug(
-        "Message type 0x%x is not GTPU GPDU(0x%x)\n", p_gtpuh->message_type,
-        GTPU_G_PDU);
+  if (teid_dl) {
+    update_map_traffic_classification(src_ip, protocol, dest_ip, *teid_dl);
+    tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE, dest_ip); 
     return XDP_PASS;
-    // return XDP_DROP;
   }
 
-  bpf_debug("GTP GPDU received with Valid GTP Packet (SRC IP:0x%x)\n", src_ip);
-
-  // Check if the gtp extension header extends beyond the data end.
-  if ((void*) ((struct gtpu_extn_pdu_session_container*) (p_gtpuh + 1) + 1) >
-      (void*) (long) p_ctx->data_end) {
-    bpf_debug("Invalid IPv4 Inner Header\n");
-    return XDP_DROP;
-  }
-
-  // Jump to session context.
-  tail_call_next_prog(p_ctx, p_gtpuh->teid, INTERFACE_VALUE_ACCESS, src_ip);
-  bpf_debug("BPF tail call was not executed! teid %d\n", p_gtpuh->teid);
-
-  return XDP_PASS;
-  // return XDP_DROP;
+  // bpf_printk("No TEID Downlink was foud for:");
+  // bpf_printk("(src ip, dest ip) = (%d, %d)", src_ip, dest_ip);
+  // bpf_printk("(protocol, dscp) = (%u, %u)", protocol, dscp);
+  return XDP_DROP;
 }
 
 /*****************************************************************************************************************/
@@ -277,131 +215,61 @@ static u32 gtp_handle(
  * @return u32 The XDP action.
  */
 
-static u32 udp_handle(
-    struct xdp_md* p_ctx, struct udphdr* udph, u32 src_ip, u32 dest_ip,
-    u8 dscp) {
+static u32 uplink_traffic_handle(struct xdp_md* p_ctx, struct udphdr* udph) {
   void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
-  bpf_debug("*** IP DST: %d", dest_ip);
-  u32 dport = htons(udph->dest);
+  
+  struct gtpuhdr* p_gtpuh = (struct gtpuhdr*) (udph + 1);
 
-  switch (dport) {
-    case GTP_UDP_PORT: {
-      struct gtpuhdr* p_gtpuh = (struct gtpuhdr*) (udph + 1);
-
-      // Check if the GTP header extends beyond the data end.
-      if ((void*) (p_gtpuh + 1) > p_data_end) {
-        bpf_debug("Invalid GTPU packet\n");
-        return XDP_DROP;
-      }
-
-      struct ethhdr* p_new_eth = p_data + GTP_ENCAPSULATED_SIZE;
-
-      if ((void*) (p_new_eth + 1) > p_data_end) {
-        return XDP_DROP;
-      }
-
-      struct iphdr* p_ip_inner = (void*) (p_new_eth + 1);
-
-      if ((void*) (p_ip_inner + 1) > p_data_end) {
-        return XDP_DROP;
-      }
-
-      u32 src_ip_in = p_ip_inner->saddr;
-      return gtp_handle(p_ctx, p_gtpuh, src_ip_in);
-    }
-    default: {
-      // The destination IP is the UE IP address (donwlink).
-      //   u32* teid_dl = retreive_teid_downlink(src_ip, dest_ip, dscp,
-      //   IPPROTO_UDP);
-
-      //   if (teid_dl) {
-      //     bpf_debug("The teid for downlink UDP: %d", *teid_dl);
-      //     update_map_traffic_classification(
-      //         src_ip, IPPROTO_UDP, dest_ip, *teid_dl);
-      //     tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE,
-      //     dest_ip); bpf_debug("BPF tail call was not executed! teid %d\n",
-      //     teid_dl); return XDP_PASS;
-      //   }
-
-      //   bpf_debug(
-      //       "No TEID Downlink was foud for (src ip, dest ip) = (%d, %d)",
-      //       src_ip, dest_ip);
-      //   bpf_debug("and for (protocol, dscp) = (%u, %u)", IPPROTO_UDP, dscp);
-      //   return XDP_DROP;
-      // retreive_teid_downlink(p_ctx, src_ip, dest_ip, dscp, IPPROTO_UDP);
-    }
+//   // Check if the GTP header extends beyond the data end.
+  if((void *)p_gtpuh + sizeof(*p_gtpuh) > p_data_end) {
+    bpf_debug("Invalid GTPU packet");
+    return XDP_DROP;
   }
-}
 
-/*****************************************************************************************************************/
-/**
- * TCP SECTION.
- */
+  struct ethhdr* p_new_eth = p_data + GTP_ENCAPSULATED_SIZE;
 
-/**
- * @brief Handle TCP header.
- *
- * @param p_ctx The user accessible metadata for xdp packet hook.
- * @param tcph The TCP header.
- * @return u32 The XDP action.
- */
-static u32 tcp_handle(
-    struct xdp_md* p_ctx, struct tcphdr* tcph, u32 src_ip, u32 dest_ip,
-    u8 dscp) {
-  // bpf_debug("Valid TCP Packet (SRC IP:0x%x, DEST IP:0x%x)\n", src_ip,
-  // dest_ip); u32* teid_dl = retreive_teid_downlink(src_ip, dest_ip, dscp,
-  // IPPROTO_TCP);
+  if((void *)p_new_eth + sizeof(*p_new_eth) > p_data_end) {
+    bpf_debug("Invalid Ethernet packet");
+    return XDP_DROP;
+  }
 
-  // if (teid_dl) {
-  //   bpf_debug("The teid for downlink TCP: %d", *teid_dl);
-  //   update_map_traffic_classification(src_ip, IPPROTO_TCP, dest_ip,
-  //   *teid_dl); tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE,
-  //   dest_ip); bpf_debug("BPF tail call was not executed! teid %d\n",
-  //   teid_dl); return XDP_PASS;
+ //struct iphdr* p_ip_inner = (void*) (p_new_eth + 1);
+  //struct iphdr* p_ip_inner = (struct iphdr*) (p_new_eth + 1);
+  struct iphdr* p_ip_inner = (struct iphdr *)(p_gtpuh + 1);
+
+  // if((void *)p_ip_inner + sizeof(*p_ip_inner) > p_data_end) {
+  //   bpf_debug("Invalid Inner IP packet");
+  //   return XDP_DROP;
   // }
 
-  // bpf_debug(
-  //     "No TEID Downlink was foud for (src ip, dest ip) = (%d, %d)", src_ip,
-  //     dest_ip);
-  // bpf_debug("and for (protocol, dscp) = (%u, %u)", IPPROTO_TCP, dscp);
-  // return XDP_DROP;
-  // retreive_teid_downlink(p_ctx, src_ip, dest_ip, dscp, IPPROTO_TCP);
+
+   u32 src_ip_in = p_ip_inner->saddr;
+
+  if (p_gtpuh->message_type != GTPU_G_PDU) {
+    // bpf_debug(
+    //     "Message type 0x%x is not GTPU GPDU(0x%x)\n", p_gtpuh->message_type,
+    //     GTPU_G_PDU);
+    return XDP_PASS;
+   // return XDP_DROP;
+  }
+
+ // bpf_debug("GTP GPDU received with Valid GTP Packet (SRC IP:0x%x)\n", src_ip);
+
+  // Check if the gtp extension header extends beyond the data end.
+  if ((void*) ((struct gtpu_extn_pdu_session_container*) (p_gtpuh + 1) + 1) >
+      (void*) (long) p_ctx->data_end) {
+   // bpf_debug("Invalid IPv4 Inner Header\n");
+    return XDP_DROP;
+  }
+
+//   // Jump to session context.
+   tail_call_next_prog(p_ctx, p_gtpuh->teid, INTERFACE_VALUE_ACCESS, src_ip_in);
+//   //bpf_debug("BPF tail call was not executed! teid %d\n", p_gtpuh->teid);
+
+  return XDP_PASS;
 }
 
-/*****************************************************************************************************************/
-/**
- * ICMP SECTION.
- */
-
-/**
- * @brief Handle ICMP header.
- *
- * @param p_ctx The user accessible metadata for xdp packet hook.
- * @param icmph The icmp header.
- * @return u32 The XDP action.
- */
-
-static u32 icmp_handle(
-    struct xdp_md* p_ctx, struct icmphdr* icmph, u32 src_ip, u32 dest_ip,
-    u8 dscp) {
-  // u32* teid_dl = retreive_teid_downlink(src_ip, dest_ip, dscp, IPPROTO_ICMP);
-
-  // if (teid_dl) {
-  //   bpf_debug("The teid for downlink ICMP: %d", *teid_dl);
-  //   update_map_traffic_classification(src_ip, IPPROTO_ICMP, dest_ip,
-  //   *teid_dl); tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE,
-  //   dest_ip); bpf_debug("BPF tail call was not executed! teid %d\n",
-  //   teid_dl); return XDP_PASS;
-  // }
-
-  // bpf_debug(
-  //     "No TEID Downlink was foud for (src ip, dest ip) = (%d, %d)", src_ip,
-  //     dest_ip);
-  // bpf_debug("and for (protocol, dscp) = (%u, %u)", IPPROTO_ICMP, dscp);
-  // return XDP_DROP;
-  // retreive_teid_downlink(p_ctx, src_ip, dest_ip, dscp, IPPROTO_ICMP);
-}
 /*****************************************************************************************************************/
 /**
  * IP SECTION.
@@ -416,77 +284,39 @@ static u32 icmp_handle(
  */
 
 static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
-  void* p_data     = (void*) (long) p_ctx->data;
   void* p_data_end = (void*) (long) p_ctx->data_end;
 
   u32 ip_dest = iph->daddr;
   u32 ip_src  = iph->saddr;
   u8 dscp     = iph->tos;
   u8 protocol = iph->protocol;
-  // bpf_debug("icmp src ip = %d", ip_src);
-  // bpf_debug("icmp dst ip = %d", ip_dest);
-  // bpf_debug("icmp dscp ip = %u", dscp);
-
-  switch (iph->protocol) {
+  
+  switch (protocol) {
     case IPPROTO_UDP: {
-      bpf_debug("*** This is a UDP packet ***\n");
       struct udphdr* udph = (struct udphdr*) (iph + 1);
 
       // Check if the UDP header extends beyond the data end.
       if ((void*) (udph + 1) > p_data_end) {
-        bpf_debug("Invalid UDP packet\n");
+        bpf_printk("Invalid UDP packet\n");
         return XDP_DROP;
       }
 
-      u32 dport = htons(udph->dest);
-
-      if (dport == GTP_UDP_PORT) {
-        struct gtpuhdr* p_gtpuh = (struct gtpuhdr*) (udph + 1);
-
-        // Check if the GTP header extends beyond the data end.
-        if ((void*) (p_gtpuh + 1) > p_data_end) {
-          bpf_debug("Invalid GTPU packet\n");
-          return XDP_DROP;
-        }
-
-        struct ethhdr* p_new_eth = p_data + GTP_ENCAPSULATED_SIZE;
-
-        if ((void*) (p_new_eth + 1) > p_data_end) {
-          return XDP_DROP;
-        }
-
-        struct iphdr* p_ip_inner = (void*) (p_new_eth + 1);
-
-        if ((void*) (p_ip_inner + 1) > p_data_end) {
-          return XDP_DROP;
-        }
-
-        u32 src_ip_in = p_ip_inner->saddr;
-        return gtp_handle(p_ctx, p_gtpuh, src_ip_in);
+      if (htons(udph->dest) == GTP_UDP_PORT){
+        return uplink_traffic_handle(p_ctx, udph);
       }
-
-      //      return udp_handle(p_ctx, udph, ip_src, ip_dest, dscp);
-      break;
-    }
-    case IPPROTO_TCP: {
-      bpf_debug("*** This is a TCP packet ***\n");
-      // tail_call_next_prog(p_ctx, 1, INTERFACE_VALUE_ACCESS, 201392387);
-      break;
-    }
-    case IPPROTO_ICMP: {
-      bpf_debug("*** This is an ICMP packet ***\n");
-      // tail_call_next_prog(p_ctx, 2, INTERFACE_VALUE_CORE, 201392399);
+      
       break;
     }
     default: {
-      bpf_debug("Non UDP/TCP/ICMP protocols\n");
-      // return XDP_PASS;
-      return XDP_DROP;
+      return downlink_traffic_handle(p_ctx, ip_src, ip_dest, dscp, protocol);
     }
   }
-
-  retreive_teid_downlink(p_ctx, ip_src, ip_dest, dscp, protocol);
 }
+
+
+
+
+
 
 /*****************************************************************************************************************/
 /**
@@ -513,12 +343,12 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
   u16 eth_type     = htons(ethh->h_proto);
   u64 offset       = sizeof(*ethh);
 
-  bpf_debug("Debug: eth_type:0x%x\n", eth_type);
+ // bpf_debug("Debug: eth_type:0x%x\n", eth_type);
 
   switch (eth_type) {
     case ETH_P_8021Q:
     case ETH_P_8021AD: {
-      bpf_debug("VLAN!! Changing the offset\n");
+     // bpf_debug("VLAN!! Changing the offset\n");
       struct vlan_hdr* vlan_hdr = (struct vlan_hdr*) (ethh + 1);
       offset += sizeof(*vlan_hdr);
       if ((void*) (vlan_hdr + 1) <= p_data_end)
@@ -540,7 +370,7 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
     // Skip non 802.3 Ethertypes
     // Fall-through
     default:
-      bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x\n", offset, eth_type);
+      //bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x\n", offset, eth_type);
       return XDP_PASS;
       // return XDP_DROP; //bpf_debug("Drop the packet"); // I can not drop the
       // packet due to arping not handeled
@@ -550,7 +380,7 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
 /*****************************************************************************************************************/
 SEC("xdp_entry_point")
 int entry_point(struct xdp_md* p_ctx) {
-  bpf_debug("==========< PFCP Session Lookup >==========\n");
+  bpf_debug("==< PFCP Session Lookup >==\n");
 
   struct ethhdr* ethh = (void*) (long) p_ctx->data;
 
