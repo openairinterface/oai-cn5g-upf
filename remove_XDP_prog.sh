@@ -1,5 +1,3 @@
+#!/ bin / sh
 
-# !/bin/sh
-
-sudo ip link set dev eth0 xdp off
-sudo ip link set dev eth1 xdp off
+sudo ip link set dev demo - n3 xdp off sudo ip link set dev demo - n6 xdp off

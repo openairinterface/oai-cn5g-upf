@@ -132,6 +132,8 @@ static u32 create_outer_header_gtpu_ipv4(
 
   bpf_debug("IP SRC: %d, IP DST:%d\n", p_ip->saddr, p_ip->daddr);
 
+  bpf_debug("IP SRC: %d, IP DST:%d\n", p_ip->saddr, p_ip->daddr);
+
   /*
   |----------------------------------------------------------------|
   |-------------------------- Add UDP header ----------------------|
@@ -189,9 +191,10 @@ static u32 create_outer_header_gtpu_ipv4(
   p_gtpuh->message_length = htons(
       ntohs(p_inner_ip->tot_len) +
       sizeof(struct gtpu_extn_pdu_session_container) + 4);
-  p_gtpuh->teid       = p_far->forwarding_parameters.outer_header_creation.teid;
-  p_gtpuh->sequence   = GTP_SEQ;
-  p_gtpuh->pdu_number = GTP_PDU_NUMBER;
+  p_gtpuh->teid =
+      htobe32(p_far->forwarding_parameters.outer_header_creation.teid);
+  p_gtpuh->sequence      = GTP_SEQ;
+  p_gtpuh->pdu_number    = GTP_PDU_NUMBER;
   p_gtpuh->next_ext_type = GTP_NEXT_EXT_TYPE;
 
   /*
