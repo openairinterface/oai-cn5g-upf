@@ -3213,8 +3213,8 @@ union bpf_attr {
  *		valid address but requiring a major memory fault. If reading
  *kernel memory fails, the string for **%s** will be an empty string, and the ip
  *		address for **%p{i,I}{4,6}** will be 0. Not returning error to
- *		bpf program is consistent with what **bpf_trace_printk**\ () does
- *for now. Return 0 on success, or a negative error in case of failure:
+ *		bpf program is consistent with what **bpf_trace_printk**\ ()
+ *does for now. Return 0 on success, or a negative error in case of failure:
  *
  *		**-EBUSY** if per-CPU memory copy buffer is busy, can try again
  *		by returning 1 from bpf program.
