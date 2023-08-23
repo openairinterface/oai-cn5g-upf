@@ -142,9 +142,9 @@ amf:
       nssai:
         - sst: 1
         - sst: 1
-          sd: 000001
+          sd: 1
         - sst: 222
-          sd: 00007B
+          sd: 123
   supported_integrity_algorithms:
     - "NIA0"
     - "NIA1"
@@ -183,7 +183,7 @@ smf:
         session_ambr_dl: "400Mbps"
     - single_nssai:
         sst: 1
-        sd: 000001
+        sd: 1
       dnn: "oai.ipv4"
       qos_profile:
         5qi: 9
@@ -191,7 +191,7 @@ smf:
         session_ambr_dl: "200Mbps"
     - single_nssai:
         sst: 222
-        sd: 00007B
+        sd: 123
       dnn: "default"
       qos_profile:
         5qi: 9
@@ -209,11 +209,11 @@ upf:
       dnnList:
         - dnn: oai
     - sst: 1
-      sd: 000001
+      sd: 1
       dnnList:
         - dnn: oai.ipv4
     - sst: 222
-      sd: 00007B
+      sd: 123
       dnnList:
         - dnn: default
 
