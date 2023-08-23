@@ -7,9 +7,12 @@
 #include <pfcp_far.hpp>
 #include <array>
 #include <pfcp/pfcp_far.h>
+#include <next_prog_rule_key.h>
+#include <netinet/ether.h>
 
 class BPFMap;
 class OnStateChangeSessionProgramObserver;
+class PFCP_Session_LookupProgram;
 class PFCP_Session_PDR_LookupProgram;
 class SessionPrograms;
 class FARProgram;
@@ -95,26 +98,76 @@ class SessionProgramManager {
 
   /*****************************************************************************************************************/
   void addFarProgram(uint32_t seid, std::shared_ptr<FARProgram> pFARProgram);
-  /*****************************************************************************************************************/
 
+  /*****************************************************************************************************************/
   void updateArpTableMap(
       std::shared_ptr<FARProgram> pFARProgram, uint32_t upfIP,
       uint32_t remoteIP);
 
   /*****************************************************************************************************************/
   uint32_t getRemoteIP(uint32_t upfIP, uint32_t remoteIP);
+
   /*****************************************************************************************************************/
   pfcp_far_t_ createFar(std::shared_ptr<pfcp::pfcp_far> pFar);
 
   /*****************************************************************************************************************/
+
   void createPipeline(
-      uint32_t seid, uint32_t teid, uint8_t sourceInterface,
+      uint32_t seid, uint32_t teid1, uint8_t sourceInterface,
       uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
-      bool isModification);
+      bool isModification, uint32_t teid2, uint8_t qfi);
+
+  /*****************************************************************************************************************/
+  void initializeNextRuleProgIndexKey(
+      next_rule_prog_index_key& key, uint32_t teid, uint32_t ueIpAddress,
+      uint8_t sourceInterface);
+
+  /*****************************************************************************************************************/
+  void storeFarProgramIndexInNextProgRuleIndexMap(
+      std::shared_ptr<FARProgram> pFARProgram,
+      const next_rule_prog_index_key& key,
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
+
+  /*****************************************************************************************************************/
+  void storeSessionMappingMap(
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+      uint32_t sied, uint32_t teid_ul, uint32_t teid_dl);
+
+  /*****************************************************************************************************************/
+  void storeFARInFARMap(
+      std::shared_ptr<FARProgram> pFARProgram,
+      std::shared_ptr<pfcp::pfcp_far> pFar);
+
+  /*****************************************************************************************************************/
+  void saveSeidWithinFARProgram(
+      uint32_t seid, std::shared_ptr<FARProgram> pFARProgram,
+      const next_rule_prog_index_key& key);
+
+  /*****************************************************************************************************************/
+  void updateARPTableForN6(
+      std::shared_ptr<FARProgram> pFARProgram, uint32_t dnIP, uint32_t upfn6IP);
+
+  /*****************************************************************************************************************/
+  void updateARPTableForN3(
+      std::shared_ptr<FARProgram> pFARProgram, uint32_t gNodeBIP,
+      uint32_t upfn3IP, uint32_t seid);
+
+  /*****************************************************************************************************************/
+  uint32_t getGnodebIp(std::shared_ptr<pfcp::pfcp_far> pFar);
+
+  /*****************************************************************************************************************/
+  void storeUeQfiTeidMap(
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+      uint32_t ue_ip_address, uint8_t qfi, uint32_t teid_ul);
 
   /*****************************************************************************************************************/
   void updatePipeline(
       uint32_t seid, uint32_t teid, uint32_t gNBIpAddress, bool isModification);
+
+  /*****************************************************************************************************************/
+  // void updateMap(std::shared_ptr<PFCP_Session_LookupProgram>
+  // pPFCP_Session_LookupProgram,
+  //   uint32_t seid, uint32_t teid_ul, uint32_t src_ip, uint32_t teid_dl);
 
   /*****************************************************************************************************************/
   void removePipeline(uint32_t seid);

@@ -12,6 +12,7 @@
 
 /*****************************************************************************************************************/
 // The unique FAR that will be consumed in this program.
+
 struct bpf_map_def SEC("maps") m_far = {
     .type        = BPF_MAP_TYPE_HASH,
     .key_size    = sizeof(u8),

@@ -9,7 +9,6 @@
  * as __u64.
  */
 #include "bpf_helper_defs.h"
-
 #define __uint(name, val) int(*name)[val]
 #define __type(name, val) typeof(val)* name
 #define __array(name, val) typeof(val)* name[]
@@ -111,17 +110,17 @@ struct bpf_map_def {
   unsigned int map_flags;
 };
 
-enum libbpf_pin_type {
-  LIBBPF_PIN_NONE,
-  /* PIN_BY_NAME: pin maps by name (in /sys/fs/bpf by default) */
-  LIBBPF_PIN_BY_NAME,
-};
+// enum libbpf_pin_type {
+//   LIBBPF_PIN_NONE,
+//   /* PIN_BY_NAME: pin maps by name (in /sys/fs/bpf by default) */
+//   LIBBPF_PIN_BY_NAME,
+// };
 
-enum libbpf_tristate {
-  TRI_NO     = 0,
-  TRI_YES    = 1,
-  TRI_MODULE = 2,
-};
+// enum libbpf_tristate {
+//   TRI_NO     = 0,
+//   TRI_YES    = 1,
+//   TRI_MODULE = 2,
+// };
 
 #define __kconfig __attribute__((section(".kconfig")))
 #define __ksym __attribute__((section(".ksyms")))
