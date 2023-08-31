@@ -300,12 +300,12 @@ void pfcp_switch::setup_pdn_interfaces() {
       struct in_addr address4 = {};
       address4.s_addr         = it.network_ipv4.s_addr + be32toh(1);
 
-      cmd = fmt::format(
-          "ip addr add {}/{} dev tun{}", conv::toString(address4).c_str(),
-          it.prefix_ipv4, index);
-      rc = system((const char*) cmd.c_str());
-
-      if (index != 0) {
+      if (index == 0) {
+        cmd = fmt::format(
+            "ip addr add {}/{} dev tun{}", conv::toString(address4).c_str(),
+            it.prefix_ipv4, index);
+        rc = system((const char*) cmd.c_str());
+      } else {
         // Remove defult route
         cmd = fmt::format(
             "ip route del {}/{}", conv::toString(it.network_ipv4).c_str(),
