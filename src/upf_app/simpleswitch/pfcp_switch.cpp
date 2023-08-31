@@ -286,24 +286,18 @@ void pfcp_switch::setup_pdn_interfaces() {
   for (int index = 0; index < upf_cfg.pdns.size(); index++) {
     pdn_cfg_t it = upf_cfg.pdns[index];
     int sock_r   = 0;
-    if (index == 0) {
-      cmd = fmt::format("ip tuntap add mode tun dev tun{}", index);
-      rc  = system((const char*) cmd.c_str());
+    cmd          = fmt::format("ip tuntap add mode tun dev tun{}", index);
+    rc           = system((const char*) cmd.c_str());
 
-      cmd = fmt::format("ip link set dev tun{} up", index);
-      rc  = system((const char*) cmd.c_str());
+    cmd = fmt::format("ip link set dev tun{} up", index);
+    rc  = system((const char*) cmd.c_str());
 
-      cmd = fmt::format("ethtool -K tun{0} tx-checksum-ip-generic off;", index);
-      rc  = system((const char*) cmd.c_str());
-    }
+    cmd = fmt::format("ethtool -K tun{0} tx-checksum-ip-generic off;", index);
+    rc  = system((const char*) cmd.c_str());
+
     if (it.prefix_ipv4) {
       struct in_addr address4 = {};
       address4.s_addr         = it.network_ipv4.s_addr + be32toh(1);
-
-      cmd = fmt::format(
-          "ip addr add {}/{} dev tun{}", conv::toString(address4).c_str(),
-          it.prefix_ipv4, index);
-      rc = system((const char*) cmd.c_str());
 
       if (index != 0) {
         // Remove defult route
@@ -317,9 +311,9 @@ void pfcp_switch::setup_pdn_interfaces() {
         address4_gw.s_addr = upf_cfg.pdns[0].network_ipv4.s_addr + be32toh(1);
 
         cmd = fmt::format(
-            "ip route add {}/{} via {} dev tun0",
+            "ip route add {}/{} via {} dev tun",
             conv::toString(it.network_ipv4).c_str(), it.prefix_ipv4,
-            conv::toString(address4_gw).c_str());
+            conv::toString(address4_gw).c_str(), index);
         rc = system((const char*) cmd.c_str());
       }
 
