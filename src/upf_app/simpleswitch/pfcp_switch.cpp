@@ -307,10 +307,10 @@ void pfcp_switch::setup_pdn_interfaces() {
         rc = system((const char*) cmd.c_str());
       } else {
         // Remove defult route
-        cmd = fmt::format(
-            "ip route del {}/{}", conv::toString(it.network_ipv4).c_str(),
-            it.prefix_ipv4);
-        rc = system((const char*) cmd.c_str());
+        // cmd = fmt::format(
+        //     "ip route del {}/{}", conv::toString(it.network_ipv4).c_str(),
+        //     it.prefix_ipv4);
+        // rc = system((const char*) cmd.c_str());
 
         // Add first pdn as gateway for additional PDNs
         struct in_addr address4_gw = {};
