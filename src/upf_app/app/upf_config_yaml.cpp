@@ -198,6 +198,14 @@ void upf::from_yaml(const YAML::Node& node) {
       m_remote_n6.from_yaml(elem.second);
     }
 
+    if (key == UPF_CONFIG_SMF_LIST) {
+      for (const auto& yaml_sub : node[UPF_CONFIG_SMF_LIST]) {
+        string_config_value m_smf;
+        m_smf.from_yaml(elem.second);
+        m_smf_list.push_back(m_smf);
+      }
+    }
+
     if (key == UPF_CONFIG_UPF_INFO) {
       for (const auto& yaml_sub : node[UPF_CONFIG_UPF_INFO]) {
         m_upf_info_config.from_yaml(yaml_sub);
@@ -262,6 +270,11 @@ const std::string upf::get_upf_name() const {
 //------------------------------------------------------------------------------
 const std::string upf::get_remote_n6() const {
   return m_remote_n6.get_value();
+}
+
+//------------------------------------------------------------------------------
+const std::vector<string_config_value> upf::get_smf_list() const {
+  return m_smf_list;
 }
 
 //------------------------------------------------------------------------------
@@ -420,6 +433,25 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
     IPV4_STR_ADDR_TO_INADDR(
         util::trim(remote_n6_addr).c_str(), cfg.remote_n6,
         "BAD IPv4 ADDRESS FORMAT FOR N6 DN !");
+  }
+
+  if (!cfg.register_nrf) {
+    for (const auto& smf_host : upf_local->get_smf_list()) {
+      std::string smf_addr;
+      uint8_t addr_type = {};
+      pfcp::node_id_t n = {};
+      unsigned int port = 0;
+      n.node_id_type    = pfcp::NODE_ID_TYPE_IPV4_ADDRESS;  // actually
+      fqdn::resolve(upf_local->get_remote_n6(), smf_addr, port, addr_type);
+      if (addr_type != 0) {  // IPv6: TODO
+        throw("DO NOT SUPPORT IPV6 ADDR FOR SMF!");
+      } else {  // IPv4
+        IPV4_STR_ADDR_TO_INADDR(
+            util::trim(smf_addr).c_str(), n.u1.ipv4_address,
+            "BAD IPv4 ADDRESS FORMAT FOR SMF !");
+      }
+      cfg.smfs.push_back(n);
+    }
   }
 
   if (get_nf(NRF_CONFIG_NAME)->is_set() & register_nrf()) {
