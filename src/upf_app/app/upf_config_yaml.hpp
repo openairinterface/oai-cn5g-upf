@@ -188,8 +188,6 @@ class upf : public nf {
 
   [[nodiscard]] std::string to_string(const std::string& indent) const override;
   [[nodiscard]] const uint32_t get_instance_id() const;
-  [[nodiscard]] const std::string get_pid_directory() const;
-  [[nodiscard]] const std::string get_upf_name() const;
   [[nodiscard]] const std::string get_remote_n6() const;
   [[nodiscard]] const std::vector<string_config_value> get_smf_list() const;
   [[nodiscard]] const upf_support_features& get_support_features() const;
