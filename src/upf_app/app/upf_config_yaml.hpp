@@ -27,10 +27,6 @@
 
 constexpr auto UPF_CONFIG_INSTANCE_ID            = "instance_id";
 constexpr auto UPF_CONFIG_INSTANCE_ID_LABEL      = "Instance ID";
-constexpr auto UPF_CONFIG_PID_DIRECTORY          = "pid_directory";
-constexpr auto UPF_CONFIG_PID_DIRECTORY_LABEL    = "PID Directory";
-constexpr auto UPF_CONFIG_UPF_NAME               = "upf_name";
-constexpr auto UPF_CONFIG_UPF_NAME_LABEL         = "UPF Name";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES       = "support_features";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_LABEL = "Support Features";
 constexpr auto UPF_CONFIG_UPF_INFO_LABEL         = "UPF INFO";
@@ -167,8 +163,6 @@ class upf_config_yaml : public config {
 class upf : public nf {
  private:
   int_config_value m_instance_id;
-  string_config_value m_pid_directory;
-  string_config_value m_upf_name;
   upf_support_features m_upf_support_features;
   upf_info_config m_upf_info_config;
   string_config_value m_remote_n6;

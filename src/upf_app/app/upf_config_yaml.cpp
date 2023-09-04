@@ -182,14 +182,6 @@ void upf::from_yaml(const YAML::Node& node) {
       m_instance_id.from_yaml(elem.second);
     }
 
-    if (key == UPF_CONFIG_PID_DIRECTORY) {
-      m_pid_directory.from_yaml(elem.second);
-    }
-
-    if (key == UPF_CONFIG_UPF_NAME) {
-      m_upf_name.from_yaml(elem.second);
-    }
-
     if (key == UPF_CONFIG_SUPPORT_FEATURES) {
       m_upf_support_features.from_yaml(elem.second);
     }
@@ -231,14 +223,6 @@ std::string upf::to_string(const std::string& indent) const {
       inner_width, m_instance_id.get_value()));
 
   out.append(indent).append(fmt::format(
-      BASE_FORMATTER, OUTER_LIST_ELEM, UPF_CONFIG_PID_DIRECTORY_LABEL,
-      inner_width, m_pid_directory.get_value()));
-
-  out.append(indent).append(fmt::format(
-      BASE_FORMATTER, OUTER_LIST_ELEM, UPF_CONFIG_UPF_NAME_LABEL, inner_width,
-      m_upf_name.get_value()));
-
-  out.append(indent).append(fmt::format(
       BASE_FORMATTER, OUTER_LIST_ELEM, UPF_CONFIG_REMOTE_N6_GW_LABEL,
       inner_width, m_remote_n6.get_value()));
 
@@ -257,14 +241,6 @@ std::string upf::to_string(const std::string& indent) const {
 //------------------------------------------------------------------------------
 const uint32_t upf::get_instance_id() const {
   return m_instance_id.get_value();
-}
-//------------------------------------------------------------------------------
-const std::string upf::get_pid_directory() const {
-  return m_pid_directory.get_value();
-}
-//------------------------------------------------------------------------------
-const std::string upf::get_upf_name() const {
-  return m_upf_name.get_value();
 }
 
 //------------------------------------------------------------------------------
