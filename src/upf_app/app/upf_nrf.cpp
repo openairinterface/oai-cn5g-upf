@@ -297,8 +297,8 @@ void upf_nrf::send_curl(
     curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, NRF_CURL_TIMEOUT_MS);
     curl_easy_setopt(
         curl, CURLOPT_INTERFACE,
-        upf_cfg.n4.if_name.c_str());  // TODO: use another interface for UPF
-                                      // to communicate with NRF
+        upf_cfg.sbi.if_name.c_str());  // TODO: use another interface for UPF
+                                       // to communicate with NRF
     if (upf_cfg.http_version == 2) {
       if (Logger::should_log(spdlog::level::debug))
         curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
