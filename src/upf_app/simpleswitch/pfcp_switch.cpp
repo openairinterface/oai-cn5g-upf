@@ -344,14 +344,14 @@ void pfcp_switch::setup_pdn_interfaces() {
           "ip -6 addr add {}/{} dev tun{}", conv::toString(addr6).c_str(),
           it.prefix_ipv6, index);
       rc = system((const char*) cmd.c_str());
-      if ((it.enable_snat) && (/* SGI has IPv6 address*/)) {
-        cmd = fmt::format(
-            "ip6tables -t nat -A POSTROUTING -s {}/{} -o {} -j
-            SNAT-- to -
-            source {} ", conv::toString(addr6).c_str(), it.prefix_ipv6,
-            xxx);
-        rc = system((const char*) cmd.c_str());
-      }
+      // if ((it.enable_snat) && (/* SGI has IPv6 address*/)) {
+      //   cmd = fmt::format(
+      //       "ip6tables -t nat -A POSTROUTING -s {}/{} -o {} -j
+      //       SNAT-- to -
+      //       source {} ", conv::toString(addr6).c_str(), it.prefix_ipv6,
+      //       xxx);
+      //   rc = system((const char*) cmd.c_str());
+      // }
     }
     // even if we do nat, we can receive ue ip destinated IP packet
     // but do not forget to set routes outside UPF
