@@ -193,8 +193,10 @@ void upf::from_yaml(const YAML::Node& node) {
     if (key == UPF_CONFIG_SMF_LIST) {
       for (const auto& yaml_sub : node[UPF_CONFIG_SMF_LIST]) {
         string_config_value m_smf;
-        m_smf.from_yaml(elem.second);
-        m_smf_list.push_back(m_smf);
+        if (yaml_sub["host"]) {
+          m_smf.from_yaml(yaml_sub["host"]);
+          m_smf_list.push_back(m_smf);
+        }
       }
     }
 
@@ -394,8 +396,8 @@ in_addr upf_config_yaml::resolve_nf(const std::string& host) {
 void upf_config_yaml::to_upf_config(upf_config& cfg) {
   std::shared_ptr<upf> upf_local = std::static_pointer_cast<upf>(get_local());
   cfg.instance                   = upf_local->get_instance_id();
-  cfg.log_level    = spdlog::level::from_str(log_level());
-  cfg.register_nrf = register_nrf();
+  cfg.log_level                  = spdlog::level::from_str(log_level());
+  cfg.register_nrf               = register_nrf();
 
   std::string remote_n6_addr;
   uint8_t addr_type = {};
@@ -410,13 +412,14 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   }
 
   if (!cfg.register_nrf) {
-    for (const auto& smf_host : upf_local->get_smf_list()) {
+    std::vector<string_config_value> smf_list = upf_local->get_smf_list();
+    for (const auto& smf_host : smf_list) {
       std::string smf_addr;
       uint8_t addr_type = {};
       pfcp::node_id_t n = {};
       unsigned int port = 0;
       n.node_id_type    = pfcp::NODE_ID_TYPE_IPV4_ADDRESS;  // actually
-      fqdn::resolve(upf_local->get_remote_n6(), smf_addr, port, addr_type);
+      fqdn::resolve(smf_host.get_value(), smf_addr, port, addr_type);
       if (addr_type != 0) {  // IPv6: TODO
         throw("DO NOT SUPPORT IPV6 ADDR FOR SMF!");
       } else {  // IPv4
