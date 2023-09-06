@@ -29,6 +29,8 @@
 ################################
 SCRIPT=$(readlink -f ${BASH_SOURCE})
 THIS_SCRIPT_PATH=`dirname $SCRIPT`
+# Get the kernel version
+KERNEL_VERSION=$(uname -r | cut -d'-' -f1,2 | cut -d'.' -f1,2)
 source $THIS_SCRIPT_PATH/build_helper
 source $THIS_SCRIPT_PATH/build_helper.fb_folly
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.yamlcpp
@@ -118,7 +120,7 @@ install_bpftool_from_git() {
   if [[ $prompt =~ [yY](es)* ]]
   then
     #GIT_URL=https://github.com/libbpf/bpftool.git
-    GIT_URL=https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/snapshot/linux-5.7.tar.gz
+    GIT_URL=https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/snapshot/linux-$KERNEL_VERSION.tar.gz
     echo "Install bpftool from $GIT_URL"
     pushd $OPENAIRCN_DIR/build/ext
     echo "Downloading bpftool"
@@ -133,17 +135,17 @@ install_bpftool_from_git() {
       $SUDO $INSTALLER install -y wget
     fi
     # trick for CI
-    if [ ! -f $OPENAIRCN_DIR/build/ext/linux-5.7.tar.gz ]; then
+    if [ ! -f $OPENAIRCN_DIR/build/ext/linux-$KERNEL_VERSION.tar.gz ]; then
       wget -nv --tries=4 --retry-connrefused --wait=8 $GIT_URL
       ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
     fi
-    ls -lst linux-5.7.tar.gz && tar -xf linux-5.7.tar.gz && rm -rf linux-5.7.tar.gz
+    ls -lst linux-$KERNEL_VERSION.tar.gz && tar -xf linux-$KERNEL_VERSION.tar.gz && rm -rf linux-$KERNEL_VERSION.tar.gz
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
-    cd linux-5.7/tools/bpf/bpftool && make -j $(nproc)
+    cd linux-$KERNEL_VERSION/tools/bpf/bpftool && make -j $(nproc)
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
     $SUDO make install
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
-    $SUDO rm -rf linux-5.7
+    $SUDO rm -rf linux-$KERNEL_VERSION
     popd
   fi
   echo_success "End of bpftool installation"

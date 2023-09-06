@@ -16,4 +16,3 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_ISYSTEM_DIRS} ${SANITIZE_OPTIONS} 
 
 set(CMAKE_OBJCOPY llvm-objcopy CACHE INTERNAL "objcopy tool")
 set(CMAKE_SIZE_UTIL llvm-size CACHE INTERNAL "size tool")
-

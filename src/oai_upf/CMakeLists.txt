@@ -318,9 +318,10 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger/logger.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/config/config.cmake)
 
 # folly glog dl double-conversion for FB folly library
-target_link_libraries (upf
+target_link_libraries (upf 
 ${ASAN}  -Wl,--start-group CN_UTILS
-${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so
+asan 
+${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so 
 APP
 SIMPLE_SWITCH
 interfaces

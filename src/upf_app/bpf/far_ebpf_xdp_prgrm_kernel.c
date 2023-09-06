@@ -413,7 +413,7 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
 /*****************************************************************************************************************/
 SEC("xdp_far")
 int far_entry_point(struct xdp_md* p_ctx) {
-  bpf_debug("==========< FAR CONTEXT >==========\n");
+  bpf_debug("==< FAR CONTEXT >==\n");
 
   u32 key            = 0;
   pfcp_far_t_* p_far = bpf_map_lookup_elem(&m_far, &key);
