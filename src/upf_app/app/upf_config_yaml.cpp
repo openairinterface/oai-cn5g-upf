@@ -26,6 +26,7 @@
 #include "logger.hpp"
 #include <boost/algorithm/string.hpp>
 #include "conversions.hpp"
+#include "conv.hpp"
 
 namespace oai::config {
 
@@ -73,97 +74,18 @@ std::string upf_support_features::to_string(const std::string& indent) const {
 }
 
 //------------------------------------------------------------------------------
-upf_info_config::upf_info_config(
-    const snssai_t& snssai, const std::vector<std::string>& dnn) {
-  m_snssai = snssai;
-  // narrowing conversion, but should be okay because max value is 16777215
-  m_sd  = int_config_value("SD", m_snssai.sd);
-  m_sst = int_config_value("SST", m_snssai.sst);
-
-  m_sd.set_validation_interval(0, 16777215);
-  m_sst.set_validation_interval(0, 255);
-
-  m_config_name = "Single NSSAI";
-}
-
-//------------------------------------------------------------------------------
-void upf_info_config::from_yaml(const YAML::Node& node) {
-  snssai_upf_info_item_t snssai_item = {};
-  if (node["sd"]) {
-    m_sd.from_yaml(node["sd"]);
-    m_snssai.sd = m_sd.get_value();
-  }
-  if (node["sst"]) {
-    m_sst.from_yaml(node["sst"]);
-    m_snssai.sst = m_sst.get_value();
-  }
-  if (node["dnnList"]) {
-    for (const auto& dnn : node["dnnList"]) {
-      dnn_upf_info_item_t dnn_item = {};
-      dnn_item.dnn                 = dnn["dnn"].as<std::string>();
-      snssai_item.dnn_upf_info_list.insert(dnn_item);
-    }
-  }
-
-  snssai_item.snssai.sst = m_snssai.sst;
-  snssai_item.snssai.sd  = m_snssai.sd;
-  m_snssai_item_list.push_back(snssai_item);
-}
-
-//------------------------------------------------------------------------------
-std::string upf_info_config::to_string(const std::string& indent) const {
-  std::string out;
-  for (auto snssai_item : m_snssai_item_list) {
-    out.append(indent).append(
-        fmt::format("{} {}:\n", INNER_LIST_ELEM, m_config_name));
-
-    std::string inner_indent = add_indent(indent);
-
-    unsigned int inner_width = get_inner_width(inner_indent.length());
-    out.append(inner_indent)
-        .append(fmt::format(
-            BASE_FORMATTER, OUTER_LIST_ELEM, m_sst.get_config_name(),
-            inner_width, std::to_string(snssai_item.snssai.sst)));
-
-    std::string sd_value =
-        fmt::format("{:#X} ({})", m_sd.get_value(), m_sd.get_value());
-    out.append(inner_indent)
-        .append(fmt::format(
-            BASE_FORMATTER, OUTER_LIST_ELEM, m_sd.get_config_name(),
-            inner_width, std::to_string(snssai_item.snssai.sd)));
-
-    out.append(indent + indent)
-        .append(fmt::format("{} {}:\n", INNER_LIST_ELEM, "DNN List"));
-    inner_indent = add_indent(indent + indent);
-    inner_width  = get_inner_width(inner_indent.length());
-
-    for (auto dnn : snssai_item.dnn_upf_info_list) {
-      out.append(inner_indent)
-          .append(fmt::format(
-              BASE_FORMATTER, OUTER_LIST_ELEM, "DNN", inner_width,
-              dnn.dnn.c_str()));
-    }
-  }
-  // ToDo: Add interface info list
-  return out;
-}
-
-void upf_info_config::validate() {
-  m_sst.validate();
-  m_sd.validate();
-}
-
-const snssai_t& upf_info_config::get_snssai() const {
-  return m_snssai;
-}
-//------------------------------------------------------------------------------
 upf::upf(
     const std::string& name, const std::string& host, const sbi_interface& sbi,
     const std::map<std::string, upf_interface_config>& interfaces)
     : nf(name, host, sbi),
       m_upf_support_features(false, false),
-      m_upf_info_config(DEFAULT_SNSSAI, DEFAULT_DNN_LIST),
-      m_interfaces(interfaces) {}
+      m_interfaces(interfaces) {
+  model::nrf::SnssaiUpfInfoItem item;
+  item.setSNssai(DEFAULT_SNSSAI);
+  item.setDnnUpfInfoList(DEFAULT_DNN_LIST);
+  m_upf_info.setSNssaiUpfInfoList(
+      std::vector<oai::model::nrf::SnssaiUpfInfoItem>{item});
+}
 
 void upf::from_yaml(const YAML::Node& node) {
   nf::from_yaml(node);
@@ -199,9 +121,9 @@ void upf::from_yaml(const YAML::Node& node) {
     }
 
     if (key == UPF_CONFIG_UPF_INFO) {
-      for (const auto& yaml_sub : node[UPF_CONFIG_UPF_INFO]) {
-        m_upf_info_config.from_yaml(yaml_sub);
-      }
+      nlohmann::json j = oai::utils::conversions::yaml_to_json(
+          node[UPF_CONFIG_UPF_INFO], false);
+      nlohmann::from_json(j, m_upf_info);
     }
   }
 }
@@ -238,10 +160,7 @@ std::string upf::to_string(const std::string& indent) const {
       "{} {}:\n", OUTER_LIST_ELEM, UPF_CONFIG_SUPPORT_FEATURES_LABEL));
   out.append(m_upf_support_features.to_string(inner_indent));
 
-  out.append(
-      fmt::format("{} {}\n", OUTER_LIST_ELEM, UPF_CONFIG_UPF_INFO_LABEL));
-
-  out.append(m_upf_info_config.to_string(inner_indent));
+  out.append(m_upf_info.to_string(1));
 
   return out;
 }
@@ -280,8 +199,8 @@ const upf_support_features& upf::get_support_features() const {
 }
 
 //------------------------------------------------------------------------------
-const upf_info_config& upf::get_upf_info() const {
-  return m_upf_info_config;
+const oai::model::nrf::UpfInfo& upf::get_upf_info() const {
+  return m_upf_info;
 }
 const std::map<std::string, upf_interface_config>& upf::get_interfaces() const {
   return m_interfaces;
@@ -309,12 +228,7 @@ void upf::validate() {
   for (auto& iface : m_interfaces) {
     iface.second.validate();
   }
-}
-
-//------------------------------------------------------------------------------
-const std::vector<snssai_upf_info_item_t>&
-upf_info_config::get_snssai_upf_info_item() const {
-  return m_snssai_item_list;
+  m_upf_info.validate();
 }
 
 //------------------------------------------------------------------------------
@@ -322,9 +236,9 @@ upf_config_yaml::upf_config_yaml(
     const std::string& config_path, bool log_stdout, bool log_rot_file)
     : oai::config::config(
           config_path, oai::config::UPF_CONFIG_NAME, log_stdout, log_rot_file) {
-  m_used_sbi_values = {
-      oai::config::UPF_CONFIG_NAME, oai::config::SMF_CONFIG_NAME,
-      oai::config::NRF_CONFIG_NAME};
+  m_used_sbi_values    = {oai::config::UPF_CONFIG_NAME,
+                       oai::config::SMF_CONFIG_NAME,
+                       oai::config::NRF_CONFIG_NAME};
   m_used_config_values = {
       oai::config::LOG_LEVEL_CONFIG_NAME, oai::config::REGISTER_NF_CONFIG_NAME,
       oai::config::NF_CONFIG_HTTP_NAME,   oai::config::NF_LIST_CONFIG_NAME,
@@ -444,8 +358,19 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   cfg.enable_bpf_datapath =
       upf_local->get_support_features().get_option_enable_bpf_datapath();
   cfg.enable_snat = upf_local->get_support_features().get_option_enable_snat();
-  cfg.upf_info.snssai_upf_info_list =
-      upf_local->get_upf_info().get_snssai_upf_info_item();
+
+  auto snssai_upf_list = upf_local->get_upf_info().getSNssaiUpfInfoList();
+  for (const auto& snssai : snssai_upf_list) {
+    snssai_upf_info_item_t item;
+    item.snssai.sd  = snssai.getSNssai().getSdInt();
+    item.snssai.sst = snssai.getSNssai().getSst();
+    for (const auto& dnn : snssai.getDnnUpfInfoList()) {
+      dnn_upf_info_item_t dnn_item = {};
+      dnn_item.dnn                 = dnn.getDnn();
+      item.dnn_upf_info_list.insert(dnn_item);
+    }
+    cfg.upf_info.snssai_upf_info_list.push_back(item);
+  }
 
   // ToDo: Remove hardcoded pdn value here
   for (const auto& cfg_dnn : get_dnns()) {

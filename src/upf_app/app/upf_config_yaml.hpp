@@ -24,6 +24,7 @@
 #include "config.hpp"
 #include "upf_config.hpp"
 #include "common_defs.h"
+#include "UpfInfo.h"
 
 constexpr auto UPF_CONFIG_INSTANCE_ID            = "instance_id";
 constexpr auto UPF_CONFIG_INSTANCE_ID_LABEL      = "Instance ID";
@@ -63,31 +64,6 @@ class upf_support_features : public config_type {
   [[nodiscard]] std::string to_string(const std::string& indent) const override;
   [[nodiscard]] bool get_option_enable_bpf_datapath() const;
   [[nodiscard]] bool get_option_enable_snat() const;
-};
-
-class upf_info_config : public config_type {
- private:
-  int_config_value m_sd;
-  int_config_value m_sst;
-  snssai_t m_snssai;
-  string_config_value m_dnn;
-  std::vector<interface_upf_info_item_t> m_interface_item_list;
-  std::vector<snssai_upf_info_item_t> m_snssai_item_list;
-
- public:
-  explicit upf_info_config(
-      const snssai_t& snssai, const std::vector<std::string>& dnn);
-
-  void from_yaml(const YAML::Node& node) override;
-
-  [[nodiscard]] std::string to_string(const std::string& indent) const override;
-
-  void validate() override;
-
-  [[nodiscard]] const snssai_t& get_snssai() const;
-
-  [[nodiscard]] const std::vector<snssai_upf_info_item_t>&
-  get_snssai_upf_info_item() const;
 };
 
 class upf_interface_config : public local_interface {
@@ -168,7 +144,7 @@ class upf : public nf {
   string_config_value m_pid_directory;
   string_config_value m_upf_name;
   upf_support_features m_upf_support_features;
-  upf_info_config m_upf_info_config;
+  oai::model::nrf::UpfInfo m_upf_info;
   string_config_value m_remote_n6;
   // the reason to use a map is to have support for different interfaces in the
   // future now we use N3, N6 or N4 as key, but then we can have N3_NWI to
@@ -195,7 +171,7 @@ class upf : public nf {
   [[nodiscard]] const std::string get_upf_name() const;
   [[nodiscard]] const std::string get_remote_n6() const;
   [[nodiscard]] const upf_support_features& get_support_features() const;
-  [[nodiscard]] const upf_info_config& get_upf_info() const;
+  [[nodiscard]] const oai::model::nrf::UpfInfo& get_upf_info() const;
   [[nodiscard]] const std::map<std::string, upf_interface_config>&
   get_interfaces() const;
 };
