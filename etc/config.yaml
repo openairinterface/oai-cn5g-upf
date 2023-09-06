@@ -204,18 +204,21 @@ upf:
     enable_snat: yes           # If "on": Source natting is done for UE, DEFAULT= off
   remote_n6_gw: oai-ext-dn
   upf_info:
-    - sst: 1
-      sd: 0xFFFFFF
-      dnnList:
-        - dnn: oai
-    - sst: 1
-      sd: 000001
-      dnnList:
-        - dnn: oai.ipv4
-    - sst: 222
-      sd: 00007B
-      dnnList:
-        - dnn: default
+    sNssaiUpfInfoList:
+      - sNssai:
+          sst: 1
+        dnnUpfInfoList:
+          - dnn: "oai"
+      - sNssai:
+          sst: 1
+          sd: 000001
+        dnnUpfInfoList:
+          - dnn: "oai.ipv4"
+      - sNssai:
+          sst: 222
+          sd: 00007B
+        dnnUpfInfoList:
+          - dnn: "default"
 
 ## DNN configuration
 dnns:
