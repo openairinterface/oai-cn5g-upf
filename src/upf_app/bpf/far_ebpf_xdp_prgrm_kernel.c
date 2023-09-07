@@ -217,6 +217,7 @@ static u32 create_outer_header_gtpu_ipv4(
   |---------------------- Compute L3 CHECKSUM ---------------------|
   |----------------------------------------------------------------|
   */
+ 
   __wsum l3sum = pcn_csum_diff(0, 0, (__be32*) p_ip, sizeof(*p_ip), 0);
   pcn_l3_csum_replace(p_ctx, IP_CSUM_OFFSET, 0, l3sum, 0);
 
