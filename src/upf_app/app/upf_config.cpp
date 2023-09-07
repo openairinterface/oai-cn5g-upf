@@ -313,14 +313,6 @@ int upf_config::load(const string& config_file) {
         "%s : %s, No FQDN configured", nfex.what(), nfex.getPath());
   }
 
-  try {
-    upf_cfg.lookupValue(UPF_CONFIG_STRING_PID_DIRECTORY, pid_dir);
-    util::trim(pid_dir);
-  } catch (const SettingNotFoundException& nfex) {
-    Logger::upf_app().info(
-        "%s : %s, using defaults", nfex.what(), nfex.getPath());
-  }
-
   // Log Level
   try {
     std::string string_level;
@@ -678,7 +670,6 @@ void upf_config::display() {
   Logger::upf_app().info("Configuration:");
   Logger::upf_app().info("- FQDN ..................: %s", fqdn.c_str());
   Logger::upf_app().info("- Instance ..............: %d", instance);
-  Logger::upf_app().info("- PID dir ...............: %s", pid_dir.c_str());
   Logger::upf_app().info("- ITTI tasks:");
   Logger::upf_app().info("    ITTI Timer task:");
   Logger::upf_app().info(

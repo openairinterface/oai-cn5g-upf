@@ -182,20 +182,22 @@ void upf::from_yaml(const YAML::Node& node) {
       m_instance_id.from_yaml(elem.second);
     }
 
-    if (key == UPF_CONFIG_PID_DIRECTORY) {
-      m_pid_directory.from_yaml(elem.second);
-    }
-
-    if (key == UPF_CONFIG_UPF_NAME) {
-      m_upf_name.from_yaml(elem.second);
-    }
-
     if (key == UPF_CONFIG_SUPPORT_FEATURES) {
       m_upf_support_features.from_yaml(elem.second);
     }
 
     if (key == UPF_CONFIG_REMOTE_N6_GW) {
       m_remote_n6.from_yaml(elem.second);
+    }
+
+    if (key == UPF_CONFIG_SMF_LIST) {
+      for (const auto& yaml_sub : node[UPF_CONFIG_SMF_LIST]) {
+        string_config_value m_smf;
+        if (yaml_sub["host"]) {
+          m_smf.from_yaml(yaml_sub["host"]);
+          m_smf_list.push_back(m_smf);
+        }
+      }
     }
 
     if (key == UPF_CONFIG_UPF_INFO) {
@@ -223,14 +225,6 @@ std::string upf::to_string(const std::string& indent) const {
       inner_width, m_instance_id.get_value()));
 
   out.append(indent).append(fmt::format(
-      BASE_FORMATTER, OUTER_LIST_ELEM, UPF_CONFIG_PID_DIRECTORY_LABEL,
-      inner_width, m_pid_directory.get_value()));
-
-  out.append(indent).append(fmt::format(
-      BASE_FORMATTER, OUTER_LIST_ELEM, UPF_CONFIG_UPF_NAME_LABEL, inner_width,
-      m_upf_name.get_value()));
-
-  out.append(indent).append(fmt::format(
       BASE_FORMATTER, OUTER_LIST_ELEM, UPF_CONFIG_REMOTE_N6_GW_LABEL,
       inner_width, m_remote_n6.get_value()));
 
@@ -250,18 +244,15 @@ std::string upf::to_string(const std::string& indent) const {
 const uint32_t upf::get_instance_id() const {
   return m_instance_id.get_value();
 }
-//------------------------------------------------------------------------------
-const std::string upf::get_pid_directory() const {
-  return m_pid_directory.get_value();
-}
-//------------------------------------------------------------------------------
-const std::string upf::get_upf_name() const {
-  return m_upf_name.get_value();
-}
 
 //------------------------------------------------------------------------------
 const std::string upf::get_remote_n6() const {
   return m_remote_n6.get_value();
+}
+
+//------------------------------------------------------------------------------
+const std::vector<string_config_value> upf::get_smf_list() const {
+  return m_smf_list;
 }
 
 //------------------------------------------------------------------------------
@@ -405,10 +396,8 @@ in_addr upf_config_yaml::resolve_nf(const std::string& host) {
 void upf_config_yaml::to_upf_config(upf_config& cfg) {
   std::shared_ptr<upf> upf_local = std::static_pointer_cast<upf>(get_local());
   cfg.instance                   = upf_local->get_instance_id();
-  cfg.pid_dir                    = upf_local->get_pid_directory();
-  //   cfg.upf_name                   = upf_local->get_upf_name();
-  cfg.log_level    = spdlog::level::from_str(log_level());
-  cfg.register_nrf = register_nrf();
+  cfg.log_level                  = spdlog::level::from_str(log_level());
+  cfg.register_nrf               = register_nrf();
 
   std::string remote_n6_addr;
   uint8_t addr_type = {};
@@ -420,6 +409,26 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
     IPV4_STR_ADDR_TO_INADDR(
         util::trim(remote_n6_addr).c_str(), cfg.remote_n6,
         "BAD IPv4 ADDRESS FORMAT FOR N6 DN !");
+  }
+
+  if (!cfg.register_nrf) {
+    std::vector<string_config_value> smf_list = upf_local->get_smf_list();
+    for (const auto& smf_host : smf_list) {
+      std::string smf_addr;
+      uint8_t addr_type = {};
+      pfcp::node_id_t n = {};
+      unsigned int port = 0;
+      n.node_id_type    = pfcp::NODE_ID_TYPE_IPV4_ADDRESS;  // actually
+      fqdn::resolve(smf_host.get_value(), smf_addr, port, addr_type);
+      if (addr_type != 0) {  // IPv6: TODO
+        throw("DO NOT SUPPORT IPV6 ADDR FOR SMF!");
+      } else {  // IPv4
+        IPV4_STR_ADDR_TO_INADDR(
+            util::trim(smf_addr).c_str(), n.u1.ipv4_address,
+            "BAD IPv4 ADDRESS FORMAT FOR SMF !");
+      }
+      cfg.smfs.push_back(n);
+    }
   }
 
   if (get_nf(NRF_CONFIG_NAME)->is_set() & register_nrf()) {

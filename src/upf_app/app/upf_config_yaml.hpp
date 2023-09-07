@@ -27,10 +27,6 @@
 
 constexpr auto UPF_CONFIG_INSTANCE_ID            = "instance_id";
 constexpr auto UPF_CONFIG_INSTANCE_ID_LABEL      = "Instance ID";
-constexpr auto UPF_CONFIG_PID_DIRECTORY          = "pid_directory";
-constexpr auto UPF_CONFIG_PID_DIRECTORY_LABEL    = "PID Directory";
-constexpr auto UPF_CONFIG_UPF_NAME               = "upf_name";
-constexpr auto UPF_CONFIG_UPF_NAME_LABEL         = "UPF Name";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES       = "support_features";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_LABEL = "Support Features";
 constexpr auto UPF_CONFIG_UPF_INFO_LABEL         = "UPF INFO";
@@ -48,6 +44,8 @@ constexpr auto UPF_CONFIG_REMOTE_N6_GW_LABEL = "Remote N6 Gateway";
 constexpr auto UPF_CONFIG_N3_LABEL = "n3";
 constexpr auto UPF_CONFIG_N6_LABEL = "n6";
 constexpr auto UPF_CONFIG_N4_LABEL = "n4";
+
+constexpr auto UPF_CONFIG_SMF_LIST = "smfs";
 
 namespace oai::config {
 class upf_support_features : public config_type {
@@ -165,11 +163,10 @@ class upf_config_yaml : public config {
 class upf : public nf {
  private:
   int_config_value m_instance_id;
-  string_config_value m_pid_directory;
-  string_config_value m_upf_name;
   upf_support_features m_upf_support_features;
   upf_info_config m_upf_info_config;
   string_config_value m_remote_n6;
+  std::vector<string_config_value> m_smf_list;
   // the reason to use a map is to have support for different interfaces in the
   // future now we use N3, N6 or N4 as key, but then we can have N3_NWI to
   // support multiple use cases or several N6/N9 (e.g. for UL CL)
@@ -191,9 +188,8 @@ class upf : public nf {
 
   [[nodiscard]] std::string to_string(const std::string& indent) const override;
   [[nodiscard]] const uint32_t get_instance_id() const;
-  [[nodiscard]] const std::string get_pid_directory() const;
-  [[nodiscard]] const std::string get_upf_name() const;
   [[nodiscard]] const std::string get_remote_n6() const;
+  [[nodiscard]] const std::vector<string_config_value> get_smf_list() const;
   [[nodiscard]] const upf_support_features& get_support_features() const;
   [[nodiscard]] const upf_info_config& get_upf_info() const;
   [[nodiscard]] const std::map<std::string, upf_interface_config>&
