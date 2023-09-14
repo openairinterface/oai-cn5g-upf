@@ -394,9 +394,9 @@ void pfcp_switch::setup_pdn_interfaces() {
 }
 
 //------------------------------------------------------------------------------
-pfcp::fteid_t pfcp_switch::generate_fteid_s1u() {
+pfcp::fteid_t pfcp_switch::generate_fteid_n3() {
   pfcp::fteid_t fteid = {};
-  fteid.teid          = generate_teid_s1u();
+  fteid.teid          = generate_teid_n3();
   if (upf_cfg.n3.addr4.s_addr) {
     fteid.v4                  = 1;
     fteid.ipv4_address.s_addr = upf_cfg.n3.addr4.s_addr;
@@ -409,9 +409,9 @@ pfcp::fteid_t pfcp_switch::generate_fteid_s1u() {
 //------------------------------------------------------------------------------
 pfcp_switch::pfcp_switch()
     : seid_generator_(),
-      teid_s1u_generator_(),
+      teid_n3_generator__(),
       ue_ipv4_hbo2pfcp_pdr(PFCP_SWITCH_MAX_PDRS),
-      ul_s1u_teid2pfcp_pdr(PFCP_SWITCH_MAX_PDRS),
+      ul_n3_teid2pfcp_pdr(PFCP_SWITCH_MAX_PDRS),
       up_seid2pfcp_sessions(PFCP_SWITCH_MAX_SESSIONS),
       threads_(16),
       socks_r(16),
@@ -481,8 +481,8 @@ bool pfcp_switch::get_pfcp_ul_pdrs_by_up_teid(
     std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>& pdrs) const {
   folly::AtomicHashMap<
       teid_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>::
-      const_iterator pit = ul_s1u_teid2pfcp_pdr.find(teid);
-  if (pit == ul_s1u_teid2pfcp_pdr.end())
+      const_iterator pit = ul_n3_teid2pfcp_pdr.find(teid);
+  if (pit == ul_n3_teid2pfcp_pdr.end())
     return false;
   else {
     pdrs = pit->second;
@@ -535,8 +535,8 @@ void pfcp_switch::add_pfcp_ul_pdr_by_up_teid(
     const teid_t teid, std::shared_ptr<pfcp::pfcp_pdr>& pdr) {
   folly::AtomicHashMap<
       teid_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>::
-      const_iterator pit = ul_s1u_teid2pfcp_pdr.find(teid);
-  if (pit == ul_s1u_teid2pfcp_pdr.end()) {
+      const_iterator pit = ul_n3_teid2pfcp_pdr.find(teid);
+  if (pit == ul_n3_teid2pfcp_pdr.end()) {
     std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs =
         std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>(
             new std::vector<std::shared_ptr<pfcp::pfcp_pdr>>());
@@ -546,7 +546,7 @@ void pfcp_switch::add_pfcp_ul_pdr_by_up_teid(
         entry(teid, pdrs);
     // Logger::pfcp_switch().info( "add_pfcp_ul_pdr_by_up_teid tunnel " TEID_FMT
     // " ", teid);
-    ul_s1u_teid2pfcp_pdr.insert(entry);
+    ul_n3_teid2pfcp_pdr.insert(entry);
   } else {
     // sort by precedence
     // const std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>&
@@ -564,7 +564,7 @@ void pfcp_switch::add_pfcp_ul_pdr_by_up_teid(
 }
 //------------------------------------------------------------------------------
 void pfcp_switch::remove_pfcp_ul_pdrs_by_up_teid(const teid_t teid) {
-  ul_s1u_teid2pfcp_pdr.erase(teid);
+  ul_n3_teid2pfcp_pdr.erase(teid);
 }
 
 //------------------------------------------------------------------------------

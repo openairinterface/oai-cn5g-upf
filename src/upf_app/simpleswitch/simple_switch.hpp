@@ -25,12 +25,12 @@
    \email: lionel.gauthier@eurecom.fr
 */
 
-#ifndef FILE_SGWU_S1U_HPP_SEEN
-#define FILE_SGWU_S1U_HPP_SEEN
+#ifndef FILE_SGWU_SIMPLESWITCH_HPP_SEEN
+#define FILE_SGWU_SIMPLESWITCH_HPP_SEEN
 
 #include "endpoint.hpp"
 #include "gtpv1u.hpp"
-#include "itti_msg_s1u.hpp"
+#include "itti_msg_n3.hpp"
 #include "msg_gtpv1u.hpp"
 
 #include <linux/ip.h>
@@ -57,19 +57,19 @@ class upf_n3 : public gtpv1u::gtpu_l4_stack {
   upf_n3(upf_n3 const&) = delete;
   void operator=(upf_n3 const&) = delete;
 
-  // void handle_itti_msg (itti_s1u_echo_request& s) {};
-  void handle_itti_msg(std::shared_ptr<itti_s1u_echo_response> m);
-  void handle_itti_msg(std::shared_ptr<itti_s1u_error_indication> m);
-  // void handle_itti_msg (itti_s1u_supported_extension_headers_notification& s)
-  // {}; void handle_itti_msg (itti_s1u_end_marker& s) {};
+  // void handle_itti_msg (itti_n3_echo_request& s) {};
+  void handle_itti_msg(std::shared_ptr<itti_n3_echo_response> m);
+  void handle_itti_msg(std::shared_ptr<itti_n3_error_indication> m);
+  // void handle_itti_msg (itti_n3_supported_extension_headers_notification& s)
+  // {}; void handle_itti_msg (itti_n3_end_marker& s) {};
 
-  // void send_msg (itti_s1u_echo_request& s) {};
-  // void send_msg (itti_s1u_echo_response& s);
-  // void send_msg (itti_s1u_error_indication& s) {};
-  // void send_msg (itti_s1u_supported_extension_headers_notification& s) {};
-  // void send_msg (itti_s1u_end_marker& s) {};
+  // void send_msg (itti_n3_echo_request& s) {};
+  // void send_msg (itti_n3_echo_response& s);
+  // void send_msg (itti_n3_error_indication& s) {};
+  // void send_msg (itti_n3_supported_extension_headers_notification& s) {};
+  // void send_msg (itti_n3_end_marker& s) {};
 
-  void handle_receive_s1u_msg(
+  void handle_receive_n3_msg(
       gtpv1u::gtpv1u_msg& msg, const endpoint& r_endpoint);
   void handle_receive(
       char* recv_buffer, const std::size_t bytes_transferred,
@@ -91,4 +91,4 @@ class upf_n3 : public gtpv1u::gtpu_l4_stack {
 }  // namespace app
 }  // namespace upf
 }  // namespace oai
-#endif /* FILE_SGWU_S1U_HPP_SEEN */
+#endif /* FILE_SGWU_SIMPLESWITCH_HPP_SEEN */

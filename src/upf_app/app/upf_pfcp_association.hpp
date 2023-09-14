@@ -159,7 +159,7 @@ class pfcp_associations {
 
   bool add_peer_candidate_node(const pfcp::node_id_t& node_id);
 
-  void restore_sx_sessions(const pfcp::node_id_t& node_id);
+  void restore_n4_sessions(const pfcp::node_id_t& node_id);
 
   void initiate_heartbeat_request(timer_id_t timer_id, uint64_t arg2_user);
   void timeout_heartbeat_request(timer_id_t timer_id, uint64_t arg2_user);
