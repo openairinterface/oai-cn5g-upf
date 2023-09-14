@@ -49,8 +49,7 @@ class itti_n3_msg : public itti_msg {
 
   itti_n3_msg(const itti_n3_msg& i) : itti_msg(i) {}
 
-  itti_n3_msg(
-      const itti_n3_msg& i, const task_id_t orig, const task_id_t dest)
+  itti_n3_msg(const itti_n3_msg& i, const task_id_t orig, const task_id_t dest)
       : itti_n3_msg(i) {
     origin      = orig;
     destination = dest;
@@ -71,8 +70,7 @@ class itti_n3_echo_request : public itti_n3_msg {
     return *this;
   }
   itti_n3_echo_request(
-      const itti_n3_echo_request& i, const task_id_t orig,
-      const task_id_t dest)
+      const itti_n3_echo_request& i, const task_id_t orig, const task_id_t dest)
       : itti_n3_msg(i, orig, dest) {
     gtp_ies = i.gtp_ies;
   }
@@ -133,8 +131,7 @@ class itti_n3_supported_extension_headers_notification : public itti_n3_msg {
  public:
   itti_n3_supported_extension_headers_notification(
       const task_id_t orig, const task_id_t dest)
-      : itti_n3_msg(N3_SUPPORTED_EXTENSION_HEADERS_NOTIFICATION, orig, dest) {
-  }
+      : itti_n3_msg(N3_SUPPORTED_EXTENSION_HEADERS_NOTIFICATION, orig, dest) {}
   explicit itti_n3_supported_extension_headers_notification(
       const itti_n3_supported_extension_headers_notification& i)
       : itti_n3_msg(i) {

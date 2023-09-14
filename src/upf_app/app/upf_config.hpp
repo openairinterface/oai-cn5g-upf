@@ -222,7 +222,7 @@ class upf_config {
         nsf(),
         enable_snat(false) {
     itti.itti_timer_sched_params.sched_priority = 85;
-    itti.n3_sched_params.sched_priority        = 84;
+    itti.n3_sched_params.sched_priority         = 84;
     itti.n4_sched_params.sched_priority         = 84;
     itti.upf_app_sched_params.sched_priority    = 84;
     itti.async_cmd_sched_params.sched_priority  = 84;
