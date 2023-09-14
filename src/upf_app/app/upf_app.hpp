@@ -30,8 +30,8 @@
 
 #include "common_root_types.h"
 
-#include "itti_msg_sxab.hpp"
-#include "itti_msg_s1u.hpp"
+#include "itti_msg_n4.hpp"
+#include "itti_msg_n3.hpp"
 
 #include <boost/atomic.hpp>
 
@@ -59,7 +59,7 @@ class upf_app {
 
   teid_t generate_s5s8_up_teid();
 
-  void handle_itti_msg(std::shared_ptr<itti_s1u_echo_request> m);
+  void handle_itti_msg(std::shared_ptr<itti_n3_echo_request> m);
 
   //  void handle_itti_msg (itti_n4_heartbeat_request& m);
   //  void handle_itti_msg (itti_n4_heartbeat_response& m);

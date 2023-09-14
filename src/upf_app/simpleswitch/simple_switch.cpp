@@ -64,14 +64,14 @@ void upf_n3_task(void* args_p) {
     std::shared_ptr<itti_msg> shared_msg = itti_inst->receive_msg(task_id);
     auto* msg                            = shared_msg.get();
     switch (msg->msg_type) {
-      case S1U_ECHO_RESPONSE:
+      case N3_ECHO_RESPONSE:
         upf_n3_inst->handle_itti_msg(
-            std::static_pointer_cast<itti_s1u_echo_response>(shared_msg));
+            std::static_pointer_cast<itti_n3_echo_response>(shared_msg));
         break;
 
-      case S1U_ERROR_INDICATION:
+      case N3_ERROR_INDICATION:
         upf_n3_inst->handle_itti_msg(
-            std::static_pointer_cast<itti_s1u_error_indication>(shared_msg));
+            std::static_pointer_cast<itti_n3_error_indication>(shared_msg));
         break;
 
       case TIME_OUT:
@@ -105,7 +105,7 @@ upf_n3::upf_n3()
           upf_cfg.enable_5g_features) {
   Logger::upf_n3().startup("Starting...");
   if (itti_inst->create_task(
-          TASK_UPF_N3, upf_n3_task, &upf_cfg.itti.s1u_sched_params)) {
+          TASK_UPF_N3, upf_n3_task, &upf_cfg.itti.n3_sched_params)) {
     Logger::upf_n3().error("Cannot create task TASK_UPF_N3");
     throw std::runtime_error("Cannot create task TASK_UPF_N3");
   }
@@ -227,8 +227,8 @@ void upf_n3::send_g_pdu(
 //------------------------------------------------------------------------------
 void upf_n3::handle_receive_echo_request(
     gtpv1u_msg& msg, const endpoint& r_endpoint) {
-  itti_s1u_echo_request* echo =
-      new itti_s1u_echo_request(TASK_UPF_N3, TASK_UPF_APP);
+  itti_n3_echo_request* echo =
+      new itti_n3_echo_request(TASK_UPF_N3, TASK_UPF_APP);
 
   gtpv1u_echo_request msg_ies_container = {};
   msg.to_core_type(echo->gtp_ies);
@@ -241,8 +241,8 @@ void upf_n3::handle_receive_echo_request(
     echo->gtp_ies.set_sequence_number(sn);
   }
 
-  std::shared_ptr<itti_s1u_echo_request> secho =
-      std::shared_ptr<itti_s1u_echo_request>(echo);
+  std::shared_ptr<itti_n3_echo_request> secho =
+      std::shared_ptr<itti_n3_echo_request>(echo);
   int ret = itti_inst->send_msg(secho);
   if (RETURNok != ret) {
     Logger::upf_n3().error(
@@ -252,18 +252,18 @@ void upf_n3::handle_receive_echo_request(
 }
 
 //------------------------------------------------------------------------------
-void upf_n3::handle_itti_msg(std::shared_ptr<itti_s1u_echo_response> m) {
+void upf_n3::handle_itti_msg(std::shared_ptr<itti_n3_echo_response> m) {
   send_response(m->gtp_ies);
 }
 //------------------------------------------------------------------------------
-void upf_n3::handle_itti_msg(std::shared_ptr<itti_s1u_error_indication> m) {
+void upf_n3::handle_itti_msg(std::shared_ptr<itti_n3_error_indication> m) {
   send_indication(m->gtp_ies);
 }
 //------------------------------------------------------------------------------
 void upf_n3::report_error_indication(
     const endpoint& r_endpoint, const uint32_t tunnel_id) {
-  itti_s1u_error_indication* error_ind =
-      new itti_s1u_error_indication(TASK_UPF_N3, TASK_UPF_N3);
+  itti_n3_error_indication* error_ind =
+      new itti_n3_error_indication(TASK_UPF_N3, TASK_UPF_N3);
   error_ind->gtp_ies.r_endpoint = r_endpoint;
   error_ind->gtp_ies.set_teid(0);
 
@@ -280,8 +280,8 @@ void upf_n3::report_error_indication(
     return;
   }
 
-  std::shared_ptr<itti_s1u_error_indication> serror_ind =
-      std::shared_ptr<itti_s1u_error_indication>(error_ind);
+  std::shared_ptr<itti_n3_error_indication> serror_ind =
+      std::shared_ptr<itti_n3_error_indication>(error_ind);
   int ret = itti_inst->send_msg(serror_ind);
   if (RETURNok != ret) {
     Logger::upf_n3().error(

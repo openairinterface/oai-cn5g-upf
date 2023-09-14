@@ -213,7 +213,7 @@ bool pfcp_session::create(
     allocated_fteid                  = {};
     if (local_fteid.ch) {
       // TODO if (local_fteid.choose_id) {
-      allocated_fteid = pfcp_switch_inst->generate_fteid_s1u();
+      allocated_fteid = pfcp_switch_inst->generate_fteid_n3();
     } else {
       // cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
       allocated_fteid = pdi.local_fteid.second;

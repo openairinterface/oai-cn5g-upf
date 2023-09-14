@@ -168,6 +168,6 @@ void pfcp_pdr::notify_cp_requested(
     h.set(report);
     h.set(dl_data_report);
 
-    upf_n4_inst->send_sx_msg(session->cp_fseid, h);
+    upf_n4_inst->send_n4_msg(session->cp_fseid, h);
   }
 }

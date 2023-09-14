@@ -111,6 +111,18 @@ database:
   generate_random: true
   connection_timeout: 300 # seconds
 
+## general single_nssai configuration
+## Defines YAML anchors, which are reused in the config file
+snssais:
+  - &embb_slice1
+    sst: 1
+  - &embb_slice2
+    sst: 1
+    sd: 000001 # in hex
+  - &custom_slice
+    sst: 222
+    sd: 00007B # in hex
+
 ############## NF-specific configuration
 amf:
   pid_directory: "/var/run"
@@ -207,18 +219,13 @@ upf:
     - host: oai-smf            # To be used for PFCP association in case of no-NRF
   upf_info:
     sNssaiUpfInfoList:
-      - sNssai:
-          sst: 1
+      - sNssai: *embb_slice1
         dnnUpfInfoList:
           - dnn: "oai"
-      - sNssai:
-          sst: 1
-          sd: 000001
+      - sNssai: *embb_slice2
         dnnUpfInfoList:
           - dnn: "oai.ipv4"
-      - sNssai:
-          sst: 222
-          sd: 00007B
+      - sNssai: *custom_slice
         dnnUpfInfoList:
           - dnn: "default"
 

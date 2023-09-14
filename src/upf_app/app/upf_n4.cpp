@@ -243,7 +243,7 @@ upf_n4::upf_n4()
   enterprise_specific.proprietary_data = "OAI UPF";
 
   if (itti_inst->create_task(
-          TASK_UPF_N4, upf_n4_task, &upf_cfg.itti.sx_sched_params)) {
+          TASK_UPF_N4, upf_n4_task, &upf_cfg.itti.n4_sched_params)) {
     Logger::upf_n4().error("Cannot create task TASK_UPF_N4");
     throw std::runtime_error("Cannot create task TASK_UPF_N4");
   }
@@ -390,7 +390,7 @@ void upf_n4::handle_receive_association_setup_request(
       a.pfcp_ies.set(enterprise_specific);
       if (node_id.node_id_type != pfcp::NODE_ID_TYPE_IPV6_ADDRESS) {
         a.r_endpoint = remote_endpoint;
-        send_sx_msg(a);
+        send_n4_msg(a);
       } else {
         Logger::upf_n4().warn(
             "Received SX ASSOCIATION SETUP REQUEST node_id IPV6, FQDN!, "
@@ -581,38 +581,38 @@ void upf_n4::handle_receive_pfcp_msg(
 
 //------------------------------------------------------------------------------
 void upf_n4::handle_itti_msg(itti_n4_session_establishment_response& msg) {
-  send_sx_msg(msg);
+  send_n4_msg(msg);
 }
 //------------------------------------------------------------------------------
 void upf_n4::handle_itti_msg(itti_n4_session_modification_response& msg) {
-  send_sx_msg(msg);
+  send_n4_msg(msg);
 }
 //------------------------------------------------------------------------------
 void upf_n4::handle_itti_msg(itti_n4_session_deletion_response& msg) {
-  send_sx_msg(msg);
+  send_n4_msg(msg);
 }
 //------------------------------------------------------------------------------
-void upf_n4::send_sx_msg(itti_n4_association_setup_request& i) {
+void upf_n4::send_n4_msg(itti_n4_association_setup_request& i) {
   send_request(i.r_endpoint, i.pfcp_ies, TASK_UPF_N4, i.trxn_id);
 }
 //------------------------------------------------------------------------------
-void upf_n4::send_sx_msg(itti_n4_association_setup_response& i) {
+void upf_n4::send_n4_msg(itti_n4_association_setup_response& i) {
   send_response(i.r_endpoint, i.pfcp_ies, i.trxn_id);
 }
 //------------------------------------------------------------------------------
-void upf_n4::send_sx_msg(itti_n4_session_establishment_response& i) {
+void upf_n4::send_n4_msg(itti_n4_session_establishment_response& i) {
   send_response(i.r_endpoint, i.seid, i.pfcp_ies, i.trxn_id);
 }
 //------------------------------------------------------------------------------
-void upf_n4::send_sx_msg(itti_n4_session_modification_response& i) {
+void upf_n4::send_n4_msg(itti_n4_session_modification_response& i) {
   send_response(i.r_endpoint, i.seid, i.pfcp_ies, i.trxn_id);
 }
 //------------------------------------------------------------------------------
-void upf_n4::send_sx_msg(itti_n4_session_deletion_response& i) {
+void upf_n4::send_n4_msg(itti_n4_session_deletion_response& i) {
   send_response(i.r_endpoint, i.seid, i.pfcp_ies, i.trxn_id);
 }
 //------------------------------------------------------------------------------
-void upf_n4::send_sx_msg(itti_n4_session_report_request& i) {
+void upf_n4::send_n4_msg(itti_n4_session_report_request& i) {
   send_request(i.r_endpoint, i.seid, i.pfcp_ies, TASK_UPF_N4, i.trxn_id);
 }
 //------------------------------------------------------------------------------
@@ -633,14 +633,14 @@ void upf_n4::start_association(const pfcp::node_id_t& node_id) {
       // a.l_endpoint =
       // endpoint(boost::asio::ip::address_v4(upf_cfg.n4.addr4), 0);
       a.r_endpoint = endpoint(node_id.u1.ipv4_address, pfcp::default_port);
-      send_sx_msg(a);
+      send_n4_msg(a);
     } else {
       Logger::upf_n4().warn("TODO start_association() node_id IPV6, FQDN!");
     }
   }
 }
 //------------------------------------------------------------------------------
-void upf_n4::send_sx_msg(
+void upf_n4::send_n4_msg(
     const pfcp::fseid_t& cp_fseid, const pfcp::pfcp_session_report_request& s) {
   itti_n4_session_report_request isrr(TASK_UPF_N4, TASK_UPF_N4);
   isrr.trxn_id  = generate_trxn_id();
@@ -655,7 +655,7 @@ void upf_n4::send_sx_msg(
       // endpoint(boost::asio::ip::address_v4(upf_cfg.n4.addr4), 0);
       isrr.r_endpoint =
           endpoint(peer_node_id.u1.ipv4_address, pfcp::default_port);
-      send_sx_msg(isrr);
+      send_n4_msg(isrr);
     } else {
       Logger::upf_n4().warn("TODO start_association() node_id IPV6, FQDN!");
     }
