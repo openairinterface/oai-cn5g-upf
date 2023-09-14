@@ -54,15 +54,9 @@ By contributing to OpenAirInterface, you agree that your contributions will be l
 
 ## Continuous Integration process ##
 
-<<<<<<< HEAD
-1.  You push your modified code with the new branch onto our [official GitHub repository](https://github.com/OPENAIRINTERFACE/oai-upf).
-    -  Please make the name of the branch explicit and short.
-2.  You create a pull request from the [dedicated web page](https://github.com/OPENAIRINTERFACE/oai-upf/pulls).
-=======
 1.  You push your modified code with the new branch onto our [official GitLab repository](https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-upf).
     -  Please make the name of the branch explicit and short.
 2.  You create a merge request from the [dedicated web page](https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-upf/-/merge_requests).
->>>>>>> 93f5efddafe4c5deff12e1a8d617c21f6feb6977
     -  The `target` (`base` in the web-page) branch **SHALL be `develop`**.
     -  The `source` (`compare` in the web-page) branch is your branch.
 3.  Our Continuous Integration (CI) process will be triggered automatically on your proposed modified code and check the validity.
