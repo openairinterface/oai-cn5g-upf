@@ -139,7 +139,7 @@ bool util::dotted_to_string(const std::string& dot, std::string& no_dot) {
   return result;
 };
 
-void util::string_to_dnn(const std::string& str, bstring bstr) {
-  bstr->slen = str.length();
-  memcpy((void*) bstr->data, (void*) str.c_str(), str.length());
-}
+// void util::string_to_dnn(const std::string& str, bstring bstr) {
+//   bstr->slen = str.length();
+//   memcpy((void*) bstr->data, (void*) str.c_str(), str.length());
+// }
