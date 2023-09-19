@@ -43,7 +43,7 @@ static u32 tail_call_next_prog(
   map_key.ipv4_address = ipv4_address;
 
   bpf_debug(
-      "Packet Informations (TEID: %d, SRC INTERFACE: %d, IP SRC: 0x%x)\n", teid,
+      "Packet Informations (TEID: %d, SRC INTERFACE: %d, IP SRC: 0x%x)", teid,
       source_value, ipv4_address);
 
   // return XDP_DROP;
@@ -51,12 +51,12 @@ static u32 tail_call_next_prog(
   u32* index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
 
   if (index_prog) {
-    bpf_debug("Value of the eBPF tail call, index_prog = %d\n", *index_prog);
+    bpf_debug("Value of the eBPF tail call, index_prog = %d", *index_prog);
     bpf_tail_call(p_ctx, &m_next_rule_prog, *index_prog);
   }
 
-  bpf_debug("BPF tail call was not executed!\n");
-  bpf_debug("Check your key and its endianess\n");
+  bpf_debug("BPF tail call was not executed!");
+  bpf_debug("Check your key and its endianess");
 
   return XDP_DROP;
 }
@@ -244,24 +244,24 @@ static u32 gtp_handle(
   // TODO: Handle other PDU.
   if (p_gtpuh->message_type != GTPU_G_PDU) {
     bpf_debug(
-        "Message type 0x%x is not GTPU GPDU(0x%x)\n", p_gtpuh->message_type,
+        "Message type 0x%x is not GTPU GPDU(0x%x)", p_gtpuh->message_type,
         GTPU_G_PDU);
     return XDP_PASS;
     // return XDP_DROP;
   }
 
-  bpf_debug("GTP GPDU received with Valid GTP Packet (SRC IP:0x%x)\n", src_ip);
+  bpf_debug("GTP GPDU received with Valid GTP Packet (SRC IP:0x%x)", src_ip);
 
   // Check if the gtp extension header extends beyond the data end.
   if ((void*) ((struct gtpu_extn_pdu_session_container*) (p_gtpuh + 1) + 1) >
       (void*) (long) p_ctx->data_end) {
-    bpf_debug("Invalid IPv4 Inner Header\n");
+    bpf_debug("Invalid IPv4 Inner Header");
     return XDP_DROP;
   }
 
   // Jump to session context.
   tail_call_next_prog(p_ctx, p_gtpuh->teid, INTERFACE_VALUE_ACCESS, src_ip);
-  bpf_debug("BPF tail call was not executed! teid %d\n", p_gtpuh->teid);
+  bpf_debug("BPF tail call was not executed! teid %d", p_gtpuh->teid);
 
   return XDP_PASS;
   // return XDP_DROP;
@@ -294,7 +294,7 @@ static u32 udp_handle(
 
       // Check if the GTP header extends beyond the data end.
       if ((void*) (p_gtpuh + 1) > p_data_end) {
-        bpf_debug("Invalid GTPU packet\n");
+        bpf_debug("Invalid GTPU packet");
         return XDP_DROP;
       }
 
@@ -323,7 +323,7 @@ static u32 udp_handle(
       //     update_map_traffic_classification(
       //         src_ip, IPPROTO_UDP, dest_ip, *teid_dl);
       //     tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE,
-      //     dest_ip); bpf_debug("BPF tail call was not executed! teid %d\n",
+      //     dest_ip); bpf_debug("BPF tail call was not executed! teid %d",
       //     teid_dl); return XDP_PASS;
       //   }
 
@@ -352,7 +352,7 @@ static u32 udp_handle(
 static u32 tcp_handle(
     struct xdp_md* p_ctx, struct tcphdr* tcph, u32 src_ip, u32 dest_ip,
     u8 dscp) {
-  // bpf_debug("Valid TCP Packet (SRC IP:0x%x, DEST IP:0x%x)\n", src_ip,
+  // bpf_debug("Valid TCP Packet (SRC IP:0x%x, DEST IP:0x%x)", src_ip,
   // dest_ip); u32* teid_dl = retreive_teid_downlink(src_ip, dest_ip, dscp,
   // IPPROTO_TCP);
 
@@ -360,7 +360,7 @@ static u32 tcp_handle(
   //   bpf_debug("The teid for downlink TCP: %d", *teid_dl);
   //   update_map_traffic_classification(src_ip, IPPROTO_TCP, dest_ip,
   //   *teid_dl); tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE,
-  //   dest_ip); bpf_debug("BPF tail call was not executed! teid %d\n",
+  //   dest_ip); bpf_debug("BPF tail call was not executed! teid %d",
   //   teid_dl); return XDP_PASS;
   // }
 
@@ -394,7 +394,7 @@ static u32 icmp_handle(
   //   bpf_debug("The teid for downlink ICMP: %d", *teid_dl);
   //   update_map_traffic_classification(src_ip, IPPROTO_ICMP, dest_ip,
   //   *teid_dl); tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE,
-  //   dest_ip); bpf_debug("BPF tail call was not executed! teid %d\n",
+  //   dest_ip); bpf_debug("BPF tail call was not executed! teid %d",
   //   teid_dl); return XDP_PASS;
   // }
 
@@ -432,12 +432,12 @@ static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
 
   switch (iph->protocol) {
     case IPPROTO_UDP: {
-      bpf_debug("*** This is a UDP packet ***\n");
+      bpf_debug("*** This is a UDP packet ***");
       struct udphdr* udph = (struct udphdr*) (iph + 1);
 
       // Check if the UDP header extends beyond the data end.
       if ((void*) (udph + 1) > p_data_end) {
-        bpf_debug("Invalid UDP packet\n");
+        bpf_debug("Invalid UDP packet");
         return XDP_DROP;
       }
 
@@ -448,7 +448,7 @@ static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
 
         // Check if the GTP header extends beyond the data end.
         if ((void*) (p_gtpuh + 1) > p_data_end) {
-          bpf_debug("Invalid GTPU packet\n");
+          bpf_debug("Invalid GTPU packet");
           return XDP_DROP;
         }
 
@@ -472,17 +472,17 @@ static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
       break;
     }
     case IPPROTO_TCP: {
-      bpf_debug("*** This is a TCP packet ***\n");
+      bpf_debug("*** This is a TCP packet ***");
       // tail_call_next_prog(p_ctx, 1, INTERFACE_VALUE_ACCESS, 201392387);
       break;
     }
     case IPPROTO_ICMP: {
-      bpf_debug("*** This is an ICMP packet ***\n");
+      bpf_debug("*** This is an ICMP packet ***");
       // tail_call_next_prog(p_ctx, 2, INTERFACE_VALUE_CORE, 201392399);
       break;
     }
     default: {
-      bpf_debug("Non UDP/TCP/ICMP protocols\n");
+      bpf_debug("Non UDP/TCP/ICMP protocols");
       // return XDP_PASS;
       return XDP_DROP;
     }
@@ -516,12 +516,12 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
   u16 eth_type     = htons(ethh->h_proto);
   u64 offset       = sizeof(*ethh);
 
-  bpf_debug("Debug: eth_type:0x%x\n", eth_type);
+  bpf_debug("Debug: eth_type:0x%x", eth_type);
 
   switch (eth_type) {
     case ETH_P_8021Q:
     case ETH_P_8021AD: {
-      bpf_debug("VLAN!! Changing the offset\n");
+      bpf_debug("VLAN!! Changing the offset");
       struct vlan_hdr* vlan_hdr = (struct vlan_hdr*) (ethh + 1);
       offset += sizeof(*vlan_hdr);
       if ((void*) (vlan_hdr + 1) <= p_data_end)
@@ -531,7 +531,7 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
       struct iphdr* iph = (struct iphdr*) ((void*) ethh + offset);
       // Check if the IP header extends beyond the data end.
       if ((void*) (iph + 1) > p_data_end) {
-        bpf_debug("Invalid IPv4 Packet\n");
+        bpf_debug("Invalid IPv4 Packet");
         return XDP_DROP;
       }
 
@@ -542,8 +542,9 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
     case ETH_P_ARP:
     // Skip non 802.3 Ethertypes
     // Fall-through
+     return XDP_PASS;
     default:
-      bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x\n", offset, eth_type);
+      bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x", offset, eth_type);
       return XDP_PASS;
       // return XDP_DROP; //bpf_debug("Drop the packet"); // I can not drop the
       // packet due to arping not handeled
@@ -553,12 +554,12 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
 /*****************************************************************************************************************/
 SEC("xdp_entry_point")
 int entry_point(struct xdp_md* p_ctx) {
-  bpf_debug("==========< PFCP Session Lookup >==========\n");
+  bpf_debug("==========< PFCP Session Lookup >==========");
 
   struct ethhdr* ethh = (void*) (long) p_ctx->data;
 
   if ((void*) (ethh + 1) > (void*) (long) p_ctx->data_end) {
-    bpf_debug("Invalid Ethernet header\n");
+    bpf_debug("Invalid Ethernet header");
     return XDP_DROP;
   }
 
