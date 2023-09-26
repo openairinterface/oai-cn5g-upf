@@ -953,6 +953,26 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
     cause.cause_value = CAUSE_VALUE_SESSION_CONTEXT_NOT_FOUND;
   } else {
     resp->seid = s->cp_fseid.seid;
+    if (upf_cfg.enable_bpf_datapath) {
+      std::shared_ptr<pfcp::pfcp_session> pSession =
+          std::make_shared<pfcp::pfcp_session>(*s);
+      spSessionManager = UserPlaneComponent::getInstance().getSessionManager();
+      // spSessionManager->sessions.push_back(pSession);
+
+      auto& sessions = spSessionManager->sessions;
+
+      // Find the iterator pointing to pSession in the vector
+      auto it = std::find(sessions.begin(), sessions.end(), pSession);
+
+      // Check if pSession was found before erasing it
+      if (it != sessions.end()) {
+        sessions.erase(it);  // Erase the element from the vector
+        spSessionManager->removeBPFSession(pSession->get_up_seid());
+      } else {
+        // Element not found, handle the case as needed
+        Logger::upf_app().warn("Session %d does not exist", resp->seid);
+      }
+    }
     remove_pfcp_session(s);
   }
   pfcp_associations::get_instance().notify_del_session(fseid);
