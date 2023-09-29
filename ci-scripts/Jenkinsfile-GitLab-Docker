@@ -233,8 +233,8 @@ pipeline {
                   // It's a different agent from main one.
                   prepareWorkspaceMergeCase()
                   // Moving to focal and cppcheck 1.90 and a dockerfile approach
-                  //sh 'sed -i -e "s@nfName@upf@" ci-scripts/common/docker/Dockerfile.ci.cppcheck'
-                  sh 'docker build --target upf-cppcheck --tag upf-cppcheck:test --file ci-scripts/docker/Dockerfile.ci.cppcheck . > archives/cppcheck_install.log 2>&1'
+                  sh 'sed -i -e "s@nfName@upf@" ci-scripts/common/docker/Dockerfile.ci.cppcheck'
+                  sh 'docker build --target upf-cppcheck --tag upf-cppcheck:test --file ci-scripts/common/docker/Dockerfile.ci.cppcheck . > archives/cppcheck_install.log 2>&1'
                   sh 'docker run --name upf-ci-cppcheck --entrypoint /bin/true upf-cppcheck:test'
                   sh 'docker cp upf-ci-cppcheck:/home/cppcheck.xml archives'
                   sh 'docker cp upf-ci-cppcheck:/home/cppcheck_build.log archives'
@@ -270,11 +270,11 @@ pipeline {
                 gitlabCommitStatus(name: "Code Formatting Checker") {
                   // It's a different agent from main one.
                   prepareWorkspaceMergeCase()
-                  //sh 'sed -i -e "s@nfName@upf@" ci-scripts/common/docker/Dockerfile.ci.clang-format'
+                  sh 'sed -i -e "s@nfName@upf@" ci-scripts/common/docker/Dockerfile.ci.clang-format'
                   if ("MERGE".equals(env.gitlabActionType)) {
-                    sh 'docker build --target upf-clang-format-check --tag upf-clang-format-check:test --file ci-scripts/docker/Dockerfile.ci.clang-format --build-arg MERGE_REQUEST_CHECK=True --build-arg SOURCE_BRANCH=' + env.gitlabSourceBranch + ' --build-arg TARGET_BRANCH=' + env.gitlabTargetBranch + ' . > archives/clang_format_install.log 2>&1'
+                    sh 'docker build --target upf-clang-format-check --tag upf-clang-format-check:test --file ci-scripts/common/docker/Dockerfile.ci.clang-format --build-arg MERGE_REQUEST_CHECK=True --build-arg SOURCE_BRANCH=' + env.gitlabSourceBranch + ' --build-arg TARGET_BRANCH=' + env.gitlabTargetBranch + ' . > archives/clang_format_install.log 2>&1'
                   } else {
-                    sh 'docker build --target upf-clang-format-check --tag upf-clang-format-check:test --file ci-scripts/docker/Dockerfile.ci.clang-format . > archives/clang_format_install.log 2>&1'
+                    sh 'docker build --target upf-clang-format-check --tag upf-clang-format-check:test --file ci-scripts/common/docker/Dockerfile.ci.clang-format . > archives/clang_format_install.log 2>&1'
                   }
                   sh 'docker run --name upf-ci-clang-format --entrypoint /bin/true upf-clang-format-check:test'
                   sh 'docker cp upf-ci-clang-format:/home/src/oai_rules_result.txt src'
