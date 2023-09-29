@@ -264,7 +264,7 @@ check_install_upf_deps() {
   $SUDO $INSTALLER install $OPTION $PACKAGE_LIST
   ret=$?;[[ $ret -ne 0 ]] && return $ret
 
-  echo_info "Packages and Libraries installation finished!"
+  echo_info "distro libs installation complete"
 
   install_libbpf_from_git $1 $2
   ret=$?;[[ $ret -ne 0 ]] && return $ret

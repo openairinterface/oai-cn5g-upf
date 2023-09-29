@@ -56,7 +56,7 @@ RUN ./build_upf --install-deps --force
 # BUILDER IMAGE
 #---------------------------------------------------------------------
 FROM oai-upf-base as oai-upf-builder
-RUN ./build_upf --clean --build-type Release --jobs --Verbose && \
+RUN ./build_upf --clean --Verbose --build-type Release --jobs && \
     ldd /openair-upf/build/upf/build/upf && \
     mv /openair-upf/build/upf/build/upf /openair-upf/build/upf/build/oai_upf && \
     echo "end of UPF build"
