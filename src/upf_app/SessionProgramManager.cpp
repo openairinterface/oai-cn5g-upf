@@ -163,46 +163,43 @@ void SessionProgramManager::storeFarProgramIndexInNextProgRuleIndexMap(
 // Helper function to store Session mapping
 void SessionProgramManager::storeSessionMappingMap(
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-    uint32_t ue_ip_address, uint32_t teid_dl, uint32_t teid_ul) {
-  s_session_mapping key;
-
-  __builtin_memset(&key, 0, sizeof(struct s_session_mapping));
+    uint32_t ue_ip_address, uint32_t teid_dl) {
+  uint32_t key;
 
   if (is_little_endian()) {
-    key.ue_ip_address = htole32(ue_ip_address);
-    key.teid_ul       = htobe32(teid_ul);
-    teid_dl           = htobe32(teid_dl);
+    key     = htole32(ue_ip_address);
+    teid_dl = htobe32(teid_dl);
   } else {
-    key.ue_ip_address = ue_ip_address;
-    key.teid_ul       = htole32(teid_ul);
-    teid_dl           = htole32(teid_dl);
+    key     = ue_ip_address;
+    teid_dl = htole32(teid_dl);
   }
 
   pPFCP_Session_LookupProgram->getSessionMappingMap()->update(
-      key, teid_dl, BPF_ANY);
+      ue_ip_address, teid_dl, BPF_ANY);
 }
 
 /*****************************************************************************************************************/
-// Helper function to store UE QFI
-void SessionProgramManager::storeUeQfiTeidMap(
-    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-    uint32_t ue_ip_address, uint8_t qfi, uint32_t teid_ul) {
-  s_ue_qfi key;
+// // Helper function to store UE QFI
+// void SessionProgramManager::storeUeQfiTeidMap(
+//     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+//     uint32_t ue_ip_address, uint8_t qfi, uint32_t teid_ul) {
+//   s_ue_qfi key;
 
-  __builtin_memset(&key, 0, sizeof(struct s_ue_qfi));
+//   __builtin_memset(&key, 0, sizeof(struct s_ue_qfi));
 
-  if (is_little_endian()) {
-    key.src_ip = htole32(ue_ip_address);
-    teid_ul    = htobe32(teid_ul);
-  } else {
-    key.src_ip = ue_ip_address;
-    teid_ul    = htole32(teid_ul);
-  }
+//   if (is_little_endian()) {
+//     key.src_ip = htole32(ue_ip_address);
+//     teid_ul    = htobe32(teid_ul);
+//   } else {
+//     key.src_ip = ue_ip_address;
+//     teid_ul    = htole32(teid_ul);
+//   }
 
-  key.qfi = qfi;
+//   key.qfi = qfi;
 
-  pPFCP_Session_LookupProgram->getUeQfiTeidMap()->update(key, teid_ul, BPF_ANY);
-}
+//   pPFCP_Session_LookupProgram->getUeQfiTeidMap()->update(key, teid_ul,
+//   BPF_ANY);
+// }
 
 /*****************************************************************************************************************/
 // Helper function to store the FAR in the FAR program
@@ -303,7 +300,7 @@ uint32_t SessionProgramManager::getGnodebIp(
 void SessionProgramManager::createPipeline(
     uint32_t seid, uint32_t teid1, uint8_t sourceInterface,
     uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
-    bool isModification, uint32_t teid2, uint8_t qfi) {
+    bool isModification, uint32_t teid2) {
   next_rule_prog_index_key key;
   initializeNextRuleProgIndexKey(key, teid1, ueIpAddress, sourceInterface);
 
@@ -318,7 +315,7 @@ void SessionProgramManager::createPipeline(
       pFARProgram, key, pPFCP_Session_LookupProgram);
 
   Logger::upf_app().debug("Store FAR in the FAR program");
-  Logger::upf_app().debug("############ QFI2 %u ###########", qfi);
+  // Logger::upf_app().debug("############ QFI2 %u ###########", qfi);
   storeFARInFARMap(pFARProgram, pFar);
 
   uint32_t dnIP    = upf_cfg.remote_n6.s_addr;
@@ -326,7 +323,7 @@ void SessionProgramManager::createPipeline(
   uint32_t upfn6IP = upf_cfg.n6.addr4.s_addr;
 
   Logger::upf_app().warn(
-      "TODO: Try to extract the  updateARPTableForN6 for the if and else to "
+      "TODO: Try to extract the updateARPTableForN6 for the if and else to "
       "run it only once");
   // // Launch a separate thread to update ARP table map
   //   std::thread arpUpdateThread2([this, pFARProgram, dnIP, upfn6IP]() {
@@ -335,8 +332,7 @@ void SessionProgramManager::createPipeline(
   // arpUpdateThread2.detach();
 
   if (isModification) {
-    storeSessionMappingMap(
-        pPFCP_Session_LookupProgram, ueIpAddress, teid1, teid2);
+    storeSessionMappingMap(pPFCP_Session_LookupProgram, ueIpAddress, teid1);
     uint32_t gNodeBIP = getGnodebIp(pFar);
 
     std::thread arpUpdateThread1(
@@ -354,8 +350,6 @@ void SessionProgramManager::createPipeline(
     });
 
     arpUpdateThread2.detach();
-    storeUeQfiTeidMap(pPFCP_Session_LookupProgram, ueIpAddress, qfi, teid1);
-
     saveSeidWithinFARProgram(seid, pFARProgram, key);
   }
 }

@@ -178,7 +178,7 @@ class PFCP_Session_LookupProgram {
 
   /*****************************************************************************************************************/
   // The traffic map.
-  std::shared_ptr<BPFMap> mpTrafficMap;
+  // std::shared_ptr<BPFMap> mpTrafficMap;
 
   /*****************************************************************************************************************/
   // The session mapping map.
@@ -187,12 +187,12 @@ class PFCP_Session_LookupProgram {
   /*****************************************************************************************************************/
 
   // The UE-QFI-TEID map.
-  std::shared_ptr<BPFMap> mpUeQfiTeidMap;
+  // std::shared_ptr<BPFMap> mpUeQfiTeidMap;
 
   /*****************************************************************************************************************/
 
   // The QOS Flow map.
-  std::shared_ptr<BPFMap> mpQosFlowMap;
+  // std::shared_ptr<BPFMap> mpQosFlowMap;
 
   /*****************************************************************************************************************/
   // The BPF lifecycle program.
