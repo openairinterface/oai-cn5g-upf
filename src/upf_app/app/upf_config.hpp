@@ -42,14 +42,17 @@
 #include <stdbool.h>
 #include <string>
 #include "logger.hpp"
+#include "Snssai.h"
+#include "DnnUpfInfoItem.h"
 // #include "upf.h"
 
 // const uint32_t SD_NO_VALUE = 0xFFFFFF;
 
 constexpr auto UPF_CONFIG_OPTION_YES_STR = "Yes";
 constexpr auto UPF_CONFIG_OPTION_NO_STR  = "No";
-const snssai_t DEFAULT_SNSSAI{1, 0xFFFFFF};
-const std::vector<std::string> DEFAULT_DNN_LIST = {"default"};
+const oai::model::common::Snssai DEFAULT_SNSSAI{1};
+const std::vector<oai::model::nrf::DnnUpfInfoItem> DEFAULT_DNN_LIST = {
+    oai::model::nrf::DnnUpfInfoItem("default")};
 
 #define UPF_CONFIG_STRING_UPF_CONFIG "UPF"
 #define UPF_CONFIG_STRING_PID_DIRECTORY "PID_DIRECTORY"
@@ -76,7 +79,7 @@ const std::vector<std::string> DEFAULT_DNN_LIST = {"default"};
 #define UPF_CONFIG_STRING_SMF_LIST "SMF_LIST"
 #define UPF_CONFIG_STRING_ITTI_TASKS "ITTI_TASKS"
 #define UPF_CONFIG_STRING_ITTI_TIMER_SCHED_PARAMS "ITTI_TIMER_SCHED_PARAMS"
-#define UPF_CONFIG_STRING_S1U_SCHED_PARAMS "S1U_SCHED_PARAMS"
+#define UPF_CONFIG_STRING_N3_SCHED_PARAMS "N3_SCHED_PARAMS"
 #define UPF_CONFIG_STRING_SX_SCHED_PARAMS "SX_SCHED_PARAMS"
 #define UPF_CONFIG_STRING_SMF_APP_SCHED_PARAMS "SMF_APP_SCHED_PARAMS"
 #define UPF_CONFIG_STRING_ASYNC_CMD_SCHED_PARAMS "ASYNC_CMD_SCHED_PARAMS"
@@ -130,8 +133,8 @@ typedef struct pdn_cfg_s {
 
 typedef struct itti_cfg_s {
   util::thread_sched_params itti_timer_sched_params;
-  util::thread_sched_params s1u_sched_params;
-  util::thread_sched_params sx_sched_params;
+  util::thread_sched_params n3_sched_params;
+  util::thread_sched_params n4_sched_params;
   util::thread_sched_params upf_app_sched_params;
   util::thread_sched_params async_cmd_sched_params;
 } itti_cfg_t;
@@ -219,8 +222,8 @@ class upf_config {
         nsf(),
         enable_snat(false) {
     itti.itti_timer_sched_params.sched_priority = 85;
-    itti.s1u_sched_params.sched_priority        = 84;
-    itti.sx_sched_params.sched_priority         = 84;
+    itti.n3_sched_params.sched_priority         = 84;
+    itti.n4_sched_params.sched_priority         = 84;
     itti.upf_app_sched_params.sched_priority    = 84;
     itti.async_cmd_sched_params.sched_priority  = 84;
 

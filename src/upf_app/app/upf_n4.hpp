@@ -30,7 +30,7 @@
 
 #include "endpoint.hpp"
 #include "pfcp.hpp"
-#include "itti_msg_sxab.hpp"
+#include "itti_msg_n4.hpp"
 #include "msg_pfcp.hpp"
 #include "upf_pfcp_association.hpp"
 
@@ -76,23 +76,23 @@ class upf_n4 : public pfcp::pfcp_l4_stack {
   void handle_itti_msg(itti_n4_session_deletion_response& s);
   void handle_itti_msg(itti_n4_session_report_response& s){};
 
-  void send_sx_msg(itti_n4_heartbeat_request& s){};
-  void send_sx_msg(itti_n4_heartbeat_response& s){};
-  void send_sx_msg(itti_n4_association_setup_request& s);
-  void send_sx_msg(itti_n4_association_setup_response& s);
-  void send_sx_msg(itti_n4_association_update_request& s){};
-  void send_sx_msg(itti_n4_association_update_response& s){};
-  void send_sx_msg(itti_n4_association_release_request& s){};
-  void send_sx_msg(itti_n4_association_release_response& s){};
-  void send_sx_msg(itti_n4_version_not_supported_response& s){};
-  void send_sx_msg(itti_n4_node_report_request& s){};
-  void send_sx_msg(itti_n4_session_set_deletion_response& s){};
-  void send_sx_msg(itti_n4_session_establishment_response& s);
-  void send_sx_msg(itti_n4_session_modification_response& s);
-  void send_sx_msg(itti_n4_session_deletion_response& s);
-  void send_sx_msg(itti_n4_session_report_request& s);
+  void send_n4_msg(itti_n4_heartbeat_request& s){};
+  void send_n4_msg(itti_n4_heartbeat_response& s){};
+  void send_n4_msg(itti_n4_association_setup_request& s);
+  void send_n4_msg(itti_n4_association_setup_response& s);
+  void send_n4_msg(itti_n4_association_update_request& s){};
+  void send_n4_msg(itti_n4_association_update_response& s){};
+  void send_n4_msg(itti_n4_association_release_request& s){};
+  void send_n4_msg(itti_n4_association_release_response& s){};
+  void send_n4_msg(itti_n4_version_not_supported_response& s){};
+  void send_n4_msg(itti_n4_node_report_request& s){};
+  void send_n4_msg(itti_n4_session_set_deletion_response& s){};
+  void send_n4_msg(itti_n4_session_establishment_response& s);
+  void send_n4_msg(itti_n4_session_modification_response& s);
+  void send_n4_msg(itti_n4_session_deletion_response& s);
+  void send_n4_msg(itti_n4_session_report_request& s);
 
-  void send_sx_msg(
+  void send_n4_msg(
       const pfcp::fseid_t& cp_fseid,
       const pfcp::pfcp_session_report_request& s);
 

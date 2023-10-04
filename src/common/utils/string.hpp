@@ -30,9 +30,9 @@
 
 #include <string>
 
-extern "C" {
-#include "bstrlib.h"
-}
+// extern "C" {
+// #include "bstrlib.h"
+// }
 
 namespace util {
 
@@ -45,6 +45,6 @@ std::string& rtrim(std::string& s);
 std::string& trim(std::string& s);
 bool string_to_dotted(const std::string& str, std::string& dotted);
 bool dotted_to_string(const std::string& dot, std::string& no_dot);
-void string_to_dnn(const std::string& str, bstring bstr);
+// void string_to_dnn(const std::string& str, bstring bstr);
 }  // namespace util
 #endif

@@ -194,7 +194,11 @@ void upf_nrf::send_deregister_nf_instance(const std::string& url) {
   uint32_t http_code   = {0};
   send_curl(url, "DELETE", response, http_code);
 
-  // TODO:
+  if (http_code == HTTP_STATUS_CODE_204_NO_CONTENT) {
+    Logger::upf_app().info("Got successful response from NRF de-registration");
+  } else {
+    Logger::upf_app().warn("Could not get response from NRF");
+  }
 }
 
 //---------------------------------------------------------------------------------------------
@@ -229,6 +233,18 @@ void upf_nrf::register_to_nrf() {
   std::string nrf_api_root = {};
   get_nrf_api_root(nrf_api_root);
   send_register_nf_instance(
+      nrf_api_root + NNRF_NF_REGISTER_URL + upf_instance_id);
+}
+
+//---------------------------------------------------------------------------------------------
+void upf_nrf::deregister_to_nrf() {
+  if (!upf_cfg.register_nrf) return;
+  Logger::upf_app().debug("Send NF De-registration to NRF");
+
+  std::string nrf_api_root = {};
+  get_nrf_api_root(nrf_api_root);
+
+  send_deregister_nf_instance(
       nrf_api_root + NNRF_NF_REGISTER_URL + upf_instance_id);
 }
 
@@ -270,13 +286,8 @@ void upf_nrf::timer_nrf_heartbeat_timeout(
 //---------------------------------------------------------------------------------------------
 void upf_nrf::timer_nrf_deregistration(
     timer_id_t timer_id, uint64_t arg2_user) {
-  Logger::upf_app().debug("Send NF De-registration to NRF");
-
-  std::string nrf_api_root = {};
-  get_nrf_api_root(nrf_api_root);
-
-  send_deregister_nf_instance(
-      nrf_api_root + NNRF_NF_REGISTER_URL + upf_instance_id);
+  // timer_id and arg2_user unused?
+  deregister_to_nrf();
 }
 
 //---------------------------------------------------------------------------------------------
@@ -297,8 +308,8 @@ void upf_nrf::send_curl(
     curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, NRF_CURL_TIMEOUT_MS);
     curl_easy_setopt(
         curl, CURLOPT_INTERFACE,
-        upf_cfg.n4.if_name.c_str());  // TODO: use another interface for UPF
-                                      // to communicate with NRF
+        upf_cfg.sbi.if_name.c_str());  // TODO: use another interface for UPF
+                                       // to communicate with NRF
     if (upf_cfg.http_version == 2) {
       if (Logger::should_log(spdlog::level::debug))
         curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);

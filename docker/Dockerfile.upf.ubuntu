@@ -65,7 +65,7 @@ FROM oai-upf-base as oai-upf-builder
 COPY . /openair-upf
 # Building UPF
 WORKDIR /openair-upf/build/scripts
-RUN ./build_upf --clean --build-type Release --jobs --Verbose && \
+RUN ./build_upf --clean --Verbose --build-type Release --jobs && \
     ldd /openair-upf/build/upf/build/upf && \
     mv /openair-upf/build/upf/build/upf /openair-upf/build/upf/build/oai_upf && \
     echo "end of UPF build"

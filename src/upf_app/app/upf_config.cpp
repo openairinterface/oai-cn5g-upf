@@ -174,18 +174,18 @@ int upf_config::load_itti(const Setting& itti_cfg, itti_cfg_t& cfg) {
   }
 
   try {
-    const Setting& s1u_sched_params_cfg =
-        itti_cfg[UPF_CONFIG_STRING_S1U_SCHED_PARAMS];
-    load_thread_sched_params(s1u_sched_params_cfg, cfg.s1u_sched_params);
+    const Setting& n3_sched_params_cfg =
+        itti_cfg[UPF_CONFIG_STRING_N3_SCHED_PARAMS];
+    load_thread_sched_params(n3_sched_params_cfg, cfg.n3_sched_params);
   } catch (const SettingNotFoundException& nfex) {
     Logger::upf_app().info(
         "%s : %s, using defaults", nfex.what(), nfex.getPath());
   }
 
   try {
-    const Setting& sx_sched_params_cfg =
+    const Setting& n4_sched_params_cfg =
         itti_cfg[UPF_CONFIG_STRING_SX_SCHED_PARAMS];
-    load_thread_sched_params(sx_sched_params_cfg, cfg.sx_sched_params);
+    load_thread_sched_params(n4_sched_params_cfg, cfg.n4_sched_params);
   } catch (const SettingNotFoundException& nfex) {
     Logger::upf_app().info(
         "%s : %s, using defaults", nfex.what(), nfex.getPath());
@@ -311,14 +311,6 @@ int upf_config::load(const string& config_file) {
   } catch (const SettingNotFoundException& nfex) {
     Logger::upf_app().info(
         "%s : %s, No FQDN configured", nfex.what(), nfex.getPath());
-  }
-
-  try {
-    upf_cfg.lookupValue(UPF_CONFIG_STRING_PID_DIRECTORY, pid_dir);
-    util::trim(pid_dir);
-  } catch (const SettingNotFoundException& nfex) {
-    Logger::upf_app().info(
-        "%s : %s, using defaults", nfex.what(), nfex.getPath());
   }
 
   // Log Level
@@ -678,7 +670,6 @@ void upf_config::display() {
   Logger::upf_app().info("Configuration:");
   Logger::upf_app().info("- FQDN ..................: %s", fqdn.c_str());
   Logger::upf_app().info("- Instance ..............: %d", instance);
-  Logger::upf_app().info("- PID dir ...............: %s", pid_dir.c_str());
   Logger::upf_app().info("- ITTI tasks:");
   Logger::upf_app().info("    ITTI Timer task:");
   Logger::upf_app().info(
@@ -690,18 +681,18 @@ void upf_config::display() {
       itti.itti_timer_sched_params.sched_priority);
   Logger::upf_app().info("    UPF-N3 task:");
   Logger::upf_app().info(
-      "      CPU ID .........: %d", itti.s1u_sched_params.cpu_id);
+      "      CPU ID .........: %d", itti.n3_sched_params.cpu_id);
   Logger::upf_app().info(
-      "      sched policy....: %d", itti.s1u_sched_params.sched_policy);
+      "      sched policy....: %d", itti.n3_sched_params.sched_policy);
   Logger::upf_app().info(
-      "      sched priority..: %d", itti.s1u_sched_params.sched_priority);
+      "      sched priority..: %d", itti.n3_sched_params.sched_priority);
   Logger::upf_app().info("    UPF-N4 task:");
   Logger::upf_app().info(
-      "      CPU ID .........: %d", itti.sx_sched_params.cpu_id);
+      "      CPU ID .........: %d", itti.n4_sched_params.cpu_id);
   Logger::upf_app().info(
-      "      sched policy....: %d", itti.sx_sched_params.sched_policy);
+      "      sched policy....: %d", itti.n4_sched_params.sched_policy);
   Logger::upf_app().info(
-      "      sched priority..: %d", itti.sx_sched_params.sched_priority);
+      "      sched priority..: %d", itti.n4_sched_params.sched_priority);
   Logger::upf_app().info("    UPF_APP task:");
   Logger::upf_app().info(
       "      CPU ID .........: %d", itti.upf_app_sched_params.cpu_id);

@@ -72,9 +72,9 @@ void upf_app_task(void* args_p) {
     std::shared_ptr<itti_msg> shared_msg = itti_inst->receive_msg(task_id);
     auto* msg                            = shared_msg.get();
     switch (msg->msg_type) {
-      case S1U_ECHO_REQUEST:
+      case N3_ECHO_REQUEST:
         upf_app_inst->handle_itti_msg(
-            std::static_pointer_cast<itti_s1u_echo_request>(shared_msg));
+            std::static_pointer_cast<itti_n3_echo_request>(shared_msg));
         break;
 
       case N4_SESSION_ESTABLISHMENT_REQUEST:
@@ -179,23 +179,23 @@ upf_app::~upf_app() {
   if (upf_nrf_inst) delete upf_nrf_inst;
 }
 //------------------------------------------------------------------------------
-void upf_app::handle_itti_msg(std::shared_ptr<itti_s1u_echo_request> m) {
+void upf_app::handle_itti_msg(std::shared_ptr<itti_n3_echo_request> m) {
   Logger::upf_app().debug("Received %s ", m->get_msg_name());
-  itti_s1u_echo_response* s1u_resp =
-      new itti_s1u_echo_response(TASK_UPF_APP, TASK_UPF_N3);
+  itti_n3_echo_response* n3_resp =
+      new itti_n3_echo_response(TASK_UPF_APP, TASK_UPF_N3);
 
   // May insert a call to a function here(throttle for example)
-  s1u_resp->gtp_ies.r_endpoint      = m->gtp_ies.r_endpoint;
-  s1u_resp->gtp_ies.teid            = m->gtp_ies.teid;
-  s1u_resp->gtp_ies.sequence_number = m->gtp_ies.sequence_number;
+  n3_resp->gtp_ies.r_endpoint      = m->gtp_ies.r_endpoint;
+  n3_resp->gtp_ies.teid            = m->gtp_ies.teid;
+  n3_resp->gtp_ies.sequence_number = m->gtp_ies.sequence_number;
 
-  std::shared_ptr<itti_s1u_echo_response> msg =
-      std::shared_ptr<itti_s1u_echo_response>(s1u_resp);
+  std::shared_ptr<itti_n3_echo_response> msg =
+      std::shared_ptr<itti_n3_echo_response>(n3_resp);
   int ret = itti_inst->send_msg(msg);
   if (RETURNok != ret) {
     Logger::upf_app().error(
         "Could not send ITTI message %s to task TASK_UPF_N3",
-        s1u_resp->get_msg_name());
+        n3_resp->get_msg_name());
   }
 }
 //------------------------------------------------------------------------------

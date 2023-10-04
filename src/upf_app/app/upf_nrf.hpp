@@ -88,6 +88,11 @@ class upf_nrf {
    */
   void register_to_nrf();
 
+  /**
+   * Trigger NF de-registration to NRF
+   */
+  void deregister_to_nrf();
+
   /*
    * Generate a random UUID for UPF instance
    * @param [void]

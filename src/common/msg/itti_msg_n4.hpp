@@ -19,7 +19,7 @@
  *      contact@openairinterface.org
  */
 
-/*! \file itti_msg_sxab.hpp
+/*! \file itti_msg_n4.hpp
    \author  Lionel GAUTHIER
    \date 2019
    \email: lionel.gauthier@eurecom.fr

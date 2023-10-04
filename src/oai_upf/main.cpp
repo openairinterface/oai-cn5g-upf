@@ -24,6 +24,7 @@
 #include "upf_app.hpp"
 #include "upf_config.hpp"
 #include "upf_config_yaml.hpp"
+#include "upf_nrf.hpp"
 
 #include <boost/asio.hpp>
 #include <iostream>
@@ -57,6 +58,8 @@ pfcp_switch* pfcp_switch_inst         = nullptr;
 upf_app* upf_app_inst                 = nullptr;
 upf_config upf_cfg;
 boost::asio::io_service io_service;
+// TODO These global variables are ugly :| -> refactor together with nrf client
+extern upf_nrf* upf_nrf_inst;
 
 #ifndef N3_IF_NAME
 #define N3_IF_NAME upf_cfg.n3.if_name
@@ -72,6 +75,9 @@ std::unique_ptr<upf_config_yaml> upf_cfg_yaml = nullptr;
 void my_app_signal_handler(int s) {
   std::cout << "Caught signal " << s << std::endl;
   Logger::system().startup("exiting");
+  if (upf_nrf_inst) {
+    upf_nrf_inst->deregister_to_nrf();
+  }
   itti_inst->send_terminate_msg(TASK_UPF_APP);
   itti_inst->wait_tasks_end();
   std::cout << "Freeing Allocated memory..." << std::endl;

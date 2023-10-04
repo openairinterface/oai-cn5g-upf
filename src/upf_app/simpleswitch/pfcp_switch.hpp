@@ -30,7 +30,7 @@
 
 //#include "concurrentqueue.h"
 #include "itti.hpp"
-#include "itti_msg_sxab.hpp"
+#include "itti_msg_n4.hpp"
 #include "msg_pfcp.hpp"
 #include "pfcp_session.hpp"
 #include "uint_generator.hpp"
@@ -76,7 +76,7 @@ class pfcp_switch {
   int pdn_if_index;
 
   util::uint_generator<uint64_t> seid_generator_;
-  util::uint_generator<teid_t> teid_s1u_generator_;
+  util::uint_generator<teid_t> teid_n3_generator__;
 
 #define TASK_UPF_PFCP_SWITCH_MAX_COMMIT_INTERVAL (0)
 #define TASK_UPF_PFCP_SWITCH_MIN_COMMIT_INTERVAL (1)
@@ -91,7 +91,7 @@ class pfcp_switch {
       up_seid2pfcp_sessions;
   folly::AtomicHashMap<
       teid_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>
-      ul_s1u_teid2pfcp_pdr;
+      ul_n3_teid2pfcp_pdr;
   folly::AtomicHashMap<
       uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>
       ue_ipv4_hbo2pfcp_pdr;
@@ -138,7 +138,7 @@ class pfcp_switch {
 
   uint64_t generate_seid() { return seid_generator_.get_uid(); };
 
-  teid_t generate_teid_s1u() { return teid_s1u_generator_.get_uid(); };
+  teid_t generate_teid_n3() { return teid_n3_generator__.get_uid(); };
 
   void setup();
 
@@ -150,7 +150,7 @@ class pfcp_switch {
   void add_pfcp_dl_pdr_by_ue_ip(
       const uint32_t ue_ip, std::shared_ptr<pfcp::pfcp_pdr>&);
 
-  pfcp::fteid_t generate_fteid_s1u();
+  pfcp::fteid_t generate_fteid_n3();
   bool create_packet_in_access(
       std::shared_ptr<pfcp::pfcp_pdr>& pdr, const pfcp::fteid_t& in,
       uint8_t& cause);
