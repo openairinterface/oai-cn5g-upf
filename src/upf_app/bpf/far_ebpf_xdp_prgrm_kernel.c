@@ -137,9 +137,7 @@ static u32 create_outer_header_gtpu_ipv4(
   p_ip->daddr =
       p_far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
 
-  bpf_debug("IP SRC: %d, IP DST:%d", p_ip->saddr, p_ip->daddr);
-
-  bpf_debug("IP SRC: %d, IP DST:%d", p_ip->saddr, p_ip->daddr);
+  bpf_debug("IP SRC: 0x%x, IP DST: 0x%x", p_ip->saddr, p_ip->daddr);
 
   /*
   |----------------------------------------------------------------|
@@ -182,7 +180,7 @@ static u32 create_outer_header_gtpu_ipv4(
       "Destination MAC:%x:%x:%x:", p_eth->h_dest[0], p_eth->h_dest[1],
       p_eth->h_dest[2]);
   bpf_debug("%x:%x:%x", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
-  bpf_debug("Destination IP:%d, \t", p_ip->daddr);
+  bpf_debug("Destination IP:0x%x, \t", p_ip->daddr);
   // bpf_debug(
   //     "Port:%d",
   //     p_far->forwarding_parameters.outer_header_creation.port_number);
@@ -199,10 +197,9 @@ static u32 create_outer_header_gtpu_ipv4(
       ntohs(p_inner_ip->tot_len) +
       sizeof(struct gtpu_extn_pdu_session_container) + 4);
   p_gtpuh->teid =
-      bpf_htons(p_far->forwarding_parameters.outer_header_creation.teid);
-  // htobe32(p_far->forwarding_parameters.outer_header_creation.teid);
+      htobe32(p_far->forwarding_parameters.outer_header_creation.teid);
   bpf_debug(
-      "TEID from p_far:%d",
+      "TEID from p_far:0x%x",
       p_far->forwarding_parameters.outer_header_creation.teid);
   p_gtpuh->sequence      = GTP_SEQ;
   p_gtpuh->pdu_number    = GTP_PDU_NUMBER;
@@ -435,7 +432,7 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
 /*****************************************************************************************************************/
 SEC("xdp_far")
 int far_entry_point(struct xdp_md* p_ctx) {
-  bpf_debug("==< FAR CONTEXT >==");
+  bpf_debug("==========< FAR CONTEXT >==========");
 
   u32 key            = 0;
   pfcp_far_t_* p_far = bpf_map_lookup_elem(&m_far, &key);

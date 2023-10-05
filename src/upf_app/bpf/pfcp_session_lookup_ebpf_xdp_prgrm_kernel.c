@@ -43,7 +43,7 @@ static u32 tail_call_next_prog(
   map_key.ipv4_address = ipv4_address;
 
   bpf_debug(
-      "Packet Informations (TEID: %d, SRC INTERFACE: %d, IP SRC: 0x%x)", teid,
+      "Packet Informations (TEID: 0x%x, SRC INTERFACE: %d, IP: 0x%x)", teid,
       source_value, ipv4_address);
 
   // return XDP_DROP;
@@ -70,7 +70,7 @@ static u32 handle_downlink_traffic(struct xdp_md* p_ctx, u32 ue_ip_address) {
 
   if (teid_dl) {
     bpf_printk(
-        "TEID downlink: %d was found for UE IP SRC: %d", ue_ip_address,
+        "TEID downlink: 0x%x was found for UE IP: 0x%x", ue_ip_address,
         *teid_dl);
     tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
   }
@@ -113,8 +113,6 @@ static u32 handle_uplink_traffic(struct xdp_md* p_ctx, struct udphdr* udph) {
   }
 
   struct iphdr* p_ip_inner = (void*) (p_new_eth + 1);
-  // struct iphdr* p_ip_inner = (struct iphdr*) (p_new_eth + 1);
-  // struct iphdr* p_ip_inner = (struct iphdr *)(p_gtpuh + 1);
 
   if ((void*) p_ip_inner + sizeof(*p_ip_inner) > p_data_end) {
     bpf_debug("Invalid Inner IP packet");
