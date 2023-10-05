@@ -45,17 +45,33 @@ int xdp_redirect_gtpu(struct xdp_md* p_ctx) {
  * @return 0 (Success), 1 (Fail).
  */
 
-static u32 update_dst_mac_address(struct iphdr* p_ip, struct ethhdr* p_eth) {
-  void* p_mac_address;
+// static u32 update_dst_mac_address(struct iphdr* p_ip, struct ethhdr* p_eth) {
+//   void* p_mac_address;
 
-  p_mac_address = bpf_map_lookup_elem(&m_arp_table, &p_ip->daddr);
+//   p_mac_address = bpf_map_lookup_elem(&m_arp_table, &p_ip->daddr);
 
-  if (!p_mac_address) {
-    bpf_debug("MAC Address NOT Found for IP addr: %d", p_ip->daddr);
+//   if (!p_mac_address) {
+//     bpf_debug("MAC Address NOT Found for IP addr: 0x%x", p_ip->daddr);
+//     return 1;
+//   }
+
+//   memcpy(p_eth->h_dest, p_mac_address, sizeof(p_eth->h_dest));
+
+//   return 0;
+// }
+
+static u32 update_dst_mac_address(u32 ip, struct ethhdr* p_eth) {
+  struct s_arp_mapping* map_table;
+  memset(&map_table, 0, sizeof(struct s_arp_mapping));
+
+  map_table = bpf_map_lookup_elem(&m_arp_table, &ip);
+
+  if (!map_table) {
+    bpf_debug("MAC Address NOT Found for IP addr: 0x%x", ip);
     return 1;
   }
 
-  memcpy(p_eth->h_dest, p_mac_address, sizeof(p_eth->h_dest));
+  memcpy(p_eth->h_dest, map_table->mac_address, sizeof(p_eth->h_dest));
 
   return 0;
 }
@@ -67,7 +83,7 @@ static u32 get_ip_address_from_map(e_reference_point key) {
 
   if (map_element) {
     bpf_debug(
-        "Map Values: IP:%d, port:%d", map_element->ipv4_address,
+        "Map Values: IP:0x%x, port:%d", map_element->ipv4_address,
         map_element->port);
     return map_element->ipv4_address;
   }
@@ -167,7 +183,8 @@ static u32 create_outer_header_gtpu_ipv4(
       p_eth->h_dest[2]);
   bpf_debug("%x:%x:%x", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
 
-  void* p_mac_address = bpf_map_lookup_elem(&m_arp_table, &p_ip->daddr);
+  u32 n3_ip           = get_ip_address_from_map(N3_INTERFACE);
+  void* p_mac_address = bpf_map_lookup_elem(&m_arp_table, &n3_ip);
   if (!p_mac_address) {
     bpf_debug("MAC address not found!!");
     return XDP_DROP;
@@ -290,15 +307,13 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
     __builtin_memcpy(p_new_eth, p_eth, sizeof(*p_eth));
 
     // Update destination mac address.
-    struct iphdr* p_ip = (void*) (p_new_eth + 1);
+    // struct iphdr* p_ip = (void*) (p_new_eth + 1);
 
-    if ((void*) (p_ip + 1) > p_data_end) {
-      return XDP_DROP;
-    }
-
-    // update_dst_mac_address(p_ip, p_new_eth);
-
-    if (update_dst_mac_address(p_ip, p_new_eth)) {
+    // if ((void*) (p_ip + 1) > p_data_end) {
+    //   return XDP_DROP;
+    // }
+    u32 n6_ip = get_ip_address_from_map(N6_INTERFACE);
+    if (update_dst_mac_address(n6_ip, p_new_eth)) {
       return XDP_DROP;
     }
 

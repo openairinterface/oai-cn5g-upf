@@ -15,9 +15,10 @@
 #include "NextHopFinder.hpp"
 #include <errno.h>
 #include <arpa/inet.h>
-#include <traffic_classification.h>
-#include <ue_teid_qfi_matching.h>
+//#include <traffic_classification.h>
+// #include <ue_teid_qfi_matching.h>
 #include <session_mapping.h>
+#include <arp_table_maps.h>
 #include "upf_config.hpp"
 #include <thread>
 
@@ -222,8 +223,13 @@ void SessionProgramManager::updateARPTableForN6(
 
     uint32_t ipnexremoteN6hop =
         (is_little_endian()) ? htole32(remoteN6) : remoteN6;
-    pFARProgram->getArpTableMap()->update(
-        ipnexremoteN6hop, remoteN6MAC->ether_addr_octet, BPF_ANY);
+
+    struct s_arp_mapping map_table;
+    memset(&map_table, 0, sizeof(struct s_arp_mapping));
+    memcpy(map_table.mac_address, remoteN6MAC->ether_addr_octet, 6);
+    map_table.ipv4_address = ipnexremoteN6hop;
+
+    pFARProgram->getArpTableMap()->update(upfn6IP, map_table, BPF_ANY);
   } catch (const std::exception& ex) {
     Logger::upf_app().error(
         "Error: The ARP table was not updated for N6 Next HOP");
@@ -243,8 +249,13 @@ void SessionProgramManager::updateARPTableForN3(
 
     uint32_t ipnexremoteN3hop =
         (is_little_endian()) ? htole32(remoteN3) : remoteN3;
-    pFARProgram->getArpTableMap()->update(
-        ipnexremoteN3hop, remoteN3MAC->ether_addr_octet, BPF_ANY);
+
+    struct s_arp_mapping map_table;
+    memset(&map_table, 0, sizeof(struct s_arp_mapping));
+    memcpy(map_table.mac_address, remoteN3MAC->ether_addr_octet, 6);
+    map_table.ipv4_address = ipnexremoteN3hop;
+
+    pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
 
     for (auto it = farPrograms->begin(); it != farPrograms->end(); ++it) {
       // Access the members of the 'farprograms' struct
@@ -252,8 +263,7 @@ void SessionProgramManager::updateARPTableForN3(
       std::shared_ptr<FARProgram> pFARProgram = it->pFARProgram;
 
       if (savedSeid == seid) {
-        pFARProgram->getArpTableMap()->update(
-            ipnexremoteN3hop, remoteN3MAC->ether_addr_octet, BPF_ANY);
+        pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
       }
     }
   } catch (const std::exception& ex) {

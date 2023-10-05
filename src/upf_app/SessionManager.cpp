@@ -464,7 +464,7 @@ void SessionManager::updateBPFSessionDL(
   }
 
   Logger::upf_app().debug(
-      "Create the Downlink Direction Datapath for Session %d", seidul);
+      "Create the Downlink Direction Datapath for Session 0x%x", seidul);
   Logger::upf_app().debug(
       "PDI extracted from Downlink PDR %d",
       pdrHighPrecedenceDl->pdr_id.rule_id);
@@ -499,7 +499,7 @@ void SessionManager::updateBPFSessionDL(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
         ueIpAddress.ipv4_address.s_addr, pFar, true, teid_ul);
   } else {
-    Logger::upf_app().error("Uplink TEID not found for session: %d", seidul);
+    Logger::upf_app().error("Uplink TEID not found for session: 0x%x", seidul);
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
         ueIpAddress.ipv4_address.s_addr, pFar, true, 0);
@@ -515,7 +515,7 @@ void SessionManager::removeBPFSession(uint64_t seid) {
   }
 
   SessionProgramManager::getInstance().removePipeline(seid);
-  Logger::upf_app().debug("Session %d Has Been Removed Successfully", seid);
+  Logger::upf_app().debug("Session 0x%x Has Been Removed Successfully", seid);
 }
 
 /*****************************************************************************************************************/

@@ -18,8 +18,8 @@
 #include <utils/logger.h>
 #include <utils/utils.h>
 #include <next_prog_rule_key.h>
-#include <traffic_classification.h>
-#include <qfi_flow_mapping_table.h>
+//#include <traffic_classification.h>
+//#include <qfi_flow_mapping_table.h>
 
 #ifdef KERNEL_SPACE
 #include <linux/in.h>
