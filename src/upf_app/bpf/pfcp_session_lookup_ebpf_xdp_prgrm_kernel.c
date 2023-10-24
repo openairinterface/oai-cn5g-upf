@@ -172,15 +172,14 @@ static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
 
       // Check if the UDP header extends beyond the data end.
       if ((void*) (udph + 1) > p_data_end) {
-        bpf_printk("Invalid UDP packet\n");
+        bpf_printk("Invalid UDP packet");
         return XDP_DROP;
       }
 
       if (htons(udph->dest) == GTP_UDP_PORT) {
+        bpf_printk("This is a GTP traffic");
         return handle_uplink_traffic(p_ctx, udph);
       }
-
-      break;
     }
     default: {
       return handle_downlink_traffic(p_ctx, ip_dest);
