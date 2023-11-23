@@ -29,6 +29,7 @@
 # BASE IMAGE
 #---------------------------------------------------------------------
 FROM docker.io/rockylinux:8 as oai-upf-base
+ENV IS_DOCKERFILE=1
 
 RUN dnf install 'dnf-command(config-manager)' -y && \
     dnf config-manager --set-enabled powertools && \
