@@ -80,8 +80,6 @@ ENV TZ=Europe/Paris
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade --yes && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes \
-      python3 \
-      python3-jinja2 \
       tzdata \
       psmisc \
       net-tools \
@@ -135,7 +133,10 @@ COPY --from=oai-upf-builder \
     ./
 
 RUN ldconfig && \
-    ldd /openair-upf/bin/oai_upf && ldd /openair-upf/bin/bpftool
+    echo "ldd /openair-upf/bin/oai_upf" && \
+    ldd /openair-upf/bin/oai_upf && \
+    echo "ldd /openair-upf/bin/bpftool" && \
+    ldd /openair-upf/bin/bpftool
 
 # Copying template configuration files
 # The configuration folder will be flat
