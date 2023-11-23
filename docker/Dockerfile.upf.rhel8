@@ -29,6 +29,7 @@
 # BUILDER IMAGE
 #---------------------------------------------------------------------
 FROM registry.access.redhat.com/ubi8/ubi:latest as oai-upf-base
+ENV IS_DOCKERFILE=1
 
 # Entitlements and RHSM configurations are Open-Shift Secret and ConfigMaps
 # It is pre-requisite
