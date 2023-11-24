@@ -320,7 +320,6 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model/common_model.cmake)
 # folly glog dl double-conversion for FB folly library
 target_link_libraries (upf 
 ${ASAN}  -Wl,--start-group CN_UTILS
-asan 
 ${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so 
 APP
 SIMPLE_SWITCH

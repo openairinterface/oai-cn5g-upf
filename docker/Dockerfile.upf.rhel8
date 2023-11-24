@@ -104,6 +104,7 @@ RUN rm -f /etc/rhsm-host && \
       libicu \
       boost \
       libevent \
+      #libasan \
       findutils \
       libconfig && \
     pip3 install jinja2 && \

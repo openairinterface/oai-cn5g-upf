@@ -84,6 +84,7 @@ RUN microdnf update -y && \
       libicu \
       boost \
       libevent \
+      #libasan \
       findutils \
       libconfig && \
     pip3 install jinja2 && \
