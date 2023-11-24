@@ -29,14 +29,25 @@
 ################################
 SCRIPT=$(readlink -f ${BASH_SOURCE})
 THIS_SCRIPT_PATH=`dirname $SCRIPT`
-# Get the kernel version
-KERNEL_VERSION=$(uname -r | cut -d'-' -f1,2 | cut -d'.' -f1,2)
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.fb_folly
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.fmt
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.spdlog
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.yamlcpp
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.nlohmann
+
+# Get the kernel version
+KERNEL_VERSION=$(uname -r | cut -d'-' -f1,2 | cut -d'.' -f1,2)
+# Hack to pull at least 5.7 kernel code for build reasons
+MAJOR_VERSION=`echo $KERNEL_VERSION | cut -d'.' -f1,1`
+MINOR_VERSION=`echo $KERNEL_VERSION | cut -d'.' -f2,2`
+if [[ $MAJOR_VERSION -lt 5 ]]; then
+  KERNEL_VERSION=5.7
+elif [[ $MAJOR_VERSION -eq 5 ]]; then
+  if [[ $MINOR_VERSION -lt 7 ]]; then
+    KERNEL_VERSION=5.7
+  fi
+fi
 
 #-------------------------------------------------------------------------------
 install_libbpf_from_git() {
