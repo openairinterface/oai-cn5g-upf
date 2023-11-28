@@ -218,11 +218,10 @@ void SessionProgramManager::updateARPTableForN6(
     std::shared_ptr<FARProgram> pFARProgram, uint32_t dnIP, uint32_t upfn6IP) {
   try {
     NextHopFinder finder;
-    uint32_t remoteN6 = getRemoteIP(upfn6IP, dnIP);
-    auto remoteN6MAC  = finder.retrieveNextHopMAC(remoteN6);
-
-    uint32_t ipnexremoteN6hop =
-        (is_little_endian()) ? htole32(remoteN6) : remoteN6;
+    //uint32_t remoteN6 = getRemoteIP(upfn6IP, dnIP);
+    uint32_t ipnexremoteN6hop =(is_little_endian()) ? htole32(getRemoteIP(upfn6IP, dnIP)) : getRemoteIP(upfn6IP, dnIP);
+    auto remoteN6MAC  = finder.retrieveNextHopMAC(ipnexremoteN6hop);
+    
 
     struct s_arp_mapping map_table;
     memset(&map_table, 0, sizeof(struct s_arp_mapping));
@@ -244,11 +243,11 @@ void SessionProgramManager::updateARPTableForN3(
   try {
     NextHopFinder finder;
 
-    uint32_t remoteN3 = getRemoteIP(upfn3IP, gNodeBIP);
-    auto remoteN3MAC  = finder.retrieveNextHopMAC(remoteN3);
-
+    //uint32_t remoteN3 = getRemoteIP(upfn3IP, gNodeBIP);
+    
     uint32_t ipnexremoteN3hop =
-        (is_little_endian()) ? htole32(remoteN3) : remoteN3;
+        (is_little_endian()) ? htole32(getRemoteIP(upfn3IP, gNodeBIP)) : getRemoteIP(upfn3IP, gNodeBIP);
+    auto remoteN3MAC  = finder.retrieveNextHopMAC(ipnexremoteN3hop);
 
     struct s_arp_mapping map_table;
     memset(&map_table, 0, sizeof(struct s_arp_mapping));

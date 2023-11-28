@@ -48,14 +48,14 @@ u_int32_t NextHopFinder::retrieveNextHopIP(uint32_t destination_ip) {
   char command[COMMAND_MAX_LENGTH];
 
   struct in_addr addr;
-  addr.s_addr     = htonl(destination_ip);
+  addr.s_addr     = destination_ip;
   char* ipAddress = inet_ntoa(addr);
 
   if (ipAddress == nullptr) {
     Logger::upf_app().error("The Next Hop IPv4 WAS NOT Retrieved");
     throw std::runtime_error("The Next Hop IPv4 WAS NOT Retrieved");
   }
-
+  
   sprintf(command, "ip route get %s | awk '{print $3}'", ipAddress);
   u_int32_t next_hop_ip = htonl(inet_addr(executeCommand(command).c_str()));
 
@@ -67,7 +67,10 @@ u_int32_t NextHopFinder::retrieveNextHopIP(uint32_t destination_ip) {
   return next_hop_ip;
 }
 
+
+
 /*****************************************************************************************************************/
+
 ether_addr* NextHopFinder::retrieveNextHopMAC(uint32_t next_hop_ip) {
   char command[COMMAND_MAX_LENGTH];
 
