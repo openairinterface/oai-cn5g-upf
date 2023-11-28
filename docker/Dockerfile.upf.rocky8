@@ -71,8 +71,6 @@ ENV TZ=Europe/Paris
 # We install some debug tools for the moment in addition of mandatory libraries
 RUN microdnf update -y && \
     microdnf install -y \
-      python3 \
-      python3-pip \
       tzdata \
       procps-ng \
       psmisc \
@@ -87,7 +85,6 @@ RUN microdnf update -y && \
       #libasan \
       findutils \
       libconfig && \
-    pip3 install jinja2 && \
     microdnf clean all -y && \
     rm -rf /var/cache/yum /var/cache/dnf
 
@@ -109,6 +106,7 @@ COPY --from=oai-upf-builder \
     /usr/local/lib64/libyaml-cpp.so.0.* \
     /lib64/
 RUN ldconfig && \
+    echo "ldd /openair-upf/bin/oai_upf" && \
     ldd /openair-upf/bin/oai_upf
 
 # Copying template configuration files
