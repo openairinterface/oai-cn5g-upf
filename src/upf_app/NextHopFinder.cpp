@@ -55,7 +55,7 @@ u_int32_t NextHopFinder::retrieveNextHopIP(uint32_t destination_ip) {
     Logger::upf_app().error("The Next Hop IPv4 WAS NOT Retrieved");
     throw std::runtime_error("The Next Hop IPv4 WAS NOT Retrieved");
   }
-  
+
   sprintf(command, "ip route get %s | awk '{print $3}'", ipAddress);
   u_int32_t next_hop_ip = htonl(inet_addr(executeCommand(command).c_str()));
 
@@ -66,8 +66,6 @@ u_int32_t NextHopFinder::retrieveNextHopIP(uint32_t destination_ip) {
 
   return next_hop_ip;
 }
-
-
 
 /*****************************************************************************************************************/
 
