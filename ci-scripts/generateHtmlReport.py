@@ -58,7 +58,7 @@ class HtmlReport():
         with open(os.path.join(cwd, REPORT_NAME), 'w') as wfile:
             wfile.write(generate_header(args))
             wfile.write(generate_git_info(args))
-            wfile.write(build_summary(args, 'upf', '20', '8'))
+            wfile.write(build_summary(args, 'upf', '22', '8'))
             wfile.write(coding_formatting_log_check(args))
             wfile.write(analyze_sca_log_check())
             wfile.write(generate_footer())
