@@ -155,9 +155,9 @@ amf:
       nssai:
         - sst: 1
         - sst: 1
-          sd: 1
+          sd: 000001
         - sst: 222
-          sd: 123
+          sd: 00007B
   supported_integrity_algorithms:
     - "NIA0"
     - "NIA1"
