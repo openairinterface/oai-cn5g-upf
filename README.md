@@ -1,55 +1,63 @@
-<h1 align="center">
-    <a href="https://openairinterface.org/"><img src="https://openairinterface.org/wp-content/uploads/2015/06/cropped-oai_final_logo.png" alt="OAI" width="550"></a>
-</h1>
+------------------------------------------------------------------------------
+
+                             OPENAIR-CN-5G
+ An implementation of the 5G Core network by the OpenAirInterface community.
 
 ------------------------------------------------------------------------------
 
-                             OPENAIR-CN
-    An implementation of the Evolved Packet Core network.
-    
-------------------------------------------------------------------------------
-    
-<p align="center">
-    <a href="https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-upf/-/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-OAI--Public--V1.1-blue" alt="License"></a>
-    <a href="https://jenkins-oai.eurecom.fr/job/OAI-CN5G-UPF/"><img src="https://img.shields.io/jenkins/build?jobUrl=https%3A%2F%2Fjenkins-oai.eurecom.fr%2Fjob%2FOAI-CN5G-UPF%2F&label=build%20OAI-UPF"></a>
-</p>
+OPENAIR-CN-5G is an implementation of the 3GPP specifications for the 5G Core Network.
+At the moment, it contains the following network elements:
 
-  Openair-cn is an implementation of the 3GPP specifications concerning the 
-  Evolved Packet Core Networks, that means it contains the implementation of the
-  following network elements:
-
-  * MME,
-  * HSS,
-  * S-GW+P-GW.
+* Access and Mobility Management Function (**AMF**)
+* Authentication Server Management Function (**AUSF**)
+* Location Management Function (**LMF**)
+* Network Exposure Function (**NEF**)
+* Network Slicing Selection Function (**NSSF**)
+* Network Repository Function (**NRF**)
+* Network Data Analytics Function (**NWDAF**)
+* Policy Control Function (**PCF**)
+* Session Management Function (**SMF**)
+* Unified Data Management (**UDM**)
+* Unified Data Repository (**UDR**)
+* Unstructured Data Storage Function (**UDSF**)
+* User Plane Function (**UPF**)
   
-  Each element implementation has its own repository: this repository (`oai-upf`) is meant for UPF.
+Each element implementation has its own repository: this repository (`oai-upf`) is meant for UPF.
 
-# oai-upf
+# Licence info
 
-In the `Control / User Planes Separation` (a.k.a. `CUPS`) of SPGW, only the UPF (User Plane) implementation is available in this repo.
+It is distributed under `OAI Public License V1.1`.
+See [OAI Website for more details](https://www.openairinterface.org/?page_id=698).
 
-This component can be deployed:
-
-*  As first intended as `4G-LTE` Core Network User Plane function.
-*  But now also as a `5G` Core Network User Plane function (a.k.a. `UPF`)
-
-It is distributed under `OAI Public License V1.1`. See [OAI Website for more details](https://www.openairinterface.org/?page_id=698).
-
-The text for `OAI Public License V1.1` is also available under [LICENSE](LICENSE) file in the same directory.
+The text for `OAI Public License V1.1` is also available under [LICENSE](LICENSE)
+file at the root of this repository.
 
 # Where to start
 
-  The Openair-cn UPF code is written, executed, and tested on `UBUNTU` server `bionic` version.
+The Openair-CN-5G UPF code is written, executed, and tested on UBUNTU server focal/jammy version.
+Other Linux distributions support will be added later on.
 
-  It is also built and tested on `RHEL8` platform (such as `Openshift`).
-
-  More details on the deployment options and the supported feature set is available on this [page](docs/FEATURE_SET.md).
+More details on the supported feature set is available on this [page](docs/FEATURE_SET.md).
 
 # Collaborative work
 
-  This source code is managed through a GitLab, a collaborative development platform
+This source code is managed through a GITLAB server, a collaborative development platform:
 
-  Process is explained in [CONTRIBUTING](CONTRIBUTING.md) file.
+*  URL: [https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-upf](https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-upf).
+
+Process is explained in [CONTRIBUTING](CONTRIBUTING.md) file.
+
+# Contribution requests
+
+In a general way, anybody who is willing can contribute on any part of the
+code in any network component.
+
+Contributions can be simple bugfixes, advices and remarks on the design,
+architecture, coding/implementation.
+
+# Release Notes
+
+They are available on the [CHANGELOG](CHANGELOG.md) file.
 
 # Directory structure
 
