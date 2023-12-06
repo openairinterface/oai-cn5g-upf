@@ -38,14 +38,18 @@ source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.nlohmann
 
 # Get the kernel version
 KERNEL_VERSION=$(uname -r | cut -d'-' -f1,2 | cut -d'.' -f1,2)
-# Hack to pull at least 5.7 kernel code for build reasons
+# The validated kernel versions for bpf-tool are between 5.7 and 5.15
 MAJOR_VERSION=`echo $KERNEL_VERSION | cut -d'.' -f1,1`
 MINOR_VERSION=`echo $KERNEL_VERSION | cut -d'.' -f2,2`
 if [[ $MAJOR_VERSION -lt 5 ]]; then
   KERNEL_VERSION=5.7
+elif [[ $MAJOR_VERSION -gt 5 ]]; then
+  KERNEL_VERSION=5.15
 elif [[ $MAJOR_VERSION -eq 5 ]]; then
   if [[ $MINOR_VERSION -lt 7 ]]; then
     KERNEL_VERSION=5.7
+  elif [[ $MINOR_VERSION -gt 15 ]]; then
+    KERNEL_VERSION=5.15
   fi
 fi
 
@@ -85,6 +89,7 @@ install_libbpf_from_git() {
         binutils-dev \
         libbpf-dev \
         libelf-dev \
+        libcap-dev \
         libpcap-dev \
         zlib1g-dev \
         llvm \
