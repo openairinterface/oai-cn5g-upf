@@ -115,7 +115,7 @@ class SessionProgramManager {
   void createPipeline(
       uint32_t seid, uint32_t teid1, uint8_t sourceInterface,
       uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
-      bool isModification, uint32_t teid2, uint8_t qfi);
+      bool isModification, uint32_t teid2);
 
   /*****************************************************************************************************************/
   void initializeNextRuleProgIndexKey(
@@ -131,7 +131,7 @@ class SessionProgramManager {
   /*****************************************************************************************************************/
   void storeSessionMappingMap(
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-      uint32_t sied, uint32_t teid_ul, uint32_t teid_dl);
+      uint32_t ue_ip_address, uint32_t teid_dl);
 
   /*****************************************************************************************************************/
   void storeFARInFARMap(
@@ -156,13 +156,13 @@ class SessionProgramManager {
   uint32_t getGnodebIp(std::shared_ptr<pfcp::pfcp_far> pFar);
 
   /*****************************************************************************************************************/
-  void storeUeQfiTeidMap(
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-      uint32_t ue_ip_address, uint8_t qfi, uint32_t teid_ul);
-
-  /*****************************************************************************************************************/
   void updatePipeline(
       uint32_t seid, uint32_t teid, uint32_t gNBIpAddress, bool isModification);
+  /*****************************************************************************************************************/
+  //   void storeUeQfiTeidMap(
+  //       std::shared_ptr<PFCP_Session_LookupProgram>
+  //       pPFCP_Session_LookupProgram, uint32_t ue_ip_address, uint8_t qfi,
+  //       uint32_t teid_ul);
 
   /*****************************************************************************************************************/
   // void updateMap(std::shared_ptr<PFCP_Session_LookupProgram>

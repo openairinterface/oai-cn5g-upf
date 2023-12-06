@@ -82,6 +82,7 @@ RUN microdnf update -y && \
       libicu \
       boost \
       libevent \
+      #libasan \
       findutils \
       libconfig && \
     microdnf clean all -y && \

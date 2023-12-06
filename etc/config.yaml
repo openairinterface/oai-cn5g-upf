@@ -62,17 +62,18 @@ nfs:
   upf:
     host: oai-upf
     sbi:
-      port_http1: 80
+      #port_http1: 80
+      port: 8080
       api_version: v1
       interface_name: demo-oai
     n3:
-      interface_name: demo-oai
+      interface_name: demo-n3
       port: 2152
     n4:
       interface_name: demo-oai
       port: 8805
     n6:
-      interface_name: demo-oai
+      interface_name: demo-n6
     n9:
       interface_name: demo-oai
       port: 2152
@@ -173,7 +174,8 @@ smf:
     use_local_pcc_rules: yes # Use infos from local_pcc_rules or from PCF
   # we resolve from NRF, this is just to configure usage_reporting
   upfs:
-    - host: oai-spgwu
+    # - host: oai-spgwu
+    - host: oai-upf
       config:
         enable_usage_reporting: no
   ue_dns:
@@ -195,7 +197,7 @@ smf:
         session_ambr_dl: "400Mbps"
     - single_nssai:
         sst: 1
-        sd: 000001
+        sd: 1
       dnn: "oai.ipv4"
       qos_profile:
         5qi: 9
@@ -203,7 +205,7 @@ smf:
         session_ambr_dl: "200Mbps"
     - single_nssai:
         sst: 222
-        sd: 00007B
+        sd: 123
       dnn: "default"
       qos_profile:
         5qi: 9
@@ -212,8 +214,8 @@ smf:
 
 upf:
   support_features:
-    enable_bpf_datapath: no    # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
-    enable_snat: yes           # If "on": Source natting is done for UE, DEFAULT= off
+    enable_bpf_datapath: yes   # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
+    enable_snat: no           # If "on": Source natting is done for UE, DEFAULT= off
   remote_n6_gw: oai-ext-dn
   smfs:
     - host: oai-smf            # To be used for PFCP association in case of no-NRF
@@ -228,6 +230,17 @@ upf:
       - sNssai: *custom_slice
         dnnUpfInfoList:
           - dnn: "default"
+
+  # upf_info:
+  #   - sst: 1
+  #     sd: 123
+  #     dnnList:
+  #       - dnn: oai
+  #       - dnn: default
+  #   - sst: 1
+  #     sd: 0xFFFFFF
+  #     dnnList:
+  #       - dnn: oai.ipv4
 
 ## DNN configuration
 dnns:
@@ -246,3 +259,17 @@ dnns:
   - dnn: "ims"
     pdu_session_type: "IPV4V6"
     ipv4_pool: "14.1.1.2 - 14.1.1.253"
+
+# dnns:
+#   - dnn: "oai"
+#     pdu_session_type: "IPV4"
+#     ipv4_subnet: "12.1.1.0/24"
+#   - dnn: "oai.ipv4"
+#     pdu_session_type: "IPV4"
+#     ipv4_subnet: "12.1.2.0/24"
+#   - dnn: "default"
+#     pdu_session_type: "IPV4"
+#     ipv4_subnet: "12.1.3.0/24"
+#   - dnn: "ims"
+#     pdu_session_type: "IPV4V6"
+#     ipv4_subnet: "12.1.4.0/24"

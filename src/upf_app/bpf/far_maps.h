@@ -5,6 +5,7 @@
 #include <linux/bpf.h>
 #include <pfcp/pfcp_far.h>
 #include <types.h>
+#include "arp_table_maps.h"
 
 #define MAX_INTERFACES 10
 #define ARP_ENTRIES_MAX_SIZE 12
@@ -31,11 +32,18 @@ struct bpf_map_def SEC("maps") m_redirect_interfaces = {
 /*****************************************************************************************************************/
 // Static ARP Table. Used to get the MAC address of the next hop.
 // TODO: Pin this maps. It does not depend on the session program
+// struct bpf_map_def SEC("maps") m_arp_table = {
+//     .type        = BPF_MAP_TYPE_HASH,
+//     .key_size    = sizeof(u32),           // IPv4 address
+//     .value_size  = 6,                     // MAC address
+//     .max_entries = ARP_ENTRIES_MAX_SIZE,  // 2,
+// };
+
 struct bpf_map_def SEC("maps") m_arp_table = {
     .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(u32),           // IPv4 address
-    .value_size  = 6,                     // MAC address
-    .max_entries = ARP_ENTRIES_MAX_SIZE,  // 2,
+    .key_size    = sizeof(u32),                   // IPv4 address
+    .value_size  = sizeof(struct s_arp_mapping),  // <IP Address, MAC address>
+    .max_entries = ARP_ENTRIES_MAX_SIZE,          // 2,
 };
 
 /*****************************************************************************************************************/

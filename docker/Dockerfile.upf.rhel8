@@ -102,6 +102,7 @@ RUN rm -f /etc/rhsm-host && \
       libicu \
       boost \
       libevent \
+      #libasan \
       findutils \
       libconfig && \
     microdnf clean all -y && \

@@ -89,6 +89,9 @@ RUN apt-get update && \
       sudo \
       iptables \
       netbase \
+# Ubuntu 20 --> libasan5
+# Ubuntu 22 --> libasan6
+      libasan? \
       libgssapi-krb5-2 \
 # Ubuntu 18/20 --> libldap-2.4-2
       libldap-2.4-2 \
@@ -123,7 +126,6 @@ COPY --from=oai-upf-builder \
     /usr/lib/x86_64-linux-gnu/libpsl.so.5 \
     /usr/local/lib/libfmt.so \
     /usr/local/lib/libyaml-cpp.so.0.? \
-    /usr/lib/x86_64-linux-gnu/libasan.so.5 \
     /usr/lib/x86_64-linux-gnu/libbfd-2.34-system.so \
     /usr/lib/x86_64-linux-gnu/libopcodes-2.34-system.so \
 # Ubuntu 18 --> boost 67 will be copied
