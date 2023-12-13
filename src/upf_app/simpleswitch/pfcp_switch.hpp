@@ -46,6 +46,9 @@
 #include <thread>
 #include <vector>
 
+#include <SessionManager.h>
+#include <variant>
+
 namespace oai {
 namespace upf {
 namespace app {
@@ -175,6 +178,21 @@ class pfcp_switch {
 
   bool no_internal_loop(struct iphdr* const iph, const std::size_t num_bytes);
   void send_to_core(char* const ip_packet, const ssize_t len);
+
+  using itti_n4_session_request = std::variant<
+      itti_n4_session_establishment_request*,
+      itti_n4_session_modification_request*, itti_n4_session_deletion_request*>;
+
+  void start_datapath(
+      itti_n4_session_establishment_request* establishment_req,
+      itti_n4_session_modification_request* modification_request,
+      itti_n4_session_deletion_request* deletion_req, pfcp::pfcp_session* s,
+      std::shared_ptr<SessionManager> obj,
+      void (SessionManager::*crud_func)(
+          std::shared_ptr<pfcp::pfcp_session>,
+          itti_n4_session_establishment_request* est_req,
+          itti_n4_session_modification_request* mod_req,
+          itti_n4_session_deletion_request* del_req));
 
   void handle_pfcp_session_establishment_request(
       std::shared_ptr<itti_n4_session_establishment_request> sreq,
