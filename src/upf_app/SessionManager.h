@@ -18,6 +18,8 @@
 #include <pfcp_session.hpp>
 #include <unordered_map>
 
+#include "itti_msg_n4.hpp"
+
 class BPFMap;
 class ForwardingActionRules;
 class PacketDetectionRules;
@@ -35,9 +37,11 @@ class SessionBpf;
  * maps. It communicate with BPF maps in order to update its PDRs and FARs. This
  * class does not validate the input.
  */
+
 class SessionManager {
  public:
   // Set of PDRs.
+
   using pdrs_t = std::vector<std::shared_ptr<PacketDetectionRules>>;
   /*****************************************************************************************************************/
 
@@ -78,7 +82,11 @@ class SessionManager {
    * @param pSession The PFCP session which contains the context that will be
    * deployed.
    */
-  void createBPFSession(std::shared_ptr<pfcp::pfcp_session> pSession);
+  void createBPFSession(
+      std::shared_ptr<pfcp::pfcp_session> pSession,
+      itti_n4_session_establishment_request* est_req,
+      itti_n4_session_modification_request* mod_req,
+      itti_n4_session_deletion_request* del_req);
   /*****************************************************************************************************************/
 
   /**
@@ -86,7 +94,24 @@ class SessionManager {
    *
    * @param pSession The session object to be updated.
    */
-  void updateBPFSession(std::shared_ptr<pfcp::pfcp_session> pSession);
+  void updateBPFSession(
+      std::shared_ptr<pfcp::pfcp_session> pSession,
+      itti_n4_session_establishment_request* est_req,
+      itti_n4_session_modification_request* mod_req,
+      itti_n4_session_deletion_request* del_req);
+
+  /*****************************************************************************************************************/
+  /**
+   * @brief Remove BPF pipeline.
+   *
+   * @param seid  The PFCP session which contains the context that will be
+   * removed.
+   */
+  void removeBPFSession(
+      std::shared_ptr<pfcp::pfcp_session> pSession,
+      itti_n4_session_establishment_request* est_req,
+      itti_n4_session_modification_request* mod_req,
+      itti_n4_session_deletion_request* del_req);
 
   /*****************************************************************************************************************/
   void createBPFSessionUL(
@@ -129,15 +154,6 @@ class SessionManager {
   uint32_t findUplinkTeid(
       uint32_t seid,
       const std::vector<std::shared_ptr<pfcp::pfcp_session>>& sessions);
-
-  /*****************************************************************************************************************/
-  /**
-   * @brief Remove BPF pipeline.
-   *
-   * @param seid  The PFCP session which contains the context that will be
-   * removed.
-   */
-  void removeBPFSession(uint64_t seid);
 
   /*****************************************************************************************************************/
   static bool comparePDR(

@@ -49,8 +49,6 @@
 #include <stdexcept>
 #include <net/ethernet.h>
 
-#include <SessionManager.h>
-
 static std::shared_ptr<SessionManager> spSessionManager;
 
 using namespace pfcp;
@@ -621,6 +619,41 @@ bool pfcp_switch::create_packet_in_access(
 }
 
 //------------------------------------------------------------------------------
+void pfcp_switch::start_datapath(
+    itti_n4_session_establishment_request* establishment_request,
+    itti_n4_session_modification_request* modification_request,
+    itti_n4_session_deletion_request* deletion_request, pfcp::pfcp_session* s,
+    std::shared_ptr<SessionManager> obj,
+    void (SessionManager::*crud_func)(
+        std::shared_ptr<pfcp::pfcp_session>,
+        itti_n4_session_establishment_request* est_req,
+        itti_n4_session_modification_request* mod_req,
+        itti_n4_session_deletion_request* del_req)) {
+  std::shared_ptr<pfcp::pfcp_session> pSession =
+      std::make_shared<pfcp::pfcp_session>(*s);
+  obj = UserPlaneComponent::getInstance().getSessionManager();
+
+  itti_n4_session_establishment_request* est_req = establishment_request;
+  itti_n4_session_modification_request* mod_req  = modification_request;
+  itti_n4_session_deletion_request* del_req      = deletion_request;
+
+  if (!del_req) {
+    obj->sessions.push_back(pSession);
+    (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
+  } else {
+    auto& sessions = spSessionManager->sessions;
+    auto it        = std::find(sessions.begin(), sessions.end(), pSession);
+
+    if (it != sessions.end()) {
+      sessions.erase(it);  // Erase the element from the vector
+      (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
+    } else {
+      Logger::upf_app().warn("Session does not exist");
+    }
+  }
+}
+
+//------------------------------------------------------------------------------
 void pfcp_switch::handle_pfcp_session_establishment_request(
     std::shared_ptr<itti_n4_session_establishment_request> sreq,
     itti_n4_session_establishment_response* resp) {
@@ -690,13 +723,11 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
       }
 
       if (upf_cfg.enable_bpf_datapath) {
-        std::shared_ptr<pfcp::pfcp_session> pSession =
-            std::make_shared<pfcp::pfcp_session>(*session);
-        spSessionManager =
-            UserPlaneComponent::getInstance().getSessionManager();
-        spSessionManager->sessions.push_back(pSession);
-        // bool isModification = false;
-        spSessionManager->createBPFSession(pSession);
+        Logger::pfcp_switch().info(
+            "Establishing datapath: create PDRs + create FARs");
+        start_datapath(
+            req, NULL, NULL, session, spSessionManager,
+            &SessionManager::createBPFSession);
       }
 
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
@@ -766,6 +797,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
     }
   }
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::handle_pfcp_session_modification_request(
     std::shared_ptr<itti_n4_session_modification_request> sreq,
@@ -792,7 +824,15 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     resp->seid = session->cp_fseid.seid;
 
     for (auto it : req->pfcp_ies.remove_pdrs) {
+      if (upf_cfg.enable_bpf_datapath) {
+        Logger::pfcp_switch().info("Modifying datapath: remove PDRs");
+        start_datapath(
+            NULL, req, NULL, session, spSessionManager,
+            &SessionManager::updateBPFSession);
+      }
+
       remove_pdr& pdr = it;
+
       if (not session->remove(pdr, cause, offending_ie.offending_ie)) {
         if (cause.cause_value ==
             CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
@@ -805,7 +845,15 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     }
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.remove_fars) {
+        if (upf_cfg.enable_bpf_datapath) {
+          Logger::pfcp_switch().info("Modifying datapath: remove FARs");
+          start_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::updateBPFSession);
+        }
+
         remove_far& far = it;
+
         if (not session->remove(far, cause, offending_ie.offending_ie)) {
           if (cause.cause_value ==
               CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
@@ -820,6 +868,12 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.create_fars) {
+        if (upf_cfg.enable_bpf_datapath) {
+          Logger::pfcp_switch().info("Modifying datapath: create FARs");
+          start_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::updateBPFSession);
+        }
         create_far& cr_far = it;
         if (not session->create(cr_far, cause, offending_ie.offending_ie)) {
           break;
@@ -865,17 +919,23 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       }
 
       if (upf_cfg.enable_bpf_datapath) {
-        std::shared_ptr<pfcp::pfcp_session> pSession =
-            std::make_shared<pfcp::pfcp_session>(*session);
-        spSessionManager =
-            UserPlaneComponent::getInstance().getSessionManager();
-        spSessionManager->sessions.push_back(pSession);
-        spSessionManager->updateBPFSession(pSession);
+        Logger::pfcp_switch().info(
+            "Modifying datapath: create PDRs + create FARs");
+        start_datapath(
+            NULL, req, NULL, session, spSessionManager,
+            &SessionManager::updateBPFSession);
       }
     }
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.update_pdrs) {
+        if (upf_cfg.enable_bpf_datapath) {
+          Logger::pfcp_switch().info("Modifying datapath: update PDRs");
+          start_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::updateBPFSession);
+        }
+
         update_pdr& pdr     = it;
         uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
         if (not session->update(pdr, cause_value)) {
@@ -886,6 +946,13 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
       for (auto it : req->pfcp_ies.update_fars) {
+        if (upf_cfg.enable_bpf_datapath) {
+          Logger::pfcp_switch().info("Modifying datapath: update FARs");
+          start_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::updateBPFSession);
+        }
+
         update_far& far     = it;
         uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
         if (not session->update(far, cause_value)) {
@@ -955,27 +1022,17 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
   if (not get_pfcp_session_by_up_seid(req->seid, s)) {
     cause.cause_value = CAUSE_VALUE_SESSION_CONTEXT_NOT_FOUND;
   } else {
-    resp->seid = s->cp_fseid.seid;
+    pfcp::pfcp_session* session = s.get();
+    resp->seid                  = s->cp_fseid.seid;
+
     if (upf_cfg.enable_bpf_datapath) {
-      std::shared_ptr<pfcp::pfcp_session> pSession =
-          std::make_shared<pfcp::pfcp_session>(*s);
-      spSessionManager = UserPlaneComponent::getInstance().getSessionManager();
-      // spSessionManager->sessions.push_back(pSession);
-
-      auto& sessions = spSessionManager->sessions;
-
-      // Find the iterator pointing to pSession in the vector
-      auto it = std::find(sessions.begin(), sessions.end(), pSession);
-
-      // Check if pSession was found before erasing it
-      if (it != sessions.end()) {
-        sessions.erase(it);  // Erase the element from the vector
-        spSessionManager->removeBPFSession(pSession->get_up_seid());
-      } else {
-        // Element not found, handle the case as needed
-        Logger::upf_app().warn("Session %d does not exist", resp->seid);
-      }
+      Logger::pfcp_switch().info(
+          "Deleting datapath: delete PDRs + delete FARs");
+      start_datapath(
+          NULL, NULL, req, session, spSessionManager,
+          &SessionManager::removeBPFSession);
     }
+
     remove_pfcp_session(s);
   }
   pfcp_associations::get_instance().notify_del_session(fseid);
