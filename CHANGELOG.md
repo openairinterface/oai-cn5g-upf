@@ -1,5 +1,28 @@
 # RELEASE NOTES: #
 
+## v2.0.0 -- December 2023 ##
+
+* Features
+  - Support YAML configuration file
+    * Yaml validation default value
+  - Implemented an eBPF-based solution in parallel of the current Simple-Switch solution
+    * This is a runtime option
+  - De-register towards NRF on exit
+  - Enable PFCP association request for no NRF case
+* Tech debt
+  - Switching to clang-format-12
+  - Published image on Docker-Hub is using now Ubuntu-22 as base image
+  - Ubuntu-18 is no longer supportable due to eBPF
+
+## v1.5.1 -- May 2023 ##
+
+* Support for rocky linux 8.7
+* Increasing size of hashmap tables
+* Code Refactoring for:
+  * Logging mechanism (runtime log level selection)
+* Published image on Docker-Hub is using now Ubuntu-20 as base image
+  * We will soon obsolete the build system for Ubuntu18.04
+
 ## v1.5.0 -- January 2023 ##
 
 * feat(fqdn): giving some time for FQDN resolution
