@@ -1,0 +1,29 @@
+define: &trex_app
+  version: &version v3.00
+  sha256sum: 290c1be468335a2de2e69f217b139c9b1198732e529bfd069348d05297548b8a
+  download_path: &download_path /tmp/
+
+## Trex Server Configuration ##
+trex_server:
+  hostname: dn
+  username: ubuntu
+  ip: 172.21.19.56
+  async_port: 4501
+  sync_port: 4500
+  trex_server_app:
+    <<: *trex_app
+    #path: !join [*download_path, *version]
+
+
+## Trex Client Configuration ##
+trex_client:
+  hostname: 
+  username: 
+  ip:
+  client_ssh:
+  trex_client_app:
+    <<: *trex_app
+    relative_path: trex_client/
+    relative_lib_path: interactive/
+
+
