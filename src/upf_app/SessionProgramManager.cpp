@@ -180,29 +180,6 @@ void SessionProgramManager::storeSessionMappingMap(
 }
 
 /*****************************************************************************************************************/
-// // Helper function to store UE QFI
-// void SessionProgramManager::storeUeQfiTeidMap(
-//     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-//     uint32_t ue_ip_address, uint8_t qfi, uint32_t teid_ul) {
-//   s_ue_qfi key;
-
-//   __builtin_memset(&key, 0, sizeof(struct s_ue_qfi));
-
-//   if (is_little_endian()) {
-//     key.src_ip = htole32(ue_ip_address);
-//     teid_ul    = htobe32(teid_ul);
-//   } else {
-//     key.src_ip = ue_ip_address;
-//     teid_ul    = htole32(teid_ul);
-//   }
-
-//   key.qfi = qfi;
-
-//   pPFCP_Session_LookupProgram->getUeQfiTeidMap()->update(key, teid_ul,
-//   BPF_ANY);
-// }
-
-/*****************************************************************************************************************/
 // Helper function to store the FAR in the FAR program
 void SessionProgramManager::storeFARInFARMap(
     std::shared_ptr<FARProgram> pFARProgram,
@@ -220,7 +197,7 @@ void SessionProgramManager::updateARPTableForN6(
     NextHopFinder finder;
     // uint32_t remoteN6 = getRemoteIP(upfn6IP, dnIP);
     uint32_t ipnexremoteN6hop = (is_little_endian()) ?
-                                    htole32(getRemoteIP(upfn6IP, dnIP)) :
+                                    htobe32(getRemoteIP(htobe32(upfn6IP), htobe32(dnIP))) :
                                     getRemoteIP(upfn6IP, dnIP);
     auto remoteN6MAC          = finder.retrieveNextHopMAC(ipnexremoteN6hop);
 
@@ -247,7 +224,7 @@ void SessionProgramManager::updateARPTableForN3(
     // uint32_t remoteN3 = getRemoteIP(upfn3IP, gNodeBIP);
 
     uint32_t ipnexremoteN3hop = (is_little_endian()) ?
-                                    htole32(getRemoteIP(upfn3IP, gNodeBIP)) :
+                                    htobe32(getRemoteIP(htobe32(upfn3IP), htobe32(gNodeBIP))) :
                                     getRemoteIP(upfn3IP, gNodeBIP);
     auto remoteN3MAC          = finder.retrieveNextHopMAC(ipnexremoteN3hop);
 

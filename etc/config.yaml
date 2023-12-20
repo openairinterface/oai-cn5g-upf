@@ -64,12 +64,12 @@ nfs:
     sbi:
       port: 8080
       api_version: v1
-      interface_name: enp1s0
+      interface_name: demo-oai
     n3:
       interface_name: enp8s0
       port: 2152
     n4:
-      interface_name: demo-oai
+      interface_name: enp1s0
       port: 8805
     n6:
       interface_name: enp7s0
@@ -218,7 +218,7 @@ smf:
 upf:
   support_features:
     enable_bpf_datapath: yes    # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
-  remote_n6_gw: oai-ext-dn
+  remote_n6_gw: n6_bridge
   upf_info:
     sNssaiUpfInfoList:
       - sNssai: *embb_slice1

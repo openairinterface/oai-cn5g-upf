@@ -84,7 +84,7 @@ ether_addr* NextHopFinder::retrieveNextHopMAC(uint32_t next_hop_ip) {
   sprintf(command, "sudo arping -c 1 %s | awk '/from/ {print $4}'", ipAddress);
   // Logger::upf_app().debug("Next Hop SRC IP = %s", ipAddress);
   Logger::upf_app().debug(
-      "Next Hop <SRC IP, MAC Address> = <%s, %s>", ipAddress,
+      "Next Hop <SRC IP, MAC Address> = %s, %s", ipAddress,
       executeCommand(command).c_str());
 
   ether_addr* next_hop_mac;
