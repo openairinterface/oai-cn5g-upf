@@ -15,13 +15,14 @@ from scapy.contrib.pfcp import IE_ApplyAction, IE_CreateFAR, IE_CreatePDR, IE_De
     PFCPSessionModificationRequest, \
     IE_CPFunctionFeatures, PFCPSessionEstablishmentResponse, IE_CreatedPDR, IE_QFI, PFCPHeartbeatResponse, \
     IE_SequenceNumber, PFCPHeartbeatRequest
-from scapy.layers.inet import IP, UDP, ICMP
+from scapy.layers.inet import IP, UDP
 
 from scapy.all import sniff
 
 SMF_ID = "192.168.100.1"
 SEQ = 16770407
 FTEID_UL = 2596996162
+FTEID_DL = 2547891023
 UE_IP = "12.1.1.2"
 # gNB_IP = "192.168.72.1"
 gNB_IP = "192.168.101.3"
@@ -116,20 +117,20 @@ def session_establishment_ul(seid_):
 
 def session_modification_dl(seid_):
     return PFCPSessionModificationRequest(IE_list=[
+        # IE_NodeId(id_type="FQDN", id=SMF_ID),
+        IE_FSEID(seid=seid_, ipv4="192.168.100.1", v4=1),
         create_pdr_dl(2, 2, "core.oai.org", "permit out ip from any to assigned", "Core", UE_IP, 1),
-        create_far_dl(2, "access.oai.org", FTEID_UL, gNB_IP),
-        # IE_FSEID(seid=seid_, ipv4="192.168.100.2", v4=1),
-        IE_NodeId(id_type="FQDN", id=SMF_ID)
+        create_far_dl(2, "access.oai.org", FTEID_DL, gNB_IP),
     ])
 
 
-def icmp_request_ul(fteid, dst ="8.8.8.8"):
-    res = scapy.sendrecv.sr1(IP(src=f"{gNB_IP}", dst="192.168.101.2", flags=["DF"]) /
-                             UDP(sport=2152, dport=2152) / GTP_U_Header(teid=fteid) / GTPPDUSessionContainer(type=1,
-                                                                                                             QFI=8) /
-                             IP(src=f"{UE_IP}", dst=dst, flags=["DF"]) / ICMP()/(b"1"*48)
-                             )
-    print(res)
+# def icmp_request_ul(fteid, dst ="8.8.8.8"):
+#     res = scapy.sendrecv.sr1(IP(src=f"{gNB_IP}", dst="192.168.101.2", flags=["DF"]) /
+#                              UDP(sport=2152, dport=2152) / GTP_U_Header(teid=fteid) / GTPPDUSessionContainer(type=1,
+#                                                                                                              QFI=8) /
+#                              IP(src=f"{UE_IP}", dst=dst, flags=["DF"]) / ICMP()/(b"1"*48)
+#                              )
+#     print(res)
 
 
 def association():
@@ -192,7 +193,7 @@ def main():
     #heartbeat_sniffer = Sniffer(if_name="demo-oai", filter="dst host 192.168.100.2 and udp port 8805")
     #icmp_sniffer = Sniffer(if_name="cn5g-access", filter="dst host 192.168.72.1 and icmp")
 
-    print("Starting heartbeat and ICMP sniffer in background")
+    # print("Starting heartbeat and ICMP sniffer in background")
     #heartbeat_sniffer.start()
     #icmp_sniffer.start()
 
@@ -216,7 +217,7 @@ def main():
     # TODO this hangs currently, because scapy does not find the return value. I really would like to verify here
     # if there is a response
     #icmp_request_ul(created_fteid, "192.168.73.135")
-    icmp_request_ul(created_fteid, "8.8.8.8")
+    # icmp_request_ul(created_fteid, "8.8.8.8")
 
     time.sleep(1)
 

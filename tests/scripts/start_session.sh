@@ -28,9 +28,9 @@ send_keys_upf(){
   #---------------------------------------------------------#
   #                        PANEL 0                          #
   #---------------------------------------------------------#
-  tmux send-keys -t $session_name:0.0 "ssh "${DUT_NAME}"" C-m
+  tmux send-keys -t $session_name:0.0 "sleep 20; ssh "${DUT_NAME}"" C-m
   tmux send-keys -t $session_name:0.0 "cd "${DUT_UPF_WORKSPACE_STANDALONE}"" C-m
-  tmux send-keys -t $session_name:0.0 "ip link set dev demo-n3 xdp off; ip link set dev demo-n6 xdp off" C-m
+  tmux send-keys -t $session_name:0.0 "ip link set dev "${UPF_N3_INTERFACE}" xdp off; ip link set dev "${UPF_N6_INTERFACE}" xdp off" C-m
   #tmux send-keys -t $session_name:0.0 "make clean && make setup && make install" C-m
   tmux send-keys -t $session_name:0.0 "upf -o -c etc/config.yaml" C-m
 
@@ -44,12 +44,12 @@ send_keys_upf(){
   #---------------------------------------------------------#
   #                        PANEL 2                          #
   #---------------------------------------------------------#
-  # tmux send-keys -t $session_name:0.2 "ssh "${DUT_NAME}"" C-m
-  # tmux send-keys -t $session_name:0.2 "cd "${DUT_DEPLOYMENT}"" C-m
-  # tmux send-keys -t $session_name:0.2 "sleep 3" C-m
-  # tmux send-keys -t $session_name:0.2 "apt-get install scapy" C-m
-  # tmux send-keys -t $session_name:0.2 "python3 pfcp_requests.py" C-m
-
+  tmux send-keys -t $session_name:0.2 "ssh "${DUT_NAME}"" C-m
+  tmux send-keys -t $session_name:0.2 "cd "${DUT_CN_WORKSPACE_STANDALONE}"" C-m
+  tmux send-keys -t $session_name:0.2 "docker-compose -f docker-compose/"${CN_DOCKER_COMPOSE_FILE}" down -t0" C-m
+  tmux send-keys -t $session_name:0.2 "docker-compose -f docker-compose/"${CN_DOCKER_COMPOSE_FILE}" up -d" C-m
+  tmux send-keys -t $session_name:0.2 "watch docker ps" C-m
+  
   #---------------------------------------------------------#
   #                        PANEL 3                          #
   #---------------------------------------------------------#
@@ -80,7 +80,7 @@ send_keys_trex(){
   #---------------------------------------------------------#
   #                        PANEL 0                          #
   #---------------------------------------------------------#
-  tmux send-keys -t $session_name:1.0 "ssh "${TREX_SERVER_NAME}"" C-m
+  tmux send-keys -t $session_name:1.0 "sleep 70; ssh "${TREX_SERVER_NAME}"" C-m
   #tmux send-keys -t $session_name:1.0 "echo "1" > /proc/sys/net/ipv4/ip_forward" C-m
   #tmux send-keys -t $session_name:1.0 "echo off > /sys/devices/system/cpu/smt/control" C-m
   tmux send-keys -t $session_name:1.0 "cd /tmp/"${TREX_VERSION}"; \
@@ -92,7 +92,7 @@ send_keys_trex(){
   #---------------------------------------------------------#
   #                        PANEL 1                          #
   #---------------------------------------------------------#
-  tmux send-keys -t $session_name:1.1 ""${dirname}"/install_trex_remote.sh" C-m
+  tmux send-keys -t $session_name:1.1 "sleep 30; "${dirname}"/install_trex_remote.sh" C-m
   tmux send-keys -t $session_name:1.1 ""${dirname}"/deploy_trex_config.sh" C-m
   tmux send-keys -t $session_name:1.1 ""${dirname}"/run_trex_server.sh" C-m
 
@@ -114,10 +114,9 @@ create_window_upf(){
 create_window_trex() {
   tmux new-window -d -t $session_name -n 'Trex'
   configure_layout $session_name 1 0 -h
-  resize_panel $session_name 1 0 -R 10
+  resize_panel $session_name 1 0 -R 20
   send_keys_trex
 }
-
 
 
 

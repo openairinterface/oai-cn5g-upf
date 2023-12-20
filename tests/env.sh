@@ -2,7 +2,21 @@
 WORKSPACE="${HOME}"/workspace
 DUT_UPF_WORKSPACE_STANDALONE="${WORKSPACE}"/standalone-mode/oai-cn5g-upf
 DUT_UPF_WORKSPACE_DOCKER="${WORKSPACE}"/docker-mode/oai-cn5g-upf/
+
+DUT_CN_WORKSPACE_STANDALONE="${WORKSPACE}"/standalone-mode/oai-cn5g-fed
+DUT_CN_WORKSPACE_DOCKER="${WORKSPACE}"/docker-mode/oai-cn5g-fed
+
+CN_DOCKER_COMPOSE_FILE=docker-compose-basic-nrf-ebpf-standalone.yaml
+
+UPF_N3_INTERFACE=enp8s0
+UPF_N6_INTERFACE=enp7s0
+
+
+
 DUT_SCAPY="${WORKSPACE}"/scapy
+
+
+
 
 
 BPF_SAMPLES_DIR="${DUT_UPF_WORKSPACE_STANDALONE}"/build/samples
