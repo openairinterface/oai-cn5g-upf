@@ -4,9 +4,9 @@
   interfaces: ['07:00.0', '08:00.0']
   port_info:
       - dest_mac: 52:54:00:06:7f:69
-        src_mac:  52:54:00:f4:ad:33
-      - dest_mac: 52:54:00:61:ca:33
         src_mac:  52:54:00:52:00:35
+      - dest_mac: 52:54:00:61:ca:33
+        src_mac:  52:54:00:f4:ad:33
 
   platform:
       master_thread_id: 0
