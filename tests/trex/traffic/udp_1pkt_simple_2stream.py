@@ -14,7 +14,7 @@ class STLS1(object):
 
     def get_streams (self, direction = 0, **kwargs):
         # create 1 stream
-        return [ self.create_stream("10.10.10.2"), self.create_stream("10.10.10.3") ]
+        return [ self.create_stream("192.168.102.3"), self.create_stream("192.168.102.4") ]
 
 
 # dynamic load - used for trex console or simulator

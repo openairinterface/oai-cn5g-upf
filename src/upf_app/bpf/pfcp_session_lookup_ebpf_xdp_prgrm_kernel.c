@@ -119,7 +119,15 @@ static u32 handle_uplink_traffic(struct xdp_md* p_ctx, struct udphdr* udph) {
     return XDP_DROP;
   }
 
+  // struct iphdr* p_ip_inner = (struct iphdr*) (p_gtpuh + 1);
+
+  // if ((void*) (p_ip_inner + 1) > p_data_end) {
+  //   bpf_debug("Invalid Inner IP packet");
+  //   return XDP_DROP;
+  // }
+
   u32 src_ip_in = p_ip_inner->saddr;
+  bpf_debug("!!!!!!!! INER IP SRC = 0x%x,  INER IP DST = 0x%x, IP PROTOCOL = 0x%x", src_ip_in, p_ip_inner->daddr, p_ip_inner->protocol);
 
   if (p_gtpuh->message_type != GTPU_G_PDU) {
     // bpf_debug(

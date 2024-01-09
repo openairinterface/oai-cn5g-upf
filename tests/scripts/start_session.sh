@@ -80,14 +80,16 @@ send_keys_trex(){
   #---------------------------------------------------------#
   #                        PANEL 0                          #
   #---------------------------------------------------------#
-  tmux send-keys -t $session_name:1.0 "sleep 120; ssh "${TREX_SERVER_NAME}"" C-m
+  tmux send-keys -t $session_name:1.0 "sleep 60; ssh "${TREX_SERVER_NAME}"" C-m
   #tmux send-keys -t $session_name:1.0 "echo "1" > /proc/sys/net/ipv4/ip_forward" C-m
   #tmux send-keys -t $session_name:1.0 "echo off > /sys/devices/system/cpu/smt/control" C-m
-  tmux send-keys -t $session_name:1.0 "cd /tmp/"${TREX_VERSION}"; \
+  tmux send-keys -t $session_name:1.0 "cd "${TREX_SERVER_DIR}"; \
       sleep 5; ./trex-console --port "${DUT_TREX_SYNC_SSH_PORT_FORWARDING}" \
       --async_port "${DUT_TREX_ASYNC_SSH_PORT_FORWARDING}"" C-m
-  tmux send-keys -t $session_name:1.0 "start -f "${TREX_TRAFFIC_DIR}"/udp_1pkt_simple.py -m 1kpps -p 0; \
+  tmux send-keys -t $session_name:1.0 "start -f "${TREX_TRAFFIC_DIR}"/udp_1pkt_simple.py -m 250kpps -p 0; \
       portattr -a --prom on; tui" C-m
+  # tmux send-keys -t $session_name:1.0 "start -f "${TREX_TRAFFIC_DIR}"/gtp_1pkt_simple.py -m 100kpps -p 0; \
+  #    portattr -a --prom on; tui" C-m
   
   #---------------------------------------------------------#
   #                        PANEL 1                          #
