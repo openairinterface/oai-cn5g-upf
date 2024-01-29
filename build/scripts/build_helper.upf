@@ -135,6 +135,17 @@ install_bpftool_from_git() {
     debug=1
   fi
 
+  # Trick for building on Openshift build: don't build, recover a pre-built version
+  #
+  if [ -f $OPENAIRCN_DIR/build/ext/bpftool-5-14.tar.gz ]; then
+    pushd /
+    gzip -cd $OPENAIRCN_DIR/build/ext/bpftool-5-14.tar.gz | $SUDO tar -xvf -
+    $SUDO chmod +x /usr/local/sbin/bpftool
+    echo "bpftool installation complete"
+    popd
+    return 0
+  fi
+
   if [[ $prompt =~ [yY](es)* ]]
   then
     #GIT_URL=https://github.com/libbpf/bpftool.git

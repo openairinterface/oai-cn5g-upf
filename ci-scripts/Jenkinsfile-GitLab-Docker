@@ -206,6 +206,10 @@ pipeline {
                   sh "oc delete -f openshift/build-config.yaml || true"
                   sh "sed -i -e 's@oai-upf:latest@oai-upf:${upf_tag}@g' openshift/build-config.yaml"
                   sh "oc create -f openshift/build-config.yaml"
+                  // Trick to bypass bpftool build
+                  sh "mkdir -p build/ext"
+                  sh "cp /opt/kernel-no-download/bpftool-5-14.tar.gz build/ext"
+                  // Starting the build
                   sh "oc start-build upf-build-cfg  --from-file=./"
                   // need python to wait for pod upf-build-cfg-1-build to be Completed or Error
                   // it fails if it detects error or timeout at 20 minutes
