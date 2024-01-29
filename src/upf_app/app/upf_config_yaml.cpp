@@ -355,7 +355,6 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   cfg.nrf_addr.fqdn         = nrf_addr.fqdn;
   cfg.nrf_addr.ipv4_addr    = nrf_addr.ipv4_addr;
 
-  cfg.use_fqdn_dns = false;  // TODO: to be removed
   cfg.http_version = get_http_version();
 
   cfg.sbi_api_version = local().get_sbi().get_api_version();

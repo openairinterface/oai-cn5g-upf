@@ -53,61 +53,6 @@ constexpr auto UPF_CONFIG_OPTION_NO_STR  = "No";
 const oai::model::common::Snssai DEFAULT_SNSSAI{1};
 const std::vector<oai::model::nrf::DnnUpfInfoItem> DEFAULT_DNN_LIST = {
     oai::model::nrf::DnnUpfInfoItem("default")};
-
-#define UPF_CONFIG_STRING_UPF_CONFIG "UPF"
-#define UPF_CONFIG_STRING_PID_DIRECTORY "PID_DIRECTORY"
-#define UPF_CONFIG_STRING_INSTANCE "INSTANCE"
-#define UPF_CONFIG_STRING_FQDN "FQDN"
-#define UPF_CONFIG_STRING_INTERFACES "INTERFACES"
-#define UPF_CONFIG_STRING_INTERFACE_NAME "INTERFACE_NAME"
-#define UPF_CONFIG_STRING_IPV4_ADDRESS "IPV4_ADDRESS"
-#define UPF_CONFIG_STRING_PORT "PORT"
-#define UPF_CONFIG_STRING_SCHED_PARAMS "SCHED_PARAMS"
-#define UPF_CONFIG_STRING_THREAD_RD_CPU_ID "CPU_ID"
-#define UPF_CONFIG_STRING_THREAD_RD_SCHED_POLICY "SCHED_POLICY"
-#define UPF_CONFIG_STRING_THREAD_RD_SCHED_PRIORITY "SCHED_PRIORITY"
-#define UPF_CONFIG_STRING_THREAD_POOL_SIZE "THREAD_POOL_SIZE"
-#define UPF_CONFIG_STRING_INTERFACE_N3 "N3"
-#define UPF_CONFIG_STRING_INTERFACE_N4 "N4"
-#define UPF_CONFIG_STRING_INTERFACE_N6 "N6"
-#define UPF_CONFIG_STRING_PDN_NETWORK_LIST "PDN_NETWORK_LIST"
-#define UPF_CONFIG_STRING_NETWORK_IPV4 "NETWORK_IPV4"
-#define UPF_CONFIG_STRING_NETWORK_IPV6 "NETWORK_IPV6"
-#define UPF_CONFIG_STRING_ADDRESS_PREFIX_DELIMITER "/"
-#define UPF_CONFIG_STRING_SNAT "SNAT"
-#define UPF_CONFIG_STRING_MAX_PFCP_SESSIONS "MAX_PFCP_SESSIONS"
-#define UPF_CONFIG_STRING_SMF_LIST "SMF_LIST"
-#define UPF_CONFIG_STRING_ITTI_TASKS "ITTI_TASKS"
-#define UPF_CONFIG_STRING_ITTI_TIMER_SCHED_PARAMS "ITTI_TIMER_SCHED_PARAMS"
-#define UPF_CONFIG_STRING_N3_SCHED_PARAMS "N3_SCHED_PARAMS"
-#define UPF_CONFIG_STRING_SX_SCHED_PARAMS "SX_SCHED_PARAMS"
-#define UPF_CONFIG_STRING_SMF_APP_SCHED_PARAMS "SMF_APP_SCHED_PARAMS"
-#define UPF_CONFIG_STRING_ASYNC_CMD_SCHED_PARAMS "ASYNC_CMD_SCHED_PARAMS"
-#define UPF_CONFIG_STRING_NON_STANDART_FEATURES "NON_STANDART_FEATURES"
-#define UPF_CONFIG_STRING_BYPASS_UL_PFCP_RULES "BYPASS_UL_PFCP_RULES"
-
-#define UPF_CONFIG_STRING_5G_FEATURES "SUPPORT_5G_FEATURES"
-#define UPF_CONFIG_STRING_ENABLE_BPF_DATAPATH "ENABLE_BPF_DATAPATH"
-#define UPF_CONFIG_STRING_5G_FEATURES_REGISTER_NRF "REGISTER_NRF"
-#define UPF_CONFIG_STRING_5G_FEATURES_UPF_FQDN "UPF_FQDN_5G"
-#define UPF_CONFIG_STRING_5G_FEATURES_NRF "NRF"
-#define UPF_CONFIG_STRING_5G_FEATURES_NRF_IPV4_ADDRESS "IPV4_ADDRESS"
-#define UPF_CONFIG_STRING_5G_FEATURES_NRF_PORT "PORT"
-#define UPF_CONFIG_STRING_5G_FEATURES_NRF_HTTP_VERSION "HTTP_VERSION"
-#define UPF_CONFIG_STRING_5G_FEATURES_NRF_API_VERSION "API_VERSION"
-#define UPF_CONFIG_STRING_5G_FEATURES_UPF_INFO "UPF_INFO"
-#define UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SST "NSSAI_SST"
-#define UPF_CONFIG_STRING_5G_FEATURES_NSSAI_SD "NSSAI_SD"
-#define UPF_CONFIG_STRING_5G_FEATURES_DNN "DNN"
-#define UPF_CONFIG_STRING_HTTP_VERSION "HTTP_VERSION"
-#define UPF_CONFIG_STRING_5G_FEATURES_USE_FQDN_NRF "USE_FQDN_NRF"
-#define UPF_CONFIG_STRING_5G_FEATURES_UPF_INFO_DNN_LIST "DNN_LIST"
-#define UPF_CONFIG_STRING_LOG_LEVEL "LOG_LEVEL"
-
-#define UPF_CONFIG_REMOTE_N6_GW_CONFIG "REMOTE_N6_GW"
-
-#define UPF_ABORT_ON_ERROR true
-#define UPG_WARN_ON_ERROR false
 using namespace libconfig;
 
 namespace oai::config {
@@ -144,13 +89,6 @@ typedef struct nsf_cfg_s {
   bool bypass_ul_pfcp_rules;
 } nsf_cfg_t;
 class upf_config {
- private:
-  int load_itti(const libconfig::Setting& itti_cfg, itti_cfg_t& cfg);
-  int load_interface(const libconfig::Setting& if_cfg, interface_cfg_t& cfg);
-  int load_thread_sched_params(
-      const libconfig::Setting& thread_sched_params_cfg,
-      util::thread_sched_params& cfg);
-
  public:
   /* Reader/writer lock for this configuration */
   std::mutex m_rw_lock;
@@ -187,20 +125,11 @@ class upf_config {
   bool register_nrf;
   struct in_addr remote_n6;
   upf_info_t upf_info;
-  bool use_fqdn_dns;
 
   unsigned int http_version;
 
   nf_addr smf_addr;
   nf_addr nrf_addr;
-
-  // struct {
-  //   struct in_addr ipv4_addr;
-  //   unsigned int port;
-  //   unsigned int http_version;
-  //   std::string api_version;
-  //   std::string fqdn;
-  // } nrf_addr;
 
   interface_cfg_t sbi;
   unsigned int sbi_http2_port;
@@ -239,7 +168,6 @@ class upf_config {
     enable_bpf_datapath       = false;
     register_nrf              = false;
     upf_info                  = {};
-    use_fqdn_dns              = false;
     nrf_addr.ipv4_addr.s_addr = INADDR_ANY;
     nrf_addr.port             = 80;
     nrf_addr.api_version      = "v1";
@@ -250,9 +178,7 @@ class upf_config {
 
   void lock() { m_rw_lock.lock(); };
   void unlock() { m_rw_lock.unlock(); };
-  int load(const std::string& config_file);
   int execute();
-  void display();
   int get_pfcp_node_id(pfcp::node_id_t& node_id);
   int get_pfcp_fseid(pfcp::fseid_t& fseid);
 };
