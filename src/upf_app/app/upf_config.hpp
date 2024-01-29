@@ -41,6 +41,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string>
+#include <config_types.hpp>
 #include "logger.hpp"
 #include "Snssai.h"
 #include "DnnUpfInfoItem.h"
@@ -129,7 +130,7 @@ class upf_config {
   unsigned int http_version;
 
   nf_addr smf_addr;
-  nf_addr nrf_addr;
+  sbi_interface nrf_addr;
 
   interface_cfg_t sbi;
   unsigned int sbi_http2_port;
@@ -149,7 +150,8 @@ class upf_config {
         smfs(),
         max_pfcp_sessions(100),
         nsf(),
-        enable_snat(false) {
+        enable_snat(false),
+        nrf_addr(){
     itti.itti_timer_sched_params.sched_priority = 85;
     itti.n3_sched_params.sched_priority         = 84;
     itti.n4_sched_params.sched_priority         = 84;
@@ -168,10 +170,6 @@ class upf_config {
     enable_bpf_datapath       = false;
     register_nrf              = false;
     upf_info                  = {};
-    nrf_addr.ipv4_addr.s_addr = INADDR_ANY;
-    nrf_addr.port             = 80;
-    nrf_addr.api_version      = "v1";
-    nrf_addr.fqdn             = {};
 
     log_level = spdlog::level::debug;
   };

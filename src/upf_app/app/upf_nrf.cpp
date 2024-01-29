@@ -346,12 +346,6 @@ void upf_nrf::send_curl(
 
 //---------------------------------------------------------------------------------------------
 void upf_nrf::get_nrf_api_root(std::string& api_root) {
-  if (!upf_cfg.nrf_addr.uri_root.empty())
-    api_root = std::string(upf_cfg.nrf_addr.uri_root) + NNRF_NFM_BASE +
-               upf_cfg.nrf_addr.api_version;
-  else
-    api_root = std::string(inet_ntoa(
-                   *((struct in_addr*) &upf_cfg.nrf_addr.ipv4_addr))) +
-               ":" + std::to_string(upf_cfg.nrf_addr.port) + NNRF_NFM_BASE +
-               upf_cfg.nrf_addr.api_version;
+  api_root = std::string(upf_cfg.nrf_addr.get_url()) + NNRF_NFM_BASE +
+               upf_cfg.sbi_api_version;
 }
