@@ -223,6 +223,7 @@ check_install_upf_deps() {
       automake \
       build-essential \
       $CMAKE \
+      gcc-multilib \
       git"
   elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
     PACKAGE_LIST="\
