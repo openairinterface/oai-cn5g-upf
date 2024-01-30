@@ -169,7 +169,7 @@ int main(int argc, char** argv) {
   std::string conf_file_name = Options::getlibconfigConfig();
   Logger::upf_app().debug("Parsing the configuration file, file type YAML.");
   upf_cfg_yaml = std::make_unique<upf_config_yaml>(
-          conf_file_name, Options::getlogStdout(), Options::getlogRotFilelog());
+      conf_file_name, Options::getlogStdout(), Options::getlogRotFilelog());
   if (!upf_cfg_yaml->init()) {
     Logger::upf_app().error("Reading the configuration failed. Exiting.");
     return 1;

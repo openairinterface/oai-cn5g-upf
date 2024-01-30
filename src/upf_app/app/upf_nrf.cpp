@@ -79,6 +79,9 @@ void upf_nrf_task(void* args_p) {
               upf_nrf_inst->timer_nrf_deregistration(
                   to->timer_id, to->arg2_user);
               break;
+            case TASK_UPF_NRF_TIMEOUT_NRF_REGISTRATION:
+              upf_nrf_inst->timer_nrf_registration(to->timer_id, to->arg2_user);
+              break;
             default:;
           }
         }
@@ -106,6 +109,7 @@ upf_nrf::upf_nrf() {
   upf_profile         = {};
   upf_instance_id     = {};
   timer_nrf_heartbeat = {};
+  timer_nrf_retry     = {};
 
   if (itti_inst->create_task(TASK_UPF_NRF, upf_nrf_task, nullptr)) {
     Logger::upf_app().error("Cannot create task TASK_UPF_NRF");
@@ -114,11 +118,10 @@ upf_nrf::upf_nrf() {
 
   // Register to NRF
   register_to_nrf();
-  Logger::upf_app().startup("Started");
 }
 
 //-----------------------------------------------------------------------------------------------------
-void upf_nrf::send_register_nf_instance(const std::string& url) {
+bool upf_nrf::send_register_nf_instance(const std::string& url) {
   Logger::upf_app().info("Send NF Instance Registration to NRF");
 
   nlohmann::json json_data = {};
@@ -155,9 +158,11 @@ void upf_nrf::send_register_nf_instance(const std::string& url) {
         upf_profile.get_nf_heartBeat_timer(), 0, TASK_UPF_NRF,
         TASK_UPF_NRF_TIMEOUT_NRF_HEARTBEAT,
         0);  // TODO arg2_user
+    return true;
 
   } else {
     Logger::upf_app().warn("Could not get response from NRF");
+    return false;
   }
 }
 
@@ -205,6 +210,7 @@ void upf_nrf::send_deregister_nf_instance(const std::string& url) {
 void upf_nrf::generate_upf_profile() {
   // generate UUID
   generate_uuid();
+  upf_profile = {};
   // TODO: remove hardcoded values
   upf_profile.set_nf_instance_id(upf_instance_id);
   upf_profile.set_nf_instance_name("OAI-UPF");
@@ -232,8 +238,18 @@ void upf_nrf::register_to_nrf() {
   // Then register to NRF
   std::string nrf_api_root = {};
   get_nrf_api_root(nrf_api_root);
-  send_register_nf_instance(
-      nrf_api_root + NNRF_NF_REGISTER_URL + upf_instance_id);
+  if (send_register_nf_instance(
+          nrf_api_root + NNRF_NF_REGISTER_URL + upf_instance_id)) {
+    Logger::upf_app().startup("Started");
+  } else {
+    Logger::upf_app().debug(
+        "Set a timer to the next NRF registration try (%d)",
+        nrf_retry_interval);
+    timer_nrf_retry = itti_inst->timer_setup(
+        nrf_retry_interval, 0, TASK_UPF_NRF,  // TODO TIMER VARIABLE
+        TASK_UPF_NRF_TIMEOUT_NRF_REGISTRATION,
+        0);  // TODO arg2_user
+  }
 }
 
 //---------------------------------------------------------------------------------------------
@@ -288,6 +304,12 @@ void upf_nrf::timer_nrf_deregistration(
     timer_id_t timer_id, uint64_t arg2_user) {
   // timer_id and arg2_user unused?
   deregister_to_nrf();
+}
+
+//---------------------------------------------------------------------------------------------
+void upf_nrf::timer_nrf_registration(timer_id_t timer_id, uint64_t arg2_user) {
+  // timer_id and arg2_user unused?
+  register_to_nrf();
 }
 
 //---------------------------------------------------------------------------------------------
@@ -347,5 +369,5 @@ void upf_nrf::send_curl(
 //---------------------------------------------------------------------------------------------
 void upf_nrf::get_nrf_api_root(std::string& api_root) {
   api_root = std::string(upf_cfg.nrf_addr.get_url()) + NNRF_NFM_BASE +
-               upf_cfg.sbi_api_version;
+             upf_cfg.sbi_api_version;
 }

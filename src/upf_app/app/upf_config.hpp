@@ -151,7 +151,7 @@ class upf_config {
         max_pfcp_sessions(100),
         nsf(),
         enable_snat(false),
-        nrf_addr(){
+        nrf_addr() {
     itti.itti_timer_sched_params.sched_priority = 85;
     itti.n3_sched_params.sched_priority         = 84;
     itti.n4_sched_params.sched_priority         = 84;
@@ -166,10 +166,10 @@ class upf_config {
     n4.thread_rd_sched_params.sched_priority = 95;
     n4.port                                  = pfcp::default_port;
 
-    enable_5g_features        = true;
-    enable_bpf_datapath       = false;
-    register_nrf              = false;
-    upf_info                  = {};
+    enable_5g_features  = true;
+    enable_bpf_datapath = false;
+    register_nrf        = false;
+    upf_info            = {};
 
     log_level = spdlog::level::debug;
   };
