@@ -9,7 +9,7 @@
 #include <signal.h>  // signals
 #include <pfcp_session_lookup_ebpf_xdp_prgrm_kernel_skel.h>
 #include <wrappers/BPFMap.hpp>
-#include "qfi_flow_mapping_table.h"
+// #include "qfi_flow_mapping_table.h"
 
 class BPFMaps;
 class BPFMap;
@@ -148,8 +148,8 @@ class PFCP_Session_LookupProgram {
    */
   void initializeMaps();
 
-  void instrementQfiFlowMappingTable(
-      e_resource_type type, uint32_t qos, uint8_t qfi, uint8_t dscp);
+//   void instrementQfiFlowMappingTable(
+//       e_resource_type type, uint32_t qos, uint8_t qfi, uint8_t dscp);
 
   /*****************************************************************************************************************/
   // The reference of the bpf maps.

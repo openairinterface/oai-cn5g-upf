@@ -64,15 +64,16 @@ static u32 tail_call_next_prog(
 /*****************************************************************************************************************/
 
 static u32 handle_downlink_traffic(struct xdp_md* p_ctx, u32 ue_ip_address) {
-  // u32* teid_dl = NULL;
+  struct session_id* session;
+  memset(&session, 0, sizeof(struct session_id));
+  session = bpf_map_lookup_elem(&m_session_mapping, &ue_ip_address); 
 
-  u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, &ue_ip_address);
-
-  if (teid_dl) {
+  if (session) {
+    u32 teid_dl = session->teid_dl;
     bpf_printk(
         "TEID downlink: 0x%x was found for UE IP: 0x%x", ue_ip_address,
-        *teid_dl);
-    tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
+         teid_dl);
+    tail_call_next_prog(p_ctx, teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
   }
 
   bpf_debug("BPF tail call was not executed!");

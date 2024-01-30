@@ -10,6 +10,7 @@
 #include <next_prog_rule_map.h>
 #include <next_prog_rule_key.h>
 #include "interfaces.h"
+#include "session_id.h"
 //#include "traffic_classification.h"
 // #include "session_mapping.h"
 // #include "ue_teid_qfi_matching.h"
@@ -75,12 +76,20 @@ struct bpf_map_def SEC("maps") m_upf_interfaces = {
 
 /*****************************************************************************************************************/
 
+// struct bpf_map_def SEC("maps") m_session_mapping = {
+//     .type        = BPF_MAP_TYPE_HASH,
+//     .key_size    = sizeof(u32),  // ue_ip_address
+//     .value_size  = sizeof(u32),  // teid_dl
+//     .max_entries = MAX_LENGTH,
+// };
+
 struct bpf_map_def SEC("maps") m_session_mapping = {
     .type        = BPF_MAP_TYPE_HASH,
     .key_size    = sizeof(u32),  // ue_ip_address
-    .value_size  = sizeof(u32),  // teid_dl
+    .value_size  = sizeof(struct session_id),  // < teid_ul, teid_dl, seid >
     .max_entries = MAX_LENGTH,
 };
+
 
 /*****************************************************************************************************************/
 

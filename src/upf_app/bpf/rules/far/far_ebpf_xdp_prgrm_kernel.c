@@ -45,21 +45,6 @@ int xdp_redirect_gtpu(struct xdp_md* p_ctx) {
  * @return 0 (Success), 1 (Fail).
  */
 
-// static u32 update_dst_mac_address(struct iphdr* p_ip, struct ethhdr* p_eth) {
-//   void* p_mac_address;
-
-//   p_mac_address = bpf_map_lookup_elem(&m_arp_table, &p_ip->daddr);
-
-//   if (!p_mac_address) {
-//     bpf_debug("MAC Address NOT Found for IP addr: 0x%x", p_ip->daddr);
-//     return 1;
-//   }
-
-//   memcpy(p_eth->h_dest, p_mac_address, sizeof(p_eth->h_dest));
-
-//   return 0;
-// }
-
 static u32 update_dst_mac_address(u32 ip, struct ethhdr* p_eth) {
   struct s_arp_mapping* map_table;
   memset(&map_table, 0, sizeof(struct s_arp_mapping));
@@ -348,101 +333,6 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
     }
   }
 }
-
-/*****************************************************************************************************************/
-// static u32 pfcp_far_apply(struct xdp_md *p_ctx, pfcp_far_t_ *p_far)
-// {
-//   void *p_data = (void *)(long)p_ctx->data;
-//   void *p_data_end = (void *)(long)p_ctx->data_end;
-//   struct ethhdr *p_eth = p_data;
-//   void *p_mac_address;
-
-//   u8 dest_interface;
-//   u16 outer_header_creation;
-//   // TODO dupl
-//   // TODO nocp
-//   // TODO buff
-
-//   if((void *)(p_eth + 1) > p_data_end) {
-//     bpf_debug("Invalid pointer");
-//     return XDP_DROP;
-//   }
-
-//   // Check if it is a forward action.
-//   if(!p_far) {
-//     bpf_debug("Invalid FAR!");
-//     return XDP_DROP;
-//   }
-
-//   dest_interface =
-//   p_far->forwarding_parameters.destination_interface.interface_value;
-//   outer_header_creation =
-//   p_far->forwarding_parameters.outer_header_creation.outer_header_creation_description;
-
-//   // TODO: Reorder the if's
-//   if(p_far->apply_action.forw) {
-//     if(dest_interface == INTERFACE_VALUE_CORE) {
-//       // Redirect to data network.
-//       bpf_debug("Destination is to INTERFACE_VALUE_CORE");
-//       // Check Outer header creation - IPv4 or IPv6
-//       switch(outer_header_creation) {
-//       case OUTER_HEADER_CREATION_UDP_IPV4:
-//         bpf_debug("OUTER_HEADER_CREATION_UDP_IPV4");
-//         struct ethhdr *p_new_eth = p_data + GTP_ENCAPSULATED_SIZE;
-
-//         // Move eth header forward.
-//         if((void *)(p_new_eth + 1) > p_data_end) {
-//           return 1;
-//         }
-//         __builtin_memcpy(p_new_eth, p_eth, sizeof(*p_eth));
-
-//         // Update destination mac address.
-//         struct iphdr *p_ip = (void *)(p_new_eth + 1);
-
-//         if((void *)(p_ip + 1) > p_data_end) {
-//           return XDP_DROP;
-//         }
-
-//         if(update_dst_mac_address(p_ip, p_new_eth)) {
-//           return XDP_DROP;
-//         }
-
-//         // Adjust head to the right.
-//         bpf_xdp_adjust_head(p_ctx, GTP_ENCAPSULATED_SIZE);
-
-//         return bpf_redirect_map(&m_redirect_interfaces, UPLINK, 0);
-//         bpf_debug("OUTER_HEADER_CREATION_UDP_IPV4 REDIRECT FAILED");
-//         break;
-//       case OUTER_HEADER_CREATION_UDP_IPV6:
-//         bpf_debug("OUTER_HEADER_CREATION_UDP_IPV6");
-//         // TODO
-//         break;
-//       default:
-//         bpf_debug("In destination to CORE - Invalid option: %d",
-//         outer_header_creation);
-//       }
-//     } else if(dest_interface == INTERFACE_VALUE_ACCESS) {
-//       // Redirect to core network.
-//       bpf_debug("Destination is to INTERFACE_VALUE_ACCESS");
-//       switch(outer_header_creation) {
-//       case OUTER_HEADER_CREATION_GTPU_UDP_IPV4:
-//         bpf_debug("OUTER_HEADER_CREATION_GTPU_UDP_IPV4");
-//         create_outer_header_gtpu_ipv4(p_ctx, p_far);
-//         return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
-//         break;
-//       case OUTER_HEADER_CREATION_GTPU_UDP_IPV6:
-//         bpf_debug("OUTER_HEADER_CREATION_GTPU_UDP_IPV6");
-//         break;
-//       default:
-//         bpf_debug("In destination to ACCESS - Invalid option: %d",
-//         outer_header_creation);
-//       }
-//     }
-//   } else {
-//     bpf_debug("Forward action unset");
-//   }
-//   return XDP_PASS;
-// }
 
 /*****************************************************************************************************************/
 SEC("xdp_far")

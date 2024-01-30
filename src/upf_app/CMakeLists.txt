@@ -15,6 +15,14 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf/nrf_model.cmake)
 
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
+include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/include)
+include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr)
+include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/far)
+include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/qer)
+#include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/urr)
+#include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/bar)
+#include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/mar)
+
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 
 set(GTP_INTERFACE $ENV{GTP_INTERFACE})

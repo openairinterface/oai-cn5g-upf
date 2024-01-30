@@ -15,9 +15,6 @@
 #include "NextHopFinder.hpp"
 #include <errno.h>
 #include <arpa/inet.h>
-//#include <traffic_classification.h>
-// #include <ue_teid_qfi_matching.h>
-#include <session_mapping.h>
 #include <arp_table_maps.h>
 #include "upf_config.hpp"
 #include <thread>
