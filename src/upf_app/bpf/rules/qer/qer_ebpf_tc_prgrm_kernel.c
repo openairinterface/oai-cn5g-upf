@@ -25,14 +25,14 @@
 #include "bpf_endian.h"
 
 #include <linux/pkt_cls.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <linux/filter.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <net/if.h>
-#include <sys/ioctl.h>
-#include <linux/if_link.h>
+// #include <stdio.h>
+// #include <stdlib.h>
+// #include <linux/filter.h>
+// #include <unistd.h>
+// #include <arpa/inet.h>
+// #include <net/if.h>
+// #include <sys/ioctl.h>
+// #include <linux/if_link.h>
 #include <qer_maps.h>
 
 #include <linux/netdevice.h>
@@ -177,7 +177,6 @@
  */
 
 static __always_inline u32 uplink_sdf_filter(struct __sk_buff *skb, struct ethhdr* ethh, struct udphdr* udph) {
-  void* data     = (void*) (long) skb->data;
   void* data_end = (void*) (long) skb->data_end;
 
   struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
@@ -203,9 +202,8 @@ static __always_inline u32 uplink_sdf_filter(struct __sk_buff *skb, struct ethhd
     return TC_ACT_SHOT;
   }
 
-  struct filter_key* key;
-  memset(&key, 0, sizeof(struct filter_key));
-
+  struct filter_key* key = {0};
+  
   u8 protocol   = iph_inner->protocol;
   
   key->src_ip   = iph_inner->saddr;
@@ -244,13 +242,12 @@ static __always_inline u32 uplink_sdf_filter(struct __sk_buff *skb, struct ethhd
     }
   }
    
-  struct session_id* session;
-  memset(&session, 0, sizeof(struct session_id));
+  struct session_id* session = {0};
   session = bpf_map_lookup_elem(&m_session_mapping, &key->src_ip);
 
   if (session){
     u32 seid = session->seid;
-    u8 *qfi = gtpu_ext_h->qfi;
+    u8 qfi = gtpu_ext_h->qfi;
     skb->tc_classid = ((u32)qfi << 24) | seid;
     /*
     SHould we make it even more unique than unique value ?
@@ -266,12 +263,9 @@ static __always_inline u32 uplink_sdf_filter(struct __sk_buff *skb, struct ethhd
 /*****************************************************************************************************************/
 
 static __always_inline u32 downlink_sdf_filter(struct __sk_buff *skb, struct ethhdr* ethh, struct iphdr* iph) {
-  void* data     = (void*) (long) skb->data;
   void* data_end = (void*) (long) skb->data_end;
 
-  struct filter_key* filter;
-  memset(&filter, 0, sizeof(struct filter_key));
-
+  struct filter_key* filter = {0};
   u8 protocol = iph->protocol;
   u32 ip_src  = iph->saddr;
   u32 ip_dst  = iph->daddr;
@@ -315,21 +309,20 @@ static __always_inline u32 downlink_sdf_filter(struct __sk_buff *skb, struct eth
   }
    
   // Get QFI value
-  e_qfi qfi = bpf_map_lookup_elem(&m_filter, &filter); 
+  e_qfi* qfi = bpf_map_lookup_elem(&m_filter, &filter); 
   if (qfi){
     bpf_debug("\t IP SRC: 0x%x", filter->src_ip);
     bpf_debug("\t IP DST: 0x%x", filter->dst_ip);
     bpf_debug("\t IP PROTO: 0x%x", filter->protocol);
     bpf_debug("\t DST PORT: 0x%x", filter->dst_port);
 
-    struct session_id* session;
-    memset(&session, 0, sizeof(struct session_id));
-
+    struct session_id* session = NULL;
+    
     session = bpf_map_lookup_elem(&m_session_mapping, &ip_dst);
     
     if (session){
       u32 seid = session->seid;
-      skb->tc_classid = ((u32)qfi << 24) | seid;
+      skb->tc_classid = ((u32)(*qfi) << 24) | seid;
       /*
       SHould we make it even more unique than unique value ?
       u32 teid_ul = session->teid_ul;
@@ -358,8 +351,6 @@ static __always_inline u32 downlink_sdf_filter(struct __sk_buff *skb, struct eth
 
 static __always_inline u32 ipv4_sdf_filter(struct __sk_buff *skb, struct ethhdr* ethh, struct iphdr* iph) {
   void* data_end = (void*) (long) skb->data_end;
-  u32 ip_src  = iph->saddr;
-  u32 ip_dest = iph->daddr;
   u8 protocol = iph->protocol;
 
   switch (protocol) {
@@ -393,10 +384,10 @@ static __always_inline u32 ipv4_sdf_filter(struct __sk_buff *skb, struct ethhdr*
  * @return ** __inline TC taken action
  */
 static __always_inline u32 sdf_filter(struct __sk_buff *skb, struct ethhdr* ethh){
-  void *data      = (void *)(long) skb->data;
+  //void *data      = (void *)(long) skb->data;
 	void *data_end  = (void *)(long) skb->data_end;
-	void *data_meta = (void *)(long) skb->data_meta;
-	struct meta_info *meta = data_meta;
+	//void *data_meta = (void *)(long) skb->data_meta;
+	//struct meta_info *meta = data_meta;
 
   u16 eth_type = htons(ethh->h_proto);
   bpf_debug("Debug: eth_type:0x%x", eth_type);
@@ -445,7 +436,7 @@ static __always_inline u32 sdf_filter(struct __sk_buff *skb, struct ethhdr* ethh
  */
 
 // SEC("ingress_filter")
-// int ingress_filter(struct __sk_buff *skb) {
+// int ingress_filter_entry_point(struct __sk_buff *skb) {
 // bpf_debug("==========< INGRESS FILTER >==========\n");  
 // Extract Ethernet header
 // struct ethhdr* ethh = bpf_hdr_pointer(skb);
@@ -527,13 +518,13 @@ int handle_ingress(struct __sk_buff *skb) {
 
 
 SEC("egress_filter")
-int egress_filter(struct __sk_buff *skb) {
+int egress_filter_entry_point(struct __sk_buff *skb) {
   bpf_debug("==========< EGRESS FILTER >==========\n");
 
-    // Extract Ethernet header
-  struct ethhdr* ethh = bpf_hdr_pointer(skb);
-
-  if ((void*) (ethh + 1) > skb->data_end) {
+  // Extract Ethernet header
+  struct ethhdr* ethh = (void*) (long) skb->data;
+  
+  if ((void*) (ethh + 1) > (void*) (long) skb->data_end) {
     bpf_debug("Invalid Ethernet header");
     return TC_ACT_SHOT;
   }

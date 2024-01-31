@@ -331,7 +331,9 @@ PFCP
 far_ebpf_xdp
 pfcp_session_pdr_lookup_ebpf_xdp
 pfcp_session_lookup_ebpf_xdp
+qer_ebpf_tc
 UPF_XDP
+UPF_TC
 gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group
 pthread m rt config++
 event boost_system curl yaml-cpp

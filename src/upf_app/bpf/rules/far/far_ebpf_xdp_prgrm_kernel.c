@@ -46,9 +46,8 @@ int xdp_redirect_gtpu(struct xdp_md* p_ctx) {
  */
 
 static u32 update_dst_mac_address(u32 ip, struct ethhdr* p_eth) {
-  struct s_arp_mapping* map_table;
-  memset(&map_table, 0, sizeof(struct s_arp_mapping));
-
+  struct s_arp_mapping* map_table = NULL;
+  
   map_table = bpf_map_lookup_elem(&m_arp_table, &ip);
 
   if (!map_table) {

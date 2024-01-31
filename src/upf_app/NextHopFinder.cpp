@@ -87,8 +87,7 @@ ether_addr* NextHopFinder::retrieveNextHopMAC(uint32_t next_hop_ip) {
       "Next Hop <SRC IP, MAC Address> = <%s, %s>", ipAddress,
       executeCommand(command).c_str());
 
-  ether_addr* next_hop_mac;
-  __builtin_memset(&next_hop_mac, 0, sizeof(ether_addr));
+  ether_addr* next_hop_mac = {};
   next_hop_mac = ether_aton(executeCommand(command).c_str());
 
   if (next_hop_mac == nullptr) {

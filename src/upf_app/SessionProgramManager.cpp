@@ -68,8 +68,8 @@ void SessionProgramManager::setTeidSessionMap(
 void SessionProgramManager::addFarProgram(
     uint32_t seid, std::shared_ptr<FARProgram> pFARProgram) {
   // Create a new 'farprograms' object
-  farprograms farprogam;
-  __builtin_memset(&farprogam, 0, sizeof(farprograms));
+  farprograms farprogam = {};
+  //__builtin_memset(&farprogam, 0, sizeof(farprograms));
   farprogam.seid        = seid;
   farprogam.pFARProgram = pFARProgram;
 

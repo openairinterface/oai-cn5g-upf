@@ -64,8 +64,7 @@ static u32 tail_call_next_prog(
 /*****************************************************************************************************************/
 
 static u32 handle_downlink_traffic(struct xdp_md* p_ctx, u32 ue_ip_address) {
-  struct session_id* session;
-  memset(&session, 0, sizeof(struct session_id));
+  struct session_id* session = NULL;
   session = bpf_map_lookup_elem(&m_session_mapping, &ue_ip_address); 
 
   if (session) {
