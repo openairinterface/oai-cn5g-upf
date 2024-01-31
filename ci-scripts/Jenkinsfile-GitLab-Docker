@@ -439,11 +439,11 @@ pipeline {
           }
         }
         // Home-made RAN emulator
-        stage ('NGAP-Tester') {
+        stage ('Robot-Test') {
           steps {
             script {
-              gitlabCommitStatus(name: "NGAP-Tester") {
-                localStatus = build job: 'OAI-CN5G-NGAP-Tester',
+              gitlabCommitStatus(name: "Robot-Test") {
+                localStatus = build job: 'OAI-CN5G-RobotTest',
                   parameters: [
                     string(name: 'UPF_TAG', value: String.valueOf(upf_tag)),
                     string(name: 'UPF_BRANCH', value: String.valueOf(upf_branch))
@@ -451,9 +451,9 @@ pipeline {
                 localResult = localStatus.getResult()
 
                 if (localStatus.resultIsBetterOrEqualTo('SUCCESS')) {
-                  echo "NGAP-Tester is OK"
+                  echo "Robot-Test is OK"
                 } else {
-                  error "NGAP-Tester is is KO"
+                  error "Robot-Test is is KO"
                 }
               }
             }
@@ -461,8 +461,8 @@ pipeline {
           post {
             always {
               script {
-                copyArtifacts(projectName: 'OAI-CN5G-NGAP-Tester',
-                              filter: '*_results_oai_cn5g*.html',
+                copyArtifacts(projectName: 'OAI-CN5G-RobotTest',
+                              filter: '*.html',
                               selector: lastCompleted())
               }
             }

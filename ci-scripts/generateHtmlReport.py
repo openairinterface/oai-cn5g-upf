@@ -67,15 +67,23 @@ class HtmlReport():
         gitInfo = generate_git_info(args)
         cwd = os.getcwd()
         for reportFile in os.listdir(cwd):
-            if reportFile.endswith('.html') and re.search('results_oai_cn5g_', reportFile) is not None:
+            if reportFile.endswith('.html') and (re.search('results_oai_cn5g_', reportFile) is not None or re.search('test_results_robot_', reportFile) is not None):
                 newFile = ''
+                robotBuildUrl = ''
                 gitInfoAppended = False
                 with open(os.path.join(cwd, reportFile), 'r') as rfile:
                     for line in rfile:
                         if re.search('<h2>', line) is not None and not gitInfoAppended:
                             gitInfoAppended = True
                             newFile += gitInfo
-                        newFile += line
+                        if re.search('OAI-CN5G-RobotTest -- Build-ID', line) is not None:
+                            result = re.search('href="(?P<build_url>[a-zA-Z0-9\-\:\/\.]+)"', line)
+                            if result is not None:
+                                robotBuildUrl = result.group('build_url')
+                        if re.search('archives/log.html', line) is not None:
+                            newFile += re.sub('archives', f'{robotBuildUrl}/artifact/archives', line)
+                        else:
+                            newFile += line
                 with open(os.path.join(cwd, reportFile), 'w') as wfile:
                     wfile.write(newFile)
 
