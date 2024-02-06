@@ -210,7 +210,7 @@ pipeline {
                   sh "mkdir -p build/ext"
                   sh "cp /opt/kernel-no-download/bpftool-5-14.tar.gz build/ext"
                   // Starting the build
-                  sh "oc start-build upf-build-cfg  --from-file=./"
+                  sh 'oc start-build upf-build-cfg  --from-dir=./ --exclude=""'
                   // need python to wait for pod upf-build-cfg-1-build to be Completed or Error
                   // it fails if it detects error or timeout at 20 minutes
                   sh "./ci-scripts/common/python/check_build_pod_status.py --pod-name upf-build-cfg-1-build --log-file archives/upf_rhel_image_build.log"
