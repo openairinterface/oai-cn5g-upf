@@ -1,4 +1,5 @@
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/toolchain.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindLibNL.cmake)
 add_subdirectory(bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/bpf_pfcp)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
@@ -23,6 +24,8 @@ include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/qer)
 #include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/bar)
 #include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/mar)
 
+include_directories(${LibNL_INCLUDE_DIR})
+
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 
 set(GTP_INTERFACE $ENV{GTP_INTERFACE})
@@ -33,7 +36,7 @@ add_library(UPF_XDP STATIC
   UserPlaneComponent.cpp
   Configuration.cpp
   SignalHandler.cpp
-  NextHopFinder.cpp
+  helpers/NextHopFinder.cpp
   SessionProgramManager.cpp
   SessionManager.cpp
   SessionPrograms.cpp
@@ -52,7 +55,7 @@ add_library(UPF_TC STATIC
   UserPlaneComponent.cpp
   Configuration.cpp
   SignalHandler.cpp
-  NextHopFinder.cpp
+  helpers/NextHopFinder.cpp
   SessionProgramManager.cpp
   SessionManager.cpp
   SessionPrograms.cpp

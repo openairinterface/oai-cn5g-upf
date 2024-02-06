@@ -516,6 +516,13 @@ int upf_config::load(const string& config_file) {
       enable_bpf_datapath = false;
     }
 
+    support_features.lookupValue(UPF_CONFIG_STRING_ENABLE_QOS, opt);
+    if (boost::iequals(opt, "yes")) {
+      enable_qos = true;
+    } else {
+      enable_qos = false;
+    }
+
     support_features.lookupValue(
         UPF_CONFIG_STRING_5G_FEATURES_USE_FQDN_NRF, opt);
     if (boost::iequals(opt, "yes")) {
@@ -789,6 +796,12 @@ void upf_config::display() {
   Logger::upf_app().info("    register_nrf: %s", (register_nrf) ? "yes" : "no");
   Logger::upf_app().info(
       "    enable_bpf_datapath: %s", (enable_bpf_datapath) ? "yes" : "no");
+  if (enable_bpf_datapath){
+    Logger::upf_app().info("    enable_qos: %s", (enable_qos) ? "yes" : "no");    
+  } else {
+    Logger::upf_app().info("    enable_qos: no");
+  }
+  
   Logger::upf_app().info("    use_fqdn_dns: %s", (use_fqdn_dns) ? "yes" : "no");
   if (register_nrf) {
     Logger::upf_app().info("    NRF:");

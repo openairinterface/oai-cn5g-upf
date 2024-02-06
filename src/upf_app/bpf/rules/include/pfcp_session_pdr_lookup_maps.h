@@ -13,7 +13,7 @@
 #define FAR_ENTRIES_MAX_SIZE 5000  // 10
 #define ARP_ENTRIES_MAX_SIZE 12
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 struct bpf_map_def SEC("maps") m_fars = {
     .type        = BPF_MAP_TYPE_HASH,
     .key_size    = sizeof(u32),          // teid
@@ -21,7 +21,7 @@ struct bpf_map_def SEC("maps") m_fars = {
     .max_entries = FAR_ENTRIES_MAX_SIZE,
 };
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 struct bpf_map_def SEC("maps") m_redirect_interfaces = {
     .type        = BPF_MAP_TYPE_DEVMAP,
     .key_size    = sizeof(u32),  // id
@@ -29,7 +29,7 @@ struct bpf_map_def SEC("maps") m_redirect_interfaces = {
     .max_entries = MAX_LENGTH,   // 10,
 };
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 // Uplink map.
 // TODO: Store multiple PDR.
 struct bpf_map_def SEC("maps") m_teid_pdr = {
@@ -39,7 +39,7 @@ struct bpf_map_def SEC("maps") m_teid_pdr = {
     .max_entries = PDR_ENTRIES_MAX_SIZE,  // 10,
 };
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 // Downlink map.
 // TODO: Store multiple PDR.
 struct bpf_map_def SEC("maps") m_ueip_pdr = {
@@ -49,7 +49,7 @@ struct bpf_map_def SEC("maps") m_ueip_pdr = {
     .max_entries = PDR_ENTRIES_MAX_SIZE,  // 10,
 };
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 // Static ARP Table. Used to get the MAC address of the next hop.
 // TODO:  Pin this maps. It does not depend on the session program
 struct bpf_map_def SEC("maps") m_arp_table = {

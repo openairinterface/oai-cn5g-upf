@@ -69,6 +69,13 @@ extern upf_nrf* upf_nrf_inst;
 #define N6_IF_NAME upf_cfg.n6.if_name
 #endif
 
+#ifndef QDISC_HTB_SCHEDULER
+#define QDISC_HTB_SCHEDULER "HTB"
+#endif
+
+
+
+
 std::unique_ptr<upf_config_yaml> upf_cfg_yaml = nullptr;
 
 //------------------------------------------------------------------------------
@@ -127,8 +134,9 @@ int my_check_redundant_process(char* exec_name) {
   delete[] cmd;
   return result;
 }
+
 //------------------------------------------------------------------------------
-void setup_bpf() {
+void setup_bpf(const char* qdisc_scheduler = nullptr) {
   std::shared_ptr<RulesUtilities> mpRulesFactory;
   mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
 
@@ -136,9 +144,13 @@ void setup_bpf() {
   string sUDPInterface = N6_IF_NAME;
   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
   Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
-  UserPlaneComponent::getInstance().setup(
-      mpRulesFactory, sGTPInterface, sUDPInterface);
-  // spSessionManager = UserPlaneComponent::getInstance().getSessionManager();
+  
+  if(qdisc_scheduler){
+    UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface, qdisc_scheduler);
+  } else {
+    UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface);
+  }
+    
 }
 //------------------------------------------------------------------------------
 int main(int argc, char** argv) {
@@ -218,7 +230,15 @@ int main(int argc, char** argv) {
   fflush(fp);
   fclose(fp);
 
-  if (upf_cfg.enable_bpf_datapath) setup_bpf();
+  if (upf_cfg.enable_bpf_datapath){
+    const char *qdisc_scheduler = nullptr;
+    if (upf_cfg.enable_qos){
+      const char *qdisc_scheduler = QDISC_HTB_SCHEDULER;
+    }
+    
+    setup_bpf(qdisc_scheduler);
+  }
+   
   // once all udp servers initialized
   io_service.run();
 

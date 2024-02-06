@@ -14,12 +14,18 @@
 
 #include "interfaces.h"
 
+#include <netlink/netlink.h>
+#include <netlink/route/qdisc.h>
+
+
+
 class BPFMaps;
 class BPFMap;
 class SessionManager;
 class RulesUtilities;
 
 using QERProgramLifeCycle = ProgramLifeCycle<qer_ebpf_tc_prgrm_kernel_c>;
+
 
 /**
  * @brief Singleton class to abstract the UPF bpf tc program.
@@ -30,15 +36,15 @@ class QERProgram : public BPFProgram {
    * @brief Construct a new QERProgram object.
    *
    */
-  explicit QERProgram();
+  explicit QERProgram(const std::string& gtpInterface, const std::string& udpInterface);
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Destroy the QERProgram object
    */
   virtual ~QERProgram();
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
 
   /**
    * @brief Setup the BPF program.
@@ -46,7 +52,7 @@ class QERProgram : public BPFProgram {
    */
   void setup();
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the BPFMaps object.
    *
@@ -54,13 +60,13 @@ class QERProgram : public BPFProgram {
    */
   std::shared_ptr<BPFMaps> getMaps();
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Tear downs the BPF program.
    *
    */
   void tearDown();
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
 
   /**
    * @brief Update program int map.
@@ -70,15 +76,14 @@ class QERProgram : public BPFProgram {
    */
   void updateProgramMap(uint32_t key, uint32_t fd);
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Remove program in map.
    *
    * @param key The key which will be remove in the program map.
    */
   void removeProgramMap(uint32_t key);
-
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the TEID to session Map object.
    *
@@ -86,7 +91,7 @@ class QERProgram : public BPFProgram {
    */
   std::shared_ptr<BPFMap> getQERMap() const;
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the Egress Interface Map object.
    *
@@ -94,7 +99,7 @@ class QERProgram : public BPFProgram {
    */
   std::shared_ptr<BPFMap> getEgressInterfaceMap() const;
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the n3 GTP-U Tunnel Map object.
    *
@@ -103,7 +108,7 @@ class QERProgram : public BPFProgram {
    */
   std::shared_ptr<BPFMap> geGtpUTunnelMap() const;
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the Filter Map object.
    *
@@ -111,7 +116,46 @@ class QERProgram : public BPFProgram {
    */
   std::shared_ptr<BPFMap> getFilterMap() const;
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
+  
+  
+
+
+                     
+    
+  /*---------------------------------------------------------------------------------------------------------------*/
+ 
+  /**
+   * @brief Create a configure hierarchy object
+   * 
+   * @param sock 
+   * @param interface 
+   * @param child_ids 
+   */
+  void create_configure_hierarchy(struct nl_sock *sock, const char *interface, std::vector<std::vector<uint32_t>> child_ids);
+  /*---------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Create a parent parent class object
+   * 
+   * @param sock 
+   * @param interface 
+   * @param parent_id 
+   * @return * struct rtnl_qdisc* 
+   */
+  struct rtnl_qdisc *create_parent_class(struct nl_sock *sock, const char *interface, uint32_t parent_id);
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Create a child class object
+   * 
+   * @param sock 
+   * @param parent 
+   * @param child_id 
+   * @return struct rtnl_qdisc* 
+   */
+  struct rtnl_qdisc *create_child_class(struct nl_sock *sock, struct rtnl_qdisc *parent, uint32_t child_id);
+  
+/*---------------------------------------------------------------------------------------------------------------*/
  private:
   /**
    * @brief Initialize BPF wrappers maps.
@@ -119,24 +163,42 @@ class QERProgram : public BPFProgram {
    */
   void initializeMaps();
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   // The reference of the bpf maps.
   std::shared_ptr<BPFMaps> mpMaps;
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   // The skeleton of the UPF program generated by bpftool.
   // ProgramLifeCycle is the owner of the pointer.
   qer_ebpf_tc_prgrm_kernel_c* spSkeleton;
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   // The GTP-U Tunnel map.
   std::shared_ptr<BPFMap> mpGtpUTunnelMap;
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
+ 
+  // The BPF lifecycle program.
+  std::shared_ptr<QERProgramLifeCycle> mpLifeCycle;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
   // The Filter map.
   std::shared_ptr<BPFMap> mpFilterMap;
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
+  // The GTP interface.
+  std::string mGTPInterface;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  // The UDP interface.
+  std::string mUDPInterface;
+  
+  /*---------------------------------------------------------------------------------------------------------------*/
+  
+  std::vector<struct rtnl_qdisc *> parent_qdiscs;
+  std::vector<std::vector<struct rtnl_qdisc *>> child_qdiscs;
+
 };
 
 #endif  // __QER_EBPF_TC_PRGRM_USER_H__
+

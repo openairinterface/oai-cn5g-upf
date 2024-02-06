@@ -50,6 +50,7 @@
 
 constexpr auto UPF_CONFIG_OPTION_YES_STR = "Yes";
 constexpr auto UPF_CONFIG_OPTION_NO_STR  = "No";
+
 const oai::model::common::Snssai DEFAULT_SNSSAI{1};
 const std::vector<oai::model::nrf::DnnUpfInfoItem> DEFAULT_DNN_LIST = {
     oai::model::nrf::DnnUpfInfoItem("default")};
@@ -88,6 +89,7 @@ const std::vector<oai::model::nrf::DnnUpfInfoItem> DEFAULT_DNN_LIST = {
 
 #define UPF_CONFIG_STRING_5G_FEATURES "SUPPORT_5G_FEATURES"
 #define UPF_CONFIG_STRING_ENABLE_BPF_DATAPATH "ENABLE_BPF_DATAPATH"
+#define UPF_CONFIG_STRING_ENABLE_QOS "ENABLE_QOS"
 #define UPF_CONFIG_STRING_5G_FEATURES_REGISTER_NRF "REGISTER_NRF"
 #define UPF_CONFIG_STRING_5G_FEATURES_UPF_FQDN "UPF_FQDN_5G"
 #define UPF_CONFIG_STRING_5G_FEATURES_NRF "NRF"
@@ -184,6 +186,7 @@ class upf_config {
 
   bool enable_5g_features;
   bool enable_bpf_datapath;
+  bool enable_qos;
   bool register_nrf;
   struct in_addr remote_n6;
   upf_info_t upf_info;
@@ -237,6 +240,7 @@ class upf_config {
 
     enable_5g_features        = true;
     enable_bpf_datapath       = false;
+    enable_qos                = false;
     register_nrf              = false;
     upf_info                  = {};
     use_fqdn_dns              = false;

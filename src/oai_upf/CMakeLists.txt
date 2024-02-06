@@ -256,6 +256,13 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
 
+
+
+set(CMAKE_MODULE_PATH "${SRC_TOP_DIR}/upf_app/cmake" "${CMAKE_MODULE_PATH}")
+include(FindPkgConfig)
+find_package (LibNL REQUIRED)
+
+
 ################################################################
 # Add sub modules
 ################################################################
@@ -311,12 +318,15 @@ IF(STATIC_LINKING)
   SET(ASAN asan)
 ENDIF(STATIC_LINKING)
 
+
 ## Common modules
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger/logger.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/config/config.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf/nrf_model.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model/common_model.cmake)
+include(${SRC_TOP_DIR}/upf_app/cmake/FindLibNL.cmake)
+
 
 # folly glog dl double-conversion for FB folly library
 target_link_libraries (upf 
@@ -335,7 +345,7 @@ qer_ebpf_tc
 UPF_XDP
 UPF_TC
 gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group
-pthread m rt config++
+pthread m rt config++ 
 event boost_system curl yaml-cpp
 )
 
