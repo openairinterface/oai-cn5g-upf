@@ -8,7 +8,7 @@
 #include "logger.hpp"
 
 
-class NicInfromationGetter {
+class NicInformationGetter {
  public:
  /**
   * @brief Construct a new Nic Information Getter object

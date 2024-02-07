@@ -82,7 +82,7 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      * @param gtpInterface 
      * @param udpInterface
     */
-    void UserPlaneComponent::set_members(std::shared_ptr<RulesUtilities> pRulesUtilities,
+    void set_members(std::shared_ptr<RulesUtilities> pRulesUtilities,
     const std::string& gtpInterface, const std::string& udpInterface);
     
     /*---------------------------------------------------------------------------------------------------------------*/
@@ -144,16 +144,16 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      */
     const char* getQdiscScheduler() const;    
 
-  /*---------------------------------------------------------------------------------------------------------------*/
-  // From onNewSessionProgramObserver.
-  void onNewSessionProgram(
-      u_int32_t programId, u_int32_t fileDescriptor) override;
+    /*---------------------------------------------------------------------------------------------------------------*/
+    // From onNewSessionProgramObserver.
+    void onNewSessionProgram(
+        u_int32_t programId, u_int32_t fileDescriptor) override;
 
-  /*---------------------------------------------------------------------------------------------------------------*/
-  // From onNewSessionProgramObserver.
-  void onDestroySessionProgram(u_int32_t programId) override;
+    /*---------------------------------------------------------------------------------------------------------------*/
+    // From onNewSessionProgramObserver.
+    void onDestroySessionProgram(u_int32_t programId) override;
 
-  // TODO: getSessionManger?
+    // TODO: getSessionManger?
 
  
     private:
@@ -169,58 +169,79 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
       enum libbpf_print_level lvl, const char* fmt, va_list args);
 
     /*------------------------------------------------------------------------------------------------------------------*/
-
+    /**
+     * @brief Create a socket object
+     */
+    void create_socket();
+    
+    /*------------------------------------------------------------------------------------------------------------------*/
     /**
      * @brief Create a qdisc object
      * 
      * @param sock 
      * @return struct rtnl_qdisc* 
      */
-    struct rtnl_qdisc* create_qdisc(struct nl_sock *sock);
+    // struct rtnl_qdisc* create_qdisc(struct nl_sock *sock);
+    void create_root_qdisc();
     
+    /*------------------------------------------------------------------------------------------------------------------*/
+    /**
+     * @brief Create a link cache object
+     * 
+     */
+    void create_link_cache();
+
+    /*------------------------------------------------------------------------------------------------------------------*/
+    /**
+     * @brief Create a link object
+     * 
+     * @param iface 
+     */
+    void create_link(const char *iface);
     /*------------------------------------------------------------------------------------------------------------------*/
     /**
      * @brief Intialize the qdisc parameters
      * 
      * @param std::string interface
      */
-    void initializeQdisc(std::string interface);
+    //void initialize_root_qdisc(std::string interface);
 
     /*------------------------------------------------------------------------------------------------------------------*/
     /**
-     * @brief Configure the root qdisc with HTB scheduler
+     * @brief Configure the HTB Qdisc
      * 
-     * @param qdisc 
-     * @param htb_class 
-     * @return struct rtnl_qdisc* 
      */
-      struct rtnl_qdisc* configure_qdisc(struct rtnl_qdisc *qdisc, struct rtnl_class *htb_class);                   
+      void configure_htb_qdisc();                   
     /*------------------------------------------------------------------------------------------------------------------*/
 
-  // The session manager reference.
-  std::shared_ptr<SessionManager> mpSessionManager;
+    // The session manager reference.
+    std::shared_ptr<SessionManager> mpSessionManager;
 
-  // The rules factory reference.
-  std::shared_ptr<RulesUtilities> mpRulesUtilities;
+    // The rules factory reference.
+    std::shared_ptr<RulesUtilities> mpRulesUtilities;
 
-  // The PFCP_Session_LookupProgram (BPF program entry point) reference.
-  std::shared_ptr<PFCP_Session_LookupProgram> mpPFCP_Session_LookupProgram;
+    // The PFCP_Session_LookupProgram (BPF program entry point) reference.
+    std::shared_ptr<PFCP_Session_LookupProgram> mpPFCP_Session_LookupProgram;
 
-  // The PFCP_Session_PDR_LookupProgram (BPF program for PFCP Session)
-  // reference.
-  std::shared_ptr<PFCP_Session_PDR_LookupProgram>
-      mpPFCP_Session_PDR_LookupProgram;
+    // The PFCP_Session_PDR_LookupProgram (BPF program for PFCP Session)
+    // reference.
+    std::shared_ptr<PFCP_Session_PDR_LookupProgram>
+        mpPFCP_Session_PDR_LookupProgram;
 
-  // The GTP interface.
-  std::string mGTPInterface;
+    // The GTP interface.
+    std::string mGTPInterface;
 
-  // The UDP interface.
-  std::string mUDPInterface;
+    // The UDP interface.
+    std::string mUDPInterface;
 
-/*---------------------------------------------------------------------------------------------------------------*/
-  const char *mQdiscScheduler;
-  struct qdisc_params *qdisc_att;
-  struct rtnl_qdisc *root_qdisc;
+  /*---------------------------------------------------------------------------------------------------------------*/
+    const char *mQdiscScheduler = nullptr;
+    struct qdisc_params *qdisc_att = nullptr;
+    struct rtnl_qdisc *root_qdisc = nullptr;
+    struct nl_sock *root_socket;
+    struct rtnl_link *link;
+    struct nl_cache *link_cache;
+    uint32_t defaultClass;
 };
 
 #endif  // __USERPLANECOMPONENT_H__

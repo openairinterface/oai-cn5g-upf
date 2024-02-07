@@ -10,8 +10,8 @@ struct qdisc_params {
   uint32_t ceil;
   uint32_t rate_buffer;
   uint32_t ceil_buffer;
-//  uint32_t quantum;
-//  int level;
+  uint32_t quantum;
+  int level;
 };
 
 

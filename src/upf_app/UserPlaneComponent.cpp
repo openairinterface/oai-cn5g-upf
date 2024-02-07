@@ -14,9 +14,9 @@
 #include <netlink/route/qdisc/htb.h>
 
 
-#ifndef QDISC_HTB_SCHEDULER
-#define  QDISC_HTB_SCHEDULER HTB
-#endif
+ #ifndef QDISC_HTB_SCHEDULER
+ #define  QDISC_HTB_SCHEDULER "HTB"
+ #endif
 
 /*---------------------------------------------------------------------------------------------------------------*/
 UserPlaneComponent::UserPlaneComponent() {
@@ -24,6 +24,7 @@ UserPlaneComponent::UserPlaneComponent() {
 #ifdef DEBUG_LIBBPF
   libbpf_set_print(UserPlaneComponent::printLibbpfLog);
 #endif
+defaultClass = 0xffff;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -130,58 +131,120 @@ void UserPlaneComponent::setup(
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();
   
-  qdisc_att = new struct qdisc_params;   
+  create_socket();
+  create_root_qdisc();
+  create_link_cache();
+  create_link(gtpInterface.c_str());
+  configure_htb_qdisc();
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-// Method to create the root qdisc
-struct rtnl_qdisc* UserPlaneComponent::create_qdisc(struct nl_sock *sock){
-    // Allocate a new Qdisc object
-    struct rtnl_qdisc *qdisc = rtnl_qdisc_alloc();
+// Method to create the socket
+void UserPlaneComponent::create_socket(){
+  Logger::upf_app().info("Create a Netlink Socket");
+  if (!(root_socket = nl_socket_alloc())){
+      Logger::upf_app().error("nl_socket_alloc: Unable to allocate netlink socket");
+      exit(EXIT_FAILURE);
+  }
 
-    if (!qdisc) {
-        perror("rtnl_qdisc_alloc");
-        nl_close(sock);
-        nl_socket_free(sock);
-        exit(EXIT_FAILURE);
-    }
-
-    return qdisc;
+  // Connect to the socket
+  if (nl_connect(root_socket, NETLINK_ROUTE) < 0) {
+      Logger::upf_app().error("nl_connect:Unable to connect to the netlink socket");
+      nl_socket_free(root_socket);
+      exit(EXIT_FAILURE);
+  }
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-// Method definition to initialize qdisc_att
-void UserPlaneComponent::initializeQdisc(std::string interface) {
-  NicInformationGetter nicInfoGet;
-  // Initialize qdisc_att members
-  qdisc_att->scheduler = getQdiscScheduler();
-  qdisc_att->rate = nicInfoGet.retrieveRate(interface);
-  qdisc_att->ceil = nicInfoGet.retrieveCeil(interface);
-  qdisc_att->rate_buffer = 0;
-  qdisc_att->ceil_buffer = 0;
-  qdisc_att->quantum = 0;
-  qdisc_att->level = 0;
+// Method to create a new HTB qdisc
+void UserPlaneComponent::create_root_qdisc(){
+  Logger::upf_app().info("Create a Qdisc Object");
+  
+  if (!(root_qdisc = rtnl_qdisc_alloc())){
+    Logger::upf_app().error("rtnl_qdisc_alloc: Unable to allocate a new qdisc");
+    nl_close(root_socket);
+    nl_socket_free(root_socket);
+    exit(EXIT_FAILURE);
+  }
 }
 
+/*---------------------------------------------------------------------------------------------------------------*/
+// // Method definition to initialize qdisc_att
+// void UserPlaneComponent::initialize_root_disc(std::string interface) {
+//   NicInformationGetter nicInfoGet;
+//   // Initialize qdisc_att members
+//   qdisc_att->scheduler = getQdiscScheduler();
+//   qdisc_att->rate = nicInfoGet.retrieveRate(interface);
+//   qdisc_att->ceil = nicInfoGet.retrieveCeil(interface);
+//   qdisc_att->rate_buffer = 0;
+//   qdisc_att->ceil_buffer = 0;
+//   qdisc_att->quantum = 0;
+//   qdisc_att->level = 0;
+// }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-struct rtnl_qdisc* UserPlaneComponent::configure_qdisc(struct rtnl_qdisc *qdisc, struct rtnl_class *htb_class){    
-  // Set Qdisc attributes
-  rtnl_tc_set_kind(TC_CAST(qdisc), qdisc_att->scheduler);
-  if (strcmp(qdisc_att->scheduler, QDISC_HTB_SCHEDULER) == 0) {
-    rtnl_htb_set_rate(htb_class, qdisc_att->rate); // Set Physical capacity
-    rtnl_htb_set_rbuffer(htb_class, qdisc_att->rate_buffer);
-    rtnl_htb_set_cbuffer(htb_class, qdisc_att->ceil_buffer);
-    rtnl_htb_set_quantum(htb_class, qdisc_att->quantum);
-    rtnl_htb_set_level(htb_class, qdisc_att->level);
-  }    
-  // Set additional Qdisc attributes as needed
+// Method to create a link cache object
+void UserPlaneComponent::create_link_cache(){
+  int err;
+  Logger::upf_app().info("Create a Netlink Link Cache object");
+  
+  if ((err = rtnl_link_alloc_cache(root_socket, AF_UNSPEC, &link_cache)) < 0) {
+    Logger::upf_app().error("Unable to allocate link cache: %s\n", nl_geterror(err));
+    nl_socket_free(root_socket);
+    exit(EXIT_FAILURE);
+  }  
+}
 
-  return qdisc; 
+/*---------------------------------------------------------------------------------------------------------------*/
+// Method to create a link object
+void UserPlaneComponent::create_link(const char *iface){
+  Logger::upf_app().info("Create a Netlink Link object");
+  
+  if (!(link = rtnl_link_get_by_name(link_cache, iface))) {
+    Logger::upf_app().error("rtnl_link_get_by_name: Interface %s not found\n", iface);
+    nl_socket_free(root_socket);
+    exit(EXIT_FAILURE);
+  }
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+void UserPlaneComponent::configure_htb_qdisc(){    
+  
+  Logger::upf_app().info("Set Qdisc Attributes");
+  //rtnl_tc_set_ifindex(TC_CAST(qdisc), master_index);
+  rtnl_tc_set_link(TC_CAST(root_qdisc), link);
+  rtnl_tc_set_parent(TC_CAST(root_qdisc), TC_H_ROOT);
+
+  Logger::upf_app().info("Delete Current Qdisc");
+  rtnl_qdisc_delete(root_socket, root_qdisc);
+  //rtnl_qdisc_put(qdisc);
+    
+  Logger::upf_app().info("Add a new HTB Qdisc");
+  rtnl_tc_set_handle(TC_CAST(root_qdisc), TC_HANDLE(1,0));
+  if (rtnl_tc_set_kind(TC_CAST(root_qdisc), QDISC_HTB_SCHEDULER)) {
+    Logger::upf_app().error("rtnl_tc_set_kind: Cannot allocate HTB\n");
+    exit(-1);
+  }
+  
+  Logger::upf_app().info("Set Default Class for Unclassified Traffic");
+  rtnl_htb_set_defcls(root_qdisc, TC_HANDLE(1, defaultClass));
+  rtnl_htb_set_rate2quantum(root_qdisc, 1);
+  
+  /* Submit request to kernel and wait for response */
+  Logger::upf_app().info("Submit Qdisc Creation Request to Kernel and Wait for Response");
+  if ((rtnl_qdisc_add(root_socket, root_qdisc, NLM_F_CREATE))) {
+    Logger::upf_app().error("rtnl_qdisc_add: Can not allocate HTB Qdisc\n");
+    exit(-1);
+  }
+  
+  /* Return the qdisc object to free memory resources */
+  //rtnl_qdisc_put(qdisc);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void UserPlaneComponent::tearDown() {
   mpPFCP_Session_LookupProgram->tearDown();
   SessionProgramManager::getInstance().removeAll();
+  rtnl_qdisc_put(root_qdisc);
+  nl_socket_free(root_socket);
 }

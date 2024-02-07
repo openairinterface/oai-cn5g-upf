@@ -12,7 +12,7 @@
 #include <types.h>
 #include <wrappers/BPFMap.hpp>
 #include "logger.hpp"
-#include "NextHopFinder.hpp"
+#include "helpers/NextHopFinder.hpp"
 #include <errno.h>
 #include <arpa/inet.h>
 #include <arp_table_maps.h>
