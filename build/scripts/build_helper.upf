@@ -283,7 +283,6 @@ check_install_upf_deps() {
       libcurl-devel \
       glibc-devel \
       glibc-devel.i686 \
-      python2 \
       pkgconfig \
       ninja-build \
       libasan"

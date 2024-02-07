@@ -21,20 +21,20 @@
 #---------------------------------------------------------------------
 #
 # Dockerfile for the Open-Air-Interface UPF service
-#   Valid for Rocky Linux 8.7+
+#   Valid for Rocky Linux 9.+
 #
 #---------------------------------------------------------------------
 
 #---------------------------------------------------------------------
 # BASE IMAGE
 #---------------------------------------------------------------------
-FROM docker.io/rockylinux:8 as oai-upf-base
+FROM docker.io/rockylinux:9 as oai-upf-base
 ENV IS_DOCKERFILE=1
 
 RUN dnf install 'dnf-command(config-manager)' -y && \
-    dnf config-manager --set-enabled powertools && \
     dnf install epel-release -y && crb enable && \
     dnf update -y && \
+    # here just to display the current version
     cat /etc/os-release && \
     dnf -y install \
        diffutils \
@@ -65,7 +65,7 @@ RUN ./build_upf --clean --Verbose --build-type Release --jobs && \
 #---------------------------------------------------------------------
 # TARGET IMAGE
 #---------------------------------------------------------------------
-FROM docker.io/rockylinux:8.7-minimal as oai-upf
+FROM docker.io/rockylinux:9-minimal as oai-upf
 ENV TZ=Europe/Paris
 
 # We install some debug tools for the moment in addition of mandatory libraries
@@ -98,12 +98,14 @@ COPY --from=oai-upf-builder \
 # Copying installed libraries from builder
 COPY --from=oai-upf-builder \
 # Currently we keep these folly dependencies from the builder
-    /lib64/libgflags.so.2.1 \
+    /lib64/libgflags.so.2.* \
     /lib64/libglog.so.0 \
     /lib64/libdouble-conversion.so.3 \
     /usr/local/lib64/libspdlog.so \
     /usr/local/lib64/libfmt.so \
     /usr/local/lib64/libyaml-cpp.so.0.* \
+# libbpf seems to be in the executable now
+    /openair-upf/build/ext/libbpf/src/libbpf.so.0 \
     /lib64/
 RUN ldconfig && \
     echo "ldd /openair-upf/bin/oai_upf" && \
