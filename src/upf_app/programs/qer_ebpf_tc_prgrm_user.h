@@ -195,8 +195,11 @@ class QERProgram : public BPFProgram {
   
   /*---------------------------------------------------------------------------------------------------------------*/
   
-  std::vector<struct rtnl_qdisc *> parent_qdiscs;
-  std::vector<std::vector<struct rtnl_qdisc *>> child_qdiscs;
+  // std::vector<struct rtnl_qdisc *> parent_qdiscs;
+  // std::vector<std::vector<struct rtnl_qdisc *>> child_qdiscs;
+  
+  struct rtnl_class* htb_class_pdu_session;
+  std::vector<struct rtnl_class*> htb_classe_qfi_flows;
 
 };
 

@@ -56,6 +56,8 @@ add_library(UPF_TC STATIC
   Configuration.cpp
   SignalHandler.cpp
   helpers/NextHopFinder.cpp
+  helpers/GetNicInformation.cpp
+  helpers/QdiscHelpers.cpp
   SessionProgramManager.cpp
   SessionManager.cpp
   SessionPrograms.cpp

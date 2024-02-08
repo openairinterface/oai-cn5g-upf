@@ -73,26 +73,13 @@ void QERProgram::initializeMaps() {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+
+
+
+
 /*---------------------------------------------------------------------------------------------------------------*/
 /*---------------------------------------------------------------------------------------------------------------*/
 
-struct nl_sock *create_socket(){
-    // Initialize Netlink socket
-    struct nl_sock *sock = nl_socket_alloc();
-    if (!sock) {
-        perror("nl_socket_alloc");
-        exit(EXIT_FAILURE);
-    }
-
-    // Connect to Netlink socket
-    if (nl_connect(sock, NETLINK_ROUTE) < 0) {
-        perror("nl_connect");
-        nl_socket_free(sock);
-        exit(EXIT_FAILURE);
-    }
-
-    return sock;
-}
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -106,33 +93,33 @@ struct nl_sock *create_socket(){
    
 /*---------------------------------------------------------------------------------------------------------------*/    
 
-struct rtnl_tc *allocate_tc(struct rtnl_tc *tc, struct nl_sock *sock, struct rtnl_qdisc *qdisc){
-    // Allocate a new Traffic Control object
-    tc = rtnl_tc_alloc();
+// struct rtnl_tc *allocate_tc(struct rtnl_tc *tc, struct nl_sock *sock, struct rtnl_qdisc *qdisc){
+//     // Allocate a new Traffic Control object
+//     tc = rtnl_tc_alloc();
 
-    if (!tc) {
-        perror("rtnl_tc_alloc");
-        rtnl_qdisc_delete(sock, qdisc);
-        nl_close(sock);
-        nl_socket_free(sock);
-        exit(EXIT_FAILURE);
-    }
+//     if (!tc) {
+//         perror("rtnl_tc_alloc");
+//         rtnl_qdisc_delete(sock, qdisc);
+//         nl_close(sock);
+//         nl_socket_free(sock);
+//         exit(EXIT_FAILURE);
+//     }
 
-    return tc;
-}
+//     return tc;
+// }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-void add_qdisc_to_interface(const char *interface, struct nl_sock *sock, struct rtnl_qdisc *qdisc, struct rtnl_tc *tc){
-    // Add the Qdisc to the interface (replace "eth0" with your interface name)
-    if (rtnl_tc_add(sock, tc, NLM_F_CREATE | NLM_F_EXCL, RTM_NEWQDISC, 0, interface) < 0) {
-        perror("rtnl_tc_add");
-        rtnl_tc_free(tc);
-        rtnl_qdisc_delete(sock, qdisc);
-        nl_close(sock);
-        nl_socket_free(sock);
-        exit(EXIT_FAILURE);
-    }
-}
+// /*---------------------------------------------------------------------------------------------------------------*/
+// void add_qdisc_to_interface(const char *interface, struct nl_sock *sock, struct rtnl_qdisc *qdisc, struct rtnl_tc *tc){
+//     // Add the Qdisc to the interface (replace "eth0" with your interface name)
+//     if (rtnl_tc_add(sock, tc, NLM_F_CREATE | NLM_F_EXCL, RTM_NEWQDISC, 0, interface) < 0) {
+//         perror("rtnl_tc_add");
+//         rtnl_tc_free(tc);
+//         rtnl_qdisc_delete(sock, qdisc);
+//         nl_close(sock);
+//         nl_socket_free(sock);
+//         exit(EXIT_FAILURE);
+//     }
+// }
 
 // /*---------------------------------------------------------------------------------------------------------------*/
 

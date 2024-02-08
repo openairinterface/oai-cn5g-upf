@@ -13,16 +13,6 @@ class PFCP_Session_LookupProgram;
 class PFCP_Session_PDR_LookupProgram;
 
 
-// struct qdisc_params {
-//   const char *scheduler;
-//   uint32_t rate;
-//   uint32_t ceil;
-//   uint32_t rate_buffer;
-//   uint32_t ceil_buffer;
-//   uint32_t quantum;
-//   int level;
-// };
-
 /**
  * @brief User Plane component class to abstract the BPF Service Function Chain
  * for mobile core network.
@@ -170,40 +160,50 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
 
     /*------------------------------------------------------------------------------------------------------------------*/
     /**
-     * @brief Create a socket object
+     * @brief retrieve parameters from NIC <Interface> for the HTB class configuration
+     * 
+     * @param interface 
+     * @return * void 
      */
-    void create_socket();
+    void initialize_root_htb_class(std::string interface);
     
     /*------------------------------------------------------------------------------------------------------------------*/
-    /**
-     * @brief Create a qdisc object
-     * 
-     * @param sock 
-     * @return struct rtnl_qdisc* 
-     */
-    // struct rtnl_qdisc* create_qdisc(struct nl_sock *sock);
-    void create_root_qdisc();
+   
+    // /**
+    //  * @brief Create a socket object
+    //  */
+    // void create_socket();
     
     /*------------------------------------------------------------------------------------------------------------------*/
-    /**
-     * @brief Create a link cache object
-     * 
-     */
-    void create_link_cache();
+    // /**
+    //  * @brief Create a qdisc object
+    //  * 
+    //  * @param sock 
+    //  * @return struct rtnl_qdisc* 
+    //  */
+    // // struct rtnl_qdisc* create_qdisc(struct nl_sock *sock);
+    // void create_qdisc();
+    
+    /*------------------------------------------------------------------------------------------------------------------*/
+    // /**
+    //  * @brief Create a link cache object
+    //  * 
+    //  */
+    // void create_link_cache();
 
     /*------------------------------------------------------------------------------------------------------------------*/
-    /**
-     * @brief Create a link object
-     * 
-     * @param iface 
-     */
-    void create_link(const char *iface);
+    // /**
+    //  * @brief Create a link object
+    //  * 
+    //  * @param iface 
+    //  */
+    // void create_link(const char *iface);
     /*------------------------------------------------------------------------------------------------------------------*/
-    /**
-     * @brief Intialize the qdisc parameters
-     * 
-     * @param std::string interface
-     */
+    // /**
+    //  * @brief Intialize the qdisc parameters
+    //  * 
+    //  * @param std::string interface
+    //  */
     //void initialize_root_qdisc(std::string interface);
 
     /*------------------------------------------------------------------------------------------------------------------*/
@@ -211,7 +211,22 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      * @brief Configure the HTB Qdisc
      * 
      */
-      void configure_htb_qdisc();                   
+      void configure_htb_qdisc();     
+
+    /*------------------------------------------------------------------------------------------------------------------*/
+    
+      // /**
+      //  * @brief Create a Root Class to Attach to the Root Qdisc
+      //  * 
+      //  */
+      // void create_root_class();              
+    
+    /*------------------------------------------------------------------------------------------------------------------*/
+    /**
+     * @brief Configure the HTB root class with the NIC attributes
+     * 
+     */
+    void configure_htb_class();
     /*------------------------------------------------------------------------------------------------------------------*/
 
     // The session manager reference.
@@ -238,6 +253,7 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
     const char *mQdiscScheduler = nullptr;
     struct qdisc_params *qdisc_att = nullptr;
     struct rtnl_qdisc *root_qdisc = nullptr;
+    struct rtnl_class *root_class = nullptr;
     struct nl_sock *root_socket;
     struct rtnl_link *link;
     struct nl_cache *link_cache;

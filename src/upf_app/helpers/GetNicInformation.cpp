@@ -16,7 +16,7 @@
 
 #include <stdexcept>
 #include <arpa/inet.h>
-
+#include <sstream>
 
 
 #define COMMAND_MAX_LENGTH 256
@@ -48,14 +48,14 @@ NicInformationGetter::NicInformationGetter() {}
 // }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-uint32_t NicInformationGetter::retrieveRate(std::string interface) {
+uint64_t NicInformationGetter::retrieveRate(std::string interface) {
   // Paths to files containing interface information speed rate
     std::string speedPath = INTERFACE_DIR + interface + "/speed";
     
     // Read speed
     std::string speed = readValueFromFile(speedPath);
 
-    uint32_t rate = 0;
+    uint64_t rate = 0;
     std::istringstream iss(speed);
     iss >> rate;
 
@@ -63,14 +63,14 @@ uint32_t NicInformationGetter::retrieveRate(std::string interface) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-uint32_t NicInformationGetter::retrieveCeil(std::string interface) {
+uint64_t NicInformationGetter::retrieveCeil(std::string interface) {
  // Paths to files containing interface information speed rate
   std::string speedPath = INTERFACE_DIR + interface + "/speed";
   
   // Read speed
   std::string speed = readValueFromFile(speedPath);
 
-  uint32_t ceil = 0;
+  uint64_t ceil = 0;
   std::istringstream iss(speed);
   iss >> ceil;
 
@@ -83,37 +83,13 @@ uint32_t NicInformationGetter::retrieveCeil(std::string interface) {
 // }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-uint32_t NicInformationGetter::retrieveRateBuffer(std::string interface) {
-//   char command[COMMAND_MAX_LENGTH];
-
-//   struct in_addr addr;
-//   addr.s_addr     = next_hop_ip;
-//   char* ipAddress = inet_ntoa(addr);
-
-//   if (ipAddress == nullptr) {
-//     Logger::upf_app().error("The Next Hop IPv4 WAS NOT Retrieved");
-//     throw std::runtime_error("The Next Hop IPv4 WAS NOT Retrieved");
-//   }
-
-//   sprintf(command, "sudo arping -c 1 %s | awk '/from/ {print $4}'", ipAddress);
-//   // Logger::upf_app().debug("Next Hop SRC IP = %s", ipAddress);
-//   Logger::upf_app().debug(
-//       "Next Hop <SRC IP, MAC Address> = <%s, %s>", ipAddress,
-//       executeCommand(command).c_str());
-
-//   ether_addr* next_hop_mac = {};
-//   next_hop_mac = ether_aton(executeCommand(command).c_str());
-
-//   if (next_hop_mac == nullptr) {
-//     Logger::upf_app().error("The Next Hop MAC WAS NOT Retrieved");
-//     throw std::runtime_error("The Next Hop MAC WAS NOT Retrieved");
-//   }
-
-//   return next_hop_mac;
+uint32_t NicInformationGetter::retrieveBurst(std::string interface) {
+  return 0;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-uint32_t NicInformationGetter::retrieveCeilBuffer(std::string interface) {
+uint32_t NicInformationGetter::retrieveCBurst(std::string interface) {
+  return 0;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

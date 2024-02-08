@@ -1,5 +1,5 @@
-#ifndef __Get_NIC_INFORMATION_HPP__
-#define __Get_NIC_INFORMATION_HPP__
+#ifndef __GET_NIC_INFORMATION_HPP__
+#define __GET_NIC_INFORMATION_HPP__
 
 #include <string>
 #include <memory>
@@ -30,7 +30,7 @@ class NicInformationGetter {
    * 
    * @return uint32_t rate
    */
-  uint32_t retrieveRate(std::string interface);
+  uint64_t retrieveRate(std::string interface);
 
 /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -38,7 +38,7 @@ class NicInformationGetter {
    * 
    * @return uint32_t ceil
    */
-  uint32_t retrieveCeil(std::string interface);
+  uint64_t retrieveCeil(std::string interface);
 
 /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -46,7 +46,7 @@ class NicInformationGetter {
    * 
    * @return uint32_t rate_buffer
    */
-  uint32_t retrieveRateBuffer(std::string interface);
+  uint32_t retrieveBurst(std::string interface);
 
 /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -54,13 +54,15 @@ class NicInformationGetter {
    * 
    * @return uint32_t ceil_buffer
    */
-  uint32_t retrieveCeilBuffer(std::string interface);
+  uint32_t retrieveCBurst(std::string interface);
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
  private:
+
+  std::string executeCommand(const std::string& command);
   const std::string INTERFACE_DIR = "/sys/class/net/";
   //std::string executeCommand(const std::string& command);
 };
 
-#endif  //__Get_NIC_INFORMATION_HPP__
+#endif  //__GET_NIC_INFORMATION_HPP__
