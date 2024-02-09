@@ -86,6 +86,10 @@ target_link_libraries(UPF_TC
   # PRIVATE spdlog
   PRIVATE elf
   PRIVATE z
+  #/usr/lib/x86_64-linux-gnu/libnl-3.so
+  libnl-3.so
+  #/usr/lib/x86_64-linux-gnu/libnl-route-3.so
+  libnl-route-3.so
 )
 
 
