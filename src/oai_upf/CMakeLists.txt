@@ -258,9 +258,7 @@ find_package(Threads REQUIRED)
 
 
 
-set(CMAKE_MODULE_PATH "${SRC_TOP_DIR}/upf_app/cmake" "${CMAKE_MODULE_PATH}")
-include(FindPkgConfig)
-find_package (LibNL REQUIRED)
+
 
 
 ################################################################
@@ -325,27 +323,69 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/config/config.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf/nrf_model.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model/common_model.cmake)
-include(${SRC_TOP_DIR}/upf_app/cmake/FindLibNL.cmake)
+
+
+
+
+
+# Read the value of enable_qos from config.yaml
+file(STRINGS "${SRC_TOP_DIR}/../etc/config.yaml" ENABLE_QOS_CONTENT REGEX "^upf:\\s+support_features:\\s+enable_qos:\\s+(yes|no)")
+
+IF(ENABLE_QOS_CONTENT MATCHES "yes")
+  set(CMAKE_MODULE_PATH "${SRC_TOP_DIR}/upf_app/cmake" "${CMAKE_MODULE_PATH}")
+  include(FindPkgConfig)
+  find_package (LibNL REQUIRED)
+  include(${SRC_TOP_DIR}/upf_app/cmake/FindLibNL.cmake)
+  message("////////////////////////////////////////////////////////")
+  SET(ENABLE_QOS 1)
+ELSE()
+  SET(ENABLE_QOS 0)
+ENDIF()
+
+# Generate config.h using configure_file
+configure_file(config.h.in config.h @ONLY)
+
 
 
 # folly glog dl double-conversion for FB folly library
-target_link_libraries (upf 
-${ASAN}  -Wl,--start-group CN_UTILS
-${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so 
-APP
-SIMPLE_SWITCH
-interfaces
-UDP
-GTPV1U
-PFCP
-far_ebpf_xdp
-pfcp_session_pdr_lookup_ebpf_xdp
-pfcp_session_lookup_ebpf_xdp
-qer_ebpf_tc
-UPF_XDP
-UPF_TC
-gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group
-pthread m rt config++ 
-event boost_system curl yaml-cpp
-)
 
+IF(ENABLE_QOS)
+  target_link_libraries (upf 
+  ${ASAN}  -Wl,--start-group CN_UTILS
+  ${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so 
+  APP
+  SIMPLE_SWITCH
+  interfaces
+  UDP
+  GTPV1U
+  PFCP
+  far_ebpf_xdp
+  pfcp_session_pdr_lookup_ebpf_xdp
+  pfcp_session_lookup_ebpf_xdp
+  qer_ebpf_tc
+  UPF_XDP
+  UPF_TC
+  gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group
+  pthread m rt config++ 
+  event boost_system curl yaml-cpp
+  )
+ELSE()
+  target_link_libraries (upf 
+  ${ASAN}  -Wl,--start-group CN_UTILS
+  ${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so 
+  APP
+  SIMPLE_SWITCH
+  interfaces
+  UDP
+  GTPV1U
+  PFCP
+  far_ebpf_xdp
+  pfcp_session_pdr_lookup_ebpf_xdp
+  pfcp_session_lookup_ebpf_xdp
+  qer_ebpf_tc
+  UPF_XDP
+  gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group
+  pthread m rt config++ 
+  event boost_system curl yaml-cpp
+  )
+ENDIF()

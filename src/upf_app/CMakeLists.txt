@@ -1,5 +1,5 @@
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/toolchain.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindLibNL.cmake)
+
 add_subdirectory(bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/bpf_pfcp)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
@@ -19,7 +19,6 @@ include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/include)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/far)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/qer)
 #include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/urr)
 #include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/bar)
 #include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/mar)
@@ -51,24 +50,6 @@ add_library(UPF_XDP STATIC
   # utils/NextProgRuleKey.cpp
 )
 
-add_library(UPF_TC STATIC
-  UserPlaneComponent.cpp
-  Configuration.cpp
-  SignalHandler.cpp
-  helpers/NextHopFinder.cpp
-  helpers/GetNicInformation.cpp
-  helpers/QdiscHelpers.cpp
-  SessionProgramManager.cpp
-  SessionManager.cpp
-  SessionPrograms.cpp
-  programs/qer_ebpf_tc_prgrm_user.cpp
-  programs/BPFProgram.cpp
-  wrappers/BPFMaps.cpp
-  wrappers/BPFMap.cpp
-)
-
-
-
 link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src)
 target_link_libraries(UPF_XDP
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.a
@@ -79,20 +60,6 @@ target_link_libraries(UPF_XDP
   PRIVATE z
 )
 
-target_link_libraries(UPF_TC
-  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.a
-  ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.so
-  # PUBLIC upfutils
-  # PRIVATE spdlog
-  PRIVATE elf
-  PRIVATE z
-  #/usr/lib/x86_64-linux-gnu/libnl-3.so
-  libnl-3.so
-  #/usr/lib/x86_64-linux-gnu/libnl-route-3.so
-  libnl-route-3.so
-)
-
-
 target_include_directories(UPF_XDP PUBLIC
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/include>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/>
@@ -102,17 +69,7 @@ target_include_directories(UPF_XDP PUBLIC
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/programs>
 )
 
-target_include_directories(UPF_TC PUBLIC
-  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/include>
-  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/>
-  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/bpf>
-  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/skel>
-  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/interfaces>
-  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/programs>
-)
-
 add_dependencies(UPF_XDP upf_ebpf_xdp_all)
-add_dependencies(UPF_TC upf_ebpf_tc_all)
 
 # configure_file (
 #     ${PROJECT_SOURCE_DIR}/cmake/Configuration.h.in
@@ -137,14 +94,63 @@ install(
     INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
 )
 
-install(
-    TARGETS UPF_TC
-    EXPORT "${TARGETS_EXPORT_NAME}"
-    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
-    INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+
+##############################################################
+if(ENABLE_QOS)
+  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindLibNL.cmake)
+  include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/qer)
+  
+  add_library(UPF_TC STATIC
+  UserPlaneComponent.cpp
+  Configuration.cpp
+  SignalHandler.cpp
+  helpers/NextHopFinder.cpp
+  helpers/GetNicInformation.cpp
+  helpers/QdiscHelpers.cpp
+  SessionProgramManager.cpp
+  SessionManager.cpp
+  SessionPrograms.cpp
+  programs/qer_ebpf_tc_prgrm_user.cpp
+  programs/BPFProgram.cpp
+  wrappers/BPFMaps.cpp
+  wrappers/BPFMap.cpp
 )
+
+  target_link_libraries(UPF_TC
+  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.a
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.so
+  # PUBLIC upfutils
+  # PRIVATE spdlog
+  PRIVATE elf
+  PRIVATE z
+  #/usr/lib/x86_64-linux-gnu/libnl-3.so
+  libnl-3.so
+  #/usr/lib/x86_64-linux-gnu/libnl-route-3.so
+  libnl-route-3.so
+)
+
+  target_include_directories(UPF_TC PUBLIC
+  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/include>
+  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/>
+  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/bpf>
+  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/skel>
+  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/interfaces>
+  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/programs>
+  )
+
+  add_dependencies(UPF_TC upf_ebpf_tc_all)
+
+  install(
+      TARGETS UPF_TC
+      EXPORT "${TARGETS_EXPORT_NAME}"
+      LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+      ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+      RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+      INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+  )
+
+endif()
+
 
 
 # Headers:

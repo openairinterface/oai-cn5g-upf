@@ -9,15 +9,16 @@
 #include <helpers/GetNicInformation.hpp>
 #include <helpers/QdiscHelpers.hpp>
 
+#ifdef ENABLE_QOS
 #include <netlink/netlink.h>
 #include <netlink/route/qdisc.h>
 #include <netlink/route/link.h>
 #include <netlink/route/qdisc/htb.h>
 
-
- #ifndef QDISC_HTB_SCHEDULER
- #define  QDISC_HTB_SCHEDULER "HTB"
- #endif
+#ifndef QDISC_HTB_SCHEDULER
+#define  QDISC_HTB_SCHEDULER "HTB"
+#endif
+#endif
 
 /*---------------------------------------------------------------------------------------------------------------*/
 UserPlaneComponent::UserPlaneComponent() {
@@ -28,20 +29,24 @@ UserPlaneComponent::UserPlaneComponent() {
 defaultClass = 0xffff;
 }
 
+
 /*---------------------------------------------------------------------------------------------------------------*/
 UserPlaneComponent::~UserPlaneComponent() {
   tearDown();
 }
+
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<SessionManager> UserPlaneComponent::getSessionManager() const {
   return mpSessionManager;
 }
 
+
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<RulesUtilities> UserPlaneComponent::getRulesUtilities() const {
   return mpRulesUtilities;
 }
+
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<PFCP_Session_LookupProgram>
@@ -49,20 +54,24 @@ UserPlaneComponent::getPFCP_Session_LookupProgram() const {
   return mpPFCP_Session_LookupProgram;
 }
 
+
 /*---------------------------------------------------------------------------------------------------------------*/
 std::string UserPlaneComponent::getGTPInterface() const {
   return mGTPInterface;
 }
+
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::string UserPlaneComponent::getUDPInterface() const {
   return mUDPInterface;
 }
 
+
 /*---------------------------------------------------------------------------------------------------------------*/
 const char* UserPlaneComponent::getQdiscScheduler() const {
   return mQdiscScheduler;
 }
+
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void UserPlaneComponent::onNewSessionProgram(
@@ -70,16 +79,19 @@ void UserPlaneComponent::onNewSessionProgram(
   mpPFCP_Session_LookupProgram->updateProgramMap(programId, fileDescriptor);
 }
 
+
 /*---------------------------------------------------------------------------------------------------------------*/
 void UserPlaneComponent::onDestroySessionProgram(u_int32_t programId) {
   mpPFCP_Session_LookupProgram->removeProgramMap(programId);
 }
+
 
 /*---------------------------------------------------------------------------------------------------------------*/
 int UserPlaneComponent::printLibbpfLog(
     enum libbpf_print_level lvl, const char* fmt, va_list args) {
   return vfprintf(stderr, fmt, args);
 }
+
 
 /*---------------------------------------------------------------------------------------------------------------*/
 UserPlaneComponent& UserPlaneComponent::getInstance() {
@@ -105,6 +117,7 @@ void UserPlaneComponent::set_members(std::shared_ptr<RulesUtilities> pRulesUtili
 
 }
 
+
 /*---------------------------------------------------------------------------------------------------------------*/
 void UserPlaneComponent::setup(
     std::shared_ptr<RulesUtilities> pRulesUtilities,
@@ -118,7 +131,9 @@ void UserPlaneComponent::setup(
   mpSessionManager = std::make_shared<SessionManager>();
 }
 
+
 /*---------------------------------------------------------------------------------------------------------------*/
+#ifdef ENABLE_QOS
 void UserPlaneComponent::setup(
     std::shared_ptr<RulesUtilities> pRulesUtilities,
     const std::string& gtpInterface, const std::string& udpInterface, const char* qdisc_scheduler) {
@@ -318,11 +333,14 @@ void UserPlaneComponent::configure_htb_class(){
 
   rtnl_class_put(root_class);
 }
+#endif
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void UserPlaneComponent::tearDown() {
   mpPFCP_Session_LookupProgram->tearDown();
   SessionProgramManager::getInstance().removeAll();
+  #ifdef ENABLE_QOS
   rtnl_qdisc_delete(root_socket, root_qdisc);
   nl_socket_free(root_socket);
+  #endif
 }

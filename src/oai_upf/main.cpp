@@ -69,14 +69,9 @@ extern upf_nrf* upf_nrf_inst;
 #define N6_IF_NAME upf_cfg.n6.if_name
 #endif
 
-#ifndef QDISC_HTB_SCHEDULER
-#define QDISC_HTB_SCHEDULER "HTB"
-#endif
-
-
-
 
 std::unique_ptr<upf_config_yaml> upf_cfg_yaml = nullptr;
+
 
 //------------------------------------------------------------------------------
 void my_app_signal_handler(int s) {
@@ -100,6 +95,8 @@ void my_app_signal_handler(int s) {
   std::cout << "Freeing Allocated memory done" << std::endl;
   exit(0);
 }
+
+
 //------------------------------------------------------------------------------
 // We are doing a check to see if an existing process already runs this program.
 // We have seen that running at least twice this program in a container may lead
@@ -135,23 +132,26 @@ int my_check_redundant_process(char* exec_name) {
   return result;
 }
 
-//------------------------------------------------------------------------------
-void setup_bpf(const char* qdisc_scheduler = nullptr) {
-  std::shared_ptr<RulesUtilities> mpRulesFactory;
-  mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
 
-  string sGTPInterface = N3_IF_NAME;
-  string sUDPInterface = N6_IF_NAME;
-  Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
-  Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
+//------------------------------------------------------------------------------
+// void setup_bpf(const char* qdisc_scheduler = nullptr) {
+//   std::shared_ptr<RulesUtilities> mpRulesFactory;
+//   mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
+
+//   string sGTPInterface = N3_IF_NAME;
+//   string sUDPInterface = N6_IF_NAME;
+//   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
+//   Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
   
-  if(qdisc_scheduler){
-    UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface, qdisc_scheduler);
-  } else {
-    UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface);
-  }
-    
-}
+//   #ifdef ENABLE_QOS
+//   if(qdisc_scheduler){
+//     UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface, qdisc_scheduler);
+//   } else {
+//     UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface);
+//   }
+// }
+
+
 //------------------------------------------------------------------------------
 int main(int argc, char** argv) {
   // Checking if another instance of UPF is running
@@ -231,14 +231,23 @@ int main(int argc, char** argv) {
   fclose(fp);
 
   if (upf_cfg.enable_bpf_datapath){
-    const char *qdisc_scheduler = nullptr;
-    if (upf_cfg.enable_qos){
-      const char *qdisc_scheduler = QDISC_HTB_SCHEDULER;
-    }
-    
-    setup_bpf(qdisc_scheduler);
+    std::shared_ptr<RulesUtilities> mpRulesFactory;
+    mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
+
+    string sGTPInterface = N3_IF_NAME;
+    string sUDPInterface = N6_IF_NAME;
+    Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
+    Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
+  
+  #ifdef ENABLE_QOS
+    #ifndef QDISC_HTB_SCHEDULER
+      #define QDISC_HTB_SCHEDULER "HTB"
+    #endif //QDISC_HTB_SCHEDULER
+    UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface, QDISC_HTB_SCHEDULER);
+  #else
+    UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface);
+  #endif //ENABLE_QOS
   }
-   
   // once all udp servers initialized
   io_service.run();
 
