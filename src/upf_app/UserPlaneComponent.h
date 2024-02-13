@@ -19,7 +19,7 @@ class PFCP_Session_PDR_LookupProgram;
  *
  */
 class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
-    public:
+  public:
 
     /**
      * @brief Destroy the User Plane Component object
@@ -27,7 +27,8 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      */
     virtual ~UserPlaneComponent();
 
-    /*---------------------------------------------------------------------------------------------------------------*/
+
+  /*---------------------------------------------------------------------------------------------------------------*/
     /**
      * @brief Get the Instance object.
      *
@@ -35,7 +36,8 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      */
     static UserPlaneComponent& getInstance();
 
-    /*---------------------------------------------------------------------------------------------------------------*/
+
+  /*---------------------------------------------------------------------------------------------------------------*/
     /**
      * @brief Setup User Plane Component.
      * Used to setup all the program.
@@ -48,8 +50,9 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
         std::shared_ptr<RulesUtilities> pRulesUtilities,
         const std::string& gtpInterface, 
         const std::string& udpInterface);
-    
-    /*---------------------------------------------------------------------------------------------------------------*/
+
+
+  /*---------------------------------------------------------------------------------------------------------------*/
     /**
      * @brief Setup User Plane Component.
      * Used to setup all the program.
@@ -64,7 +67,9 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
         const std::string& gtpInterface, 
         const std::string& udpInterface, 
         const char* qdisc_scheduler);
-    /*---------------------------------------------------------------------------------------------------------------*/
+
+
+  /*---------------------------------------------------------------------------------------------------------------*/
     /**
      * @brief Set Members of the class UserPlaneComponent
      * 
@@ -75,8 +80,8 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
     void set_members(std::shared_ptr<RulesUtilities> pRulesUtilities,
     const std::string& gtpInterface, const std::string& udpInterface);
     
-    /*---------------------------------------------------------------------------------------------------------------*/
-        
+    
+  /*---------------------------------------------------------------------------------------------------------------*/
     /**
      * @brief Tear down User Plane Component.
      * Tear down all programs that were setup.
@@ -84,7 +89,8 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      */
     void tearDown();
 
-    /*---------------------------------------------------------------------------------------------------------------*/
+
+  /*---------------------------------------------------------------------------------------------------------------*/
     /**
      * @brief Get the Session Manager object.
      *
@@ -92,7 +98,8 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      */
     std::shared_ptr<SessionManager> getSessionManager() const;
 
-    /*---------------------------------------------------------------------------------------------------------------*/
+
+  /*---------------------------------------------------------------------------------------------------------------*/
     /**
      * @brief Get the Rules Factory object.
      *
@@ -100,7 +107,8 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      */
     std::shared_ptr<RulesUtilities> getRulesUtilities() const;
 
-    /*---------------------------------------------------------------------------------------------------------------*/
+
+  /*---------------------------------------------------------------------------------------------------------------*/
     /**
      * @brief Get PFCP_Session_LookupProgram object.
      *
@@ -110,43 +118,104 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
     std::shared_ptr<PFCP_Session_LookupProgram> getPFCP_Session_LookupProgram()
         const;
 
-    /*---------------------------------------------------------------------------------------------------------------*/
+
+  /*---------------------------------------------------------------------------------------------------------------*/
     /**
-     * @brief Get the GTP interface.
+     * @brief Getter 
+     *        Get the GTP interface.
      *
      * @return std::string The GTP interface.
      */
     std::string getGTPInterface() const;
 
-    /*---------------------------------------------------------------------------------------------------------------*/
+
+  /*---------------------------------------------------------------------------------------------------------------*/
     /**
-     * @brief Get UDP interface.
+     * @brief Getter 
+     *        Get UDP interface.
      *
      * @return std::string The UDP interface.
      */
     std::string getUDPInterface() const;
  
-    /*---------------------------------------------------------------------------------------------------------------*/
+
+  /*---------------------------------------------------------------------------------------------------------------*/
     /**
-     * @brief Get qdisc scheduler.
+     * @brief Getter
+     *        Get root qdisc scheduler.
      *
      * @return const char*  qdisc scheduler name insid Linux Kernel (default: HTB).
      */
-    const char* getQdiscScheduler() const;    
+    const char* get_root_qdisc_scheduler() const;    
+    
+  /*---------------------------------------------------------------------------------------------------------------*/
+    /**
+     * @brief Getter
+     *        Get the Root qdisc Quantum Value
+     * 
+     * @return uint32_t 
+     */
+    uint32_t get_root_qdisc_quantum() const;
+  
+  /*---------------------------------------------------------------------------------------------------------------*/
+    /**
+     * @brief Getter
+     *        Get defaultClass value
+     * 
+     * @return uint32_t 
+     */
+    uint32_t get_root_qdisc_defaultClass() const; 
 
-    /*---------------------------------------------------------------------------------------------------------------*/
-    // From onNewSessionProgramObserver.
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+    /**
+     * @brief Getter
+     *        Get root class scheduler.
+     *
+     * @return const char*  qdisc scheduler name insid Linux Kernel (default: HTB).
+     */
+    const char* get_root_class_scheduler() const;    
+    
+  /*---------------------------------------------------------------------------------------------------------------*/
+    /**
+     * @brief Getter
+     *        Get the Root Class Rate Value
+     * 
+     * @return uint32_t 
+     */
+    uint32_t get_root_class_rate() const;
+  
+  /*---------------------------------------------------------------------------------------------------------------*/
+    /**
+     * @brief Get root class ceil value
+     * 
+     * @return uint32_t 
+     */
+    uint32_t get_root_class_ceil() const; 
+
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+    /**
+     * @brief What to Do on New SessionProgram
+     * 
+     * @param programId 
+     * @param fileDescriptor 
+     */
     void onNewSessionProgram(
         u_int32_t programId, u_int32_t fileDescriptor) override;
 
-    /*---------------------------------------------------------------------------------------------------------------*/
-    // From onNewSessionProgramObserver.
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+    /**
+     * @brief What to Do when Destroying SessionProgram
+     * 
+     * @param programId 
+     */
     void onDestroySessionProgram(u_int32_t programId) override;
 
-    // TODO: getSessionManger?
-
+  
  
-    private:
+  private:
     /**
      * @brief Construct a new User Plane Component object.
      *
@@ -158,76 +227,29 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
     static int printLibbpfLog(
       enum libbpf_print_level lvl, const char* fmt, va_list args);
 
-    /*------------------------------------------------------------------------------------------------------------------*/
+
+  /*------------------------------------------------------------------------------------------------------------------*/
     /**
-     * @brief retrieve parameters from NIC <Interface> for the HTB class configuration
+     * @brief Setter 
+     *        Retrieve parameters from NIC <Interface> 
+     *        for the HTB class configuration
      * 
      * @param interface 
      * @return * void 
      */
-    void initialize_root_htb_class(std::string interface);
+    void set_root_class_attributes(std::string interface, const char *scheduler);
     
-    /*------------------------------------------------------------------------------------------------------------------*/
-   
-    // /**
-    //  * @brief Create a socket object
-    //  */
-    // void create_socket();
     
-    /*------------------------------------------------------------------------------------------------------------------*/
-    // /**
-    //  * @brief Create a qdisc object
-    //  * 
-    //  * @param sock 
-    //  * @return struct rtnl_qdisc* 
-    //  */
-    // // struct rtnl_qdisc* create_qdisc(struct nl_sock *sock);
-    // void create_qdisc();
-    
-    /*------------------------------------------------------------------------------------------------------------------*/
-    // /**
-    //  * @brief Create a link cache object
-    //  * 
-    //  */
-    // void create_link_cache();
-
-    /*------------------------------------------------------------------------------------------------------------------*/
-    // /**
-    //  * @brief Create a link object
-    //  * 
-    //  * @param iface 
-    //  */
-    // void create_link(const char *iface);
-    /*------------------------------------------------------------------------------------------------------------------*/
-    // /**
-    //  * @brief Intialize the qdisc parameters
-    //  * 
-    //  * @param std::string interface
-    //  */
-    //void initialize_root_qdisc(std::string interface);
-
-    /*------------------------------------------------------------------------------------------------------------------*/
+  /*------------------------------------------------------------------------------------------------------------------*/
     /**
-     * @brief Configure the HTB Qdisc
+     * @brief Setter 
+     *        Set the Root Qdisc Parameters
      * 
      */
-      void configure_htb_qdisc();     
+    void set_root_qdisc_attributes(const char *scheduler); 
 
-    /*------------------------------------------------------------------------------------------------------------------*/
-    
-      // /**
-      //  * @brief Create a Root Class to Attach to the Root Qdisc
-      //  * 
-      //  */
-      // void create_root_class();              
-    
-    /*------------------------------------------------------------------------------------------------------------------*/
-    /**
-     * @brief Configure the HTB root class with the NIC attributes
-     * 
-     */
-    void configure_htb_class();
-    /*------------------------------------------------------------------------------------------------------------------*/
+
+  /*------------------------------------------------------------------------------------------------------------------*/
 
     // The session manager reference.
     std::shared_ptr<SessionManager> mpSessionManager;
@@ -250,14 +272,13 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
     std::string mUDPInterface;
 
   /*---------------------------------------------------------------------------------------------------------------*/
-    const char *mQdiscScheduler = nullptr;
-    struct qdisc_params *qdisc_att = nullptr;
+    struct qdisc_root_params *qdisc_att = nullptr;
+    struct class_params *class_att = nullptr;
     struct rtnl_qdisc *root_qdisc = nullptr;
     struct rtnl_class *root_class = nullptr;
     struct nl_sock *root_socket;
     struct rtnl_link *link;
     struct nl_cache *link_cache;
-    uint32_t defaultClass;
 };
 
 #endif  // __USERPLANECOMPONENT_H__

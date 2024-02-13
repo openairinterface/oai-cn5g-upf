@@ -34,7 +34,8 @@ class QdiscHelper {
    * @return struct rtnl_qdisc* 
    */
   struct rtnl_qdisc *create_qdisc(struct nl_sock *socket);
-  
+
+
   /*------------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Create a link cache object
@@ -43,6 +44,7 @@ class QdiscHelper {
    * @return struct nl_cache* 
    */
   struct nl_cache * create_link_cache(struct nl_sock *socket);
+
 
   /*------------------------------------------------------------------------------------------------------------------*/
   /**
@@ -54,35 +56,51 @@ class QdiscHelper {
    * @return struct rtnl_link* 
    */
   struct rtnl_link *create_link(const char *iface, struct nl_cache *link_cache, struct nl_sock *socket);
+  
+  
   /*------------------------------------------------------------------------------------------------------------------*/
   /**
-   * @brief Intialize the qdisc parameters
+   * @brief Configure the Root Qdisc
    * 
-   * @param std::string interface
+   * @param socket 
+   * @param link 
+   * @param qdisc 
+   * @param qdisc_scheduler 
+   * @param defaultClass 
    */
-  //void initialize_root_qdisc(std::string interface);
+  void configure_root_qdisc(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_qdisc *qdisc, const char *qdisc_scheduler, uint32_t defaultClass);
 
-  /*------------------------------------------------------------------------------------------------------------------*/
-  // /**
-  //  * @brief Configure the HTB Qdisc
-  //  * 
-  //  */
-  //   void configure_htb_qdisc();     
 
-  /*------------------------------------------------------------------------------------------------------------------*/
+  /*------------------------------------------------------------------------------------------------------------------*/ 
+  /**
+   * @brief Configure Root Class
+   * 
+   * @param socket 
+   * @param link 
+   * @param qdisc_scheduler 
+   * @param rate 
+   * @param ceil 
+   * @return * void 
+   */
+  void configure_root_class(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_class *qdisc_class, const char *qdisc_scheduler, uint32_t rate, uint32_t ceil);
   
-    /**
-     * @brief Create a Root Class to Attach to the Root Qdisc
-     * 
-     */
-    struct rtnl_class * create_class(struct nl_sock *socket);              
   
   /*------------------------------------------------------------------------------------------------------------------*/
-  // /**
-  //  * @brief Configure the HTB root class with the NIC attributes
-  //  * 
-  //  */
-  // void configure_htb_class();
+  /**
+   * @brief Create a Class to Attach to the Root Qdisc
+   * 
+   * @param socket
+   */
+  struct rtnl_class * create_class(struct nl_sock *socket);              
+  
+  /*------------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Release the Netlink Socket and Qdisc Objects
+   * 
+   * @param socket 
+   * @param qdisc_class 
+   */
+  void release_netlink_objects(struct nl_sock *socket, struct rtnl_class *qdisc_class);
   /*------------------------------------------------------------------------------------------------------------------*/
 
 

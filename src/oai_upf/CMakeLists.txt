@@ -326,17 +326,14 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model/common_model.cmake)
 
 
 
+file(STRINGS "${SRC_TOP_DIR}/../etc/config.yaml" enable_qos REGEX "^upf:\\s+support_features:\\s+enable_qos:\\s+(yes|no)")
+message("ENABLE_QOS_CONTENT: ${enable_qos}")
 
-
-# Read the value of enable_qos from config.yaml
-file(STRINGS "${SRC_TOP_DIR}/../etc/config.yaml" ENABLE_QOS_CONTENT REGEX "^upf:\\s+support_features:\\s+enable_qos:\\s+(yes|no)")
-
-IF(ENABLE_QOS_CONTENT MATCHES "yes")
+IF(enable_qos MATCHES "yes")
   set(CMAKE_MODULE_PATH "${SRC_TOP_DIR}/upf_app/cmake" "${CMAKE_MODULE_PATH}")
   include(FindPkgConfig)
   find_package (LibNL REQUIRED)
   include(${SRC_TOP_DIR}/upf_app/cmake/FindLibNL.cmake)
-  message("////////////////////////////////////////////////////////")
   SET(ENABLE_QOS 1)
 ELSE()
   SET(ENABLE_QOS 0)

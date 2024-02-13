@@ -15,8 +15,6 @@
 #include <netlink/route/qdisc/htb.h>
 
 
-
-
 /*---------------------------------------------------------------------------------------------------------------*/
 QERProgram::QERProgram(
     const std::string& gtpInterface, const std::string& udpInterface)
@@ -28,8 +26,10 @@ QERProgram::QERProgram(
       qer_ebpf_tc_prgrm_kernel_c__destroy);
 }
 
+
 /*---------------------------------------------------------------------------------------------------------------*/
 QERProgram::~QERProgram() {}
+
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void QERProgram::setup() {
@@ -39,10 +39,74 @@ void QERProgram::setup() {
   mpLifeCycle->attach();
 }
 
+
+
+
+/*---------------------------------------------------------------------------------------------------------------*/
+#ifdef ENABLE_QOS
+void QERProgram::setup(
+    const std::string& gtpInterface, const std::string& udpInterface, const char* qdisc_scheduler, std::vector<uint32_t> qfis) {
+
+  spSkeleton = mpLifeCycle->open();
+  initializeMaps();
+  mpLifeCycle->load();
+  mpLifeCycle->attach();
+
+  set_members(gtpInterface, udpInterface);
+  set_class_attributes(gtpInterface, scheduler);
+  set_qdisc_attributes(scheduler);
+
+  struct nl_sock *socket = nullptr;
+  struct rtnl_link *link = nullptr; 
+
+  /*correct the dataplane; it doesn't exist
+  and add functions get_socket(), get_link()
+  */
+  if (!(socket = dataplane.get_socket())){
+    Logger::upf_app().error("Unable to retrieve existing socket");
+    exit(EXIT_FAILURE);
+  }
+
+  if (!(link = dataplane.get_link())){
+    Logger::upf_app().error("Unable to retrieve existing link");
+    exit(EXIT_FAILURE);
+  }
+
+  if (!(class_pdu_session = qdiscHelper.create_class(socket))){
+    Logger::upf_app().error("Unable to create a PDU_SESSION Qdisc Class");
+    exit(EXIT_FAILURE);
+  }
+  
+  // Initialize class_att
+  //Initialize pos
+
+  qdiscHelper.configure_parent_class(socket, link, class_pdu_session, class_att, pos);
+  
+  /* qfis is of type: std::vector<uint32_t qfi>
+  *  qfis is obtained form pfcp_establishment
+  *  and modification within the sestion create_qer.
+  * So we push_back values in this vector and retrieve them here.
+  */  
+  for (int i = 0; i++; i < sizeof(qfis)){
+    if (!(classe_qfi_flows[i] = qdiscHelper.create_class(socket))){
+    Logger::upf_app().error("Unable to create a QFI_FLOW Qdisc Class");
+    //exit(EXIT_FAILURE);
+  }
+
+    qdiscHelper.configure_leaf_class(socket, link, classe_qfi_flows[i], class_att, pos);
+  }
+}
+#endif
+
+
+
+
+
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMaps> QERProgram::getMaps() {
   return mpMaps;
 }
+
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // TODO: Check when kill when running.
@@ -51,15 +115,18 @@ void QERProgram::tearDown() {
   mpLifeCycle->tearDown();
 }
 
+
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> QERProgram::geGtpUTunnelMap() const {
   return mpGtpUTunnelMap;
 }
 
+
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> QERProgram::getFilterMap() const {
   return mpFilterMap;
 }
+
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
@@ -72,8 +139,65 @@ void QERProgram::initializeMaps() {
   mpFilterMap     = std::make_shared<BPFMap>(mpMaps->getMap("m_filter"));
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
 
+/*---------------------------------------------------------------------------------------------------------------*/
+/*
+ * function that adds a new HTB class and set its parameters
+ */
+int class_add_HTB(struct nl_sock *sock, struct rtnl_link *rtnlLink, 
+		    uint32_t parentMaj, uint32_t parentMin,
+		    uint32_t childMaj,  uint32_t childMin, 
+		    uint64_t rate, uint64_t ceil,
+		    /* uint32_t burst, uint32_t cburst,*/ 
+		    uint32_t prio
+)
+{
+    int err;
+    struct rtnl_class *class;
+    //struct rtnl_class *class = (struct rtnl_class *) tc;
+    //create a HTB class 
+    //class = (struct rtnl_class *)rtnl_class_alloc();
+    if (!(class = rtnl_class_alloc())) {
+        printf("Can not allocate class object\n");
+        return 1;
+    }
+    //
+    rtnl_tc_set_link(TC_CAST(class), link);
+    //add a HTB qdisc
+    //printf("Add a new HTB class with 0x%X:0x%X on parent 0x%X:0x%X\n", childMaj, childMin, parentMaj, parentMin);
+    rtnl_tc_set_parent(TC_CAST(class), TC_HANDLE(parentMaj, parentMin));
+    rtnl_tc_set_handle(TC_CAST(class), TC_HANDLE(childMaj, childMin));
+    if ((err = rtnl_tc_set_kind(TC_CAST(class), "htb"))) {
+        printf("Can not set HTB to class\n");
+        return 1;
+    }
+    //printf("set HTB class prio to %u\n", prio);
+    rtnl_htb_set_prio((struct rtnl_class *)class, prio);
+    if (rate) {
+	//rate=rate/8;
+	rtnl_htb_set_rate(class, rate);
+    }
+    if (ceil) {
+	//ceil=ceil/8;
+	rtnl_htb_set_ceil(class, ceil);
+    }
+    
+    if (burst) {
+	//printf ("Class HTB: set rate burst: %u\n", burst);
+        rtnl_htb_set_rbuffer(class, burst);
+    }
+    if (cburst) {
+	//printf ("Class HTB: set rate cburst: %u\n", cburst);
+        rtnl_htb_set_cbuffer(class, cburst);
+    }
+    /* Submit request to kernel and wait for response */
+    if ((err = rtnl_class_add(sock, class, NLM_F_CREATE))) {
+        printf("Can not allocate HTB Qdisc\n");
+        return 1;
+    }
+    rtnl_class_put(class);
+    return 0;
+}
 
 
 

@@ -240,10 +240,10 @@ int main(int argc, char** argv) {
     Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
   
   #ifdef ENABLE_QOS
-    #ifndef QDISC_HTB_SCHEDULER
-      #define QDISC_HTB_SCHEDULER "HTB"
-    #endif //QDISC_HTB_SCHEDULER
-    UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface, QDISC_HTB_SCHEDULER);
+    #ifndef HTB_SCHEDULER
+      #define HTB_SCHEDULER "HTB"
+    #endif //HTB_SCHEDULER
+    UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface, HTB_SCHEDULER);
   #else
     UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface);
   #endif //ENABLE_QOS
