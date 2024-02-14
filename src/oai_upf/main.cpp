@@ -61,14 +61,19 @@ boost::asio::io_service io_service;
 // TODO These global variables are ugly :| -> refactor together with nrf client
 extern upf_nrf* upf_nrf_inst;
 
+
 #ifndef N3_IF_NAME
 #define N3_IF_NAME upf_cfg.n3.if_name
-#endif
+#endif //N3_IF_NAME
 
 #ifndef N6_IF_NAME
 #define N6_IF_NAME upf_cfg.n6.if_name
-#endif
+#endif //N6_IF_NAME
 
+#ifndef HTB_SCHEDULER
+#define HTB_SCHEDULER "HTB"
+#endif //HTB_SCHEDULER
+    
 
 std::unique_ptr<upf_config_yaml> upf_cfg_yaml = nullptr;
 
@@ -134,22 +139,22 @@ int my_check_redundant_process(char* exec_name) {
 
 
 //------------------------------------------------------------------------------
-// void setup_bpf(const char* qdisc_scheduler = nullptr) {
-//   std::shared_ptr<RulesUtilities> mpRulesFactory;
-//   mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
+void setup_bpf(const char* qdisc_scheduler = nullptr) {
+  std::shared_ptr<RulesUtilities> mpRulesFactory;
+  mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
 
-//   string sGTPInterface = N3_IF_NAME;
-//   string sUDPInterface = N6_IF_NAME;
-//   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
-//   Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
+  string sGTPInterface = N3_IF_NAME;
+  string sUDPInterface = N6_IF_NAME;
+  Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
+  Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
   
-//   #ifdef ENABLE_QOS
-//   if(qdisc_scheduler){
-//     UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface, qdisc_scheduler);
-//   } else {
-//     UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface);
-//   }
-// }
+
+  if(qdisc_scheduler){
+    UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface, qdisc_scheduler);
+  } else {
+    UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface);
+  }
+}
 
 
 //------------------------------------------------------------------------------
@@ -231,22 +236,11 @@ int main(int argc, char** argv) {
   fclose(fp);
 
   if (upf_cfg.enable_bpf_datapath){
-    std::shared_ptr<RulesUtilities> mpRulesFactory;
-    mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
-
-    string sGTPInterface = N3_IF_NAME;
-    string sUDPInterface = N6_IF_NAME;
-    Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
-    Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
-  
-  #ifdef ENABLE_QOS
-    #ifndef HTB_SCHEDULER
-      #define HTB_SCHEDULER "HTB"
-    #endif //HTB_SCHEDULER
-    UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface, HTB_SCHEDULER);
-  #else
-    UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface);
-  #endif //ENABLE_QOS
+    if(upf_cfg.enable_qos){
+      UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface, HTB_SCHEDULER);
+    } else {
+      UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface);
+    }
   }
   // once all udp servers initialized
   io_service.run();

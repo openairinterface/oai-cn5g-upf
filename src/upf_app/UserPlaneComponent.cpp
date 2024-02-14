@@ -9,12 +9,10 @@
 #include <helpers/GetNicInformation.hpp>
 #include <helpers/QdiscHelpers.hpp>
 
-#ifdef ENABLE_QOS
 #include <netlink/netlink.h>
 #include <netlink/route/qdisc.h>
 #include <netlink/route/link.h>
 #include <netlink/route/qdisc/htb.h>
-#endif
 
 #ifndef QUANTUM
 #define QUANTUM 1
@@ -109,7 +107,7 @@ uint32_t UserPlaneComponent::get_root_class_ceil() const {
 /*---------------------------------------------------------------------------------------------------------------*/
 // Method definition to initialize class_params
 void UserPlaneComponent::set_root_class_attributes(std::string interface, const char *scheduler) {
-  NicInformationGetter nicInfoGet = new NicInformationGetter();
+  NicInformationGetter nicInfoGet;
   // Initialize class_att members
   class_att->scheduler = scheduler;
   class_att->rate = nicInfoGet.retrieveRate(interface);
@@ -189,22 +187,22 @@ void UserPlaneComponent::setup(
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
-#ifdef ENABLE_QOS
 void UserPlaneComponent::setup(
     std::shared_ptr<RulesUtilities> pRulesUtilities,
     const std::string& gtpInterface, const std::string& udpInterface, const char* qdisc_scheduler) {
+  
+  QdiscHelper qdiscHelper;
 
   set_members(pRulesUtilities, gtpInterface, udpInterface);
-  set_root_class_attributes(gtpInterface, scheduler);
-  set_root_qdisc_attributes(scheduler);
+  set_root_class_attributes(gtpInterface, qdisc_scheduler);
+  set_root_qdisc_attributes(qdisc_scheduler);
 
   SignalHandler::getInstance().enable();
   mpPFCP_Session_LookupProgram->setup();
 
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();
-  QdiscHelper qdiscHelper;
-
+  
   if (!(root_socket = qdiscHelper.create_socket())){
     Logger::upf_app().error("Unable to create a netlink socket");
     exit(EXIT_FAILURE);
@@ -233,15 +231,14 @@ void UserPlaneComponent::setup(
 
   qdiscHelper.configure_root_qdisc(root_socket, link, root_qdisc, qdisc_att);
   qdiscHelper.configure_root_class(root_socket, link, root_class, class_att);
+  
 }
-#endif
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void UserPlaneComponent::tearDown() {
+  QdiscHelper qdiscHelper;
   mpPFCP_Session_LookupProgram->tearDown();
   SessionProgramManager::getInstance().removeAll();
-  #ifdef ENABLE_QOS
-  QdiscHelper.release_netlink_objects(root_socket, root_qdisc);
-  #endif
+  qdiscHelper.release_netlink_objects(root_socket, root_qdisc);
 }

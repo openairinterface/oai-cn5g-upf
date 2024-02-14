@@ -40,21 +40,114 @@ void QERProgram::setup() {
 }
 
 
+/*---------------------------------------------------------------------------------------------------------------*/
+/* 
+*  Save the different QFI values for all QoS 
+*  Flows belonging to the same PDU Session
+*/
+void QERProgram::set_qos_flows_qfis(std::vector<struct qos_flow*> qfis) {
+  struct qos_flow *qos_flow;
+  for (int i = 0; i < sizeof(qfis); i++){
+    qos_flow->qfi = qfis[i]->qfi;
+    qos_flow->mbr = qfis[i]->mbr;
+    qos_flow->gbr = qfis[i]->gbr;
+    
+    qos_flows_qfis.push_back(qos_flow);
+  }
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+/* 
+*  Save the Identifiers of the PDU Session: 
+*  Seid,  Teid_ul,  Teid_dl
+*/
+void QERProgram::set_pdu_session_ids(uint64_t seid) {
+  pdu_session->seid = seid;
+  struct gtp_u_tunnel gtp_tunnel={};
+
+  if (gtp_tunnel = bpf_map_lookup_elem(&m_gtp_u_tunnel, &seid)){
+    pdu_session->teid_ul = gtp_tunnel->teid_ul;
+    pdu_session->teid_dl = gtp_tunnel->teid_dl;
+  }
+  
+}
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
-#ifdef ENABLE_QOS
-void QERProgram::setup(
-    const std::string& gtpInterface, const std::string& udpInterface, const char* qdisc_scheduler, std::vector<uint32_t> qfis) {
+// Method definition to initialize class_params
+void QERProgram::set_pdu_session_class_attributes(const char *qdisc_scheduler) {
+  // Initialize class_att members
+  pdu_session_class_att->scheduler = qdisc_scheduler;
+  pdu_session_class_att->rate = -1; //gbr is the correct affectation?
+  pdu_session_class_att->ceil = -1; //mbr is the correct affectation?
+  pdu_session_class_att->burst = -1;
+  pdu_session_class_att->cburst = -1;
+  pdu_session_class_att->priority = -1;
+}
 
+
+/*---------------------------------------------------------------------------------------------------------------*/
+// Method definition to initialize class_params
+void QERProgram::set_qos_flows_classes_attributes() {
+  struct class_params* class_att;
+
+  for (int i = 0; i < sizeof(qos_flows_qfis); i++){
+    class_att->scheduler = pdu_session_class_att->scheduler;
+    class_att->rate[i] = qos_flows_qfis[i]->gbr; // check 5QI table to get this value
+    class_att->ceil[i] = qos_flows_qfis[i]->mbr; //check 5QI to get this value
+    class_att->burst[i] = -1;
+    class_att->cburst[i] = -1;
+    class_att->priority[i] = -1;
+    
+    qos_flows_classes_att->push_back(class_att);
+  }
+}
+
+
+/*---------------------------------------------------------------------------------------------------------------*/
+// Method definition to set pdu_session class position
+void QERProgram::set_pdu_session_class_position() {
+  pdu_session_class_pos->parentMaj = 1 ;
+  pdu_session_class_pos->parentMin = 0;
+  pdu_session_class_pos->childMaj = 1;
+  pdu_session_class_pos->childMin = pdu_session->seid && (pdu_session->teid_ul && pdu_session->teid_dl);
+}
+
+
+/*---------------------------------------------------------------------------------------------------------------*/
+// Method definition to set pdu_session class position
+void QERProgram::set_qos_flows_classes_positions() {
+  struct class_position* class_pos;
+
+  class_pos->parentMaj = pdu_session_class_pos->parentMaj;
+  class_pos->parentMin = pdu_session_class_pos->parentMin;
+  class_pos->childMaj  = pdu_session_class_pos->childMin;
+    
+  for (int i = 0; i < sizeof(qos_flows_qfis); i++){
+    class_pos->childMin = qos_flows_qfis[i];
+
+    qos_flows_classes_pos->push_back();
+  }
+}
+
+
+/*---------------------------------------------------------------------------------------------------------------*/
+void QERProgram::setup(
+    const std::string& gtpInterface, const std::string& udpInterface, const char* qdisc_scheduler, std::vector<uint32_t> qfis, uint64_t seid) {
+
+  QdiscHelper  qdiscHelper;
   spSkeleton = mpLifeCycle->open();
   initializeMaps();
   mpLifeCycle->load();
   mpLifeCycle->attach();
 
-  set_members(gtpInterface, udpInterface);
-  set_class_attributes(gtpInterface, scheduler);
-  set_qdisc_attributes(scheduler);
+  set_qos_flows_qfis(qfis);
+  set_pdu_session_ids(seid);
+
+  set_pdu_session_class_attributes(qdisc_scheduler);
+  set_qos_flows_classes_attributes();
+  set_pdu_session_class_position();
+  set_qos_flows_classes_positions();
 
   struct nl_sock *socket = nullptr;
   struct rtnl_link *link = nullptr; 
@@ -72,31 +165,24 @@ void QERProgram::setup(
     exit(EXIT_FAILURE);
   }
 
-  if (!(class_pdu_session = qdiscHelper.create_class(socket))){
-    Logger::upf_app().error("Unable to create a PDU_SESSION Qdisc Class");
-    exit(EXIT_FAILURE);
-  }
+  if (!class_pdu_session){
+    if (!(class_pdu_session = qdiscHelper.create_class(socket))){
+      Logger::upf_app().error("Unable to create a PDU_SESSION Qdisc Class");
+      exit(EXIT_FAILURE);
+    }
+    qdiscHelper.configure_pdu_session_class(socket, link, class_pdu_session, pdu_session_class_att, pdu_session_class_pos);
+  }    
   
-  // Initialize class_att
-  //Initialize pos
-
-  qdiscHelper.configure_parent_class(socket, link, class_pdu_session, class_att, pos);
-  
-  /* qfis is of type: std::vector<uint32_t qfi>
-  *  qfis is obtained form pfcp_establishment
-  *  and modification within the sestion create_qer.
-  * So we push_back values in this vector and retrieve them here.
-  */  
-  for (int i = 0; i++; i < sizeof(qfis)){
-    if (!(classe_qfi_flows[i] = qdiscHelper.create_class(socket))){
+  for (int i = 0; i < sizeof(qfis); i++){
+    struct rtnl_class* qfi_flow_class;
+    if (!(qfi_flow_class = qdiscHelper.create_class(socket))){
     Logger::upf_app().error("Unable to create a QFI_FLOW Qdisc Class");
     //exit(EXIT_FAILURE);
   }
-
-    qdiscHelper.configure_leaf_class(socket, link, classe_qfi_flows[i], class_att, pos);
+    classes_qfi_flows->push_back();
+    qdiscHelper.configure_qos_flow_class(socket, link, classes_qfi_flows[i], qos_flows_classes_att[i], qos_flows_classes_pos[i]);
   }
 }
-#endif
 
 
 
@@ -141,63 +227,63 @@ void QERProgram::initializeMaps() {
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
-/*
- * function that adds a new HTB class and set its parameters
- */
-int class_add_HTB(struct nl_sock *sock, struct rtnl_link *rtnlLink, 
-		    uint32_t parentMaj, uint32_t parentMin,
-		    uint32_t childMaj,  uint32_t childMin, 
-		    uint64_t rate, uint64_t ceil,
-		    /* uint32_t burst, uint32_t cburst,*/ 
-		    uint32_t prio
-)
-{
-    int err;
-    struct rtnl_class *class;
-    //struct rtnl_class *class = (struct rtnl_class *) tc;
-    //create a HTB class 
-    //class = (struct rtnl_class *)rtnl_class_alloc();
-    if (!(class = rtnl_class_alloc())) {
-        printf("Can not allocate class object\n");
-        return 1;
-    }
-    //
-    rtnl_tc_set_link(TC_CAST(class), link);
-    //add a HTB qdisc
-    //printf("Add a new HTB class with 0x%X:0x%X on parent 0x%X:0x%X\n", childMaj, childMin, parentMaj, parentMin);
-    rtnl_tc_set_parent(TC_CAST(class), TC_HANDLE(parentMaj, parentMin));
-    rtnl_tc_set_handle(TC_CAST(class), TC_HANDLE(childMaj, childMin));
-    if ((err = rtnl_tc_set_kind(TC_CAST(class), "htb"))) {
-        printf("Can not set HTB to class\n");
-        return 1;
-    }
-    //printf("set HTB class prio to %u\n", prio);
-    rtnl_htb_set_prio((struct rtnl_class *)class, prio);
-    if (rate) {
-	//rate=rate/8;
-	rtnl_htb_set_rate(class, rate);
-    }
-    if (ceil) {
-	//ceil=ceil/8;
-	rtnl_htb_set_ceil(class, ceil);
-    }
+// /*
+//  * function that adds a new HTB class and set its parameters
+//  */
+// int class_add_HTB(struct nl_sock *sock, struct rtnl_link *rtnlLink, 
+// 		    uint32_t parentMaj, uint32_t parentMin,
+// 		    uint32_t childMaj,  uint32_t childMin, 
+// 		    uint64_t rate, uint64_t ceil,
+// 		    /* uint32_t burst, uint32_t cburst,*/ 
+// 		    uint32_t prio
+// )
+// {
+//     int err;
+//     struct rtnl_class *class;
+//     //struct rtnl_class *class = (struct rtnl_class *) tc;
+//     //create a HTB class 
+//     //class = (struct rtnl_class *)rtnl_class_alloc();
+//     if (!(class = rtnl_class_alloc())) {
+//         printf("Can not allocate class object\n");
+//         return 1;
+//     }
+//     //
+//     rtnl_tc_set_link(TC_CAST(class), link);
+//     //add a HTB qdisc
+//     //printf("Add a new HTB class with 0x%X:0x%X on parent 0x%X:0x%X\n", childMaj, childMin, parentMaj, parentMin);
+//     rtnl_tc_set_parent(TC_CAST(class), TC_HANDLE(parentMaj, parentMin));
+//     rtnl_tc_set_handle(TC_CAST(class), TC_HANDLE(childMaj, childMin));
+//     if ((err = rtnl_tc_set_kind(TC_CAST(class), "htb"))) {
+//         printf("Can not set HTB to class\n");
+//         return 1;
+//     }
+//     //printf("set HTB class prio to %u\n", prio);
+//     rtnl_htb_set_prio((struct rtnl_class *)class, prio);
+//     if (rate) {
+// 	//rate=rate/8;
+// 	rtnl_htb_set_rate(class, rate);
+//     }
+//     if (ceil) {
+// 	//ceil=ceil/8;
+// 	rtnl_htb_set_ceil(class, ceil);
+//     }
     
-    if (burst) {
-	//printf ("Class HTB: set rate burst: %u\n", burst);
-        rtnl_htb_set_rbuffer(class, burst);
-    }
-    if (cburst) {
-	//printf ("Class HTB: set rate cburst: %u\n", cburst);
-        rtnl_htb_set_cbuffer(class, cburst);
-    }
-    /* Submit request to kernel and wait for response */
-    if ((err = rtnl_class_add(sock, class, NLM_F_CREATE))) {
-        printf("Can not allocate HTB Qdisc\n");
-        return 1;
-    }
-    rtnl_class_put(class);
-    return 0;
-}
+//     if (burst) {
+// 	//printf ("Class HTB: set rate burst: %u\n", burst);
+//         rtnl_htb_set_rbuffer(class, burst);
+//     }
+//     if (cburst) {
+// 	//printf ("Class HTB: set rate cburst: %u\n", cburst);
+//         rtnl_htb_set_cbuffer(class, cburst);
+//     }
+//     /* Submit request to kernel and wait for response */
+//     if ((err = rtnl_class_add(sock, class, NLM_F_CREATE))) {
+//         printf("Can not allocate HTB Qdisc\n");
+//         return 1;
+//     }
+//     rtnl_class_put(class);
+//     return 0;
+// }
 
 
 

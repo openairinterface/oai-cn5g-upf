@@ -113,9 +113,7 @@ struct rtnl_class *QdiscHelper::create_class(struct nl_sock *socket){
 int QdiscHelper::configure_root_qdisc(struct nl_sock *socket, 
     struct rtnl_link *link,
     struct rtnl_qdisc *qdisc,
-    struct qdisc_root_params qdisc_att
-    // const char *qdisc_scheduler, 
-    // uint32_t defaultClass
+    struct qdisc_root_params *qdisc_att
     )
 {    
   int err;
@@ -158,9 +156,6 @@ int QdiscHelper::configure_root_class(struct nl_sock *socket,
     struct rtnl_link *link,
     struct rtnl_class *qdisc_class,
     class_params *class_att
-    // const char *qdisc_scheduler, 
-    // uint32_t rate,
-    // uint32_t ceil
     ){
   int err;
 
@@ -180,11 +175,11 @@ int QdiscHelper::configure_root_class(struct nl_sock *socket,
             - rate = rate/8; 
             - ceil = ceil/8; 
     */
-    if (rate > 0) {
+    if ((class_att->rate) > 0) {
         rtnl_htb_set_rate(qdisc_class, class_att->rate);
     }
 
-    if (rate > 0) {        
+    if ((class_att->ceil) > 0) {        
 	    rtnl_htb_set_ceil(qdisc_class, class_att->ceil);
     }
   
@@ -206,17 +201,18 @@ int QdiscHelper::configure_root_class(struct nl_sock *socket,
   }
 
   rtnl_class_put(qdisc_class);
+  return 0;
 }
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
 /* Method to Release Netlink Objects (socket, qdisc)*/
-void QdiscHelper::release_netlink_objects(struct nl_sock *socket, struct rtnl_class *qdisc_class){
+void QdiscHelper::release_netlink_objects(struct nl_sock *socket, struct rtnl_qdisc *qdisc){
     Logger::upf_app().info("Release Qdisc Object");
-    rtnl_qdisc_delete(root_socket, root_qdisc);
+    rtnl_qdisc_delete(socket, qdisc);
 
     Logger::upf_app().info("Release Socket Object");
-    nl_socket_free(root_socket);
+    nl_socket_free(socket);
 } 
 
 
@@ -248,7 +244,7 @@ int QdiscHelper::configure_parent_class(struct nl_sock *socket,
       return(err);
     }
 
-    if (strcmp(rtnl_tc_get_kind(TC_CAST(qdisc_class)), HTB_SCHEDULER) == 0){
+    if (strcmp(rtnl_tc_get_kind(TC_CAST(parent_class)), HTB_SCHEDULER) == 0){
         rtnl_htb_set_prio(parent_class, class_att->priority);
         
         /*
@@ -286,7 +282,7 @@ int QdiscHelper::configure_parent_class(struct nl_sock *socket,
 
 /*---------------------------------------------------------------------------------------------------------------*/
 /* Method to configure Leaf Class object*/
-void QdiscHelper::configure_leaf_class(struct nl_sock *socket, 
+int QdiscHelper::configure_leaf_class(struct nl_sock *socket, 
             struct rtnl_link *link, 
             struct rtnl_class *leaf_class,
             struct class_params *class_att,
@@ -337,7 +333,7 @@ void QdiscHelper::configure_leaf_class(struct nl_sock *socket,
     /* Submit request to kernel and wait for response */
     if ((err = rtnl_class_add(socket, leaf_class, NLM_F_CREATE))) {
         printf("Can not allocate the leaf Class\n");
-        return 1;
+        return (err);
     }
 
     rtnl_class_put(leaf_class);

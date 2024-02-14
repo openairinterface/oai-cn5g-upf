@@ -18,13 +18,17 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf/nrf_model.cmake)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/include)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/far)
 #include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/urr)
 #include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/bar)
 #include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/mar)
 
-include_directories(${LibNL_INCLUDE_DIR})
 
+
+##############################################################
+#                          FAR                               #
+##############################################################
+include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/far)
+include_directories(${LibNL_INCLUDE_DIR})
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 
 set(GTP_INTERFACE $ENV{GTP_INTERFACE})
@@ -96,7 +100,8 @@ install(
 
 
 ##############################################################
-if(ENABLE_QOS)
+#                          QER                               #
+##############################################################
   include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindLibNL.cmake)
   include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/qer)
   
@@ -148,8 +153,6 @@ if(ENABLE_QOS)
       RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
       INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
   )
-
-endif()
 
 
 

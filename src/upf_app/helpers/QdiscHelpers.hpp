@@ -4,7 +4,7 @@
 #include <string>
 #include <memory>
 #include <netinet/ether.h>
-
+#include "qdisc_parameters.h"
 #include "logger.hpp"
 
 
@@ -65,10 +65,10 @@ class QdiscHelper {
    * @param socket 
    * @param link 
    * @param qdisc 
-   * @param qdisc_scheduler 
-   * @param defaultClass 
+   * @param qdisc_att 
+   * @return int 
    */
-  void configure_root_qdisc(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_qdisc *qdisc, const char *qdisc_scheduler, uint32_t defaultClass);
+  int configure_root_qdisc(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_qdisc *qdisc, struct qdisc_root_params *qdisc_att );
 
 
   /*------------------------------------------------------------------------------------------------------------------*/ 
@@ -77,14 +77,13 @@ class QdiscHelper {
    * 
    * @param socket 
    * @param link 
-   * @param qdisc_scheduler 
-   * @param rate 
-   * @param ceil 
-   * @return * void 
+   * @param qdisc_class 
+   * @param class_att 
+   * @return int 
    */
-  void configure_root_class(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_class *qdisc_class, const char *qdisc_scheduler, uint32_t rate, uint32_t ceil);
-  
-  
+  int configure_root_class(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_class *qdisc_class, class_params *class_att);
+
+
   /*------------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Create a Class to Attach to the Root Qdisc
@@ -93,6 +92,32 @@ class QdiscHelper {
    */
   struct rtnl_class * create_class(struct nl_sock *socket);              
   
+
+  /*------------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Configure Parent Qdisc Class
+   * 
+   * @param socket 
+   * @param link 
+   * @param parent_class 
+   * @param class_att 
+   * @param pos 
+   * @return int 
+   */
+  int configure_parent_class(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_class *parent_class, struct class_params *class_att, struct class_position *pos);
+
+  /*------------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Configure the Leaf Qdisc Class
+   * 
+   * @param socket 
+   * @param link 
+   * @param leaf_class 
+   * @param class_att 
+   * @param pos 
+   * @return int 
+   */
+  int configure_leaf_class(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_class *leaf_class, struct class_params *class_att, struct class_position *pos);
   /*------------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Release the Netlink Socket and Qdisc Objects
@@ -100,7 +125,7 @@ class QdiscHelper {
    * @param socket 
    * @param qdisc_class 
    */
-  void release_netlink_objects(struct nl_sock *socket, struct rtnl_class *qdisc_class);
+  void release_netlink_objects(struct nl_sock *socket, struct rtnl_qdisc *qdisc);
   /*------------------------------------------------------------------------------------------------------------------*/
 
 
