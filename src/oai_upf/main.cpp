@@ -167,30 +167,17 @@ int main(int argc, char** argv) {
 
   // Config
   std::string conf_file_name = Options::getlibconfigConfig();
-  std::string file_ext       = ".conf";
-  if (conf_file_name.find(file_ext) != std::string::npos) {
-    Logger::upf_app().debug("Parsing the configuration file, file type CONF.");
-    upf_cfg.load(conf_file_name);
-    Logger::set_level(upf_cfg.log_level);
-    upf_cfg.display();
-  } else {
-    // By default, considering the config file as yaml
-    Logger::upf_app().debug("Parsing the configuration file, file type YAML.");
-    upf_cfg_yaml = std::make_unique<upf_config_yaml>(
-        conf_file_name, Options::getlogStdout(), Options::getlogRotFilelog());
-    if (!upf_cfg_yaml->init()) {
-      Logger::upf_app().error("Reading the configuration failed. Exiting.");
-      return 1;
-    }
-    upf_cfg_yaml->pre_process();
-    // Convert from YAML to internal structure
-    upf_cfg_yaml->to_upf_config(upf_cfg);
-    upf_cfg_yaml->display();
+  Logger::upf_app().debug("Parsing the configuration file, file type YAML.");
+  upf_cfg_yaml = std::make_unique<upf_config_yaml>(
+      conf_file_name, Options::getlogStdout(), Options::getlogRotFilelog());
+  if (!upf_cfg_yaml->init()) {
+    Logger::upf_app().error("Reading the configuration failed. Exiting.");
+    return 1;
   }
-
-  // upf_cfg.load(Options::getlibconfigConfig());
-  // upf_cfg.display();
-  // Logger::set_level(upf_cfg.log_level);
+  upf_cfg_yaml->pre_process();
+  // Convert from YAML to internal structure
+  upf_cfg_yaml->to_upf_config(upf_cfg);
+  upf_cfg_yaml->display();
 
   // Inter task Interface
   itti_inst = new itti_mw();

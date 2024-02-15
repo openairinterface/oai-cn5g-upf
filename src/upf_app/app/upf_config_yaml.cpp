@@ -346,16 +346,9 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   }
 
   if (get_nf(NRF_CONFIG_NAME)->is_set() & register_nrf()) {
-    nrf_addr.from_sbi_config_type(
-        get_nf(NRF_CONFIG_NAME)->get_sbi(), http_version);
+    cfg.nrf_addr = get_nf(NRF_CONFIG_NAME)->get_sbi();
   }
 
-  cfg.nrf_addr.api_version  = nrf_addr.api_version;
-  cfg.nrf_addr.http_version = nrf_addr.http_version;
-  cfg.nrf_addr.fqdn         = nrf_addr.fqdn;
-  cfg.nrf_addr.ipv4_addr    = nrf_addr.ipv4_addr;
-
-  cfg.use_fqdn_dns = false;  // TODO: to be removed
   cfg.http_version = get_http_version();
 
   cfg.sbi_api_version = local().get_sbi().get_api_version();
@@ -413,11 +406,6 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
     }
     cfg.upf_info.interface_upf_info_list.push_back(
         iface.second.to_upf_info_item());
-  }
-
-  if (get_nf(oai::config::NRF_CONFIG_NAME)) {
-    cfg.nrf_addr.api_version = get_nf("nrf")->get_sbi().get_api_version();
-    cfg.nrf_addr.uri_root    = get_nf(oai::config::NRF_CONFIG_NAME)->get_url();
   }
 
   if (get_nf(oai::config::SMF_CONFIG_NAME)) {

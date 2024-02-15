@@ -43,6 +43,7 @@ namespace app {
 
 #define TASK_UPF_NRF_TIMEOUT_NRF_HEARTBEAT (1)
 #define TASK_UPF_NRF_TIMEOUT_NRF_DEREGISTRATION (2)
+#define TASK_UPF_NRF_TIMEOUT_NRF_REGISTRATION (3)
 
 class upf_nrf {
  private:
@@ -52,6 +53,8 @@ class upf_nrf {
   upf_nf_profile upf_profile;   // UPF profile
   std::string upf_instance_id;  // UPF instance id
   timer_id_t timer_nrf_heartbeat;
+  int32_t nrf_retry_interval = 5;
+  timer_id_t timer_nrf_retry;
 
  public:
   upf_nrf();
@@ -63,7 +66,7 @@ class upf_nrf {
    * @param [const std::string &] url: NRF's URL
    * @return void
    */
-  void send_register_nf_instance(const std::string& url);
+  bool send_register_nf_instance(const std::string& url);
 
   /*
    * Send NF instance registration to NRF
@@ -122,6 +125,14 @@ class upf_nrf {
    * @return void
    */
   void timer_nrf_deregistration(timer_id_t timer_id, uint64_t arg2_user);
+
+  /*
+   * will be executed when NRF registration timer expires
+   * @param [timer_id_t] timer_id
+   * @param [uint64_t] arg2_user
+   * @return void
+   */
+  void timer_nrf_registration(timer_id_t timer_id, uint64_t arg2_user);
 
   /*
    * Send Curl command
