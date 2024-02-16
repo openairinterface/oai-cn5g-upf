@@ -8,6 +8,7 @@
 #include <helpers/qdisc_parameters.h>
 
 class SessionManager;
+class NetlinkManager;
 class RulesUtilities;
 class PFCP_Session_LookupProgram;
 class PFCP_Session_PDR_LookupProgram;
@@ -77,7 +78,7 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      * @param gtpInterface 
      * @param udpInterface
     */
-    void set_members(std::shared_ptr<RulesUtilities> pRulesUtilities,
+    void setMembers(std::shared_ptr<RulesUtilities> pRulesUtilities,
     const std::string& gtpInterface, const std::string& udpInterface);
     
     
@@ -98,6 +99,14 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      */
     std::shared_ptr<SessionManager> getSessionManager() const;
 
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+    /**
+     * @brief Get the Netlink Manager object.
+     *
+     * @return std::shared_ptr<NetlinkManager> The Netlink manager reference.
+     */
+    std::shared_ptr<NetlinkManager> getNetlinkManager() const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
     /**
@@ -146,7 +155,7 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      *
      * @return const char*  qdisc scheduler name insid Linux Kernel (default: HTB).
      */
-    const char* get_root_qdisc_scheduler() const;    
+    const char* getRootQdiscScheduler() const;    
     
   /*---------------------------------------------------------------------------------------------------------------*/
     /**
@@ -155,7 +164,7 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      * 
      * @return uint32_t 
      */
-    uint32_t get_root_qdisc_quantum() const;
+    uint32_t getRootQdiscQuantum() const;
   
   /*---------------------------------------------------------------------------------------------------------------*/
     /**
@@ -164,7 +173,7 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      * 
      * @return uint32_t 
      */
-    uint32_t get_root_qdisc_defaultClass() const; 
+    uint32_t getRootQdiscDefaultClass() const; 
 
 
   /*---------------------------------------------------------------------------------------------------------------*/
@@ -174,8 +183,9 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      *
      * @return const char*  qdisc scheduler name insid Linux Kernel (default: HTB).
      */
-    const char* get_root_class_scheduler() const;    
-    
+    const char* getRootClassScheduler() const;    
+
+
   /*---------------------------------------------------------------------------------------------------------------*/
     /**
      * @brief Getter
@@ -183,15 +193,16 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      * 
      * @return uint32_t 
      */
-    uint32_t get_root_class_rate() const;
+    uint32_t getRootClassRate() const;
   
+
   /*---------------------------------------------------------------------------------------------------------------*/
     /**
      * @brief Get root class ceil value
      * 
      * @return uint32_t 
      */
-    uint32_t get_root_class_ceil() const; 
+    uint32_t getRootClassCeil() const; 
 
 
   /*---------------------------------------------------------------------------------------------------------------*/
@@ -237,7 +248,7 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      * @param interface 
      * @return * void 
      */
-    void set_root_class_attributes(std::string interface, const char *scheduler);
+    void setRootClassAttributes(std::string interface, const char *scheduler);
     
     
   /*------------------------------------------------------------------------------------------------------------------*/
@@ -246,13 +257,16 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
      *        Set the Root Qdisc Parameters
      * 
      */
-    void set_root_qdisc_attributes(const char *scheduler); 
+    void setRootQdiscAttributes(const char *scheduler); 
 
 
   /*------------------------------------------------------------------------------------------------------------------*/
 
     // The session manager reference.
     std::shared_ptr<SessionManager> mpSessionManager;
+
+        // The netlink manager reference.
+    std::shared_ptr<NetlinkManager> mpNetlinkManager;
 
     // The rules factory reference.
     std::shared_ptr<RulesUtilities> mpRulesUtilities;
@@ -272,13 +286,14 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
     std::string mUDPInterface;
 
   /*---------------------------------------------------------------------------------------------------------------*/
-    struct qdisc_root_params *qdisc_att = nullptr;
-    struct class_params *class_att = nullptr;
-    struct rtnl_qdisc *root_qdisc = nullptr;
-    struct rtnl_class *root_class = nullptr;
-    struct nl_sock *root_socket;
+    struct qdiscRootParams *qdiscAtt = nullptr;
+    struct classParams *classAtt = nullptr;
+    struct rtnl_qdisc *rootQdisc = nullptr;
+    struct rtnl_class *rootClass = nullptr;
+    
+    struct nl_sock *sock;
     struct rtnl_link *link;
-    struct nl_cache *link_cache;
+    //struct nl_cache *linkCache;
 };
 
 #endif  // __USERPLANECOMPONENT_H__

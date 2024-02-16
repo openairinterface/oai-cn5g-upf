@@ -19,7 +19,7 @@
 #include <helpers/QdiscHelpers.hpp>
 #include <pdu_session.h>
 #include <qos_flow.h>
-
+#include "gtp_u_tunnel_key.h"
 
 class BPFMaps;
 class BPFMap;
@@ -61,12 +61,20 @@ class QERProgram : public BPFProgram {
   /**
    * @brief Setup tc BPF program when QoS Feature is enabled
    * 
-   * @param gtpInterface 
-   * @param udpInterface 
-   * @param qdisc_scheduler 
-   * @param qfis 
-   */
-  void setup(const std::string& gtpInterface, const std::string& udpInterface, const char* qdisc_scheduler, std::vector<uint32_t> qfis);
+   * @param const std::string& 
+   * @param const std::string& 
+   * @param const char* 
+   * @param std::vector<struct qosFlow*> 
+   * @param uint64_t 
+   * @param struct gtpUTunnel* 
+  */
+  void setup(
+    const std::string& gtpInterface, 
+    const std::string& udpInterface, 
+    const char* qdiscScheduler, 
+    std::vector<struct qosFlow*> qfis, 
+    uint64_t seid, 
+    struct gtpUTunnel *gtpTunnel);
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the BPFMaps object.
@@ -86,8 +94,8 @@ class QERProgram : public BPFProgram {
   /**
    * @brief Update program int map.
    *
-   * @param key The key which will be inserted the program file descriptor.
-   * @param fd The file descriptor.
+   * @param uint32_t
+   * @param uint32_t
    */
   void updateProgramMap(uint32_t key, uint32_t fd);
 
@@ -95,7 +103,7 @@ class QERProgram : public BPFProgram {
   /**
    * @brief Remove program in map.
    *
-   * @param key The key which will be remove in the program map.
+   * @param uint32_t
    */
   void removeProgramMap(uint32_t key);
   /*---------------------------------------------------------------------------------------------------------------*/
@@ -131,12 +139,6 @@ class QERProgram : public BPFProgram {
    */
   std::shared_ptr<BPFMap> getFilterMap() const;
 
-  /*---------------------------------------------------------------------------------------------------------------*/
-  
-  
-
-
-                     
     
   /*---------------------------------------------------------------------------------------------------------------*/
  
@@ -147,7 +149,7 @@ class QERProgram : public BPFProgram {
    * @param interface 
    * @param child_ids 
    */
-  void create_configure_hierarchy(struct nl_sock *sock, const char *interface, std::vector<std::vector<uint32_t>> child_ids);
+  void createConfigureHierarchy(struct nl_sock *sock, const char *interface, std::vector<std::vector<uint32_t>> childIds);
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Create a parent parent class object
@@ -157,7 +159,7 @@ class QERProgram : public BPFProgram {
    * @param parent_id 
    * @return * struct rtnl_qdisc* 
    */
-  struct rtnl_qdisc *create_parent_class(struct nl_sock *sock, const char *interface, uint32_t parent_id);
+  struct rtnl_qdisc *createParentClass(struct nl_sock *sock, const char *interface, uint32_t parentId);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -168,7 +170,7 @@ class QERProgram : public BPFProgram {
    * @param child_id 
    * @return struct rtnl_qdisc* 
    */
-  struct rtnl_qdisc *create_child_class(struct nl_sock *sock, struct rtnl_qdisc *parent, uint32_t child_id);
+  struct rtnl_qdisc *createChildClass(struct nl_sock *sock, struct rtnl_qdisc *parent, uint32_t childId);
   
 
   /*---------------------------------------------------------------------------------------------------------------*/
@@ -178,23 +180,24 @@ class QERProgram : public BPFProgram {
    * 
    * @param qfis 
    */
-  void set_qos_flows_qfis(std::vector<struct qos_flow*> qfis);
-
+  void setQosFlowsQfis(std::vector<struct qosFlow*> qfis);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Set the pdu session ids object
    * 
-   * @param seid 
+   * @param seid
+   * @param gtp_tunnel 
    */
-  void set_pdu_session_ids(uint64_t seid);
+  void setPduSessionIds(uint64_t seid, struct gtpUTunnel *gtpTunnel);
+  //void set_pdu_session_ids(uint64_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Set the PDU session Qdisc Class Attributes
    * @param const char *
    */
-  void set_pdu_session_class_attributes(const char *qdisc_scheduler); 
+  void setPduSessionClassAttributes(const char *qdiscScheduler); 
 
 
   /*---------------------------------------------------------------------------------------------------------------*/
@@ -202,21 +205,21 @@ class QERProgram : public BPFProgram {
    * @brief Set the qos flows classes attributes object
    * 
    */
-  void set_qos_flows_classes_attributes();
+  void setQosFlowsClassesAttributes();
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Set the pdu session class position object
    * 
    */
-  void set_pdu_session_class_position();
+  void setPduSessionClassPosition();
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Set the qos flows classes positions object
    * 
    */
-  void set_qos_flows_classes_positions();
+  void setQosFlowsClassesPositions();
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -262,17 +265,17 @@ class QERProgram : public BPFProgram {
   // std::vector<struct rtnl_qdisc *> parent_qdiscs;
   // std::vector<std::vector<struct rtnl_qdisc *>> child_qdiscs;
   
-  struct rtnl_class* class_pdu_session = nullptr;
-  std::vector<struct rtnl_class*> classes_qfi_flows;
+  struct rtnl_class* classPduSession = nullptr;
+  std::vector<struct rtnl_class*> classesQfiFlows;
 
-  struct class_params *pdu_session_class_att = nullptr;
-  struct class_position *pdu_session_class_pos = nullptr;
+  struct classParams *pduSessionClassAtt = nullptr;
+  struct classPosition *pduSessionClassPos = nullptr;
 
-  std::vector<struct class_params*> qos_flows_classes_att;
-  std::vector<struct class_position*> qos_flows_classes_pos;
-  std::vector<struct qos_flow*> qos_flows_qfis;
+  std::vector<struct classParams*> qosFlowsClassesAtt;
+  std::vector<struct classPosition*> qosFlowsClassesPos;
+  std::vector<struct qosFlow*> qosFlowsQfis;
 
-  struct pdu_session_ids* pdu_session = nullptr;
+  struct pduSessionIds* pduSession = nullptr;
   
 };
 

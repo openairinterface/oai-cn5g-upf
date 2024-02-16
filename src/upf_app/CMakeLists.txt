@@ -36,6 +36,7 @@ set(UDP_INTERFACE $ENV{UDP_INTERFACE})
 set(SOCKET_BUFFER_ENABLED $ENV{SOCKET_BUFFER_ENABLED})
 
 add_library(UPF_XDP STATIC
+  NetlinkManager.cpp
   UserPlaneComponent.cpp
   Configuration.cpp
   SignalHandler.cpp
@@ -106,6 +107,7 @@ install(
   include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/qer)
   
   add_library(UPF_TC STATIC
+  NetlinkManager.cpp
   UserPlaneComponent.cpp
   Configuration.cpp
   SignalHandler.cpp

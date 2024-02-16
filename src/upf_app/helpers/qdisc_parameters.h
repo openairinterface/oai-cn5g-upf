@@ -4,33 +4,33 @@
 
 #include <types.h>
 
-struct qdisc_root_params {
+struct qdiscRootParams {
   const char *scheduler;
   //uint32_t rate;
   // uint32_t ceil;
   // uint32_t burst;
   // uint32_t cburst;
-  uint32_t quantum;
-  uint32_t defaultClass;
+  uint64_t quantum;
+  uint64_t defaultClass;
   // int level;
 };
 
 
-struct class_params {
+struct classParams {
   const char *scheduler;
-  uint32_t rate;
-  uint32_t ceil;
-  uint32_t burst;
-  uint32_t cburst;
-  uint32_t priority;
+  uint64_t rate;
+  uint64_t ceil;
+  uint64_t burst;
+  uint64_t cburst;
+  uint64_t priority;
 };
 
 
-struct class_position {
-  uint32_t parentMaj;
-  uint32_t parentMin;
-  uint32_t childMaj;
-  uint32_t childMin;
+struct classPosition {
+  uint64_t parentMaj;
+  uint64_t parentMin;
+  uint64_t childMaj;
+  uint64_t childMin;
   };
 
 

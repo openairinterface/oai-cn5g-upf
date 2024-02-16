@@ -23,17 +23,17 @@ class QdiscHelper {
    * 
    * @return struct nl_sock* 
    */
-  struct nl_sock *create_socket();
+  struct nl_sock *createSocket();
   
   
   /*------------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Create a qdisc object
    * 
-   * @param socket 
+   * @param struct nl_sock* 
    * @return struct rtnl_qdisc* 
    */
-  struct rtnl_qdisc *create_qdisc(struct nl_sock *socket);
+  struct rtnl_qdisc *createQdisc(struct nl_sock *socket);
 
 
   /*------------------------------------------------------------------------------------------------------------------*/
@@ -41,93 +41,104 @@ class QdiscHelper {
    * @brief Create a link cache object
    * 
    * @param socket 
-   * @return struct nl_cache* 
+   * @return struct nl_sock*
    */
-  struct nl_cache * create_link_cache(struct nl_sock *socket);
+  struct nl_cache * createLinkCache(struct nl_sock *socket);
 
 
   /*------------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Create a link object
    * 
-   * @param iface 
-   * @param link_cache 
-   * @param socket 
+   * @param const char*
+   * @param struct nl_cache*
+   * @param struct nl_sock*
    * @return struct rtnl_link* 
    */
-  struct rtnl_link *create_link(const char *iface, struct nl_cache *link_cache, struct nl_sock *socket);
+  struct rtnl_link *createLink(const char *iface, struct nl_cache *linkCache, struct nl_sock *socket);
   
   
   /*------------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Configure the Root Qdisc
    * 
-   * @param socket 
-   * @param link 
-   * @param qdisc 
-   * @param qdisc_att 
+   * @param struct nl_sock*
+   * @param struct rtnl_link* 
+   * @param struct rtnl_qdisc*
+   * @param struct qdiscRootParams*
    * @return int 
    */
-  int configure_root_qdisc(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_qdisc *qdisc, struct qdisc_root_params *qdisc_att );
+  int configureRootQdisc(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_qdisc *qdisc, struct qdiscRootParams *qdiscAtt );
 
 
   /*------------------------------------------------------------------------------------------------------------------*/ 
   /**
    * @brief Configure Root Class
    * 
-   * @param socket 
-   * @param link 
-   * @param qdisc_class 
-   * @param class_att 
+   * @param struct nl_sock*
+   * @param struct rtnl_link*
+   * @param struct rtnl_class*
+   * @param classParams*
    * @return int 
    */
-  int configure_root_class(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_class *qdisc_class, class_params *class_att);
+  int configureRootClass(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_class *qdiscClass, classParams *classAtt);
 
 
   /*------------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Create a Class to Attach to the Root Qdisc
    * 
-   * @param socket
+   * @param struct nl_sock*
+   * @return struct rtnl_class*
    */
-  struct rtnl_class * create_class(struct nl_sock *socket);              
+  struct rtnl_class* createClass(struct nl_sock *socket);              
   
 
   /*------------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Configure Parent Qdisc Class
    * 
-   * @param socket 
-   * @param link 
-   * @param parent_class 
-   * @param class_att 
-   * @param pos 
+   * @param struct nl_sock*
+   * @param struct rtnl_link*
+   * @param struct rtnl_class*
+   * @param struct classParams*
+   * @param struct classPosition*
    * @return int 
    */
-  int configure_parent_class(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_class *parent_class, struct class_params *class_att, struct class_position *pos);
+  int configureParentClass(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_class *parentClass, struct classParams *classAtt, struct classPosition *pos);
+
 
   /*------------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Configure the Leaf Qdisc Class
    * 
-   * @param socket 
-   * @param link 
-   * @param leaf_class 
-   * @param class_att 
-   * @param pos 
+   * @param struct nl_sock*  
+   * @param struct rtnl_link*
+   * @param struct rtnl_class*
+   * @param struct classParams*
+   * @param struct classPosition*
    * @return int 
    */
-  int configure_leaf_class(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_class *leaf_class, struct class_params *class_att, struct class_position *pos);
+  int configureLeafClass(struct nl_sock *socket, struct rtnl_link *link, struct rtnl_class *leafClass, struct classParams *classAtt, struct classPosition *pos);
+
+
   /*------------------------------------------------------------------------------------------------------------------*/
   /**
-   * @brief Release the Netlink Socket and Qdisc Objects
+   * @brief Release the Netlink Qdisc Object
+   * 
+   * @param struct nl_sock*
+   * @param struct rtnl_qdisc*
+   */
+  void releaseNetlinkQdisc(struct nl_sock *socket, struct rtnl_qdisc *qdisc);
+
+
+  /*------------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Method to Release Netlink socket 
    * 
    * @param socket 
-   * @param qdisc_class 
    */
-  void release_netlink_objects(struct nl_sock *socket, struct rtnl_qdisc *qdisc);
-  /*------------------------------------------------------------------------------------------------------------------*/
-
+  void releaseNetlinkSocket(struct nl_sock *socket);
 
 };
 

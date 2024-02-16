@@ -4,7 +4,7 @@
 
 #include <types.h>
 
-struct  qos_flow{
+struct  qosFlow{
   uint64_t qfi;
   uint64_t gbr;
   uint64_t mbr;

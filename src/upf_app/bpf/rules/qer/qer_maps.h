@@ -13,7 +13,7 @@
 /*---------------------------------------------------------------------------------------------------------------*/
 struct bpf_map_def SEC("maps") m_gtp_u_tunnel = {
     .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(struct gtp_u_tunnel),    // < teid_ul, teid_dl >
+    .key_size    = sizeof(struct gtpUTunnel),    // < teid_ul, teid_dl >
     .value_size  = sizeof(u32),                    // seid
     .max_entries = QFI_MAX_ENTRIES,  
 };

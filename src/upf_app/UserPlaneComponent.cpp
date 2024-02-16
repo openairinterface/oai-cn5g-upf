@@ -1,6 +1,7 @@
 #include "UserPlaneComponent.h"
 #include <RulesUtilities.h>
 #include <SessionManager.h>
+#include <NetlinkManager.h>
 #include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h>
 #include <SessionProgramManager.h>
 #include <SignalHandler.h>
@@ -24,10 +25,15 @@
 
 /*---------------------------------------------------------------------------------------------------------------*/
 UserPlaneComponent::UserPlaneComponent() {
-// Set new handlers for libbpf.
-#ifdef DEBUG_LIBBPF
-  libbpf_set_print(UserPlaneComponent::printLibbpfLog);
-#endif
+  // Set new handlers for libbpf.
+  #ifdef DEBUG_LIBBPF
+    libbpf_set_print(UserPlaneComponent::printLibbpfLog);
+  #endif
+
+  //sock = NetlinkManager::getInstance().getSocket();
+  sock = mpNetlinkManager->getSocket();
+  //link = NetlinkManager::getInstance().getLink();
+  link = mpNetlinkManager->getLink();
 }
 
 
@@ -42,6 +48,11 @@ std::shared_ptr<SessionManager> UserPlaneComponent::getSessionManager() const {
   return mpSessionManager;
 }
 
+
+/*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<NetlinkManager> UserPlaneComponent::getNetlinkManager() const {
+  return mpNetlinkManager;
+}
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<RulesUtilities> UserPlaneComponent::getRulesUtilities() const {
@@ -69,61 +80,61 @@ std::string UserPlaneComponent::getUDPInterface() const {
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
-const char* UserPlaneComponent::get_root_qdisc_scheduler() const {
-  return qdisc_att->scheduler;
+const char* UserPlaneComponent::getRootQdiscScheduler() const {
+  return qdiscAtt->scheduler;
 }
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
-uint32_t UserPlaneComponent::get_root_qdisc_quantum() const {
-  return qdisc_att->quantum;
+uint32_t UserPlaneComponent::getRootQdiscQuantum() const {
+  return qdiscAtt->quantum;
 }
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
-uint32_t UserPlaneComponent::get_root_qdisc_defaultClass() const {
-  return qdisc_att->defaultClass;
+uint32_t UserPlaneComponent::getRootQdiscDefaultClass() const {
+  return qdiscAtt->defaultClass;
 }
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
-const char* UserPlaneComponent::get_root_class_scheduler() const {
-  return class_att->scheduler;
+const char* UserPlaneComponent::getRootClassScheduler() const {
+  return classAtt->scheduler;
 }
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
-uint32_t UserPlaneComponent::get_root_class_rate() const {
-  return class_att->rate;
+uint32_t UserPlaneComponent::getRootClassRate() const {
+  return classAtt->rate;
 }
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
-uint32_t UserPlaneComponent::get_root_class_ceil() const {
-  return class_att->ceil;
+uint32_t UserPlaneComponent::getRootClassCeil() const {
+  return classAtt->ceil;
 }
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // Method definition to initialize class_params
-void UserPlaneComponent::set_root_class_attributes(std::string interface, const char *scheduler) {
+void UserPlaneComponent::setRootClassAttributes(std::string interface, const char *scheduler) {
   NicInformationGetter nicInfoGet;
-  // Initialize class_att members
-  class_att->scheduler = scheduler;
-  class_att->rate = nicInfoGet.retrieveRate(interface);
-  class_att->ceil = nicInfoGet.retrieveCeil(interface);
-  class_att->burst = 0;
-  class_att->cburst = 0;
-  class_att->priority = 0;
+  // Initialize classAtt members
+  classAtt->scheduler = scheduler;
+  classAtt->rate = nicInfoGet.retrieveRate(interface);
+  classAtt->ceil = nicInfoGet.retrieveCeil(interface);
+  classAtt->burst = 0;
+  classAtt->cburst = 0;
+  classAtt->priority = 0;
 }
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // Method definition to initialize qdisc_root_params
-void UserPlaneComponent::set_root_qdisc_attributes(const char *scheduler) {
-  qdisc_att->scheduler = scheduler;
-  qdisc_att->quantum = QUANTUM;
-  qdisc_att->defaultClass = DEFAULT_CLASS;
+void UserPlaneComponent::setRootQdiscAttributes(const char *scheduler) {
+  qdiscAtt->scheduler = scheduler;
+  qdiscAtt->quantum = QUANTUM;
+  qdiscAtt->defaultClass = DEFAULT_CLASS;
 }
 
 
@@ -155,7 +166,7 @@ UserPlaneComponent& UserPlaneComponent::getInstance() {
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void UserPlaneComponent::set_members(std::shared_ptr<RulesUtilities> pRulesUtilities,
+void UserPlaneComponent::setMembers(std::shared_ptr<RulesUtilities> pRulesUtilities,
     const std::string& gtpInterface, const std::string& udpInterface){
   
   mpRulesUtilities = pRulesUtilities;
@@ -177,68 +188,54 @@ void UserPlaneComponent::setup(
     std::shared_ptr<RulesUtilities> pRulesUtilities,
     const std::string& gtpInterface, const std::string& udpInterface) {
 
-  set_members(pRulesUtilities, gtpInterface, udpInterface);
+  setMembers(pRulesUtilities, gtpInterface, udpInterface);
   SignalHandler::getInstance().enable();
   mpPFCP_Session_LookupProgram->setup();
 
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();
+  mpNetlinkManager = std::make_shared<NetlinkManager>(gtpInterface);
 }
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void UserPlaneComponent::setup(
     std::shared_ptr<RulesUtilities> pRulesUtilities,
-    const std::string& gtpInterface, const std::string& udpInterface, const char* qdisc_scheduler) {
+    const std::string& gtpInterface, const std::string& udpInterface, const char* qdiscScheduler) {
   
   QdiscHelper qdiscHelper;
-
-  set_members(pRulesUtilities, gtpInterface, udpInterface);
-  set_root_class_attributes(gtpInterface, qdisc_scheduler);
-  set_root_qdisc_attributes(qdisc_scheduler);
+  
+  setMembers(pRulesUtilities, gtpInterface, udpInterface);
+  setRootClassAttributes(gtpInterface, qdiscScheduler);
+  setRootQdiscAttributes(qdiscScheduler);
 
   SignalHandler::getInstance().enable();
   mpPFCP_Session_LookupProgram->setup();
 
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();
+  mpNetlinkManager = std::make_shared<NetlinkManager>(gtpInterface);
   
-  if (!(root_socket = qdiscHelper.create_socket())){
-    Logger::upf_app().error("Unable to create a netlink socket");
-    exit(EXIT_FAILURE);
-  }
-
-  if (!(root_qdisc = qdiscHelper.create_qdisc(root_socket))){
+  if (!(rootQdisc = qdiscHelper.createQdisc(sock))){
     Logger::upf_app().error("Unable to create a new Root qdisc");
     exit(EXIT_FAILURE);
   }
 
-  if (!(link_cache = qdiscHelper.create_link_cache(root_socket))){
-    Logger::upf_app().error("Unable to create a link cache");
-    exit(EXIT_FAILURE);
-  }
-
-  if (!(link = qdiscHelper.create_link(gtpInterface.c_str(), link_cache, root_socket))){
-    Logger::upf_app().error("Unable to create a link");
-    exit(EXIT_FAILURE);
-  }
-
-  
-  if (!(root_class = qdiscHelper.create_class(root_socket))){
+  if (!(rootClass = qdiscHelper.createClass(sock))){
     Logger::upf_app().error("Unable to create a Root Qdisc Class");
     exit(EXIT_FAILURE);
   }
 
-  qdiscHelper.configure_root_qdisc(root_socket, link, root_qdisc, qdisc_att);
-  qdiscHelper.configure_root_class(root_socket, link, root_class, class_att);
-  
+  qdiscHelper.configureRootQdisc(sock, link, rootQdisc, qdiscAtt);
+  qdiscHelper.configureRootClass(sock, link, rootClass, classAtt);
 }
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void UserPlaneComponent::tearDown() {
   QdiscHelper qdiscHelper;
+
   mpPFCP_Session_LookupProgram->tearDown();
   SessionProgramManager::getInstance().removeAll();
-  qdiscHelper.release_netlink_objects(root_socket, root_qdisc);
+  qdiscHelper.releaseNetlinkQdisc(sock, rootQdisc);
 }

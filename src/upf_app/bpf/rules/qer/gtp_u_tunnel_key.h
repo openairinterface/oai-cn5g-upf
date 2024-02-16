@@ -3,9 +3,9 @@
 
 #include <types.h>
 
-struct gtp_u_tunnel {
-  u32 teid_ul;
-  u32 teid_dl;
+struct gtpUTunnel {
+  u32 teidUl;
+  u32 teidDl;
 };
 
 #endif  // __GTP_U_TUNNEL_KEY_H__
