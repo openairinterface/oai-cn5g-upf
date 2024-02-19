@@ -194,7 +194,8 @@ void UserPlaneComponent::setup(
 
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();
-  mpNetlinkManager = std::make_shared<NetlinkManager>(gtpInterface);
+  mpNetlinkManager = std::make_shared<NetlinkManager>(NetlinkManager::getInstance(gtpInterface));
+
 }
 
 
@@ -214,7 +215,7 @@ void UserPlaneComponent::setup(
 
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();
-  mpNetlinkManager = std::make_shared<NetlinkManager>(gtpInterface);
+  mpNetlinkManager = std::make_shared<NetlinkManager>(NetlinkManager::getInstance(gtpInterface));
   
   if (!(rootQdisc = qdiscHelper.createQdisc(sock))){
     Logger::upf_app().error("Unable to create a new Root qdisc");

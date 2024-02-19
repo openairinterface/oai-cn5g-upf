@@ -13,6 +13,7 @@
 #include <string.h>
 #include <netlink/route/link.h>
 #include <netlink/route/qdisc/htb.h>
+#include <NetlinkManager.h>
 //#include "gtpUTunnel_key.h"
 //#include "qer_maps.h"
 
@@ -167,12 +168,12 @@ void QERProgram::setup(
   /*correct the dataplane; it doesn't exist
   and add functions get_socket(), get_link()
   */
-  if (!(socket = dataplane.getSocket())){
+  if (!(socket = NetlinkManager::getInstance(gtpInterface).getSocket())){
     Logger::upf_app().error("Unable to retrieve existing socket");
     exit(EXIT_FAILURE);
   }
 
-  if (!(link = dataplane.getLink())){
+  if (!(link = NetlinkManager::getInstance(gtpInterface).getLink())){
     Logger::upf_app().error("Unable to retrieve existing link");
     exit(EXIT_FAILURE);
   }

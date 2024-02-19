@@ -236,11 +236,13 @@ int main(int argc, char** argv) {
   fclose(fp);
 
   if (upf_cfg.enable_bpf_datapath){
+    const char* qdisc_scheduler = nullptr;
+    
     if(upf_cfg.enable_qos){
-      UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface, HTB_SCHEDULER);
-    } else {
-      UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface);
-    }
+      qdisc_scheduler = HTB_SCHEDULER;
+    } 
+    
+    setup_bpf(qdisc_scheduler);
   }
   // once all udp servers initialized
   io_service.run();
