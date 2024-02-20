@@ -61,11 +61,22 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_far> far) {
   Logger::upf_n4().info("pfcp_session::add(far) seid " SEID_FMT " ", seid);
   fars.push_back(far);
 }
+
+
 //------------------------------------------------------------------------------
 void pfcp_session::add(std::shared_ptr<pfcp::pfcp_pdr> pdr) {
   Logger::upf_n4().info("pfcp_session::add(pdr) seid " SEID_FMT " ", seid);
   pdrs.push_back(pdr);
 }
+
+
+//------------------------------------------------------------------------------
+void pfcp_session::add(std::shared_ptr<pfcp::pfcp_qer> qer) {
+  Logger::upf_n4().info("pfcp_session::add(qer) seid " SEID_FMT " ", seid);
+  pdrs.push_back(qer);
+}
+
+
 //------------------------------------------------------------------------------
 bool pfcp_session::remove(const pfcp::far_id_t& far_id, uint8_t& cause_value) {
   for (std::vector<std::shared_ptr<pfcp::pfcp_far>>::iterator it = fars.begin();
@@ -80,6 +91,8 @@ bool pfcp_session::remove(const pfcp::far_id_t& far_id, uint8_t& cause_value) {
   cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;  //??
   return false;
 }
+
+
 //------------------------------------------------------------------------------
 bool pfcp_session::remove(const pfcp::pdr_id_t& pdr_id, uint8_t& cause_value) {
   for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it = pdrs.begin();
@@ -94,6 +107,27 @@ bool pfcp_session::remove(const pfcp::pdr_id_t& pdr_id, uint8_t& cause_value) {
   cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;  //??
   return false;
 }
+
+
+//------------------------------------------------------------------------------
+/**
+ * Remove QER 
+*/
+bool pfcp_session::remove(const pfcp::qer_id_t& qer_id, uint8_t& cause_value) {
+  for (std::vector<std::shared_ptr<pfcp::pfcp_qer>>::iterator it = qers.begin();
+       it != qers.end(); ++it) {
+    if ((*it)->qer_id.rule_id == qer_id.rule_id) {
+      Logger::upf_n4().info(
+          "pfcp_session::remove(qer) seid " SEID_FMT " ", seid);
+      qers.erase(it);
+      return true;
+    }
+  }
+  cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;  //??
+  return false;
+}
+
+
 //------------------------------------------------------------------------------
 bool pfcp_session::update(
     const pfcp::update_far& update, uint8_t& cause_value) {
@@ -107,7 +141,12 @@ bool pfcp_session::update(
   cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
   return false;
 }
+
+
 //------------------------------------------------------------------------------
+/**
+ * Update QER
+*/
 bool pfcp_session::update(
     const pfcp::update_pdr& update, uint8_t& cause_value) {
   std::shared_ptr<pfcp::pfcp_pdr> pdr = {};
@@ -120,6 +159,23 @@ bool pfcp_session::update(
   cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
   return false;
 }
+
+
+//------------------------------------------------------------------------------
+bool pfcp_session::update(
+    const pfcp::update_qer& update, uint8_t& cause_value) {
+  std::shared_ptr<pfcp::pfcp_qer> qer = {};
+  if (get(update.qer_id.rule_id, qer)) {
+    if (qer->update(update, cause_value)) {
+      return true;
+    }
+    return false;
+  }
+  cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  return false;
+}
+
+
 //------------------------------------------------------------------------------
 bool pfcp_session::create(
     const pfcp::create_far& cr_far, pfcp::cause_t& cause,
@@ -157,6 +213,8 @@ bool pfcp_session::create(
   add(sfar);
   return true;
 }
+
+
 //------------------------------------------------------------------------------
 bool pfcp_session::create(
     const pfcp::create_pdr& cr_pdr, pfcp::cause_t& cause,
@@ -266,6 +324,47 @@ bool pfcp_session::create(
   }
   return true;
 }
+
+
+//------------------------------------------------------------------------------
+bool pfcp_session::create(
+    const pfcp::create_qer& cr_qer, pfcp::cause_t& cause,
+    uint16_t& offending_ie) {
+  if (not cr_qer.qer_id.first) {
+    // should be caught in lower layer
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_QER_ID;
+    return false;
+  }
+  if (not cr_qer.apply_action.first) {
+    // should be caught in lower layer
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_APPLY_ACTION;
+    return false;
+  }
+  if (cr_qer.apply_action.second.forw) {
+    if (not cr_qer.forwarding_parameters.first) {
+      // should be caught in lower layer
+      cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+      offending_ie      = PFCP_IE_FORWARDING_PARAMETERS;
+      return false;
+    }
+  }
+  if (cr_qer.apply_action.second.dupl) {
+    if (not cr_qer.duplicating_parameters.first) {
+      // should be caught in lower layer
+      cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+      offending_ie      = PFCP_IE_DUPLICATING_PARAMETERS;
+      return false;
+    }
+  }
+  pfcp_qer* qer                  = new pfcp_qer(cr_qer);
+  std::shared_ptr<pfcp_qer> sqer = std::shared_ptr<pfcp_qer>(qer);
+  add(sqer);
+  return true;
+}
+
+
 //------------------------------------------------------------------------------
 bool pfcp_session::remove(
     const pfcp::remove_far& rm_far, pfcp::cause_t& cause,
@@ -278,6 +377,8 @@ bool pfcp_session::remove(
   }
   return remove(rm_far.far_id.second, cause.cause_value);
 }
+
+
 //------------------------------------------------------------------------------
 bool pfcp_session::remove(
     const pfcp::remove_pdr& rm_pdr, pfcp::cause_t& cause,
@@ -290,6 +391,22 @@ bool pfcp_session::remove(
   }
   return remove(rm_pdr.pdr_id.second, cause.cause_value);
 }
+
+
+//------------------------------------------------------------------------------
+bool pfcp_session::remove(
+    const pfcp::remove_qer& rm_qer, pfcp::cause_t& cause,
+    uint16_t& offending_ie) {
+  if (not rm_qer.qer_id.first) {
+    // should be caught in lower layer
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_QER_ID;
+    return false;
+  }
+  return remove(rm_qer.qer_id.second, cause.cause_value);
+}
+
+
 //------------------------------------------------------------------------------
 void pfcp_session::cleanup() {
   for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it = pdrs.begin();
