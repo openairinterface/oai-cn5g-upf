@@ -704,6 +704,24 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             delete session;
             break;
           }
+          
+          /*======================================================================*/
+    
+          /*
+          *  Add create_qers
+          */
+          pfcp::qer_id_t qer_id = {};
+          if (not cr_pdr.get(qer_id)){
+            // TODO
+          }
+          
+          pfcp::create_qer cr_qer = {};
+          if (not req->pfcp_ies.get(qer_id, cr_qer)){
+            // TODO
+          }  
+            
+                  
+          /*======================================================================*/ 
 
           if (not session->create(
                   cr_pdr, cause, offending_ie.offending_ie, allocated_fteid)) {
@@ -719,6 +737,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
           created_pdr.set(cr_pdr.pdr_id.second);
           created_pdr.set(allocated_fteid);
           resp->pfcp_ies.set(created_pdr);
+
         }
       }
 
@@ -883,7 +902,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         if (not session->remove(qer, cause, offending_ie.offending_ie)) {
           if (cause.cause_value == CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
             failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_QER;
-            failed_rule.rule_id_value = qer.qer_id.second.rule_id;
+            failed_rule.rule_id_value = qer.qer_id.second.qer_id;
             resp->pfcp_ies.set(failed_rule);
             break;
           }
@@ -1034,7 +1053,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         if (not session->update(qer, cause_value)) {
           failed_rule_id_t failed_rule = {};
           failed_rule.rule_id_type     = FAILED_RULE_ID_TYPE_QER;
-          failed_rule.rule_id_value    = qer.qer_id.rule_id;
+          failed_rule.rule_id_value    = qer.qer_id.second.qer_id;
           resp->pfcp_ies.set(failed_rule);
         }
       }
@@ -1084,6 +1103,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     }
   }
 }
+
+
 //------------------------------------------------------------------------------
 void pfcp_switch::handle_pfcp_session_deletion_request(
     std::shared_ptr<itti_n4_session_deletion_request> sreq,

@@ -118,7 +118,7 @@ class pfcp_session {
   /*---------------------------------------------------------------------------------------------------------------*/
   bool get(const uint16_t, std::shared_ptr<pfcp::pfcp_qer>&) const;
   
-  
+  bool get(const uint32_t, std::shared_ptr<pfcp::pfcp_qer>&) const;
   /*---------------------------------------------------------------------------------------------------------------*/
   bool update(const pfcp::update_far& update, uint8_t& cause_value);
   

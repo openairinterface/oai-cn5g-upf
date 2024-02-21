@@ -30,10 +30,10 @@ UserPlaneComponent::UserPlaneComponent() {
     libbpf_set_print(UserPlaneComponent::printLibbpfLog);
   #endif
 
-  //sock = NetlinkManager::getInstance().getSocket();
-  sock = mpNetlinkManager->getSocket();
-  //link = NetlinkManager::getInstance().getLink();
-  link = mpNetlinkManager->getLink();
+  sock = NetlinkManager::getInstance(mGTPInterface).getSocket();
+  //sock = mpNetlinkManager->getSocket();
+  link = NetlinkManager::getInstance(mGTPInterface).getLink();
+  //link = mpNetlinkManager->getLink();
 }
 
 
@@ -50,9 +50,9 @@ std::shared_ptr<SessionManager> UserPlaneComponent::getSessionManager() const {
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<NetlinkManager> UserPlaneComponent::getNetlinkManager() const {
-  return mpNetlinkManager;
-}
+// std::shared_ptr<NetlinkManager> UserPlaneComponent::getNetlinkManager() const {
+//   return mpNetlinkManager;
+// }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<RulesUtilities> UserPlaneComponent::getRulesUtilities() const {
@@ -194,7 +194,8 @@ void UserPlaneComponent::setup(
 
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();
-  mpNetlinkManager = std::make_shared<NetlinkManager>(NetlinkManager::getInstance(gtpInterface));
+  //mpNetlinkManager = std::make_shared<NetlinkManager>(NetlinkManager::getInstance(gtpInterface));
+  //NetlinkManager::getInstance(gtpInterface);
 
 }
 
@@ -215,8 +216,9 @@ void UserPlaneComponent::setup(
 
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();
-  mpNetlinkManager = std::make_shared<NetlinkManager>(NetlinkManager::getInstance(gtpInterface));
-  
+  //mpNetlinkManager = std::make_shared<NetlinkManager>(NetlinkManager::getInstance(gtpInterface));
+  NetlinkManager::getInstance(gtpInterface);
+
   if (!(rootQdisc = qdiscHelper.createQdisc(sock))){
     Logger::upf_app().error("Unable to create a new Root qdisc");
     exit(EXIT_FAILURE);

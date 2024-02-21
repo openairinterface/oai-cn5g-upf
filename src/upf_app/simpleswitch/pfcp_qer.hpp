@@ -36,21 +36,32 @@ namespace pfcp {
 
 class pfcp_qer {
  public:
-  pfcp::qer_id_t qer_id;
-  pfcp::qer_correlation_id_t qer_correlation_id;
-  pfcp::gate_status_t gate_status;
+  std::pair<bool, pfcp::qer_id_t> qer_id;
+  std::pair<bool, pfcp::qer_correlation_id_t> qer_correlation_id;
+  std::pair<bool, pfcp::gate_status_t> gate_status;
   std::pair<bool, pfcp::mbr_t> mbr;
   std::pair<bool, pfcp::gbr_t> gbr;
-  std::pair<bool, pfcp::packet_rate_t> packet_rate;
-  //std::pair<bool, pfcp::packet_rate_statues> packet_rate_status; ///?
-  pfcp::dl_flow_level_marking_t dl_flow_level_marking;
-  pfcp::qfi_t qfi;
-  pfcp::rqi_t rqi;
-  pfcp::paging_policy_indicator_t paging_policy_indicator;
-  pfcp::averaging_window_t averaging_window;
-  //pfcp::qer_control_indication_t qer_control_indication;/// ? 
+  std::pair<bool, pfcp::qfi_t> qfi;
+  std::pair<bool, pfcp::rqi_t> rqi;
+  std::pair<bool, pfcp::paging_policy_indicator_t> paging_policy_indicator;
+  
+  /*
+   * Not considered for N4 interface:
+   *    std::pair<bool, pfcp::packet_rate_t> packet_rate;
+   *    pfcp::dl_flow_level_marking_t dl_flow_level_marking;
+   *      
+   */
 
+   /*
+    * Types Not Implemented:
+    *   pfcp::qer_control_indication_t qer_control_indication;
+    *   std::pair<bool, pfcp::packet_rate_status> packet_rate_status; ///?
+    */
 
+   /*
+    * Optional Parameters:
+    *   std::pair<bool, pfcp::averaging_window_t> averaging_window;   
+    */
 //------------------------------------------------------------------------------  
   pfcp_qer()
       : qer_id(),
@@ -58,94 +69,324 @@ class pfcp_qer {
         gate_status(),
         mbr(),
         gbr(),
-        packet_rate(),
-        //packet_rate_status(), 
-        dl_flow_level_marking(),
         qfi(),
         rqi(),
-        paging_policy_indicator(),
-        averaging_window()
-        //qer_control_indication(),
-        {}
-
+        paging_policy_indicator() {}
+        /*
+        * packet_rate(),
+        * dl_flow_level_marking(),
+        * packet_rate_status(),
+        * qer_control_indication(),
+        * averaging_window()
+        */
 
 //------------------------------------------------------------------------------
   explicit pfcp_qer(const pfcp::create_qer& c)
-      : qer_id(c.qer_id.second),
+      : qer_id(c.qer_id),
         qer_correlation_id(c.qer_correlation_id),
         gate_status(c.gate_status),
         mbr(c.maximum_bitrate),
         gbr(c.guaranteed_bitrate),
-        packet_rate(c.packet_rate),
-        //packet_rate_status(c.packet_rate_status), 
-        dl_flow_level_marking(c.dl_flow_level_marking),
         qfi(c.qos_flow_identifier),
-        rqi(c.reflective_qos),
-        //paging_policy_indicator(c.),
-        //averaging_window(c.)
-        //qer_control_indication(),
+        rqi(c.reflective_qos) {
+        }
+        /*
+        * paging_policy_indicator(c.?),
+        * packet_rate(c.packet_rate),
+        * dl_flow_level_marking(c.dl_flow_level_marking),
+        * packet_rate_status(c.packet_rate_status),
+        * qer_control_indication(),
+        * averaging_window(c.?)
+        */    
+         
+
+//------------------------------------------------------------------------------
+  pfcp_qer(const pfcp_qer& c)
+      : qer_id(c.qer_id),
+        qer_correlation_id(c.qer_correlation_id),
+        gate_status(c.gate_status),
+        mbr(c.mbr),
+        gbr(c.gbr),
+        qfi(c.qfi),
+        rqi(c.rqi) {}
+        /*
+        * paging_policy_indicator(c.?),
+        * packet_rate(c.packet_rate),
+        * dl_flow_level_marking(c.dl_flow_level_marking),
+        * packet_rate_status(c.packet_rate_status),
+        * qer_control_indication(),
+        * averaging_window(c.?)
+        */   
+
+//------------------------------------------------------------------------------
+  // virtual ~pfcp_qer() {};
+
+
+//------------------------------------------------------------------------------
+  void set(const pfcp::qer_id_t& v) {
+    qer_id.first = true;
+    qer_id.second = v; 
   }
 
 
 //------------------------------------------------------------------------------
-  pfcp_far(const pfcp_far& c)
-      : far_id(c.far_id),
-        apply_action(c.apply_action),
-        forwarding_parameters(c.forwarding_parameters),
-        duplicating_parameters(c.duplicating_parameters),
-        bar_id(c.bar_id) {}
-
-  // virtual ~pfcp_far() {};
-  void set(const pfcp::far_id_t& v) { far_id = v; }
-  void set(const pfcp::apply_action_t& v) { apply_action = v; }
-  void set(const pfcp::forwarding_parameters& v) {
-    forwarding_parameters.first  = true;
-    forwarding_parameters.second = v;
-  }
-  void set(const pfcp::duplicating_parameters& v) {
-    duplicating_parameters.first  = true;
-    duplicating_parameters.second = v;
-  }
-  void set(const pfcp::bar_id_t& v) {
-    bar_id.first  = true;
-    bar_id.second = v;
+  void set(const pfcp::qer_correlation_id_t& v) { 
+    qer_correlation_id.first = true;
+    qer_correlation_id.second = v; 
   }
 
-  bool get(pfcp::far_id_t& v) const {
-    v = far_id;
-    return true;
+
+//------------------------------------------------------------------------------
+  void set(const pfcp::gate_status_t& v) {
+    gate_status.first = true;
+    gate_status.second = v; 
   }
-  bool get(pfcp::apply_action_t& v) const {
-    v = apply_action;
-    return true;
+
+
+//------------------------------------------------------------------------------
+  void set(const pfcp::mbr_t& v) {
+    mbr.first  = true;
+    mbr.second = v;
   }
-  bool get(pfcp::forwarding_parameters& v) const {
-    if (forwarding_parameters.first) {
-      v = forwarding_parameters.second;
+
+
+//------------------------------------------------------------------------------
+  void set(const pfcp::gbr_t& v) {
+    gbr.first  = true;
+    gbr.second = v;
+  }
+
+
+//------------------------------------------------------------------------------
+  /*
+   * void set(const pfcp::packet_rate_t& v) {
+   *  packet_rate.first  = true;
+   *  packet_rate.second = v;
+   * }
+  */
+  
+
+//------------------------------------------------------------------------------
+  /*
+   * void set(const pfcp::packet_rate_status_t& v) {
+   *   packet_rate_status.first  = true;
+   *   packet_rate_status.second = v;
+   * }
+   */
+
+
+//------------------------------------------------------------------------------
+ /*
+  * void set(const pfcp::dl_flow_level_marking_t& v) { 
+  *   dl_flow_level_marking.first = true;
+  *   dl_flow_level_marking.second = v; 
+  * }
+  */
+ 
+
+//------------------------------------------------------------------------------
+ void set(const pfcp::qfi_t& v) { 
+    qfi.first = true;
+    qfi.second = v;
+ }
+
+
+//------------------------------------------------------------------------------
+ void set(const pfcp::rqi_t& v) { 
+    rqi.first = true;
+    rqi.second = v; 
+ }
+
+
+//------------------------------------------------------------------------------
+ /*
+  * void set(const pfcp::paging_policy_indicator_t& v) { 
+  *   paging_policy_indicator.first = true;
+  *   paging_policy_indicator.second = v; 
+  * }
+  */
+
+
+//------------------------------------------------------------------------------
+ /*
+  * void set(const pfcp::averaging_window_t& v) { 
+  *   averaging_window.false = true;
+  *   averaging_window.second = v; 
+  * }
+  */
+
+
+//------------------------------------------------------------------------------
+ /*
+  * void set(const pfcp::qer_control_indication_t& v) { 
+  *   qer_control_indication.first = true;
+  *   qer_control_indication.second = v; 
+  * }
+  */
+ 
+
+//------------------------------------------------------------------------------
+  bool get(pfcp::qer_id_t& v) const {
+    if (qer_id.first){
+      v = qer_id.second;
       return true;
     }
     return false;
   }
-  bool get(pfcp::duplicating_parameters& v) const {
-    if (duplicating_parameters.first) {
-      v = duplicating_parameters.second;
-      return true;
-    }
-    return false;
-  }
-  bool get(pfcp::bar_id_t& v) const {
-    if (bar_id.first) {
-      v = bar_id.second;
+
+
+//------------------------------------------------------------------------------
+  bool get(pfcp::gate_status_t& v) const {
+    if (gate_status.first){
+      v = gate_status.second;
       return true;
     }
     return false;
   }
 
-  bool update(const pfcp::update_far& update, uint8_t& cause_value);
 
-  void apply_forwarding_rules(
-      struct iphdr* const iph, const std::size_t num_bytes, bool& nocp,
-      bool& buff, uint8_t qfi);
+//------------------------------------------------------------------------------
+  bool get(pfcp::qer_correlation_id_t& v) const {
+    if (qer_correlation_id.first) {
+      v = qer_correlation_id.second;
+      return true;
+    }
+    return false;
+  }
+
+
+//------------------------------------------------------------------------------  
+  bool get(pfcp::mbr_t& v) const {
+    if (mbr.first) {
+      v = mbr.second;
+      return true;
+    }
+    return false;
+  }
+  
+  
+//------------------------------------------------------------------------------
+  bool get(pfcp::gbr_t& v) const {
+    if (gbr.first) {
+      v = gbr.second;
+      return true;
+    }
+    return false;
+  }
+
+
+//------------------------------------------------------------------------------
+  bool get(pfcp::qfi_t& v) const {
+    if (qfi.first) {
+      v = qfi.second;
+      return true;
+    }
+    return false;
+  }
+
+
+//------------------------------------------------------------------------------
+  bool get(pfcp::rqi_t& v) const {
+    if (rqi.first) {
+      v = rqi.second;
+      return true;
+    }
+    return false;
+  }
+
+
+//------------------------------------------------------------------------------
+  bool get(pfcp::paging_policy_indicator_t& v) const {
+    if (paging_policy_indicator.first) {
+      v = paging_policy_indicator.second;
+      return true;
+    }
+    return false;
+  }
+
+
+//------------------------------------------------------------------------------
+  /*
+   * Not considered for N4 interface:
+   *    std::pair<bool, pfcp::packet_rate_t> packet_rate;
+   *    pfcp::dl_flow_level_marking_t dl_flow_level_marking;
+   *      
+   */
+  /* bool get(pfcp::packet_rate_t& v) const {
+   *   if (packet_rate.first) {
+   *    v = packet_rate.second;
+   *    return true;
+   *   }
+   *   return false;
+   * }
+   * 
+   */ 
+
+  /*
+   * bool get(pfcp::dl_flow_level_marking_t& v) const {
+   *   if (dl_flow_level_marking.first) {
+   *     v = dl_flow_level_marking.second;
+   *     return true;
+   *   }
+   *   return false;
+   * }
+   * 
+   */
+
+
+
+
+//------------------------------------------------------------------------------
+  /*
+    * Types Not Implemented:
+    *   pfcp::qer_control_indication_t qer_control_indication;
+    *   std::pair<bool, pfcp::packet_rate_status> packet_rate_status; ///?
+    */
+
+  /*
+   * bool get(pfcp::qer_control_indication_t& v) const {
+   *   if (qer_control_indication.first) {
+   *     v = qer_control_indication.second;
+   *     return true;
+   *   }
+   *   return false;
+   * }
+   *
+   */
+
+  /*
+   * bool get(pfcp::packet_rate_status& v) const {
+   *  if (packet_rate_status.first) {
+   *     v = packet_rate_status.second;
+   *     return true;
+   *  }
+   *  return false;
+   * }
+   *
+   */
+
+   
+//------------------------------------------------------------------------------
+  /*
+    * Optional Parameters:
+    *   std::pair<bool, pfcp::averaging_window_t> averaging_window;   
+    */
+
+    /*
+     * bool get(pfcp::averaging_window_t& v) const {
+     *  if (averaging_window.first) {
+     *     v = averaging_window.second;
+     *     return true;
+     *  }
+     *  return false;
+     * }
+     * 
+     */ 
+
+   
+//------------------------------------------------------------------------------
+  bool update(const pfcp::update_qer& update, uint8_t& cause_value);
+
 };
 }  // namespace pfcp
 

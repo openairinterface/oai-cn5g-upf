@@ -40,6 +40,7 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf/nrf_model.cmake)
 add_library (SIMPLE_SWITCH STATIC
   pfcp_far.cpp
   pfcp_pdr.cpp
+  pfcp_qer.cpp
   pfcp_session.cpp
   pfcp_switch.cpp
   simple_switch.cpp

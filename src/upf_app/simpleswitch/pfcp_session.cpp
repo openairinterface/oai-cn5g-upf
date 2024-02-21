@@ -56,6 +56,19 @@ bool pfcp_session::get(
   }
   return false;
 }
+
+//------------------------------------------------------------------------------
+bool pfcp_session::get(
+    const uint32_t qer_id, std::shared_ptr<pfcp::pfcp_qer>& qer) const {
+  for (auto it : qers) {
+    if (it->qer_id.second.qer_id == qer_id) {
+      qer = it;
+      return true;
+    }
+  }
+  return false;
+}
+
 //------------------------------------------------------------------------------
 void pfcp_session::add(std::shared_ptr<pfcp::pfcp_far> far) {
   Logger::upf_n4().info("pfcp_session::add(far) seid " SEID_FMT " ", seid);
@@ -73,7 +86,7 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_pdr> pdr) {
 //------------------------------------------------------------------------------
 void pfcp_session::add(std::shared_ptr<pfcp::pfcp_qer> qer) {
   Logger::upf_n4().info("pfcp_session::add(qer) seid " SEID_FMT " ", seid);
-  pdrs.push_back(qer);
+  qers.push_back(qer);
 }
 
 
@@ -116,7 +129,7 @@ bool pfcp_session::remove(const pfcp::pdr_id_t& pdr_id, uint8_t& cause_value) {
 bool pfcp_session::remove(const pfcp::qer_id_t& qer_id, uint8_t& cause_value) {
   for (std::vector<std::shared_ptr<pfcp::pfcp_qer>>::iterator it = qers.begin();
        it != qers.end(); ++it) {
-    if ((*it)->qer_id.rule_id == qer_id.rule_id) {
+    if ((*it)->qer_id.second.qer_id == qer_id.qer_id) {
       Logger::upf_n4().info(
           "pfcp_session::remove(qer) seid " SEID_FMT " ", seid);
       qers.erase(it);
@@ -165,7 +178,7 @@ bool pfcp_session::update(
 bool pfcp_session::update(
     const pfcp::update_qer& update, uint8_t& cause_value) {
   std::shared_ptr<pfcp::pfcp_qer> qer = {};
-  if (get(update.qer_id.rule_id, qer)) {
+  if (get(update.qer_id.second.qer_id, qer)) {
     if (qer->update(update, cause_value)) {
       return true;
     }
@@ -328,36 +341,36 @@ bool pfcp_session::create(
 
 //------------------------------------------------------------------------------
 bool pfcp_session::create(
-    const pfcp::create_qer& cr_qer, pfcp::cause_t& cause,
-    uint16_t& offending_ie) {
-  if (not cr_qer.qer_id.first) {
-    // should be caught in lower layer
-    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-    offending_ie      = PFCP_IE_QER_ID;
-    return false;
-  }
-  if (not cr_qer.apply_action.first) {
-    // should be caught in lower layer
-    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-    offending_ie      = PFCP_IE_APPLY_ACTION;
-    return false;
-  }
-  if (cr_qer.apply_action.second.forw) {
-    if (not cr_qer.forwarding_parameters.first) {
-      // should be caught in lower layer
-      cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-      offending_ie      = PFCP_IE_FORWARDING_PARAMETERS;
-      return false;
-    }
-  }
-  if (cr_qer.apply_action.second.dupl) {
-    if (not cr_qer.duplicating_parameters.first) {
-      // should be caught in lower layer
-      cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-      offending_ie      = PFCP_IE_DUPLICATING_PARAMETERS;
-      return false;
-    }
-  }
+     const pfcp::create_qer& cr_qer, pfcp::cause_t& cause,
+     uint16_t& offending_ie) {
+  // if (not cr_qer.qer_id.first) {
+  //   // should be caught in lower layer
+  //   cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+  //   offending_ie      = PFCP_IE_QER_ID;
+  //   return false;
+  // }
+  // if (not cr_qer.apply_action.first) {
+  //   // should be caught in lower layer
+  //   cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+  //   offending_ie      = PFCP_IE_APPLY_ACTION;
+  //   return false;
+  // }
+  // if (cr_qer.apply_action.second.forw) {
+  //   if (not cr_qer.forwarding_parameters.first) {
+  //     // should be caught in lower layer
+  //     cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+  //     offending_ie      = PFCP_IE_FORWARDING_PARAMETERS;
+  //     return false;
+  //   }
+  // }
+  // if (cr_qer.apply_action.second.dupl) {
+  //   if (not cr_qer.duplicating_parameters.first) {
+  //     // should be caught in lower layer
+  //     cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+  //     offending_ie      = PFCP_IE_DUPLICATING_PARAMETERS;
+  //     return false;
+  //   }
+  // }
   pfcp_qer* qer                  = new pfcp_qer(cr_qer);
   std::shared_ptr<pfcp_qer> sqer = std::shared_ptr<pfcp_qer>(qer);
   add(sqer);
