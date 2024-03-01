@@ -117,15 +117,15 @@ int QdiscHelper::configureRootQdisc(struct nl_sock *socket,
     )
 {    
   int err;
-  Logger::upf_app().info("Set the Root Qdisc Attributes");
-  //rtnl_tc_set_ifindex(TC_CAST(qdisc), master_index);
-  rtnl_tc_set_link(TC_CAST(qdisc), link);
-  rtnl_tc_set_parent(TC_CAST(qdisc), TC_H_ROOT);
 
   Logger::upf_app().info("Delete Existing Qdisc");
   rtnl_qdisc_delete(socket, qdisc);
   //rtnl_qdisc_put(qdisc);
     
+  Logger::upf_app().info("Set the Root Qdisc Attributes");
+  //rtnl_tc_set_ifindex(TC_CAST(qdisc), master_index);
+  rtnl_tc_set_link(TC_CAST(qdisc), link);
+  rtnl_tc_set_parent(TC_CAST(qdisc), TC_H_ROOT);
 
   rtnl_tc_set_handle(TC_CAST(qdisc), TC_HANDLE(1,0));
   if ((err = rtnl_tc_set_kind(TC_CAST(qdisc), qdiscAtt->scheduler))) {

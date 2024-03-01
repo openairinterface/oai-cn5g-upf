@@ -211,6 +211,7 @@ void SessionManager::createBPFSessionUL(
       ueIpAddress.ipv4_address.s_addr, pFar, false, 0);
 }
 
+
 /*---------------------------------------------------------------------------------------------------------------*/
 void SessionManager::createBPFSessionDL(
     std::shared_ptr<pfcp::pfcp_session> pSession,

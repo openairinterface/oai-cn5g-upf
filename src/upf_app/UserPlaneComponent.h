@@ -286,7 +286,7 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
     std::string mUDPInterface;
 
   /*---------------------------------------------------------------------------------------------------------------*/
-    struct qdiscRootParams *qdiscAtt = nullptr;
+    struct qdiscRootParams *qdiscAtt;
     struct classParams *classAtt = nullptr;
     struct rtnl_qdisc *rootQdisc = nullptr;
     struct rtnl_class *rootClass = nullptr;
