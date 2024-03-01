@@ -160,7 +160,7 @@ check_enable_qos() {
 install_netlink_libraries() {
   echo ""
   echo "Install Netlink libraries:"
-  apt-get install -y libnl-3-dev libnl-genl-3-dev libnl-route-3-dev
+  apt-get install -y libnl-3-dev libnl-genl-3-dev libnl-route-3-dev libnl-nf-3-dev
 }
 
 
