@@ -140,6 +140,15 @@ class QdiscHelper {
    */
   void releaseNetlinkSocket(struct nl_sock *socket);
 
+
+  /*------------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Method to Release Netlink class 
+   * 
+   * @param rtnl_class *qdiscClass
+   */
+  void releaseNetlinkClass(struct rtnl_class *qdiscClass);
+
 };
 
 #endif  // __GQDISC_HELPER_FUNCTIONS_HPP__

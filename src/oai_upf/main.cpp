@@ -71,7 +71,7 @@ extern upf_nrf* upf_nrf_inst;
 #endif //N6_IF_NAME
 
 #ifndef HTB_SCHEDULER
-#define HTB_SCHEDULER "HTB"
+#define HTB_SCHEDULER "htb"
 #endif //HTB_SCHEDULER
     
 

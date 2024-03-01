@@ -1,13 +1,22 @@
 #include "QdiscHelpers.hpp"
-
 #include <netlink/netlink.h>
-#include <netlink/route/qdisc.h>
 #include <netlink/route/link.h>
+#include <netlink/route/tc.h>
+#include <netlink/route/qdisc.h>
 #include <netlink/route/qdisc/htb.h>
-
+#include <netlink/route/qdisc/sfq.h>
+#include <netlink/route/cls/u32.h>
+#include <netlink/route/classifier.h>
+#include <netlink/route/class.h>
+#include <linux/if_ether.h>
+#include <netlink/attr.h>
+//#include "include/rtnl_u32.h"
+#include <stdio.h>
+#include <string.h>
+//#include "include/rtnl_u32_addon.h"
 
 #ifndef HTB_SCHEDULER
-#define HTB_SCHEDULER "HTB"
+#define HTB_SCHEDULER "htb"
 #endif
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -118,14 +127,14 @@ int QdiscHelper::configureRootQdisc(struct nl_sock *socket,
 {    
   int err;
 
-  Logger::upf_app().info("Delete Existing Qdisc");
-  rtnl_qdisc_delete(socket, qdisc);
-  //rtnl_qdisc_put(qdisc);
-    
   Logger::upf_app().info("Set the Root Qdisc Attributes");
   //rtnl_tc_set_ifindex(TC_CAST(qdisc), master_index);
   rtnl_tc_set_link(TC_CAST(qdisc), link);
   rtnl_tc_set_parent(TC_CAST(qdisc), TC_H_ROOT);
+  
+  Logger::upf_app().info("Delete Existing Qdisc");
+  rtnl_qdisc_delete(socket, qdisc);
+  //rtnl_qdisc_put(qdisc);
 
   rtnl_tc_set_handle(TC_CAST(qdisc), TC_HANDLE(1,0));
   if ((err = rtnl_tc_set_kind(TC_CAST(qdisc), qdiscAtt->scheduler))) {
@@ -133,8 +142,9 @@ int QdiscHelper::configureRootQdisc(struct nl_sock *socket,
     return(err);
   }
   
-  Logger::upf_app().info("Set Default Class for Unclassified Traffic");
+  //Logger::upf_app().info("Set Default Class for Unclassified Traffic");
   rtnl_htb_set_defcls(qdisc, TC_HANDLE(1, qdiscAtt->defaultClass));
+  rtnl_htb_set_defcls(qdisc, TC_H_MIN(qdiscAtt->defaultClass));
   rtnl_htb_set_rate2quantum(qdisc, qdiscAtt->quantum);
   
   /* Submit request to kernel and wait for response */
@@ -143,9 +153,7 @@ int QdiscHelper::configureRootQdisc(struct nl_sock *socket,
     Logger::upf_app().error("rtnl_qdisc_add: Can not allocate Qdisc\n");
     return(err);
   }
-  
-  /* Return the qdisc object to free memory resources */
-  rtnl_qdisc_put(qdisc);
+ 
   return 0;
 }
 
@@ -200,7 +208,6 @@ int QdiscHelper::configureRootClass(struct nl_sock *socket,
       return(err);
   }
 
-  rtnl_class_put(qdiscClass);
   return 0;
 }
 
@@ -210,7 +217,16 @@ int QdiscHelper::configureRootClass(struct nl_sock *socket,
 void QdiscHelper::releaseNetlinkQdisc(struct nl_sock *socket, struct rtnl_qdisc *qdisc){
     Logger::upf_app().info("Release Qdisc Object");
     rtnl_qdisc_delete(socket, qdisc);
+    //rtnl_qdisc_put(qdisc);
 } 
+
+
+/*---------------------------------------------------------------------------------------------------------------*/
+/* Method to Release Netlink class */
+void QdiscHelper::releaseNetlinkClass(struct rtnl_class *qdiscClass){
+    Logger::upf_app().info("Release Class Object");
+    rtnl_class_put(qdiscClass);
+}
 
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -279,7 +295,7 @@ int QdiscHelper::configureParentClass(struct nl_sock *socket,
         printf("Can not allocate the Parent Class\n");
         return 1;
     }
-    rtnl_class_put(parentClass);
+
     return 0;
 }
 
@@ -340,6 +356,5 @@ int QdiscHelper::configureLeafClass(struct nl_sock *socket,
         return err;
     }
 
-    rtnl_class_put(leafClass);
     return 0;
 }

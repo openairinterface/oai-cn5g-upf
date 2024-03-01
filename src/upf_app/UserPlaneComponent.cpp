@@ -20,7 +20,7 @@
 #endif //QUATUM
 
 #ifndef DEFAULT_CLASS
-#define DEFAULT_CLASS 0xffff
+#define DEFAULT_CLASS 30 //0xffff
 #endif //DEFAULT_CLASS
 
 /*---------------------------------------------------------------------------------------------------------------*/
