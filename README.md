@@ -47,9 +47,10 @@ This source code is managed through a GITLAB server, a collaborative development
 
 Process is explained in [CONTRIBUTING](CONTRIBUTING.md) file.
 
+
 # Contribution requests
 
-In a general way, anybody who is willing can contribute on any part of the
+In general, anybody who is willing can contribute on any part of the
 code in any network component.
 
 Contributions can be simple bugfixes, advices and remarks on the design,
