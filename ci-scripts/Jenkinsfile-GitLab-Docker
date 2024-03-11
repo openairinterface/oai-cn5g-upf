@@ -208,7 +208,12 @@ pipeline {
                   sh "oc create -f openshift/build-config.yaml"
                   // Trick to bypass bpftool build
                   sh "mkdir -p build/ext"
-                  sh "cp /opt/kernel-no-download/bpftool-5-14.tar.gz build/ext"
+                  if (fileExists('/opt/kernel-no-download/bpftool-5-14.tar.gz')) {
+                    sh "cp /opt/kernel-no-download/bpftool-5-14.tar.gz build/ext"
+                  }
+                  if (fileExists('/home/oaicicd-cn/kernel-no-download/bpftool-5-14.tar.gz')) {
+                    sh "cp /home/oaicicd-cn/kernel-no-download/bpftool-5-14.tar.gz build/ext"
+                  }
                   // Starting the build
                   sh 'oc start-build upf-build-cfg  --from-dir=./ --exclude=""'
                   // need python to wait for pod upf-build-cfg-1-build to be Completed or Error
