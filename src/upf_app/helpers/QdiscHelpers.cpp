@@ -142,7 +142,7 @@ int QdiscHelper::configureRootQdisc(struct nl_sock *socket,
     return(err);
   }
   
-  //Logger::upf_app().info("Set Default Class for Unclassified Traffic");
+  Logger::upf_app().info("Set Default Class for Unclassified Traffic");
   rtnl_htb_set_defcls(qdisc, TC_HANDLE(1, qdiscAtt->defaultClass));
   rtnl_htb_set_defcls(qdisc, TC_H_MIN(qdiscAtt->defaultClass));
   rtnl_htb_set_rate2quantum(qdisc, qdiscAtt->quantum);
@@ -167,7 +167,7 @@ int QdiscHelper::configureRootClass(struct nl_sock *socket,
     ){
   int err;
 
-  Logger::upf_app().info("Set Root Class Attributes:");
+  Logger::upf_app().info("Set Root Class Attributes");
   rtnl_tc_set_link(TC_CAST(qdiscClass), link);
   rtnl_tc_set_parent(TC_CAST(qdiscClass), TC_H_ROOT);
   rtnl_tc_set_handle(TC_CAST(qdiscClass), 1);
