@@ -88,6 +88,18 @@ void pfcp_far::apply_forwarding_rules(
                   reinterpret_cast<char* const>(iph), num_bytes);
             }
           }
+        } else if (
+            forwarding_parameters.second.destination_interface.second
+                .interface_value == INTERFACE_VALUE_SGI_LAN_N6_LAN) {
+          // TODO [TS-SFC] add NSH header creation
+          /*
+            This should also include the traffic steering information and metadata.
+            How do will pass the data? Is this part of the buff? or do we need to create
+            add new parameters. The traffic steering information includes the TSP ID
+            corresponding to the SFC ID (in some cases this is a direct map) and the 
+            metadata of the rule, which can be included in the NSH metadata.
+          */ 
+         // Send to n6 interface
         } else {
         }
       } else {

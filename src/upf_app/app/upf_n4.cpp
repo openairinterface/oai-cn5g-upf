@@ -227,7 +227,7 @@ upf_n4::upf_n4()
   up_function_features.bucp  = 0;
   up_function_features.ddnd  = 0;
   up_function_features.dlbd  = 0;
-  up_function_features.trst  = 0;
+  up_function_features.trst  = 0; // TODO [TS-SFC] set trst to 1
   up_function_features.ftup  = 1;
   up_function_features.pfdm  = 0;
   up_function_features.heeu  = 0;

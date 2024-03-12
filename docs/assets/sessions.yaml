@@ -1,0 +1,42 @@
+- seid: 0
+  pdrs:
+  - pdrID: 0
+    precedence: 0
+    pdi:
+      sourceInterface: Access
+      networkInstance: access.oai.org
+      localFTEID:
+        teid: 1234
+        ip4: 192.168.70.134
+      ueIPAddress:
+        isDestination: false
+        ip4: 12.1.1.10
+    outerHeaderRemoval: OUTER_HEADER_GTPU_UDP_IPV4
+    farID: 12
+  fars:
+  - farID: 12
+    applyAction: Forward
+    forwardingParameters:
+      destinationInterface: Core
+      networkInstance: internet.oai.org
+- seid: 1
+  pdrs:
+  - pdrID: 1
+    precedence: 0
+    pdi:
+      sourceInterface: Core
+      networkInstance: internet.oai.org
+      ueIPAddress:
+        isDestination: true
+        ip4: 12.1.1.10
+    farID: 13
+  fars:
+  - farID: 13
+    applyAction: Forward
+    forwardingParameters:
+      destinationInterface: Access
+      networkInstance: access.oai.org
+      outerHeaderCreation:
+        desc: OUTER_HEADER_CREATION_GTPU_UDP_IPV4
+        teid: 4321
+        ip: 192.168.70.1

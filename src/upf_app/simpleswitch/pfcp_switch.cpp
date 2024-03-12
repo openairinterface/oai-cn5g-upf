@@ -150,6 +150,10 @@ void pfcp_switch::send_to_core(char* const ip_packet, const ssize_t len) {
   }
 }
 //------------------------------------------------------------------------------
+void pfcp_switch::send_to_n6_lan(char* const ip_packet, const ssize_t len) {
+  // TODO [TS-SFC] implement logic
+}
+//------------------------------------------------------------------------------
 int pfcp_switch::create_pdn_socket(
     const char* const ifname, const bool promisc, int& if_index) {
   struct sockaddr_in addr = {};
@@ -1190,4 +1194,16 @@ void pfcp_switch::pfcp_session_look_up_pack_in_core(
   } else {
     Logger::pfcp_switch().info("Unknown IP version %d packet", iph->version);
   }
+}
+
+//------------------------------------------------------------------------------
+void pfcp_switch::pfcp_session_look_up_pack_in_n6_lan(
+    const char* buffer, const std::size_t num_bytes) {
+    // TODO [TS-SFC] implemenet logic
+    /*
+     * The function will receive packets from the N6 interface. If the incoming
+     * packets have NSH encapsulation (or any other encap), it should remove the headers.
+     * If the packets don't have encap, check for pdr or sdf and apply any relavant rules.
+     * Naturally we should have rules to forward to ACCESS interface with GTPU encap
+    */ 
 }

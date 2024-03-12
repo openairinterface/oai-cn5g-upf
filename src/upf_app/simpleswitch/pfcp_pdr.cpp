@@ -73,6 +73,7 @@ bool pfcp_pdr::look_up_pack_in_access(
     if (pdi.second.sdf_filter.first) {
       // TODO (create ss_pdi_t with ss_sdf_filter_t with optimized flow
       // description matching )
+      // TODO [TS-SFC] implemenet logic
       return true;
     }
     return true;  // No SDF filter actually

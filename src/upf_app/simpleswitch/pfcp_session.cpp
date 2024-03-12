@@ -257,6 +257,12 @@ bool pfcp_session::create(
       return false;
     }
     add(spdr);
+  } else if (
+      pdi.source_interface.second.interface_value == INTERFACE_VALUE_SGI_LAN_N6_LAN) {
+    // TODO [TS-SFC] implemenet logic
+    // pdr is defined for steering to the N6 interface
+    // create pdr 
+    // add pdr
   } else {
     cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
     Logger::upf_n4().info(
