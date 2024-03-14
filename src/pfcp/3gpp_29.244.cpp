@@ -670,12 +670,12 @@ pfcp_ie* pfcp_ie::new_pfcp_ie_from_stream(std::istream& is) {
         //        return ie;
         //      }
         //      break;
-        //    case PFCP_IE_PDN_TYPE: {
-        //        pfcp_pdn_type_ie *ie = new pfcp_pdn_type_ie(tlv);
-        //        ie->load_from(is);
-        //        return ie;
-        //      }
-        //      break;
+           case PFCP_IE_PDN_TYPE: {
+               pfcp_pdn_type_ie *ie = new pfcp_pdn_type_ie(tlv);
+               ie->load_from(is);
+               return ie;
+             }
+             break;
       case PFCP_IE_FAILED_RULE_ID: {
         pfcp_failed_rule_id_ie* ie = new pfcp_failed_rule_id_ie(tlv);
         ie->load_from(is);

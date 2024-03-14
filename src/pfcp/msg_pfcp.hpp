@@ -1104,19 +1104,15 @@ class pfcp_ies_container {
         0, PFCP_IE_GRACEFUL_RELEASE_PERIOD, __FILE__, __LINE__);
   }
   //  PFCP_IE_PDN_TYPE
-  // virtual bool get(pfcp::pdn_type_t& v) const {throw
-  // pfcp_msg_illegal_ie_exception(0, PFCP_IE_PDN_TYPE, __FILE__, __LINE__);}
-  // virtual void set(const pfcp::pdn_type_t& v) {throw
-  // pfcp_msg_illegal_ie_exception(0, PFCP_IE_PDN_TYPE, __FILE__, __LINE__);}
-  virtual bool get(pfcp::pdu_session_type_t& v) const {
+  virtual bool get(pfcp::pdn_type_t& v) const {
     throw pfcp_msg_illegal_ie_exception(
-        0, PFCP_IE_PDN_TYPE, __FILE__, __LINE__);
+      0, PFCP_IE_PDN_TYPE, __FILE__, __LINE__);
   }
-  virtual void set(const pfcp::pdu_session_type_t& v) {
+  virtual void set(const pfcp::pdn_type_t& v) {
     throw pfcp_msg_illegal_ie_exception(
-        0, PFCP_IE_PDN_TYPE, __FILE__, __LINE__);
+      0, PFCP_IE_PDN_TYPE, __FILE__, __LINE__);
   }
-
+  
   //  PFCP_IE_FAILED_RULE_ID
   virtual bool get(pfcp::failed_rule_id_t& v) const {
     throw pfcp_msg_illegal_ie_exception(
@@ -6385,8 +6381,7 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
   std::vector<pfcp::create_qer> create_qers;
   std::pair<bool, pfcp::create_bar> create_bar;
   std::pair<bool, pfcp::create_traffic_endpoint> create_traffic_endpoint;
-  // std::pair<bool, pfcp::pdn_type_t>   pdn_type;
-  std::pair<bool, pfcp::pdu_session_type_t> pdu_session_type;
+  std::pair<bool, pfcp::pdn_type_t> pdn_type;
   std::pair<bool, fq_csid_t> sgw_c_fq_csid;
   std::pair<bool, fq_csid_t> mme_fq_csid;
   std::pair<bool, fq_csid_t> pgw_c_fq_csid;
@@ -6406,7 +6401,7 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
         create_qers(),
         create_bar(),
         create_traffic_endpoint(),
-        pdu_session_type(),
+        pdn_type(),
         sgw_c_fq_csid(),
         mme_fq_csid(),
         pgw_c_fq_csid(),
@@ -6426,7 +6421,7 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
     create_qers                 = i.create_qers;
     create_bar                  = i.create_bar;
     create_traffic_endpoint     = i.create_traffic_endpoint;
-    pdu_session_type            = i.pdu_session_type;
+    pdn_type                    = i.pdn_type;
     sgw_c_fq_csid               = i.sgw_c_fq_csid;
     mme_fq_csid                 = i.mme_fq_csid;
     pgw_c_fq_csid               = i.pgw_c_fq_csid;
