@@ -91,7 +91,7 @@ RUN apt-get update && \
       netbase \
 # Ubuntu 20 --> libasan5
 # Ubuntu 22 --> libasan6
-      libasan? \
+#      libasan? \
       libgssapi-krb5-2 \
 # Ubuntu 20 --> libldap-2.4-2
 # Ubuntu 22 --> libldap-2.5-0
