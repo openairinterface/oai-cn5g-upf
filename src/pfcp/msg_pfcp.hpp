@@ -1454,7 +1454,18 @@ class pfcp_ies_container {
     throw pfcp_msg_illegal_ie_exception(
         0, PFCP_IE_FRAMED_IPV6_ROUTE, __FILE__, __LINE__);
   }
-  //  PFCP_IE_3GPP_INTERFACE_TYPE
+
+  //  PFCP_IE_APN_DNN
+  virtual bool get(pfcp::apn_dnn_t& v) const {
+    throw pfcp_msg_illegal_ie_exception(
+        0, PFCP_IE_APN_DNN, __FILE__, __LINE__);
+  }
+  virtual void set(const pfcp::apn_dnn_t& v) {
+    throw pfcp_msg_illegal_ie_exception(
+        0, PFCP_IE_APN_DNN, __FILE__, __LINE__);
+  }
+
+ //  PFCP_IE_3GPP_INTERFACE_TYPE
   virtual bool get(pfcp::_3gpp_interface_type_t& v) const {
     throw pfcp_msg_illegal_ie_exception(
         0, PFCP_IE_3GPP_INTERFACE_TYPE, __FILE__, __LINE__);
@@ -6382,6 +6393,7 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
   std::pair<bool, pfcp::create_bar> create_bar;
   std::pair<bool, pfcp::create_traffic_endpoint> create_traffic_endpoint;
   std::pair<bool, pfcp::pdn_type_t> pdn_type;
+  std::pair<bool, pfcp::apn_dnn_t> apn_dnn;
   std::pair<bool, fq_csid_t> sgw_c_fq_csid;
   std::pair<bool, fq_csid_t> mme_fq_csid;
   std::pair<bool, fq_csid_t> pgw_c_fq_csid;
@@ -6402,6 +6414,7 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
         create_bar(),
         create_traffic_endpoint(),
         pdn_type(),
+        apn_dnn(),
         sgw_c_fq_csid(),
         mme_fq_csid(),
         pgw_c_fq_csid(),
@@ -6422,6 +6435,7 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
     create_bar                  = i.create_bar;
     create_traffic_endpoint     = i.create_traffic_endpoint;
     pdn_type                    = i.pdn_type;
+    apn_dnn                     = i.apn_dnn;
     sgw_c_fq_csid               = i.sgw_c_fq_csid;
     mme_fq_csid                 = i.mme_fq_csid;
     pgw_c_fq_csid               = i.pgw_c_fq_csid;

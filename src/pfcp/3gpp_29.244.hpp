@@ -6536,8 +6536,11 @@ class pfcp_far_id_ie : public pfcp_ie {
     s.set(v);
   }
 };
-//-------------------------------------
-// IE QER_ID
+
+
+/*****************************************************************************************************************/
+// 8.2.75 IE QER ID
+/*****************************************************************************************************************/
 class pfcp_qer_id_ie : public pfcp_ie {
  public:
   uint32_t qer_id;
@@ -6579,7 +6582,11 @@ class pfcp_qer_id_ie : public pfcp_ie {
     s.set(v);
   }
 };
-////-------------------------------------
+
+
+/*****************************************************************************************************************/
+// 8.2.75 IE OCI_FLAGS
+/*****************************************************************************************************************/
 //// IE OCI_FLAGS
 // class pfcp_oci_flags_ie : public pfcp_ie {
 // public:
@@ -6949,6 +6956,8 @@ class pfcp_failed_rule_id_ie : public pfcp_ie {
 //      s.set(time_quota_mechanism);
 //  }
 //};
+
+
 //-------------------------------------
 // IE USER_PLANE_IP_RESOURCE_INFORMATION
 class pfcp_user_plane_ip_resource_information_ie : public pfcp_ie {
@@ -7159,6 +7168,9 @@ class pfcp_user_plane_inactivity_timer_ie : public pfcp_ie {
     s.set(v);
   }
 };
+
+
+
 ////-------------------------------------
 //// IE AGGREGATED_URRS
 // class pfcp_aggregated_urrs_ie : public pfcp_ie {
@@ -7205,6 +7217,8 @@ class pfcp_user_plane_inactivity_timer_ie : public pfcp_ie {
 //      s.set(aggregated_urrs);
 //  }
 //};
+
+
 ////-------------------------------------
 //// IE MULTIPLIER
 // class pfcp_multiplier_ie : public pfcp_ie {
@@ -7251,6 +7265,8 @@ class pfcp_user_plane_inactivity_timer_ie : public pfcp_ie {
 //      s.set(multiplier);
 //  }
 //};
+
+
 ////-------------------------------------
 //// IE AGGREGATED_URR_ID
 // class pfcp_aggregated_urr_id_ie : public pfcp_ie {
@@ -7297,6 +7313,8 @@ class pfcp_user_plane_inactivity_timer_ie : public pfcp_ie {
 //      s.set(aggregated_urr_id);
 //  }
 //};
+
+
 ////-------------------------------------
 //// IE SUBSEQUENT_VOLUME_QUOTA
 // class pfcp_subsequent_volume_quota_ie : public pfcp_ie {
@@ -7344,6 +7362,8 @@ class pfcp_user_plane_inactivity_timer_ie : public pfcp_ie {
 //      s.set(subsequent_volume_quota);
 //  }
 //};
+
+
 ////-------------------------------------
 //// IE SUBSEQUENT_TIME_QUOTA
 // class pfcp_subsequent_time_quota_ie : public pfcp_ie {
@@ -7390,6 +7410,8 @@ class pfcp_user_plane_inactivity_timer_ie : public pfcp_ie {
 //      s.set(subsequent_time_quota);
 //  }
 //};
+
+
 //-------------------------------------
 // IE RQI
 class pfcp_rqi_ie : public pfcp_ie {
@@ -7438,6 +7460,7 @@ class pfcp_rqi_ie : public pfcp_ie {
     s.set(v);
   }
 };
+
 //-------------------------------------
 // IE QFI
 class pfcp_qfi_ie : public pfcp_ie {
@@ -7486,6 +7509,7 @@ class pfcp_qfi_ie : public pfcp_ie {
     s.set(v);
   }
 };
+
 ////-------------------------------------
 //// IE QUERY_URR_REFERENCE
 // class pfcp_query_urr_reference_ie : public pfcp_ie {
@@ -7532,6 +7556,7 @@ class pfcp_qfi_ie : public pfcp_ie {
 //      s.set(query_urr_reference);
 //  }
 //};
+
 ////-------------------------------------
 //// IE ADDITIONAL_USAGE_REPORTS_INFORMATION
 // class pfcp_additional_usage_reports_information_ie : public pfcp_ie {
@@ -9083,6 +9108,75 @@ class pfcp_user_id_ie : public pfcp_ie {
 //      s.set(framed_ipv6_route);
 //  }
 //};
+
+
+
+/*****************************************************************************************************************/
+// 8.2.117 APN/DNN
+/*****************************************************************************************************************/
+class pfcp_apn_dnn_ie : public pfcp_ie {
+ public:
+  std::string apn_dnn;
+
+  //--------
+  explicit pfcp_apn_dnn_ie(const pfcp::apn_dnn_t& b)
+      : pfcp_ie(PFCP_IE_APN_DNN) {
+    apn_dnn = b.apn_dnn;
+    tlv.set_length(apn_dnn.size());
+  }
+  //--------
+  pfcp_apn_dnn_ie() : pfcp_ie(PFCP_IE_APN_DNN) {
+    apn_dnn = {};
+    tlv.set_length(0);
+  }
+  //--------
+  explicit pfcp_apn_dnn_ie(const pfcp_tlv& t) : pfcp_ie(t){};
+  //--------
+  void to_core_type(pfcp::apn_dnn_t& b) {
+    b.apn_dnn = apn_dnn;
+  }
+  //--------
+  void dump_to(std::ostream& os) {
+    tlv.dump_to(os);
+    os << apn_dnn;
+  }
+  //--------
+  void load_from(std::istream& is) {
+    // tlv.load_from(is);
+    uint16_t l = tlv.get_length();
+    char e[l];
+    is.read(e, l);
+    apn_dnn.assign(e, l);
+  }
+  //--------
+  void to_core_type(pfcp_ies_container& s) {
+    pfcp::apn_dnn_t apn_dnn = {};
+    to_core_type(apn_dnn);
+    s.set(apn_dnn);
+  }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // IE 3gpp_interface_type
 class pfcp_3gpp_interface_type_ie : public pfcp_ie {
