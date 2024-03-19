@@ -6519,6 +6519,15 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
     }
     return false;
   }
+
+  bool get(pfcp::pdn_type_t& v) const {
+    if (pdn_type.first) {
+      v = pdn_type.second;
+      return true;
+    }
+    return false;
+  }
+
   bool get(pfcp::trace_information_t& v) const {
     if (trace_information.first) {
       v = trace_information.second;
@@ -6584,6 +6593,10 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
   void set(const pfcp::trace_information_t& v) {
     trace_information.first  = true;
     trace_information.second = v;
+  }
+  void set(const pfcp::pdn_type_t& v) {
+    pdn_type.first  = true;
+    pdn_type.second = v;
   }
 };
 //------------------------------------------------------------------------------
