@@ -97,26 +97,36 @@ void SessionManager::createBPFSession(
     itti_n4_session_establishment_request* est_req,
     itti_n4_session_modification_request* mod_req,
     itti_n4_session_deletion_request* del_req) {
-  Logger::upf_app().debug(
-      "Session %d Received", pSession_establishment->get_up_seid());
-  Logger::upf_app().debug("Preparing the Datapath ...");
-  Logger::upf_app().debug("Find the PDR with Highest Precedence:");
+  
+  auto& logger = Logger::upf_app();    
 
-  for (int i = 0; i < pSession_establishment->pdrs.size(); i++) {
+  uint64_t seid = pSession_establishment->get_up_seid();
+
+  logger.debug("Session {} Received", seid); 
+  logger.debug("Preparing the Datapath ...");
+  logger.debug("Find the PDR with Highest Precedence:"); 
+
+  for (auto& pdr : pSession_establishment->pdrs) {
     pfcp::pdi pdi;
     pfcp::source_interface_t sourceInterface;
+    uint16_t pdr_id = pdr->pdr_id.rule_id;
 
-    pSession_establishment->pdrs[i]->get(pdi);
-    pdi.get(sourceInterface);
+    //std::tie(pdr_id, std::ignore) = pdr->pdr_id;
+
+    if (!pdr->get(pdi)) {
+      throw std::runtime_error("No PDI available for PDR: " + std::to_string(pdr_id));
+    }
+
+    if (!pdi.get(sourceInterface)) {
+      throw std::runtime_error("No Source Interface available within PDI Section defined for PDR: " + std::to_string(pdr_id));
+    }
 
     if (sourceInterface.interface_value == INTERFACE_VALUE_ACCESS) {
-      pSession_establishment->pdrs_uplink.push_back(
-          pSession_establishment->pdrs[i]);
+      pSession_establishment->pdrs_uplink.push_back(pdr);
     }
 
     if (sourceInterface.interface_value == INTERFACE_VALUE_CORE) {
-      pSession_establishment->pdrs_downlink.push_back(
-          pSession_establishment->pdrs[i]);
+      pSession_establishment->pdrs_downlink.push_back(pdr);
     }
   }
 
@@ -133,77 +143,53 @@ void SessionManager::createBPFSession(
 
   if ((pSession_establishment->pdrs_uplink.empty()) &&
       (pSession_establishment->pdrs_downlink.empty())) {
-    Logger::upf_app().error(
-        "No PDR was found in session %d", pSession_establishment->seid);
+    logger.error("No PDR was found in session {}", pSession_establishment->seid);
     throw std::runtime_error("No PDR was found in session");
   }
 
-  if (not(pSession_establishment->pdrs_uplink.empty())) {
-    auto pdrHighPrecedenceUl = pSession_establishment->pdrs_uplink[0];
 
-    Logger::upf_app().debug(
-        "The Uplink PDR %d has the Highest Precedence",
-        pdrHighPrecedenceUl->pdr_id.rule_id);
-
-    Logger::upf_app().debug(
-        "Extract PDI from the Uplink PDR %d",
-        pdrHighPrecedenceUl->pdr_id.rule_id);
-
-    pfcp::pdi pdi;
-    pdrHighPrecedenceUl->get(pdi);
-    pdi.get(pSession_establishment->teid_uplink);
-
-    Logger::upf_app().info(
-        "TEID for Uplink Session: %d",
-        pSession_establishment->teid_uplink.teid);
-
+  if (!pSession_establishment->pdrs_uplink.empty()) {
+    auto pdrHighPrecedenceUl = pSession_establishment->pdrs_uplink.front();
+    logger.debug("The Uplink PDR {} has the Highest Precedence", pdrHighPrecedenceUl->pdr_id.rule_id);
     createBPFSessionUL(pSession_establishment, pdrHighPrecedenceUl);
-  }
+  } 
 
-  if (not(pSession_establishment->pdrs_downlink.empty())) {
-    auto pdrHighPrecedenceDl = pSession_establishment->pdrs_downlink[0];
-    Logger::upf_app().debug(
-        "The Downlink PDR %d has the Highest Precedence",
-        pdrHighPrecedenceDl->pdr_id.rule_id);
-
-    Logger::upf_app().debug(
-        "Extract PDI from the Downlink PDR %d",
-        pdrHighPrecedenceDl->pdr_id.rule_id);
-
+  if (!pSession_establishment->pdrs_downlink.empty()) {
+    auto pdrHighPrecedenceDl = pSession_establishment->pdrs_downlink.front();
+    logger.debug("The Downlink PDR {} has the Highest Precedence", pdrHighPrecedenceDl->pdr_id.rule_id);
     createBPFSessionDL(pSession_establishment, pdrHighPrecedenceDl);
   }
-
-  mSeidToSession[pSession_establishment->get_up_seid()] =
-      pSession_establishment;
+ 
+  mSeidToSession[seid] = pSession_establishment;
 }
+
+
 /*****************************************************************************************************************/
 void SessionManager::createBPFSessionUL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl) {
+  
+  auto& logger = Logger::upf_app();
+
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
   pfcp::ue_ip_address_t ueIpAddress;
   pfcp::source_interface_t sourceInterface;
-  pfcp::qfi_t qfi;
+  uint16_t pdr_id = pdrHighPrecedenceUl->pdr_id.rule_id;
 
-  Logger::upf_app().debug(
-      "Create the Uplink Direction Datapath for Session %d",
-      pSession->get_up_seid());
-
-  if (!(pdrHighPrecedenceUl->get(pdi) && pdi.get(fteid) &&
-        pdi.get(sourceInterface) && pdi.get(ueIpAddress))) {
-    throw std::runtime_error("No fields available For Uplink Create PDI Check");
+  logger.debug("Create the Uplink Direction Datapath for Session {}", pSession->get_up_seid());
+  
+  if (!pdrHighPrecedenceUl->get(pdi) || !pdi.get(fteid) || !pdi.get(sourceInterface) || !pdi.get(ueIpAddress)) {
+    throw std::runtime_error("Failed to extract necessary fields from PDI for Uplink PDR " + std::to_string(pdr_id));
   }
 
-  Logger::upf_app().debug(
-      "PDI extracted from Uplink PDR %d", pdrHighPrecedenceUl->pdr_id.rule_id);
+  logger.debug("PDI extracted from Uplink PDR {}", pdr_id);
+  logger.debug("Extract Uplink FAR from the highest precedence Uplink PDR");
 
-  Logger::upf_app().debug(
-      "Extract Uplink FAR from the highest precedence Uplink PDR");
   std::shared_ptr<pfcp::pfcp_far> pFar;
 
   if (!extractFar(pdrHighPrecedenceUl, pSession, pFar)) {
-    throw std::runtime_error("No fields available For Uplink Create FAR Check");
+    throw std::runtime_error("Failed to extract Uplink FAR for PDR " + std::to_string(pdr_id));
   }
 
   SessionProgramManager::getInstance().createPipeline(
@@ -211,41 +197,40 @@ void SessionManager::createBPFSessionUL(
       ueIpAddress.ipv4_address.s_addr, pFar, false, 0);
 }
 
+
 /*****************************************************************************************************************/
 void SessionManager::createBPFSessionDL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl) {
+  
+  auto& logger = Logger::upf_app();
+
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
   pfcp::ue_ip_address_t ueIpAddress;
   pfcp::source_interface_t sourceInterface;
+  uint16_t pdr_id = pdrHighPrecedenceDl->pdr_id.rule_id;
 
-  Logger::upf_app().debug(
-      "Create the Downlink Direction Datapath for Session %d",
-      pSession->get_up_seid());
+  logger.debug("Create the Downlink Direction Datapath for Session {}", pSession->get_up_seid());
 
-  if (!(pdrHighPrecedenceDl->get(pdi) && pdi.get(fteid) &&
-        pdi.get(sourceInterface) && pdi.get(ueIpAddress))) {
-    throw std::runtime_error(
-        "No fields available for Downlink Create PDI Check");
+  if (!pdrHighPrecedenceDl->get(pdi) || !pdi.get(fteid) || !pdi.get(sourceInterface) || !pdi.get(ueIpAddress)) {
+    throw std::runtime_error("Failed to extract necessary fields from PDI for Downlink PDR " + std::to_string(pdr_id));
   }
 
-  Logger::upf_app().debug(
-      "PDI extracted from Uplink PDR %d", pdrHighPrecedenceDl->pdr_id.rule_id);
+  logger.debug("PDI extracted from Downlink PDR {}", pdr_id);
+  logger.debug("Extract Downlink FAR from the highest precedence Downlink PDR");
 
-  Logger::upf_app().debug(
-      "Extract Downlink FAR from the highest precedence Downlink PDR");
   std::shared_ptr<pfcp::pfcp_far> pFar;
 
   if (!extractFar(pdrHighPrecedenceDl, pSession, pFar)) {
-    throw std::runtime_error(
-        "No fields available For Downlink Create FAR Check");
+    throw std::runtime_error("Failed to extract Downlink FAR for PDR " + std::to_string(pdr_id));
   }
 
   SessionProgramManager::getInstance().createPipeline(
       pSession->get_up_seid(), fteid.teid, INTERFACE_VALUE_CORE,
       ueIpAddress.ipv4_address.s_addr, pFar, false, 0);
 }
+
 
 /*****************************************************************************************************************/
 void SessionManager::updateBPFSession(
