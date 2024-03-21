@@ -102,7 +102,7 @@ void SessionManager::createBPFSession(
 
   uint64_t seid = pSession_establishment->get_up_seid();
 
-  logger.debug("Session {} Received", seid); 
+  logger.debug("Session %d Received", seid); 
   logger.debug("Preparing the Datapath ...");
   logger.debug("Find the PDR with Highest Precedence:"); 
 
@@ -143,20 +143,20 @@ void SessionManager::createBPFSession(
 
   if ((pSession_establishment->pdrs_uplink.empty()) &&
       (pSession_establishment->pdrs_downlink.empty())) {
-    logger.error("No PDR was found in session {}", pSession_establishment->seid);
+    logger.error("No PDR was found in session %d", pSession_establishment->seid);
     throw std::runtime_error("No PDR was found in session");
   }
 
 
   if (!pSession_establishment->pdrs_uplink.empty()) {
     auto pdrHighPrecedenceUl = pSession_establishment->pdrs_uplink.front();
-    logger.debug("The Uplink PDR {} has the Highest Precedence", pdrHighPrecedenceUl->pdr_id.rule_id);
+    logger.debug("The Uplink PDR %d has the Highest Precedence", pdrHighPrecedenceUl->pdr_id.rule_id);
     createBPFSessionUL(pSession_establishment, pdrHighPrecedenceUl);
   } 
 
   if (!pSession_establishment->pdrs_downlink.empty()) {
     auto pdrHighPrecedenceDl = pSession_establishment->pdrs_downlink.front();
-    logger.debug("The Downlink PDR {} has the Highest Precedence", pdrHighPrecedenceDl->pdr_id.rule_id);
+    logger.debug("The Downlink PDR %d has the Highest Precedence", pdrHighPrecedenceDl->pdr_id.rule_id);
     createBPFSessionDL(pSession_establishment, pdrHighPrecedenceDl);
   }
  
@@ -177,13 +177,13 @@ void SessionManager::createBPFSessionUL(
   pfcp::source_interface_t sourceInterface;
   uint16_t pdr_id = pdrHighPrecedenceUl->pdr_id.rule_id;
 
-  logger.debug("Create the Uplink Direction Datapath for Session {}", pSession->get_up_seid());
+  logger.debug("Create the Uplink Direction Datapath for Session %d", pSession->get_up_seid());
   
   if (!pdrHighPrecedenceUl->get(pdi) || !pdi.get(fteid) || !pdi.get(sourceInterface) || !pdi.get(ueIpAddress)) {
     throw std::runtime_error("Failed to extract necessary fields from PDI for Uplink PDR " + std::to_string(pdr_id));
   }
 
-  logger.debug("PDI extracted from Uplink PDR {}", pdr_id);
+  logger.debug("PDI extracted from Uplink PDR %d", pdr_id);
   logger.debug("Extract Uplink FAR from the highest precedence Uplink PDR");
 
   std::shared_ptr<pfcp::pfcp_far> pFar;
@@ -211,13 +211,13 @@ void SessionManager::createBPFSessionDL(
   pfcp::source_interface_t sourceInterface;
   uint16_t pdr_id = pdrHighPrecedenceDl->pdr_id.rule_id;
 
-  logger.debug("Create the Downlink Direction Datapath for Session {}", pSession->get_up_seid());
+  logger.debug("Create the Downlink Direction Datapath for Session %d", pSession->get_up_seid());
 
   if (!pdrHighPrecedenceDl->get(pdi) || !pdi.get(fteid) || !pdi.get(sourceInterface) || !pdi.get(ueIpAddress)) {
     throw std::runtime_error("Failed to extract necessary fields from PDI for Downlink PDR " + std::to_string(pdr_id));
   }
 
-  logger.debug("PDI extracted from Downlink PDR {}", pdr_id);
+  logger.debug("PDI extracted from Downlink PDR %d", pdr_id);
   logger.debug("Extract Downlink FAR from the highest precedence Downlink PDR");
 
   std::shared_ptr<pfcp::pfcp_far> pFar;
