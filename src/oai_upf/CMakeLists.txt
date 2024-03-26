@@ -273,6 +273,7 @@ ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/app ${CMAKE_CURRENT_BINARY_DIR}/app)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/simpleswitch ${CMAKE_CURRENT_BINARY_DIR}/simpleswitch)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/gtpv1u ${CMAKE_CURRENT_BINARY_DIR}/gtpv1u)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/udp ${CMAKE_CURRENT_BINARY_DIR}/udp)
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/raw ${CMAKE_CURRENT_BINARY_DIR}/raw)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/interfaces ${CMAKE_CURRENT_BINARY_DIR}/interfaces)
 ################################################################################
 # Specific part for oai_upf folder
@@ -287,6 +288,7 @@ include_directories(${SRC_TOP_DIR}/common/utils)
 include_directories(${SRC_TOP_DIR}/gtpv1u)
 include_directories(${SRC_TOP_DIR}/pfcp)
 include_directories(${SRC_TOP_DIR}/udp)
+include_directories(${SRC_TOP_DIR}/raw)
 include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
@@ -325,6 +327,7 @@ APP
 SIMPLE_SWITCH
 interfaces
 UDP
+RAW
 GTPV1U
 PFCP
 far_ebpf_xdp

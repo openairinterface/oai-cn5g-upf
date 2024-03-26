@@ -172,12 +172,15 @@ class pfcp_switch {
       const endpoint& r_endpoint){};
   // void pfcp_session_look_up(struct ethhdr* const ethh, const std::size_t
   // num_bytes);
+  void pfcp_session_look_up_pack_in_n6_lan(
+    const char* buffer, const std::size_t num_bytes);
 
   void pfcp_session_look_up_pack_in_core(
       const char* buffer, const std::size_t num_bytes);
 
   bool no_internal_loop(struct iphdr* const iph, const std::size_t num_bytes);
   void send_to_core(char* const ip_packet, const ssize_t len);
+  void send_to_n6_lan(char* const ip_packet, const ssize_t len);
 
   using itti_n4_session_request = std::variant<
       itti_n4_session_establishment_request*,

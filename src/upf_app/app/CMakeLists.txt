@@ -31,6 +31,7 @@ include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/include)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/udp)
+include_directories(${SRC_TOP_DIR}/raw)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/config)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
@@ -45,6 +46,7 @@ add_library (APP STATIC
   upf_app.cpp
   upf_config.cpp
   upf_n4.cpp
+  upf_n6.cpp
   upf_profile.cpp
   upf_nrf.cpp
   upf_config_yaml.cpp  

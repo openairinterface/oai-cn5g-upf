@@ -33,6 +33,7 @@
 #include "upf_config.hpp"
 #include "simple_switch.hpp"
 #include "upf_n4.hpp"
+#include "upf_n6.hpp"
 #include "upf_nrf.hpp"
 
 #include <boost/uuid/random_generator.hpp>
@@ -49,6 +50,7 @@ using namespace std;
 upf_n4* upf_n4_inst   = nullptr;
 upf_n3* upf_n3_inst   = nullptr;
 upf_nrf* upf_nrf_inst = nullptr;
+upf_n6* upf_n6_inst   = nullptr; // TODO [SFC] add upf_n6_inst
 
 extern itti_mw* itti_inst;
 extern pfcp_switch* pfcp_switch_inst;
@@ -145,6 +147,12 @@ upf_app::upf_app(const std::string& config_file) {
   }
   try {
     upf_n4_inst = new upf_n4();
+  } catch (std::exception& e) {
+    Logger::upf_app().error("Cannot create UPF_N4: %s", e.what());
+    throw;
+  }
+  try {
+    upf_n6_inst = new upf_n6();
   } catch (std::exception& e) {
     Logger::upf_app().error("Cannot create UPF_N4: %s", e.what());
     throw;

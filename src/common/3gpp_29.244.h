@@ -1295,7 +1295,8 @@ enum outer_header_creation_description_value_e {
   OUTER_HEADER_CREATION_GTPU_UDP_IPV4 = 0x0100,
   OUTER_HEADER_CREATION_GTPU_UDP_IPV6 = 0x0200,
   OUTER_HEADER_CREATION_UDP_IPV4      = 0x0400,
-  OUTER_HEADER_CREATION_UDP_IPV6      = 0x0800
+  OUTER_HEADER_CREATION_UDP_IPV6      = 0x0800,
+  OUTER_HEADER_CREATION_NSH           = 0x0900, // TODO [TS-SFC] check for the correct values
 };
 
 typedef struct outer_header_creation_s {

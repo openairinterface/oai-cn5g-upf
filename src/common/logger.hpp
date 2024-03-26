@@ -27,8 +27,10 @@ static const std::string ITTI        = "itti   ";
 static const std::string UPF_APP     = "upf_app";
 static const std::string UPF_N3      = "upf_n3 ";
 static const std::string UPF_N4      = "upf_n4 ";
+static const std::string UPF_N6      = "upf_n6 ";
 static const std::string SYSTEM      = "system ";
 static const std::string UDP         = "udp    ";
+static const std::string RAW         = "raw    ";
 static const std::string PFCP        = "pfcp   ";
 static const std::string PFCP_SWITCH = "pfcp_switch";
 
@@ -49,9 +51,13 @@ class Logger {
     oai::logger::logger_registry::register_logger(
         name, UPF_N4, log_stdout, log_rot_file);
     oai::logger::logger_registry::register_logger(
+        name, UPF_N6, log_stdout, log_rot_file);
+    oai::logger::logger_registry::register_logger(
         name, SYSTEM, log_stdout, log_rot_file);
     oai::logger::logger_registry::register_logger(
         name, UDP, log_stdout, log_rot_file);
+    oai::logger::logger_registry::register_logger(
+        name, RAW, log_stdout, log_rot_file);
     oai::logger::logger_registry::register_logger(
         name, PFCP, log_stdout, log_rot_file);
     oai::logger::logger_registry::register_logger(
@@ -82,11 +88,17 @@ class Logger {
   static const oai::logger::printf_logger& upf_n4() {
     return oai::logger::logger_registry::get_logger(UPF_N4);
   }
+  static const oai::logger::printf_logger& upf_n6() {
+    return oai::logger::logger_registry::get_logger(UPF_N6);
+  }
   static const oai::logger::printf_logger& system() {
     return oai::logger::logger_registry::get_logger(SYSTEM);
   }
   static const oai::logger::printf_logger& udp() {
     return oai::logger::logger_registry::get_logger(UDP);
+  }
+  static const oai::logger::printf_logger& raw() {
+    return oai::logger::logger_registry::get_logger(RAW);
   }
   static const oai::logger::printf_logger& pfcp() {
     return oai::logger::logger_registry::get_logger(PFCP);
