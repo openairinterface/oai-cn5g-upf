@@ -260,9 +260,20 @@ bool pfcp_session::create(
   } else if (
       pdi.source_interface.second.interface_value == INTERFACE_VALUE_SGI_LAN_N6_LAN) {
     // TODO [TS-SFC] implemenet logic
-    // pdr is defined for steering to the N6 interface
-    // create pdr 
-    // add pdr
+    pfcp_pdr* pdr                  = new pfcp_pdr(cr_pdr);
+    std::shared_ptr<pfcp_pdr> spdr = std::shared_ptr<pfcp_pdr>(pdr);
+    pdr->set(get_up_seid());
+    if ((pdi.ue_ip_address.first) && (pdi.ue_ip_address.second.v4)) {
+      pfcp_switch_inst->add_pfcp_dl_pdr_by_ue_ip(
+          be32toh(pdi.ue_ip_address.second.ipv4_address.s_addr), spdr);
+    } else {
+      cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
+      Logger::upf_n4().info(
+          "Could not create_packet_in_access, cause accept only IPv4 UE IP "
+          "address! Rejecting PFCP_XXX_REQUEST");
+      return false;
+    }
+    add(spdr);
   } else {
     cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
     Logger::upf_n4().info(

@@ -21,6 +21,16 @@
 #include <utility>
 #include <vector>
 
+#include <chrono>
+#include <ctime>
+#include <stdexcept>
+#include <linux/ip.h>
+#include <linux/if.h>
+#include <linux/if_ether.h>
+#include <linux/if_packet.h>
+#include <sys/socket.h>
+#include <netinet/ether.h> // for ether_ntoa()
+
 class raw_application {
  public:
   virtual void handle_receive(
@@ -44,24 +54,25 @@ typedef struct iovec_q_item_s {
 
 class raw_server {
 #define RAW_RECV_BUFFER_SIZE 8192
+#define ROOM_FOR_ENCAP 64
  public:
   raw_server(const char* ifname)
       : app_(nullptr),
         free_pool_(nullptr),
         work_pool_(nullptr) {
-    socket_ = create_socket(ifname);
-    if (socket_ > 0) {
+    socket_raw = create_socket(ifname);
+    if (socket_raw > 0) {
       Logger::raw().debug("raw_server::raw_server(%s)", ifname);
     } else {
       Logger::raw().error("raw_server::raw_server(%s)", ifname);
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
       throw std::system_error(
-          socket_, std::generic_category(), "GTPV1-U socket creation failed!");
+          socket_raw, std::generic_category(), "RAW socket creation failed!");
     }
   }
 
   ~raw_server() {
-    close(socket_);
+    close(socket_raw);
     // TODO delete/release elements in  the pool
     delete free_pool_;
     delete work_pool_;
@@ -73,37 +84,11 @@ class raw_server {
   void raw_worker_loop(
       const int id, const util::thread_sched_params& sched_params);
 
-  void async_send_to(
-      const char* send_buffer, const ssize_t num_bytes,
-      const endpoint& r_endpoint) {
-    ssize_t bytes_written = sendto(
-        socket_, send_buffer, num_bytes, 0,
-        (struct sockaddr*) &r_endpoint.addr_storage,
-        r_endpoint.addr_storage_len);
-    if (bytes_written != num_bytes) {
-      Logger::raw().error("sendto failed(%d:%s)\n", errno, strerror(errno));
-    }
-  }
-
-  void async_send_to(
-      const char* send_buffer, const ssize_t num_bytes,
-      const struct sockaddr_in& r_endpoint) {
-    ssize_t bytes_written = sendto(
-        socket_, send_buffer, num_bytes, 0, (struct sockaddr*) &r_endpoint,
-        sizeof(struct sockaddr_in));
-    if (bytes_written != num_bytes) {
-      Logger::raw().error("sendto failed(%d:%s)\n", errno, strerror(errno));
-    }
-  }
-
-  void async_send_to(
-      const char* send_buffer, const ssize_t num_bytes,
-      const struct sockaddr_in6& r_endpoint) {
-    ssize_t bytes_written = sendto(
-        socket_, send_buffer, num_bytes, 0, (struct sockaddr*) &r_endpoint,
-        sizeof(struct sockaddr_in6));
-    if (bytes_written != num_bytes) {
-      Logger::raw().error("sendto failed(%d:%s)\n", errno, strerror(errno));
+  void send(const char* sendbuff, const ssize_t len) {
+    int bytes_sent;
+    if ((bytes_sent = write(socket_raw, sendbuff, len)) < 0) {
+      Logger::raw().error(
+          "write fd %d failed rc=%d:%s", socket_raw, bytes_sent, strerror(errno));
     }
   }
 
@@ -129,7 +114,7 @@ class raw_server {
   // raw_packet_q_item_t *raw_packet_q_item_alloc_;
   raw_application* app_;
   std::vector<std::thread> threads_;
-  int socket_;
+  int socket_raw;
   sa_family_t sa_family;
 };
 

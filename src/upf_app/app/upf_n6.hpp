@@ -11,6 +11,21 @@
 #ifndef FILE_N6_HPP_SEEN
 #define FILE_N6_HPP_SEEN
 
+#include <chrono>
+#include <ctime>
+#include <stdexcept>
+#include <linux/ip.h>
+#include <linux/if.h>
+#include <linux/if_ether.h>
+#include <linux/if_packet.h>
+#include <sys/socket.h>
+
+#include<sys/types.h>
+#include<sys/ioctl.h>
+
+#include <netinet/in.h>
+#include <netinet/ether.h> // for ether_ntoa()
+
 #include "endpoint.hpp"
 #include "raw.hpp"
 
@@ -33,7 +48,7 @@ class upf_n6 : public raw_application {
 
  protected:
   uint32_t id;
-  
+
  public:
   upf_n6();
   upf_n6(upf_n6 const&) = delete;
@@ -42,6 +57,12 @@ class upf_n6 : public raw_application {
   virtual void handle_receive(
       const char* recv_buffer, const std::size_t bytes_transferred);
 
+  void send_to_n6(char* ip_packet, const ssize_t len);
+  void send_nsh(char* ip_packet, const ssize_t len, uint32_t spi, uint32_t si);
+  void send_nsh(char* ip_packet, const ssize_t len, uint32_t spi, uint32_t si,
+    char* metdata, const ssize_t metadata_len);
+
+  char mac_addr[ETH_ALEN] = {};
 
 };
 }  // namespace app

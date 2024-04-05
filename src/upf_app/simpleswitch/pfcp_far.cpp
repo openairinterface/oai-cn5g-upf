@@ -29,6 +29,7 @@
 #include "pfcp_switch.hpp"
 #include "upf_config.hpp"
 #include "simple_switch.hpp"
+#include "upf_n6.hpp"
 
 using namespace pfcp;
 using namespace oai::upf::app;
@@ -36,7 +37,7 @@ using namespace oai::config;
 
 extern pfcp_switch* pfcp_switch_inst;
 extern upf_n3* upf_n3_inst;
-// TODO [SFC] add upf_n6_inst
+extern upf_n6* upf_n6_inst; // [TS-SFC] add upf_n6_inst
 extern upf_config upf_cfg;
 
 //------------------------------------------------------------------------------
@@ -97,20 +98,48 @@ void pfcp_far::apply_forwarding_rules(
                         .outer_header_creation_description) {
               case OUTER_HEADER_CREATION_NSH: // TODO [SFC] check name in standards
               // TODO [TS-SFC] add NSH header creation
-              /*
-                This should also include the traffic steering information and metadata.
-                How do will pass the data? Is this part of the buff? or do we need to create
-                add new parameters. The traffic steering information includes the TSP ID
-                corresponding to the SFC ID (in some cases this is a direct map) and the 
-                metadata of the rule, which can be included in the NSH metadata.
-              */ 
-            // Send to n6 interface
-            // Call upf_n6_inst->send_nsh
+              // Send to n6 interface
+              case OUTER_HEADER_CREATION_UDP_IPV4:  // TODO
+              case OUTER_HEADER_CREATION_UDP_IPV6:  // TODO
               default:;
             }
+          } else if (forwarding_parameters.second.forwarding_policy.first) { 
+            // TODO [TS-SFC] reference the pre-configured Forwarding Policy in the UP function TS 29 244 8.2.23 Forwarding Policy
+            /* The Forwarding Policy Identifier shall be set to the Traffic Steering Policy Identifier [TS  29.244 5.4.8 Traffic Steering]
+             * Based on the received traffic steering policy identifier(s), the UPF may remove or insert VLAN tags on N6 interface for downlink 
+             * and uplink frames, respectively. The details of the scenario are defined in clause 5.6.10.2 of TS 23.501 */
+            
+            /* [TR 23.700-18 7] Suggests that the TSP ID can be reused to steer traffic e.g., as the SFC ID */
+            /*
+              This should also include the traffic steering information and metadata.
+              How do will pass the data? Is this part of the buff? or do we need to create
+              add new parameters. The traffic steering information includes the TSP ID
+              corresponding to the SFC ID (in some cases this is a direct map) and the 
+              metadata of the rule, which can be included in the NSH metadata.
+            */
+            // Question: The TSP ID refers to a pre-configure forwarding policy, how and where is the policy pre-configured
+            // Question: What is the schema of the pre-configured policy
+            Logger::pfcp_switch().info("Received forwarding policy request %s", forwarding_parameters.second.forwarding_policy.second
+                        .forwarding_policy_identifier);
+            // TODO [TS-SFC] get metadata from the supplied info
+            // For now sending without metadata
+            
+            // TODO [TS-SFC] implement logic for fetching the pre-configured forwarding policy.
+            // For now default to sending NSH with 0 for SPI and SI
+            
+            upf_n6_inst->send_nsh(reinterpret_cast<char*>(iph), num_bytes,  0x112233, 0x03);
+
+            // int metadata_len = 16; // The length MUST be an integer multiple of 4 always padded out to a multiple of 4 bytes.
+            // char metadata[metadata_len]; 
+            // memset(metadata, 0, metadata_len);
+
+            // upf_n6_inst->send_nsh(
+            //   reinterpret_cast<char*>(iph), num_bytes,
+            //   0x112233, 0x03, metadata, metadata_len
+            // );
           } else {
-            // TODO [SFC] Just send out to N6 interface
-            // CAll upf_n6_inst->send
+            // TODO [TS-SFC] support multiple N6 interface and selection of interface
+            upf_n6_inst->send_to_n6(reinterpret_cast<char*>(iph), num_bytes);
           }
         } else {
         }

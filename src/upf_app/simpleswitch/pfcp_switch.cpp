@@ -1205,5 +1205,57 @@ void pfcp_switch::pfcp_session_look_up_pack_in_n6_lan(
      * packets have NSH encapsulation (or any other encap), it should remove the headers.
      * If the packets don't have encap, check for pdr or sdf and apply any relavant rules.
      * Naturally we should have rules to forward to ACCESS interface with GTPU encap
-    */ 
+    */
+    Logger::pfcp_switch().info("pfcp_session_look_up_pack_in_n6_lan not implemented");
+}
+
+void pfcp_switch::pfcp_session_look_up_pack_in_n6_lan(
+      struct iphdr* const iph, const std::size_t num_bytes) {
+  // TODO [TS-SFC] implemenet logic
+  std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs;
+  uint32_t ue_ip = be32toh(iph->daddr);
+  if (get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs)) {
+    bool nocp = false;
+    bool buff = false;
+    for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it =
+              pdrs->begin();
+          it < pdrs->end(); ++it) {
+      if ((*it)->look_up_pack_in_n6_lan(iph, num_bytes)) {
+        std::shared_ptr<pfcp::pfcp_session> ssession = {};
+        uint64_t lseid                               = 0;
+        if ((*it)->get(lseid)) {
+          if (get_pfcp_session_by_up_seid(lseid, ssession)) {
+            pfcp::far_id_t far_id = {};
+            if ((*it)->get(far_id)) {
+              std::shared_ptr<pfcp::pfcp_far> sfar = {};
+              uint8_t qfi                          = ssession->qfi;
+              if (ssession->get(far_id.far_id, sfar)) {
+                sfar->apply_forwarding_rules(iph, num_bytes, nocp, buff, qfi);
+                // TODO [TS-SFC] implement request for buffering
+                // if (buff) {
+                //   (*it)->buffering_requested(buffer, num_bytes);
+                // }
+                if (nocp) {
+                  (*it)->notify_cp_requested(ssession);
+                }
+              }
+            }
+          }
+        }
+        return;
+      } else {
+        Logger::pfcp_switch().info(
+            "look_up_pack_in_n6_lan failed PDR id %4x ", (*it)->pdr_id.rule_id);
+      }
+    }
+  } else {
+    Logger::pfcp_switch().info(
+        "pfcp_session_look_up_pack_in_n6_lan UE IP %8x not found", ue_ip);
+  }
+}
+
+void pfcp_switch::pfcp_session_look_up_pack_in_n6_lan(
+    struct ipv6hdr* const iph, const std::size_t num_bytes) {
+  // TODO [TS-SFC] implemenet logic
+  Logger::pfcp_switch().info("pfcp_session_look_up_pack_in_n6_lan not implemented");
 }

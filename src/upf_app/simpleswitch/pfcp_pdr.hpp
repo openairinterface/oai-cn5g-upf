@@ -190,6 +190,8 @@ class pfcp_pdr {
       const endpoint& r_endpoint, const uint32_t tunnel_id);
   bool look_up_pack_in_core(
       struct iphdr* const iph, const std::size_t num_bytes);
+  bool look_up_pack_in_n6_lan(
+      struct iphdr* const iph, const std::size_t num_bytes);
 
   void buffering_requested(const char* buffer, const std::size_t num_bytes);
   void notify_cp_requested(std::shared_ptr<pfcp::pfcp_session> session);

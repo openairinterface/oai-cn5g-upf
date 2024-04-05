@@ -174,6 +174,10 @@ class pfcp_switch {
   // num_bytes);
   void pfcp_session_look_up_pack_in_n6_lan(
     const char* buffer, const std::size_t num_bytes);
+  void pfcp_session_look_up_pack_in_n6_lan(
+      struct iphdr* const iph, const std::size_t num_bytes);
+  void pfcp_session_look_up_pack_in_n6_lan(
+      struct ipv6hdr* const iph, const std::size_t num_bytes);
 
   void pfcp_session_look_up_pack_in_core(
       const char* buffer, const std::size_t num_bytes);

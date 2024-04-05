@@ -73,18 +73,12 @@ void raw_server::raw_read_loop(const util::thread_sched_params& sched_params) {
   sched_params.apply(TASK_NONE, Logger::raw());
 
   while (1) {
-    Logger::raw().info("Collecting raw reads");
     if (!iov) {
       free_pool_->blockingRead(iov);
     }
-    // iov->msg.msg_name = &sin;
-    // iov->msg.msg_namelen = sizeof(sin);
-    // iov->msg.msg_iovlen = 1;
-    // iov->msg.msg_flags = 0;
-    iov->msg_iov.iov_len = RAW_RECV_BUFFER_SIZE;
-    // iov->msg.msg_control = nullptr;      /* Set to NULL if not needed  */
-    // iov->msg.msg_controllen = 0;
-    // exit thread
+
+    iov->msg_iov.iov_len = RAW_RECV_BUFFER_SIZE - ROOM_FOR_ENCAP;
+
     if (iov->msg_iov.iov_base == nullptr) {
       free(iov);
       while (work_pool_->readIfNotEmpty(iov)) {
@@ -93,12 +87,11 @@ void raw_server::raw_read_loop(const util::thread_sched_params& sched_params) {
       std::cout << "exit d" << count << std::endl;
       return;
     }
-    Logger::raw().info("Waiting for socket %d", socket_);
     ssize_t nread;
-    if ((nread = read(socket_, iov->msg_iov.iov_base, iov->msg_iov.iov_len)) >
+    if ((nread = read(socket_raw, iov->msg_iov.iov_base, iov->msg_iov.iov_len)) >
         0) {
       ++count;
-      std::cout << "pdn" << count << " " << nread << " bytes" << std::endl;
+      // std::cout << "pdn" << count << " " << nread << " bytes" << std::endl;
       iov->msg_iov.iov_len = nread;
       work_pool_->blockingWrite(iov);
       iov = nullptr;
@@ -125,7 +118,7 @@ int raw_server::create_socket(const char* ifname) {
    * header removed.
    */
 
-  if ((sd = socket(AF_PACKET, SOCK_DGRAM, htons(ETH_P_ALL))) < 0) {
+  if ((sd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) < 0) {
     /*
      * Socket creation has failed...
      */
@@ -172,7 +165,6 @@ int raw_server::create_socket(const char* ifname) {
     }
   }
   return sd;
-
 }
 
 //------------------------------------------------------------------------------
@@ -186,13 +178,13 @@ void raw_server::start_receive(
   free_pool_     = new folly::MPMCQueue<iovec_q_item_t*>(num_blocks);
   work_pool_     = new folly::MPMCQueue<iovec_q_item_t*>(num_blocks);
 
-  recv_buffer_alloc_ = (char*) calloc(num_blocks, RAW_RECV_BUFFER_SIZE);
+  recv_buffer_alloc_ = (char*) calloc(num_blocks, RAW_RECV_BUFFER_SIZE );
 
   for (int i = 0; i < num_blocks; i++) {
     iovec_q_item_s* v = (iovec_q_item_s*) calloc(1, sizeof(iovec_q_item_s));
     v->msg_iov.iov_base =
-        (void*) ((uintptr_t) calloc(1, RAW_RECV_BUFFER_SIZE));
-    v->msg_iov.iov_len = RAW_RECV_BUFFER_SIZE;
+        (void*) ((uintptr_t) calloc(1, RAW_RECV_BUFFER_SIZE ) + (uintptr_t) ROOM_FOR_ENCAP);
+    v->msg_iov.iov_len = RAW_RECV_BUFFER_SIZE - ROOM_FOR_ENCAP;
     v->msg.msg_iovlen  = 1;
     v->msg.msg_flags   = 0;
     v->msg.msg_control = nullptr;

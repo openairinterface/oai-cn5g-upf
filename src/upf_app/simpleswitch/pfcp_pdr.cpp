@@ -120,6 +120,43 @@ bool pfcp_pdr::look_up_pack_in_core(
 }
 
 //------------------------------------------------------------------------------
+bool pfcp_pdr::look_up_pack_in_n6_lan(
+    struct iphdr* const iph, const std::size_t num_bytes) {
+  // implicit packet arrives from CORE interface
+  if (outer_header_removal.first) {
+    // TODO ... when necessary (split U)
+    // Logger::pfcp_switch().info( "look_up_pack_in_core failed PDR id %4x,
+    // cause outer_header_removal present ", pdr_id.rule_id);
+    return false;
+  }
+  // if (pdi.second.source_interface.second.interface_value !=
+  // INTERFACE_VALUE_CORE) {
+  //  return false;
+  //}
+  if (pdi.second.ue_ip_address.first) {
+    if (!pdi.second.ue_ip_address.second.v4) {
+      // Logger::pfcp_switch().info( "look_up_pack_in_core failed PDR id %4x,
+      // cause ue_ip_address not present ", pdr_id.rule_id);
+      return false;
+    }
+    if (pdi.second.ue_ip_address.second.ipv4_address.s_addr != iph->daddr) {
+      // Logger::pfcp_switch().info( "look_up_pack_in_core failed PDR id %4x,
+      // cause PDR ue_ip_address %8X do not match IP dest %8X of packet ",
+      //    pdr_id.rule_id, pdi.second.ue_ip_address.second.ipv4_address.s_addr,
+      //    iph->daddr);
+      return false;
+    }
+  }
+  // SDF filters TODO vector
+  // if (pdi.second.sdf_filter.first) {
+  // TODO (create ss_pdi_t with ss_sdf_filter_t with optimized flow description
+  // matching )
+  return true;
+  //}
+  // return false;
+}
+
+//------------------------------------------------------------------------------
 bool pfcp_pdr::update(const pfcp::update_pdr& update, uint8_t& cause_value) {
   if (update.get(outer_header_removal.second))
     outer_header_removal.first = true;
