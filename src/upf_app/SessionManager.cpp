@@ -33,16 +33,14 @@ bool SessionManager::extractPdi(
 /*****************************************************************************************************************/
 // Helper function to extract source interface
 bool SessionManager::extractSourceIface(
-    pfcp::pdi& pdi,
-    pfcp::source_interface_t& sourceInterface) {
+    pfcp::pdi& pdi, pfcp::source_interface_t& sourceInterface) {
   return (pdi.get(sourceInterface));
 }
 
 /*****************************************************************************************************************/
 // Helper function to extract source interface
 bool SessionManager::extractUeIpv4(
-    pfcp::pdi& pdi,
-    pfcp::ue_ip_address_t& ueIpAddress) {
+    pfcp::pdi& pdi, pfcp::ue_ip_address_t& ueIpAddress) {
   return (pdi.get(ueIpAddress));
 }
 
@@ -69,30 +67,24 @@ bool SessionManager::extractForwardingParams(
 uint32_t SessionManager::findUplinkTeid(
     uint32_t seid,
     const std::vector<std::shared_ptr<pfcp::pfcp_session>>& sessions) {
-  uint32_t teidToUpdate = 0;
-
   for (const auto& session : sessions) {
-    pfcp::pdi pdi;
-    pfcp::source_interface_t sourceInterface;
+    if (session->get_up_seid() != seid) {
+      continue;  // Skip to the next session if not matching seid
+    }
 
-    if (session->get_up_seid() == seid) {
-      for (const auto& pdr : session->pdrs) {
-        if (pdr->get(pdi)) {
-          pdi.get(sourceInterface);
-          if (sourceInterface.interface_value == INTERFACE_VALUE_ACCESS) {
-            teidToUpdate = session->teid_uplink.teid;
-            break;
-          }
+    for (const auto& pdr : session->pdrs) {
+      pfcp::pdi pdi;
+      if (pdr->get(pdi)) {
+        pfcp::source_interface_t sourceInterface;
+        if (pdi.get(sourceInterface) &&
+            sourceInterface.interface_value == INTERFACE_VALUE_ACCESS) {
+          return session->teid_uplink.teid;
         }
       }
     }
-
-    if (teidToUpdate != 0) {
-      break;
-    }
   }
 
-  return teidToUpdate;
+  return 0;  // Return 0 if teidToUpdate is not found
 }
 
 /*****************************************************************************************************************/
@@ -103,83 +95,201 @@ void SessionManager::createSession(std::shared_ptr<SessionBpf> pSession) {
 }
 
 /*****************************************************************************************************************/
+/*
+ * Document: ETSI TS 129 244 V15.8.0 (2020-01)
+ * PDI is a Mandatory IE within the Establishment request
+ * Table 7.5.2.2-1: Create PDR IE within PFCP Session Establishment Request
+ * Source Interface is the only Mandatory IE within PDI:
+ * Table 7.5.2.2-2: PDI IE within PFCP Session Establishment Request
+ */
+
+// void SessionManager::createBPFSession(
+//     std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
+//     itti_n4_session_establishment_request* est_req,
+//     itti_n4_session_modification_request* mod_req,
+//     itti_n4_session_deletion_request* del_req) {
+//   auto& logger = Logger::upf_app();
+
+//   uint64_t seid = pSession_establishment->get_up_seid();
+
+//   logger.debug("Session %d Received", seid);
+//   logger.debug("Preparing the Datapath ...");
+//   logger.debug("Find the PDR with Highest Precedence");
+
+//   auto& pdrs_uplink   = pSession_establishment->pdrs_uplink;
+//   auto& pdrs_downlink = pSession_establishment->pdrs_downlink;
+
+//   for (auto& pdr : pSession_establishment->pdrs) {
+//     pfcp::pdi pdi;
+//     pfcp::source_interface_t sourceInterface;
+//     if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
+//       throw std::runtime_error(
+//           "Missing Mandatory IE (PDI or Source Interface) within PDR: " +
+//           std::to_string(pdr->pdr_id.rule_id));
+//     }
+
+//     switch (sourceInterface.interface_value) {
+//       case INTERFACE_VALUE_ACCESS:
+//         pdrs_uplink.push_back(pdr);
+//         break;
+//       case INTERFACE_VALUE_CORE:
+//         pdrs_downlink.push_back(pdr);
+//         break;
+//       case INTERFACE_VALUE_SGI_LAN_N6_LAN:
+//       case INTERFACE_VALUE_CP_FUNCTION:
+//       case INTERFACE_VALUE_LI_FUNCTION:
+//         // TODO: if needed, handle these cases
+//         break;
+//       default:
+//         // Handle default case if needed
+//         break;
+//     }
+//   }
+
+//   if ((pdrs_uplink.empty()) && (pdrs_downlink.empty())) {
+//     logger.error("No PDR was found in session %d", seid);
+//     throw std::runtime_error("No PDR was found in session");
+//   }
+
+//   std::sort(pdrs_uplink.begin(), pdrs_uplink.end(), comparePDR);
+//   std::sort(pdrs_downlink.begin(), pdrs_downlink.end(), comparePDR);
+
+//   auto pPFCP_Session_LookupProgram =
+//       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+
+//   if (!pdrs_uplink.empty()) {
+//     auto pdrHighPrecedenceUl = pdrs_uplink.front();
+//     logger.debug(
+//         "The Uplink PDR %d has the Highest Precedence",
+//         pdrHighPrecedenceUl->pdr_id.rule_id);
+//     createBPFSessionUL(pSession_establishment, pdrHighPrecedenceUl);
+//   }
+
+//   if (!pdrs_downlink.empty()) {
+//     auto pdrHighPrecedenceDl = pdrs_downlink.front();
+//     logger.debug(
+//         "The Downlink PDR %d has the Highest Precedence",
+//         pdrHighPrecedenceDl->pdr_id.rule_id);
+//     createBPFSessionDL(pSession_establishment, pdrHighPrecedenceDl);
+//   }
+
+//   mSeidToSession[seid] = pSession_establishment;
+// }
+
 void SessionManager::createBPFSession(
     std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
     itti_n4_session_establishment_request* est_req,
     itti_n4_session_modification_request* mod_req,
     itti_n4_session_deletion_request* del_req) {
-  
-  auto& logger = Logger::upf_app();    
-
+  auto& logger  = Logger::upf_app();
   uint64_t seid = pSession_establishment->get_up_seid();
 
-  logger.debug("Session %d Received", seid); 
+  logger.debug("Session {} Received", seid);
   logger.debug("Preparing the Datapath ...");
-  logger.debug("Find the PDR with Highest Precedence:"); 
+  logger.debug("Find the PDR with Highest Precedence");
 
-  for (auto& pdr : pSession_establishment->pdrs) {
-    pfcp::pdi pdi;
-    pfcp::source_interface_t sourceInterface;
-    uint16_t pdr_id = pdr->pdr_id.rule_id;
+  auto& pdrs_uplink   = pSession_establishment->pdrs_uplink;
+  auto& pdrs_downlink = pSession_establishment->pdrs_downlink;
 
-    //std::tie(pdr_id, std::ignore) = pdr->pdr_id;
+  bool uplink_empty   = pdrs_uplink.empty();
+  bool downlink_empty = pdrs_downlink.empty();
 
-    if (!pdr->get(pdi)) {
-      throw std::runtime_error("No PDI available for PDR: " + std::to_string(pdr_id));
-    }
+  // Process PDRs to populate uplink and downlink vectors
+  processPDRs(pSession_establishment);
 
-    if (!pdi.get(sourceInterface)) {
-      throw std::runtime_error("No Source Interface available within PDI Section defined for PDR: " + std::to_string(pdr_id));
-    }
-
-    if (sourceInterface.interface_value == INTERFACE_VALUE_ACCESS) {
-      pSession_establishment->pdrs_uplink.push_back(pdr);
-    }
-
-    if (sourceInterface.interface_value == INTERFACE_VALUE_CORE) {
-      pSession_establishment->pdrs_downlink.push_back(pdr);
-    }
+  // Throw error if both uplink and downlink vectors are empty
+  if (uplink_empty && downlink_empty) {
+    handleEmptyPDRs(seid);
   }
 
-  std::sort(
-      pSession_establishment->pdrs_uplink.begin(),
-      pSession_establishment->pdrs_uplink.end(), SessionManager::comparePDR);
+  // Sort uplink and downlink vectors
+  sortPDRs(pdrs_uplink, pdrs_downlink);
 
-  std::sort(
-      pSession_establishment->pdrs_downlink.begin(),
-      pSession_establishment->pdrs_downlink.end(), SessionManager::comparePDR);
+  // Create BPF sessions for uplink and downlink directions
+  createSessionDirection(pSession_establishment, pdrs_uplink, "Uplink");
+  createSessionDirection(pSession_establishment, pdrs_downlink, "Downlink");
 
-  auto pPFCP_Session_LookupProgram =
-      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
-
-  if ((pSession_establishment->pdrs_uplink.empty()) &&
-      (pSession_establishment->pdrs_downlink.empty())) {
-    logger.error("No PDR was found in session %d", pSession_establishment->seid);
-    throw std::runtime_error("No PDR was found in session");
-  }
-
-
-  if (!pSession_establishment->pdrs_uplink.empty()) {
-    auto pdrHighPrecedenceUl = pSession_establishment->pdrs_uplink.front();
-    logger.debug("The Uplink PDR %d has the Highest Precedence", pdrHighPrecedenceUl->pdr_id.rule_id);
-    createBPFSessionUL(pSession_establishment, pdrHighPrecedenceUl);
-  } 
-
-  if (!pSession_establishment->pdrs_downlink.empty()) {
-    auto pdrHighPrecedenceDl = pSession_establishment->pdrs_downlink.front();
-    logger.debug("The Downlink PDR %d has the Highest Precedence", pdrHighPrecedenceDl->pdr_id.rule_id);
-    createBPFSessionDL(pSession_establishment, pdrHighPrecedenceDl);
-  }
- 
+  // Store the session in the session map
   mSeidToSession[seid] = pSession_establishment;
 }
 
+/*****************************************************************************************************************/
+void SessionManager::processPDRs(
+    std::shared_ptr<pfcp::pfcp_session> pSession_establishment) {
+  auto& pdrs_uplink   = pSession_establishment->pdrs_uplink;
+  auto& pdrs_downlink = pSession_establishment->pdrs_downlink;
+
+  // Iterate over PDRs and categorize them into uplink and downlink vectors
+  for (auto& pdr : pSession_establishment->pdrs) {
+    pfcp::pdi pdi;
+    pfcp::source_interface_t sourceInterface;
+    if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
+      throw std::runtime_error(
+          "Missing Mandatory IE (PDI or Source Interface) within PDR: " +
+          std::to_string(pdr->pdr_id.rule_id));
+    }
+
+    switch (sourceInterface.interface_value) {
+      case INTERFACE_VALUE_ACCESS:
+        pdrs_uplink.push_back(pdr);
+        break;
+      case INTERFACE_VALUE_CORE:
+        pdrs_downlink.push_back(pdr);
+        break;
+      case INTERFACE_VALUE_SGI_LAN_N6_LAN:
+      case INTERFACE_VALUE_CP_FUNCTION:
+      case INTERFACE_VALUE_LI_FUNCTION:
+        // TODO: if needed, handle these cases
+        break;
+      default:
+        // Handle default case if needed
+        break;
+    }
+  }
+}
+
+/*****************************************************************************************************************/
+void SessionManager::handleEmptyPDRs(uint64_t seid) {
+  auto& logger = Logger::upf_app();
+  // Log an error and throw an exception if both uplink and downlink vectors are
+  // empty
+  logger.error("No PDRs were found in session {}", seid);
+  throw std::runtime_error("No PDRs were found in session");
+}
+
+/*****************************************************************************************************************/
+void SessionManager::sortPDRs(
+    std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_uplink,
+    std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_downlink) {
+  // Sort uplink and downlink vectors
+  std::sort(pdrs_uplink.begin(), pdrs_uplink.end(), comparePDR);
+  std::sort(pdrs_downlink.begin(), pdrs_downlink.end(), comparePDR);
+}
+
+/*****************************************************************************************************************/
+void SessionManager::createSessionDirection(
+    std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
+    std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs,
+    const std::string& direction) {
+  auto& logger = Logger::upf_app();
+  // Create BPF sessions for the specified direction
+  if (!pdrs.empty()) {
+    auto pdrHighPrecedence = pdrs.front();
+    logger.debug(
+        "The {}link PDR {} has the Highest Precedence", direction,
+        pdrHighPrecedence->pdr_id.rule_id);
+    if (direction == "Uplink") {
+      createBPFSessionUL(pSession_establishment, pdrHighPrecedence);
+    } else {
+      createBPFSessionDL(pSession_establishment, pdrHighPrecedence);
+    }
+  }
+}
 
 /*****************************************************************************************************************/
 void SessionManager::createBPFSessionUL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl) {
-  
   auto& logger = Logger::upf_app();
 
   pfcp::pdi pdi;
@@ -188,10 +298,15 @@ void SessionManager::createBPFSessionUL(
   pfcp::source_interface_t sourceInterface;
   uint16_t pdr_id = pdrHighPrecedenceUl->pdr_id.rule_id;
 
-  logger.debug("Create the Uplink Direction Datapath for Session %d", pSession->get_up_seid());
-  
-  if (!pdrHighPrecedenceUl->get(pdi) || !pdi.get(fteid) || !pdi.get(sourceInterface) || !pdi.get(ueIpAddress)) {
-    throw std::runtime_error("Failed to extract necessary fields from PDI for Uplink PDR " + std::to_string(pdr_id));
+  logger.debug(
+      "Create the Uplink Direction Datapath for Session %d",
+      pSession->get_up_seid());
+
+  if (!pdrHighPrecedenceUl->get(pdi) || !pdi.get(fteid) ||
+      !pdi.get(sourceInterface) || !pdi.get(ueIpAddress)) {
+    throw std::runtime_error(
+        "Failed to extract necessary fields from PDI for Uplink PDR " +
+        std::to_string(pdr_id));
   }
 
   logger.debug("PDI extracted from Uplink PDR %d", pdr_id);
@@ -200,7 +315,8 @@ void SessionManager::createBPFSessionUL(
   std::shared_ptr<pfcp::pfcp_far> pFar;
 
   if (!extractFar(pdrHighPrecedenceUl, pSession, pFar)) {
-    throw std::runtime_error("Failed to extract Uplink FAR for PDR " + std::to_string(pdr_id));
+    throw std::runtime_error(
+        "Failed to extract Uplink FAR for PDR " + std::to_string(pdr_id));
   }
 
   SessionProgramManager::getInstance().createPipeline(
@@ -208,12 +324,10 @@ void SessionManager::createBPFSessionUL(
       ueIpAddress.ipv4_address.s_addr, pFar, false, 0);
 }
 
-
 /*****************************************************************************************************************/
 void SessionManager::createBPFSessionDL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl) {
-  
   auto& logger = Logger::upf_app();
 
   pfcp::pdi pdi;
@@ -222,10 +336,15 @@ void SessionManager::createBPFSessionDL(
   pfcp::source_interface_t sourceInterface;
   uint16_t pdr_id = pdrHighPrecedenceDl->pdr_id.rule_id;
 
-  logger.debug("Create the Downlink Direction Datapath for Session %d", pSession->get_up_seid());
+  logger.debug(
+      "Create the Downlink Direction Datapath for Session %d",
+      pSession->get_up_seid());
 
-  if (!pdrHighPrecedenceDl->get(pdi) || !pdi.get(fteid) || !pdi.get(sourceInterface) || !pdi.get(ueIpAddress)) {
-    throw std::runtime_error("Failed to extract necessary fields from PDI for Downlink PDR " + std::to_string(pdr_id));
+  if (!pdrHighPrecedenceDl->get(pdi) || !pdi.get(fteid) ||
+      !pdi.get(sourceInterface) || !pdi.get(ueIpAddress)) {
+    throw std::runtime_error(
+        "Failed to extract necessary fields from PDI for Downlink PDR " +
+        std::to_string(pdr_id));
   }
 
   logger.debug("PDI extracted from Downlink PDR %d", pdr_id);
@@ -234,14 +353,14 @@ void SessionManager::createBPFSessionDL(
   std::shared_ptr<pfcp::pfcp_far> pFar;
 
   if (!extractFar(pdrHighPrecedenceDl, pSession, pFar)) {
-    throw std::runtime_error("Failed to extract Downlink FAR for PDR " + std::to_string(pdr_id));
+    throw std::runtime_error(
+        "Failed to extract Downlink FAR for PDR " + std::to_string(pdr_id));
   }
 
   SessionProgramManager::getInstance().createPipeline(
       pSession->get_up_seid(), fteid.teid, INTERFACE_VALUE_CORE,
       ueIpAddress.ipv4_address.s_addr, pFar, false, 0);
 }
-
 
 /*****************************************************************************************************************/
 void SessionManager::updateBPFSession(
@@ -338,7 +457,9 @@ void SessionManager::updateBPFSessionUL(
       "Update the Uplink Direction Datapath For Session %d",
       pSession->get_up_seid());
 
-  if (!(extractPdi(pdrHighPrecedenceUl, pdi) && extractSourceIface(pdi, sourceInterface) && extractUeIpv4(pdi, ueIpAddress))){
+  if (!(extractPdi(pdrHighPrecedenceUl, pdi) &&
+        extractSourceIface(pdi, sourceInterface) &&
+        extractUeIpv4(pdi, ueIpAddress))) {
     throw std::runtime_error("No fields available For Uplink Update PDI Check");
   }
 
@@ -370,8 +491,11 @@ void SessionManager::updateBPFSessionDL(
   pfcp::ue_ip_address_t ueIpAddress;
   pfcp::source_interface_t sourceInterface;
 
-  if (!(extractPdi(pdrHighPrecedenceDl, pdi) && extractSourceIface(pdi, sourceInterface) && extractUeIpv4(pdi, ueIpAddress))){
-    throw std::runtime_error("No fields available For Downlink Update PDI Check");
+  if (!(extractPdi(pdrHighPrecedenceDl, pdi) &&
+        extractSourceIface(pdi, sourceInterface) &&
+        extractUeIpv4(pdi, ueIpAddress))) {
+    throw std::runtime_error(
+        "No fields available For Downlink Update PDI Check");
   }
 
   Logger::upf_app().debug(

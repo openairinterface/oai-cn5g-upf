@@ -87,6 +87,42 @@ class SessionManager {
       itti_n4_session_establishment_request* est_req,
       itti_n4_session_modification_request* mod_req,
       itti_n4_session_deletion_request* del_req);
+
+  /*****************************************************************************************************************/
+  /**
+   * @brief Process PDRs to populate uplink and downlink vectors
+   * @param std::shared_ptr<pfcp::pfcp_session>
+   */
+  void processPDRs(std::shared_ptr<pfcp::pfcp_session> pSession_establishment);
+
+  /*****************************************************************************************************************/
+  /**
+   * @brief Throw error if both uplink and downlink vectors are empty
+   * @param uint64_t
+   */
+  void handleEmptyPDRs(uint64_t seid);
+
+  /*****************************************************************************************************************/
+  /**
+   * @brief Sort uplink and downlink vectors
+   * @param std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_uplink
+   * @param std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_downlink
+   */
+  void sortPDRs(
+      std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_uplink,
+      std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_downlink);
+
+  /*****************************************************************************************************************/
+  /**
+   * @brief Create BPF session for specific direction
+   * @param std::shared_ptr<pfcp::pfcp_session> pSession_establishment
+   * @param std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs
+   * @param const std::string& direction
+   */
+  void createSessionDirection(
+      std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
+      std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs,
+      const std::string& direction);
   /*****************************************************************************************************************/
 
   /**
@@ -134,18 +170,14 @@ class SessionManager {
       std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl);
 
   /*****************************************************************************************************************/
-  bool extractPdi(
-      std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi);
+  bool extractPdi(std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi);
 
   /*****************************************************************************************************************/
   bool extractSourceIface(
-    pfcp::pdi& pdi,
-    pfcp::source_interface_t& sourceInterface);
+      pfcp::pdi& pdi, pfcp::source_interface_t& sourceInterface);
 
   /*****************************************************************************************************************/
-  bool extractUeIpv4(
-    pfcp::pdi& pdi,
-    pfcp::ue_ip_address_t& ueIpAddress);
+  bool extractUeIpv4(pfcp::pdi& pdi, pfcp::ue_ip_address_t& ueIpAddress);
 
   /*****************************************************************************************************************/
   bool extractFar(
