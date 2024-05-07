@@ -191,15 +191,13 @@ void SessionManager::createBPFSession(
   auto& pdrs_uplink   = pSession_establishment->pdrs_uplink;
   auto& pdrs_downlink = pSession_establishment->pdrs_downlink;
 
-  bool uplink_empty   = pdrs_uplink.empty();
-  bool downlink_empty = pdrs_downlink.empty();
-
   // Process PDRs to populate uplink and downlink vectors
   processPDRs(pSession_establishment);
 
   // Throw error if both uplink and downlink vectors are empty
-  if (uplink_empty && downlink_empty) {
-    handleEmptyPDRs(seid);
+  if (pdrs_uplink.empty() && pdrs_downlink.empty()) {
+    logger.error("No PDRs were found in session: " + seid);
+    throw std::runtime_error("No PDRs were found in session");
   }
 
   // Sort uplink and downlink vectors
@@ -246,15 +244,6 @@ void SessionManager::processPDRs(
         break;
     }
   }
-}
-
-/*****************************************************************************************************************/
-void SessionManager::handleEmptyPDRs(uint64_t seid) {
-  auto& logger = Logger::upf_app();
-  // Log an error and throw an exception if both uplink and downlink vectors are
-  // empty
-  logger.error("No PDRs were found in session {}", seid);
-  throw std::runtime_error("No PDRs were found in session");
 }
 
 /*****************************************************************************************************************/
@@ -331,6 +320,7 @@ void SessionManager::processPDRDetails(
   }
 
   if (!pdi.get(fteid)){
+    if (fteid.ch){}
     fteid.teid = -1;
     logger.debug("FTEID is missing");
     logger.warn("TODO: This IE shall not be present if Traffic Endpoint ID is present");

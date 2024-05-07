@@ -150,13 +150,6 @@ class SessionManager {
 
   /*****************************************************************************************************************/
   /**
-   * @brief Throw error if both uplink and downlink vectors are empty
-   * @param uint64_t
-   */
-  void handleEmptyPDRs(uint64_t seid);
-
-  /*****************************************************************************************************************/
-  /**
    * @brief Sort uplink and downlink vectors
    * @param std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_uplink
    * @param std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_downlink
