@@ -89,41 +89,6 @@ class SessionManager {
       itti_n4_session_deletion_request* del_req);
 
   /*****************************************************************************************************************/
-  /**
-   * @brief Process PDRs to populate uplink and downlink vectors
-   * @param std::shared_ptr<pfcp::pfcp_session>
-   */
-  void processPDRs(std::shared_ptr<pfcp::pfcp_session> pSession_establishment);
-
-  /*****************************************************************************************************************/
-  /**
-   * @brief Throw error if both uplink and downlink vectors are empty
-   * @param uint64_t
-   */
-  void handleEmptyPDRs(uint64_t seid);
-
-  /*****************************************************************************************************************/
-  /**
-   * @brief Sort uplink and downlink vectors
-   * @param std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_uplink
-   * @param std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_downlink
-   */
-  void sortPDRs(
-      std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_uplink,
-      std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_downlink);
-
-  /*****************************************************************************************************************/
-  /**
-   * @brief Create BPF session for specific direction
-   * @param std::shared_ptr<pfcp::pfcp_session> pSession_establishment
-   * @param std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs
-   * @param const std::string& direction
-   */
-  void createSessionDirection(
-      std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
-      std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs,
-      const std::string& direction);
-  /*****************************************************************************************************************/
 
   /**
    * @brief Update a Session object in BPF map.
@@ -168,7 +133,51 @@ class SessionManager {
   void updateBPFSessionDL(
       std::shared_ptr<pfcp::pfcp_session> pSession,
       std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl);
+ 
+  /*****************************************************************************************************************/
+  private:
+    void processPDRDetails(
+    std::shared_ptr<pfcp::pfcp_session> pSession,
+    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedence,
+    int interfaceValue,
+    const std::string& direction);
 
+  /*****************************************************************************************************************/
+  /**
+   * @brief Process PDRs to populate uplink and downlink vectors
+   * @param std::shared_ptr<pfcp::pfcp_session>
+   */
+  void processPDRs(std::shared_ptr<pfcp::pfcp_session> pSession_establishment);
+
+  /*****************************************************************************************************************/
+  /**
+   * @brief Throw error if both uplink and downlink vectors are empty
+   * @param uint64_t
+   */
+  void handleEmptyPDRs(uint64_t seid);
+
+  /*****************************************************************************************************************/
+  /**
+   * @brief Sort uplink and downlink vectors
+   * @param std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_uplink
+   * @param std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_downlink
+   */
+  void sortPDRs(
+      std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_uplink,
+      std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_downlink);
+
+  /*****************************************************************************************************************/
+  /**
+   * @brief Create BPF session for specific direction
+   * @param std::shared_ptr<pfcp::pfcp_session> pSession_establishment
+   * @param std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs
+   * @param const std::string& direction
+   */
+  void createSessionDirection(
+      std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
+      std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs,
+      const std::string& direction);
+  
   /*****************************************************************************************************************/
   bool extractPdi(std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi);
 
@@ -202,8 +211,8 @@ class SessionManager {
 
   std::vector<std::shared_ptr<pfcp::pfcp_session>> sessions;
 
-  /*****************************************************************************************************************/
-  std::unordered_map<uint64_t, std::shared_ptr<pfcp::pfcp_session>>
+
+    std::unordered_map<uint64_t, std::shared_ptr<pfcp::pfcp_session>>
       mSeidToSession;
 };
 

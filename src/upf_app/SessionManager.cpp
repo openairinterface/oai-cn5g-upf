@@ -292,36 +292,8 @@ void SessionManager::createBPFSessionUL(
     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl) {
   auto& logger = Logger::upf_app();
 
-  pfcp::pdi pdi;
-  pfcp::fteid_t fteid;
-  pfcp::ue_ip_address_t ueIpAddress;
-  pfcp::source_interface_t sourceInterface;
-  uint16_t pdr_id = pdrHighPrecedenceUl->pdr_id.rule_id;
-
-  logger.debug(
-      "Create the Uplink Direction Datapath for Session %d",
-      pSession->get_up_seid());
-
-  if (!pdrHighPrecedenceUl->get(pdi) || !pdi.get(fteid) ||
-      !pdi.get(sourceInterface) || !pdi.get(ueIpAddress)) {
-    throw std::runtime_error(
-        "Failed to extract necessary fields from PDI for Uplink PDR " +
-        std::to_string(pdr_id));
-  }
-
-  logger.debug("PDI extracted from Uplink PDR %d", pdr_id);
-  logger.debug("Extract Uplink FAR from the highest precedence Uplink PDR");
-
-  std::shared_ptr<pfcp::pfcp_far> pFar;
-
-  if (!extractFar(pdrHighPrecedenceUl, pSession, pFar)) {
-    throw std::runtime_error(
-        "Failed to extract Uplink FAR for PDR " + std::to_string(pdr_id));
-  }
-
-  SessionProgramManager::getInstance().createPipeline(
-      pSession->get_up_seid(), fteid.teid, INTERFACE_VALUE_ACCESS,
-      ueIpAddress.ipv4_address.s_addr, pFar, false, 0);
+ // Common PDR processing
+  processPDRDetails(pSession, pdrHighPrecedenceUl, INTERFACE_VALUE_ACCESS, "Uplink");
 }
 
 /*****************************************************************************************************************/
@@ -330,35 +302,61 @@ void SessionManager::createBPFSessionDL(
     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl) {
   auto& logger = Logger::upf_app();
 
+  // Common PDR processing
+  processPDRDetails(pSession, pdrHighPrecedenceDl, INTERFACE_VALUE_CORE, "Downlink");
+}
+
+/*****************************************************************************************************************/
+void SessionManager::processPDRDetails(
+    std::shared_ptr<pfcp::pfcp_session> pSession,
+    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedence,
+    int interfaceValue,
+    const std::string& direction) {
+  auto& logger = Logger::upf_app();
+
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
   pfcp::ue_ip_address_t ueIpAddress;
   pfcp::source_interface_t sourceInterface;
-  uint16_t pdr_id = pdrHighPrecedenceDl->pdr_id.rule_id;
+  uint16_t pdr_id = pdrHighPrecedence->pdr_id.rule_id;
 
   logger.debug(
-      "Create the Downlink Direction Datapath for Session %d",
-      pSession->get_up_seid());
+      "Create the {} Direction Datapath for Session {}",
+      direction, pSession->get_up_seid());
 
-  if (!pdrHighPrecedenceDl->get(pdi) || !pdi.get(fteid) ||
-      !pdi.get(sourceInterface) || !pdi.get(ueIpAddress)) {
+  if (!(pdrHighPrecedence->get(pdi) && pdi.get(sourceInterface))) {
     throw std::runtime_error(
-        "Failed to extract necessary fields from PDI for Downlink PDR " +
+        "Missing Mandatory IE (PDI or Source Interface) within PDR: " +
         std::to_string(pdr_id));
   }
 
-  logger.debug("PDI extracted from Downlink PDR %d", pdr_id);
-  logger.debug("Extract Downlink FAR from the highest precedence Downlink PDR");
+  if (!pdi.get(fteid)){
+    fteid.teid = -1;
+    logger.debug("FTEID is missing");
+    logger.warn("TODO: This IE shall not be present if Traffic Endpoint ID is present");
+    logger.warn("TODO: The CP function shall set the CHOOSE (CH) bit to 1 if the" );
+    logger.warn("UP function supports the allocation of F-TEID and the CP function"); 
+    logger.warn("requests the UP function to assign a local F-TEID to the PDR.");
+  }
+
+  if (!pdi.get(ueIpAddress)) {
+    ueIpAddress.ipv4_address.s_addr = 0;
+    logger.debug("UE IP Address is missing");
+    logger.warn("TODO: This IE shall not be present if Traffic Endpoint ID is present");
+  }
+
+  logger.debug("PDI extracted from {} PDR {}", direction, pdr_id);
+  logger.debug("Extract {} FAR from the highest precedence {} PDR", direction, direction);
 
   std::shared_ptr<pfcp::pfcp_far> pFar;
 
-  if (!extractFar(pdrHighPrecedenceDl, pSession, pFar)) {
+  if (!extractFar(pdrHighPrecedence, pSession, pFar)) {
     throw std::runtime_error(
-        "Failed to extract Downlink FAR for PDR " + std::to_string(pdr_id));
+        "Failed to extract {} FAR for PDR " + direction + " " + std::to_string(pdr_id));
   }
 
   SessionProgramManager::getInstance().createPipeline(
-      pSession->get_up_seid(), fteid.teid, INTERFACE_VALUE_CORE,
+      pSession->get_up_seid(), fteid.teid, interfaceValue,
       ueIpAddress.ipv4_address.s_addr, pFar, false, 0);
 }
 
