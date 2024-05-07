@@ -135,7 +135,6 @@ class SessionManager {
       std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl);
  
   /*****************************************************************************************************************/
-  private:
     void processPDRDetails(
     std::shared_ptr<pfcp::pfcp_session> pSession,
     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedence,
