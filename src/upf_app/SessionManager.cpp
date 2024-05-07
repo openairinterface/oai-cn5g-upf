@@ -24,12 +24,26 @@ SessionManager::SessionManager() {}
 SessionManager::~SessionManager() {}
 
 /*****************************************************************************************************************/
-// Helper function to extract PDI and source interface
-bool SessionManager::extractPdiAndInterface(
-    std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi,
-    pfcp::source_interface_t& sourceInterface,
+// Helper function to extract PDI
+bool SessionManager::extractPdi(
+    std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi) {
+  return (pdr->get(pdi));
+}
+
+/*****************************************************************************************************************/
+// Helper function to extract source interface
+bool SessionManager::extractSourceIface(
+    pfcp::pdi& pdi,
+    pfcp::source_interface_t& sourceInterface) {
+  return (pdi.get(sourceInterface));
+}
+
+/*****************************************************************************************************************/
+// Helper function to extract source interface
+bool SessionManager::extractUeIpv4(
+    pfcp::pdi& pdi,
     pfcp::ue_ip_address_t& ueIpAddress) {
-  return (pdr->get(pdi) && pdi.get(sourceInterface) && pdi.get(ueIpAddress));
+  return (pdi.get(ueIpAddress));
 }
 
 /*****************************************************************************************************************/
@@ -39,15 +53,12 @@ bool SessionManager::extractFar(
     std::shared_ptr<pfcp::pfcp_session> session,
     std::shared_ptr<pfcp::pfcp_far>& outFar) {
   pfcp::far_id_t farId;
-  if (pdr->get(farId) && session->get(farId.far_id, outFar)) {
-    return true;
-  }
-  return false;
+  return (pdr->get(farId) && session->get(farId.far_id, outFar));
 }
 
 /*****************************************************************************************************************/
 // Helper function to extract Forwarding Parameters
-bool SessionManager::extractForwardingParameters(
+bool SessionManager::extractForwardingParams(
     std::shared_ptr<pfcp::pfcp_far> far,
     pfcp::forwarding_parameters& forwardingParams) {
   return far->get(forwardingParams);
@@ -327,8 +338,7 @@ void SessionManager::updateBPFSessionUL(
       "Update the Uplink Direction Datapath For Session %d",
       pSession->get_up_seid());
 
-  if (!extractPdiAndInterface(
-          pdrHighPrecedenceUl, pdi, sourceInterface, ueIpAddress)) {
+  if (!(extractPdi(pdrHighPrecedenceUl, pdi) && extractSourceIface(pdi, sourceInterface) && extractUeIpv4(pdi, ueIpAddress))){
     throw std::runtime_error("No fields available For Uplink Update PDI Check");
   }
 
@@ -360,10 +370,8 @@ void SessionManager::updateBPFSessionDL(
   pfcp::ue_ip_address_t ueIpAddress;
   pfcp::source_interface_t sourceInterface;
 
-  if (!extractPdiAndInterface(
-          pdrHighPrecedenceDl, pdi, sourceInterface, ueIpAddress)) {
-    throw std::runtime_error(
-        "No fields available For Downlink Update PDI Check");
+  if (!(extractPdi(pdrHighPrecedenceDl, pdi) && extractSourceIface(pdi, sourceInterface) && extractUeIpv4(pdi, ueIpAddress))){
+    throw std::runtime_error("No fields available For Downlink Update PDI Check");
   }
 
   Logger::upf_app().debug(
@@ -385,7 +393,7 @@ void SessionManager::updateBPFSessionDL(
 
   pfcp::forwarding_parameters forwardingParams;
 
-  if (!extractForwardingParameters(pFar, forwardingParams)) {
+  if (!extractForwardingParams(pFar, forwardingParams)) {
     Logger::upf_app().error(
         "Forwarding parameters were not found for Downlink Update");
   }

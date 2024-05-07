@@ -134,10 +134,18 @@ class SessionManager {
       std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl);
 
   /*****************************************************************************************************************/
-  bool extractPdiAndInterface(
-      std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi,
-      pfcp::source_interface_t& sourceInterface,
-      pfcp::ue_ip_address_t& ueIpAddress);
+  bool extractPdi(
+      std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi);
+
+  /*****************************************************************************************************************/
+  bool extractSourceIface(
+    pfcp::pdi& pdi,
+    pfcp::source_interface_t& sourceInterface);
+
+  /*****************************************************************************************************************/
+  bool extractUeIpv4(
+    pfcp::pdi& pdi,
+    pfcp::ue_ip_address_t& ueIpAddress);
 
   /*****************************************************************************************************************/
   bool extractFar(
@@ -146,7 +154,7 @@ class SessionManager {
       std::shared_ptr<pfcp::pfcp_far>& outFar);
 
   /*****************************************************************************************************************/
-  bool extractForwardingParameters(
+  bool extractForwardingParams(
       std::shared_ptr<pfcp::pfcp_far> far,
       pfcp::forwarding_parameters& forwardingParams);
 
