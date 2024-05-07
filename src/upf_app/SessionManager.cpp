@@ -196,7 +196,7 @@ void SessionManager::createBPFSession(
 
   // Throw error if both uplink and downlink vectors are empty
   if (pdrs_uplink.empty() && pdrs_downlink.empty()) {
-    logger.error("No PDRs were found in session: " + seid);
+    logger.error("No PDRs were found in session: %d", seid);
     throw std::runtime_error("No PDRs were found in session");
   }
 
