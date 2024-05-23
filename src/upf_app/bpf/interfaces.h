@@ -15,6 +15,7 @@ typedef enum {
 struct s_interface {
   u32 ipv4_address;
   u32 port;
+  uint8_t mac_address[6];
   const char* if_name;
 };
 

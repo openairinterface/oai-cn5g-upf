@@ -9,6 +9,48 @@
 #include "logger.hpp"
 #include "upf_config.hpp"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+#include <sys/socket.h>
+#include <linux/if_ether.h>
+void get_mac_address(const char* iface, uint8_t mac[6]) {
+  int sockfd;
+  struct ifreq ifr;
+
+  // Create a socket to perform ioctl operations
+  sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+  if (sockfd < 0) {
+    perror("socket");
+  }
+
+  // Clear the ifr structure to avoid issues with residual data
+  memset(&ifr, 0, sizeof(struct ifreq));
+
+  // Copy the interface name to the ifr structure
+  strncpy(ifr.ifr_name, iface, IFNAMSIZ - 1);
+
+  // Perform the ioctl operation to get the MAC address
+  if (ioctl(sockfd, SIOCGIFHWADDR, &ifr) == -1) {
+    perror("ioctl");
+    close(sockfd);
+  }
+
+  // Extract the MAC address from the ifr structure and copy it to mac array
+  memcpy(mac, ifr.ifr_hwaddr.sa_data, 6);
+
+  // Print the MAC address
+  printf(
+      "MAC address of %s: %02x:%02x:%02x:%02x:%02x:%02x\n", iface, mac[0],
+      mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+  // Close the socket
+  close(sockfd);
+}
+
 using namespace oai::config;
 extern upf_config upf_cfg;
 
@@ -33,6 +75,7 @@ void FARProgram::create_upf_interface_map_entry(e_reference_point s) {
       iface.ipv4_address = upf_cfg.n3.addr4.s_addr;
       iface.port         = upf_cfg.n3.port;
       iface.if_name      = (upf_cfg.n3.if_name).c_str();
+      get_mac_address(iface.if_name, iface.mac_address);
       getIfaceMap()->update(s, iface, BPF_ANY);
       Logger::upf_app().info("Reference Point N3 Added to m_upf_interface Map");
       break;
@@ -40,6 +83,7 @@ void FARProgram::create_upf_interface_map_entry(e_reference_point s) {
       iface.ipv4_address = upf_cfg.n6.addr4.s_addr;
       iface.port         = upf_cfg.n6.port;
       iface.if_name      = (upf_cfg.n6.if_name).c_str();
+      get_mac_address(iface.if_name, iface.mac_address);
       getIfaceMap()->update(s, iface, BPF_ANY);
       Logger::upf_app().info("Reference Point N6 Added to m_upf_interface Map");
       break;
@@ -47,6 +91,7 @@ void FARProgram::create_upf_interface_map_entry(e_reference_point s) {
       iface.ipv4_address = upf_cfg.n4.addr4.s_addr;
       iface.port         = upf_cfg.n4.port;
       iface.if_name      = (upf_cfg.n4.if_name).c_str();
+      get_mac_address(iface.if_name, iface.mac_address);
       getIfaceMap()->update(s, iface, BPF_ANY);
       Logger::upf_app().info("Reference Point N4 Added to m_upf_interface Map");
       break;

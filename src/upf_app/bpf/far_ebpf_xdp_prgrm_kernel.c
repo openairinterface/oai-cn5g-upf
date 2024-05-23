@@ -93,6 +93,18 @@ static u32 get_ip_address_from_map(e_reference_point key) {
 }
 
 /*****************************************************************************************************************/
+static u8* get_mac_address_from_map(e_reference_point key) {
+  struct s_interface* map_element =
+      bpf_map_lookup_elem(&m_upf_interfaces, &key);
+
+  if (map_element) {
+    return map_element->mac_address;
+  }
+
+  bpf_debug("No MAC address was found in the map");
+}
+
+/*****************************************************************************************************************/
 static u32 create_outer_header_gtpu_ipv4(
     struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
   bpf_debug("Create Outer Header GTPU_IPv4");
@@ -178,13 +190,15 @@ static u32 create_outer_header_gtpu_ipv4(
   |-------------------------- Add GTP header ----------------------|
   |----------------------------------------------------------------|
   */
-  bpf_debug(
-      "Destination MAC:%x:%x:%x:", p_eth->h_dest[0], p_eth->h_dest[1],
-      p_eth->h_dest[2]);
-  bpf_debug("%x:%x:%x", p_eth->h_dest[3], p_eth->h_dest[4], p_eth->h_dest[5]);
 
-  u32 n3_ip           = get_ip_address_from_map(N3_INTERFACE);
-  void* p_mac_address = bpf_map_lookup_elem(&m_arp_table, &n3_ip);
+  u32 n3_ip    = get_ip_address_from_map(N3_INTERFACE);
+  void* n3_mac = get_mac_address_from_map(N3_INTERFACE);
+  if (!n3_mac) {
+    bpf_debug("UPF N3 MAC address not found!!");
+    return XDP_DROP;
+  }
+  struct s_arp_mapping* map = bpf_map_lookup_elem(&m_arp_table, &n3_ip);
+  void* p_mac_address       = map->mac_address;
   if (!p_mac_address) {
     bpf_debug("MAC address not found!!");
     return XDP_DROP;
@@ -192,6 +206,13 @@ static u32 create_outer_header_gtpu_ipv4(
 
   // swap_src_dst_mac(p_data);
   __builtin_memcpy(p_eth->h_dest, p_mac_address, sizeof(p_eth->h_dest));
+  __builtin_memcpy(p_eth->h_source, n3_mac, sizeof(p_eth->h_source));
+
+  bpf_debug(
+      "Source MAC:%x:%x:%x:", p_eth->h_source[0], p_eth->h_source[1],
+      p_eth->h_source[2]);
+  bpf_debug(
+      "%x:%x:%x", p_eth->h_source[3], p_eth->h_source[4], p_eth->h_source[5]);
 
   bpf_debug(
       "Destination MAC:%x:%x:%x:", p_eth->h_dest[0], p_eth->h_dest[1],
@@ -328,14 +349,14 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
 
     bpf_debug("OUTER_HEADER_CREATION_UDP_IPV4 REDIRECT FAILED");
   } else if (dest_interface == INTERFACE_VALUE_ACCESS) {
-    // Redirect to core network.
+    // Redirect to access network.
     bpf_debug("Destination is to INTERFACE_VALUE_ACCESS");
     switch (outer_header_creation) {
       case OUTER_HEADER_CREATION_GTPU_UDP_IPV4:
         bpf_debug("OUTER_HEADER_CREATION_GTPU_UDP_IPV4");
         create_outer_header_gtpu_ipv4(p_ctx, p_far);
         bpf_debug(
-            "The Packet is redirected to socket for transmission to AN ...");
+            "The Packet is redirected to interface for transmission to AN ...");
         return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
         break;
       case OUTER_HEADER_CREATION_GTPU_UDP_IPV6:
