@@ -14,20 +14,20 @@
 /*****************************************************************************************************************/
 // The unique FAR that will be consumed in this program.
 
-struct bpf_map_def SEC("maps") m_far = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(u8),
-    .value_size  = sizeof(pfcp_far_t_),
-    .max_entries = FAR_TAILS_MAX,  // 1,
-};
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, FAR_TAILS_MAX); // 1,
+    __type(key, u8); 
+    __type(value, pfcp_far_t_);
+} m_far SEC(".maps");
 
 /*****************************************************************************************************************/
-struct bpf_map_def SEC("maps") m_redirect_interfaces = {
-    .type        = BPF_MAP_TYPE_DEVMAP,
-    .key_size    = sizeof(u32),     // id
-    .value_size  = sizeof(u32),     // tx port
-    .max_entries = MAX_INTERFACES,  // 10,
-};
+struct {
+    __uint(type, BPF_MAP_TYPE_DEVMAP);
+    __uint(max_entries, MAX_INTERFACES);    // 10,
+    __type(key, u32);                       // id
+    __type(value, u32);                     // tx port
+} m_redirect_interfaces SEC(".maps");
 
 /*****************************************************************************************************************/
 // Static ARP Table. Used to get the MAC address of the next hop.
@@ -39,13 +39,12 @@ struct bpf_map_def SEC("maps") m_redirect_interfaces = {
 //     .max_entries = ARP_ENTRIES_MAX_SIZE,  // 2,
 // };
 
-struct bpf_map_def SEC("maps") m_arp_table = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(u32),                   // IPv4 address
-    .value_size  = sizeof(struct s_arp_mapping),  // <IP Address, MAC address>
-    .max_entries = ARP_ENTRIES_MAX_SIZE,          // 2,
-};
-
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, ARP_ENTRIES_MAX_SIZE);      // 2,
+    __type(key, u32);                               // IPv4 address 
+    __type(value, struct s_arp_mapping);            // <IP Address, MAC address>
+} m_arp_table SEC(".maps");
 /*****************************************************************************************************************/
 // BPF_ANNOTATE_KV_PAIR(m_far, u8, pfcp_far_t_);
 // BPF_ANNOTATE_KV_PAIR(m_redirect_interfaces, u32, u32);

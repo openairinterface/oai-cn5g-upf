@@ -23,19 +23,19 @@ struct pfcp_session_request {
   // Add more session request fields as needed
 };
 
-struct bpf_map_def SEC("maps") qoe_map = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(__u32),
-    .value_size  = sizeof(struct qoe_metrics),
-    .max_entries = 1024,
-};
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, __u32);  
+    __type(value, struct qoe_metrics);
+} qoe_map SEC(".maps");
 
-struct bpf_map_def SEC("maps") pfcp_map = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(__u32),
-    .value_size  = sizeof(struct pfcp_session_request),
-    .max_entries = 1024,
-};
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, __u32); 
+    __type(value, struct pfcp_session_request);
+} pfcp_map SEC(".maps");
 
 SEC("filter")
 int qoe_pfcp_monitor(struct __sk_buff* skb) {

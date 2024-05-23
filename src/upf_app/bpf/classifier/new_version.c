@@ -19,12 +19,12 @@ struct qfi_data {
   __u32 qfi;
 };
 
-struct bpf_map_def SEC("maps") qfi_map = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(__u32),
-    .value_size  = sizeof(struct qfi_data),
-    .max_entries = 1024,
-};
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, __u32); 
+    __type(value, struct qfi_data);
+} qfi_map SEC(".maps");
 
 struct qer_data {
   __u32 qfi;
@@ -32,19 +32,19 @@ struct qer_data {
   __u64 rate;
 };
 
-struct bpf_map_def SEC("maps") qer_map = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(__u32),
-    .value_size  = sizeof(struct qer_data),
-    .max_entries = 1024,
-};
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, __u32);  
+    __type(value, struct qer_data);
+} qer_map SEC(".maps");
 
-struct bpf_map_def SEC("maps") token_bucket_map = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(__u32),
-    .value_size  = sizeof(__u64),
-    .max_entries = 1024,
-};
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, __u32);   
+    __type(value, __u64); 
+} token_bucket_map SEC(".maps");
 
 SEC("classifier")
 int qfi_classifier(struct __sk_buff* skb) {

@@ -194,7 +194,7 @@ void ProgramLifeCycle<BPFSkeletonType>::link(
       // Get programs FD from skeleton object.
       fd = bpf_program__fd(prog);
       // Link program (fd) to the interface.
-      if (bpf_set_link_xdp_fd(ifIndex, fd, mFlags) < 0) {
+      if (bpf_xdp_attach(ifIndex, fd, mFlags, NULL) < 0) {
         Logger::upf_app().error(
             "BPF program %s link set XDP failed", sectionName.c_str());
         tearDown();
@@ -247,7 +247,7 @@ void ProgramLifeCycle<BPFSkeletonType>::tearDown() {
         for (auto linkEntry : it->second) {
           Logger::upf_app().debug(
               "BPF program %s is in a HOOKED state", section.c_str());
-          if (bpf_set_link_xdp_fd(linkEntry, -1, mFlags)) {
+          if (bpf_xdp_attach(linkEntry, -1, mFlags, NULL)) {
             Logger::upf_app().error(
                 "BPF program %s cannot unlink the %d interface",
                 section.c_str(), linkEntry);
