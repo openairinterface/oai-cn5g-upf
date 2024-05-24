@@ -15,19 +15,53 @@ int main() {
     int rc = 0;
 
     // Create the database
-    rc = sqlite3Helper->create_database(db_name);    
+    rc = sqlite3Helper->create_database(db_name);  
+
+     // Create tables
+         if (!rc) {
+        if (sqlite3Helper->create_table("eth_header", ethFields) == SQLITE_OK) {
+            std::cout << "Ethernet Header table created successfully." << std::endl;
+        } else {
+            std::cerr << "Error creating Ethernet Header table." << std::endl;
+        }
+        
+        if (sqlite3Helper->create_table("ipv4_header", ipv4Fields) == SQLITE_OK) {
+            std::cout << "IPv4 Header table created successfully." << std::endl;
+        } else {
+            std::cerr << "Error creating IPv4 Header table." << std::endl;
+        }
+
+        if (sqlite3Helper->create_table("tcp_header", tcpFields) == SQLITE_OK) {
+            std::cout << "TCP Header table created successfully." << std::endl;
+        } else {
+            std::cerr << "Error creating TCP Header table." << std::endl;
+        }
+
+        if (sqlite3Helper->create_table("udp_header", udpFields) == SQLITE_OK) {
+            std::cout << "UDP Header table created successfully." << std::endl;
+        } else {
+            std::cerr << "Error creating UDP Header table." << std::endl;
+        }
+
+        if (sqlite3Helper->create_table("icmp_header", icmpFields) == SQLITE_OK) {
+            std::cout << "ICMP Header table created successfully." << std::endl;
+        } else {
+            std::cerr << "Error creating ICMP Header table." << std::endl;
+        }
+    }
+         
     
      // Create the IPv4 Header table
-    rc = sqlite3Helper->create_table("ipv4_header", ipv4Fields);
+    //rc = sqlite3Helper->create_table("ipv4_header", ipv4Fields);
     // Create the TCP Header table
-    if (!rc)
-        rc = sqlite3Helper->create_table("tcp_header", tcpFields);
+    //if (!rc)
+        //rc = sqlite3Helper->create_table("tcp_header", tcpFields);
     // Create the UDP Header table
-    if (!rc) 
-        rc = sqlite3Helper->create_table("udp_header", udpFields);
+    //if (!rc) 
+        //rc = sqlite3Helper->create_table("udp_header", udpFields);
     // Create the ICMP Header table
-    if (!rc)
-        rc = sqlite3Helper->create_table("icmp_header", icmpFields);
+    //if (!rc)
+        // rc = sqlite3Helper->create_table("icmp_header", icmpFields);
     // Create the ICMPv6 Header table
     //if (!rc)
         //rc = sqlite3Helper->create_table("icmpv6_header", icmpv6Fields);
@@ -49,10 +83,7 @@ int main() {
     // Create the QUIC Header table
     //if (!rc)
         //rc = sqlite3Helper->create_table("quic_header", quicFields);
-    // Create the Ethernet Header table
-    //if (!rc)    
-        //rc = sqlite3Helper->create_table("eth_header", ethFields);
-    // Create the GTPU table
+    //Create the GTPU table
     //if(!rc) 
         //rc = sqlite3Helper->create_table("gtpu", gtpuFields);
     // Create the Data table

@@ -25,7 +25,7 @@ std::vector<std::string> tcpFields = {
     "sequence_number INT UNSIGNED NOT NULL",
     "acknowledgment_number INT UNSIGNED NOT NULL",
     "header_length TINYINT UNSIGNED NOT NULL",
-    "reserved TINYINT UNSIGNED NOT NULL",
+    //"reserved TINYINT UNSIGNED NOT NULL",
     "flags TINYINT UNSIGNED NOT NULL",
     "window_size SMALLINT UNSIGNED NOT NULL",
     "checksum SMALLINT UNSIGNED NOT NULL",

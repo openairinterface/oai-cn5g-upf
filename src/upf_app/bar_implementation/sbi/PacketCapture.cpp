@@ -76,19 +76,54 @@ void PacketCapture::packetHandler(u_char *userData, const struct pcap_pkthdr* pk
     size_t headerLength = sizeof(struct ethhdr) + (ipv4Data[1].size() * sizeof(char));
 
     // Use switch-case for protocol checks
-   std::string protocolString = ipv4Data[7];
-if (std::all_of(protocolString.begin(), protocolString.end(), ::isdigit)) {
-    int protocol = std::stoi(protocolString);
-    switch (protocol) {
-        case IPPROTO_TCP:
-            tcpData = splitPacket.extractTCPData(reinterpret_cast<const struct tcphdr*>(packetData + headerLength));
-            break;
-        case IPPROTO_UDP:
-            udpData = splitPacket.extractUDPData(reinterpret_cast<const struct udphdr*>(packetData + headerLength), headerLength);
-            break;
-        case IPPROTO_ICMP:
-            icmpData = splitPacket.extractICMPData(reinterpret_cast<const struct icmphdr*>(packetData + headerLength));
-            break;
+    std::string protocolString = ipv4Data[7];
+    if (std::all_of(protocolString.begin(), protocolString.end(), ::isdigit)) {
+        int protocol = std::stoi(protocolString);
+        switch (protocol) {
+            case IPPROTO_TCP:
+                std::cout << "Inserting TCP header data..." << std::endl;
+                tcpData = splitPacket.extractTCPData(reinterpret_cast<const struct tcphdr*>(packetData + headerLength));
+                if (tcpFields.size() == tcpData.size()) {
+                    sqlite3Helper->insert_into_table("tcp_header", tcpFields, tcpData);
+                } else {
+                    std::cerr << "Error: Number of TCP fields doesn't match number of values!" << std::endl;
+                }
+                break;
+            case IPPROTO_UDP:
+                std::cout << "Inserting UDP header data..." << std::endl;
+                udpData = splitPacket.extractUDPData(reinterpret_cast<const struct udphdr*>(packetData + headerLength), pkthdr->len - headerLength);
+
+                if (udpFields.size() == udpData.size()) {
+                    sqlite3Helper->insert_into_table("udp_header", udpFields, udpData);
+                } else {
+                    std::cerr << "Error: Number of UDP fields doesn't match number of values!" << std::endl;
+                }
+                break;
+            case IPPROTO_ICMP:
+                std::cout << "Inserting ICMP header data..." << std::endl;
+                icmpData = splitPacket.extractICMPData(reinterpret_cast<const struct icmphdr*>(packetData + headerLength));
+                if (icmpFields.size() == icmpData.size()) {
+                    sqlite3Helper->insert_into_table("icmp_header", icmpFields, icmpData);
+                } else {
+                    std::cerr << "Error: Number of ICMP fields doesn't match number of values!" << std::endl;
+                }
+                break;
+            // Add cases for other protocols as needed
+        }
+    }
+ // Insert Ethernet and IPv4 data into the database
+    if (ethFields.size() == ethernetData.size()) {
+        sqlite3Helper->insert_into_table("eth_header", ethFields, ethernetData);
+    } else {
+        std::cerr << "Error: Number of Ethernet fields doesn't match number of values!" << std::endl;
+    }
+
+    if (ipv4Fields.size() == ipv4Data.size()) {
+        sqlite3Helper->insert_into_table("ipv4_header", ipv4Fields, ipv4Data);
+    } else {
+        std::cerr << "Error: Number of IPv4 fields doesn't match number of values!" << std::endl;
+    }
+}
         //case IPPROTO_ICMPV6:
             //icmpv6Data = splitPacket.extractICMPv6Data(reinterpret_cast<const struct icmp6_hdr*>(packetData + headerLength));
             //break;
@@ -113,18 +148,18 @@ if (std::all_of(protocolString.begin(), protocolString.end(), ::isdigit)) {
         //default:
             // Handle other protocols or unknown protocols
             //break;
-    }
-}
+  //  }
+//}
 
     // Insert the extracted data into the appropriate tables in the database using sqlite3Helper                              
-    sqlite3Helper->insert_into_table("eth_header", ethFields, ethernetData);
-    sqlite3Helper->insert_into_table("ipv4_header", ipv4Fields, ipv4Data);
-    sqlite3Helper->insert_into_table("tcp_header", tcpFields, tcpData);
-    sqlite3Helper->insert_into_table("udp_header", udpFields, udpData);
-    sqlite3Helper->insert_into_table("icmp_header", icmpFields, icmpData);
-    //sqlite3Helper->insert_into_table("icmpv6_header", icmpv6Fields, icmpv6Data);
-    //sqlite3Helper->insert_into_table("gtpu_header", gtpuFields, gtpuData);
-    //sqlite3Helper->insert_into_table("dns_header", dnsFields, dnsData);
+    //sqlite3Helper->insert_into_table("eth_header", ethFields, ethernetData);
+    // sqlite3Helper->insert_into_table("ipv4_header", ipv4Fields, ipv4Data);
+    // sqlite3Helper->insert_into_table("tcp_header", tcpFields, tcpData);
+    // sqlite3Helper->insert_into_table("udp_header", udpFields, udpData);
+    // sqlite3Helper->insert_into_table("icmp_header", icmpFields, icmpData);
+    // sqlite3Helper->insert_into_table("icmpv6_header", icmpv6Fields, icmpv6Data);
+    // sqlite3Helper->insert_into_table("gtpu_header", gtpuFields, gtpuData);
+    // sqlite3Helper->insert_into_table("dns_header", dnsFields, dnsData);
     //sqlite3Helper->insert_into_table("igmp_header", igmpFields, igmpData);
     //sqlite3Helper->insert_into_table("nbns_header", nbnsFields, nbnsData);
     //sqlite3Helper->insert_into_table("mdns_header", mdnsFields, mdnsData);
@@ -134,4 +169,4 @@ if (std::all_of(protocolString.begin(), protocolString.end(), ::isdigit)) {
     // Start the alert timer with the specified delay
     //Trigger trigger(delay);
     //trigger.startAlertTimer();
-}
+//}

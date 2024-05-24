@@ -10,7 +10,13 @@ std::vector<std::string> SplitPacket::extractEthernetData(const struct ethhdr* e
     ethernetData.push_back("Source MAC: " + std::string(ether_ntoa((struct ether_addr*)&ethernetHeader->h_source)));
     ethernetData.push_back("Destination MAC: " + std::string(ether_ntoa((struct ether_addr*)&ethernetHeader->h_dest)));
     ethernetData.push_back("Ether Type: " + std::to_string(ntohs(ethernetHeader->h_proto)));
+    // Affichage direct des valeurs
+    std::cout << "Ethernet Data:" << std::endl;
+    for (const std::string& data : ethernetData) {
+        std::cout << data << std::endl;
+    }
     return ethernetData;
+
 }
 
 // Extract IPv4 header information
@@ -39,7 +45,7 @@ std::vector<std::string> SplitPacket::extractTCPData(const struct tcphdr* tcpHea
     tcpData.push_back("Sequence Number: " + std::to_string(ntohl(tcpHeader->seq)));
     tcpData.push_back("Acknowledgment Number: " + std::to_string(ntohl(tcpHeader->ack_seq)));
     tcpData.push_back("Header Length: " + std::to_string((unsigned int)tcpHeader->doff * 4) + " bytes");
-    tcpData.push_back("Reserved: " + std::to_string((unsigned int)((ntohs(tcpHeader->res1) << 3) | (tcpHeader->res2 >> 5))));
+    //tcpData.push_back("Reserved: " + std::to_string((unsigned int)((ntohs(tcpHeader->res1) << 3) | (tcpHeader->res2 >> 5))));
     tcpData.push_back("Flags: " + std::to_string((unsigned int)tcpHeader->urg) + std::to_string((unsigned int)tcpHeader->ack) + std::to_string((unsigned int)tcpHeader->psh) + std::to_string((unsigned int)tcpHeader->rst) + std::to_string((unsigned int)tcpHeader->syn) + std::to_string((unsigned int)tcpHeader->fin));
     tcpData.push_back("Window Size: " + std::to_string(ntohs(tcpHeader->window)));
     tcpData.push_back("Checksum: " + std::to_string(ntohs(tcpHeader->check)));
