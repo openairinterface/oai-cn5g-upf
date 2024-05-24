@@ -168,7 +168,7 @@ install_bpftool_from_git() {
   
     cd bpftool
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
-    cd src && make -j $(nproc)
+    cd src && CLANG=Nope make -j $(nproc)
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
     $SUDO make install
     popd
