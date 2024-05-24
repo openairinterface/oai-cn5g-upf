@@ -6,15 +6,15 @@
 
 class Trigger {
 public:
-    Trigger();
+    Trigger(int delay); // Add a constructor taking the delay as a parameter
     ~Trigger();
     int startAlertTimer();
     static int sendAlert();
 
 private:
     std::thread alertThread;
-    static int alertTimer(int delay);
+    int delay; // Store the delay as a member variable
+    int alertTimer();
 };
 
 #endif // TRIGGER_HPP
-

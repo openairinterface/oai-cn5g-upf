@@ -1,28 +1,36 @@
 #ifndef DATABASEMANAGER_HPP
 #define DATABASEMANAGER_HPP
 
-#include "../database_code/Sqlite3Helper.hpp" // Include Sqlite3Helper.hpp to access the SQLite functionality
+#include "../database_code/Sqlite3Helper.hpp" // Include the header file for DatabaseManager
+#include <memory> // Include the memory header for std::unique_ptr
+#include <vector>
+#include <string>
 
 class DatabaseManager {
 public:
-    // Singleton pattern: static method to get the instance of DatabaseManager
-    static DatabaseManager& getInstance() {
-        static DatabaseManager instance; // Singleton instance
-        return instance;
-    }
+    // Destructor
+    ~DatabaseManager();
 
-    // Access method to get the Sqlite3Helper instance
-    Sqlite3Helper& getSqlite3Helper() {
-        return sqlite3Helper; // Return the reference to the Sqlite3Helper instance
-    }
+    // Static method to get the singleton instance of DatabaseManager
+    static DatabaseManager& getInstance();
+
+    // Method to create and return an instance of Sqlite3Helper using DatabaseManager
+    std::unique_ptr<Sqlite3Helper> createSqlite3Helper();
+
+    // Method to insert data into the database
+    int insertData(const std::string& tableName, const std::vector<std::string>& values);
+
 
 private:
-    DatabaseManager() {} // Private constructor for singleton
+    // Private constructor to enforce singleton pattern
+    DatabaseManager();
 
-    DatabaseManager(DatabaseManager const&) = delete; // Delete copy constructor
-    void operator=(DatabaseManager const&) = delete; // Delete copy assignment operator
+    // Static pointer to the singleton instance
+    static std::unique_ptr<DatabaseManager> instance;
 
-    Sqlite3Helper sqlite3Helper; // Instance of Sqlite3Helper for database operations
+    // Pointer to Sqlite3Helper instance
+    std::unique_ptr<Sqlite3Helper> sqliteHelper;
 };
+
 
 #endif // DATABASEMANAGER_HPP
