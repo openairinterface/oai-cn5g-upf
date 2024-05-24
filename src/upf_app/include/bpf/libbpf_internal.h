@@ -215,7 +215,7 @@ const struct btf_type* skip_mods_and_typedefs(
     const struct btf* btf, __u32 id, __u32* res_id);
 
 static inline enum btf_func_linkage btf_func_linkage(const struct btf_type* t) {
-  return (enum btf_func_linkage)(int) btf_vlen(t);
+  return (enum btf_func_linkage) (int) btf_vlen(t);
 }
 
 static inline __u32 btf_type_info(int kind, int vlen, int kflag) {
