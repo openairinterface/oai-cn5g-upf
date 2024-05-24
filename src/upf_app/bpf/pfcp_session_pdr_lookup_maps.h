@@ -15,48 +15,48 @@
 
 /*****************************************************************************************************************/
 struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, FAR_ENTRIES_MAX_SIZE);
-  __type(key, u32);            // teid
-  __type(value, pfcp_far_t_);  // list of pdr
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, FAR_ENTRIES_MAX_SIZE);
+    __type(key, u32);                          // teid
+    __type(value, pfcp_far_t_);        // list of pdr
 } m_fars SEC(".maps");
 
 /*****************************************************************************************************************/
 struct {
-  __uint(type, BPF_MAP_TYPE_DEVMAP);
-  __uint(max_entries, MAX_LENGTH);  // 10,
-  __type(key, u32);                 // id
-  __type(value, u32);               // tx port
+    __uint(type, BPF_MAP_TYPE_DEVMAP);
+    __uint(max_entries, MAX_LENGTH);    // 10,
+    __type(key, u32);                   // id
+    __type(value, u32);                 // tx port
 } m_redirect_interfaces SEC(".maps");
 
 /*****************************************************************************************************************/
 // Uplink map.
 // TODO: Store multiple PDR.
 struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, PDR_ENTRIES_MAX_SIZE);  // 10,
-  __type(key, teid_t_);                       // teid
-  __type(value, pfcp_pdr_t_);                 // assuming only one PDR
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, PDR_ENTRIES_MAX_SIZE);      // 10,
+    __type(key, teid_t_);                           // teid
+    __type(value, pfcp_pdr_t_);                     // assuming only one PDR
 } m_teid_pdr SEC(".maps");
 
 /*****************************************************************************************************************/
 // Downlink map.
 // TODO: Store multiple PDR.
 struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, PDR_ENTRIES_MAX_SIZE);  // 10,
-  __type(key, u32);                           // UE IP address
-  __type(value, pfcp_pdr_t_);                 // assuming only one PDR
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, PDR_ENTRIES_MAX_SIZE);      // 10,
+    __type(key, u32);                               // UE IP address
+    __type(value, pfcp_pdr_t_);                     // assuming only one PDR
 } m_ueip_pdr SEC(".maps");
 
 /*****************************************************************************************************************/
 // Static ARP Table. Used to get the MAC address of the next hop.
 // TODO:  Pin this maps. It does not depend on the session program
 struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, ARP_ENTRIES_MAX_SIZE);  // 2,
-  __type(key, u32);                           // IPv4 address
-  __type(value, unsigned char[8]);            // MAC address
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, ARP_ENTRIES_MAX_SIZE);  // 2,
+    __type(key, u32);                           // IPv4 address
+    __type(value, unsigned char[8]);              // MAC address
 } m_arp_table SEC(".maps");
 
 #endif  // __PFCP_SESSION_PDR_LOOKUP_MAPS_H__

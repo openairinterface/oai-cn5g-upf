@@ -18,10 +18,10 @@
 
 /* Keeps stats per (enum) xdp_action */
 struct {
-  __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
-  __uint(max_entries, XDP_ACTION_MAX);
-  __type(key, __u32);
-  __type(value, struct datarec);
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, XDP_ACTION_MAX);
+    __type(key, __u32); 
+    __type(value, struct datarec);
 } mc_stats SEC(".maps");
 
 /**
