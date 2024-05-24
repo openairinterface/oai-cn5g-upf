@@ -20,10 +20,10 @@ struct qfi_data {
 };
 
 struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, __u32); 
-    __type(value, struct qfi_data);
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, 1024);
+  __type(key, __u32);
+  __type(value, struct qfi_data);
 } qfi_map SEC(".maps");
 
 struct qer_data {
@@ -33,17 +33,17 @@ struct qer_data {
 };
 
 struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, __u32);  
-    __type(value, struct qer_data);
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, 1024);
+  __type(key, __u32);
+  __type(value, struct qer_data);
 } qer_map SEC(".maps");
 
 struct {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 1024);
-    __type(key, __u32);   
-    __type(value, __u64); 
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, 1024);
+  __type(key, __u32);
+  __type(value, __u64);
 } token_bucket_map SEC(".maps");
 
 SEC("classifier")
