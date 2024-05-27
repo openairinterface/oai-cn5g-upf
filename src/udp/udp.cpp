@@ -34,13 +34,13 @@
 void udp_application::handle_receive(
     char* recv_buffer, const std::size_t bytes_transferred,
     const endpoint& r_endpoint) {
-  Logger::udp().warn("Missing implementation of interface udp_application\n");
+  Logger::udp().warn("Missing implementation of interface udp_application");
 }
 
 //------------------------------------------------------------------------------
 void udp_application::start_receive(
     udp_application* gtp_stack, const util::thread_sched_params& sched_params) {
-  Logger::udp().warn("Missing implementation of interface udp_application\n");
+  Logger::udp().warn("Missing implementation of interface udp_application");
 }
 
 //------------------------------------------------------------------------------
@@ -64,21 +64,36 @@ void udp_server::udp_worker_loop(
   udp_packet_q_item_t* worker = nullptr;
 
   sched_params.apply(TASK_NONE, Logger::udp());
+  tmp_thread   = pthread_self();
+  terminateWL_ = false;
+
   while (1) {
     work_pool_->blockingRead(worker);
     ++count;
-    // std::cout << "w" << id << " " << count << std::endl;
+    if (terminateWL_) {
+      terminateWL_ = false;
+      return;
+    }
+    if (worker == nullptr) {
+      terminateWL_ = false;
+      return;
+    }
     // exit thread
     if (worker->buffer) {
       app_->handle_receive(worker->buffer, worker->size, worker->r_endpoint);
       free_pool_->write(worker);
     } else {
       free(worker);
-      // std::cout << "exit w" << id << " " << count << std::endl;
       while (work_pool_->readIfNotEmpty(worker)) {
         free(worker);
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
       }
+      Logger::udp().debug("exit udp_worker_loop after %d", count);
+      terminateWL_ = false;
+      return;
+    }
+    if (terminateWL_) {
+      terminateWL_ = false;
       return;
     }
     worker = nullptr;
@@ -91,18 +106,22 @@ void udp_server::udp_read_loop(const util::thread_sched_params& sched_params) {
   udp_packet_q_item_t* worker = nullptr;
 
   sched_params.apply(TASK_NONE, Logger::udp());
+  terminateRL_ = false;
 
   while (1) {
     free_pool_->blockingRead(worker);
     ++count;
-    // std::cout << "d" << count << std::endl;
-    // exit thread
+    if (terminateRL_) {
+      terminateRL_ = false;
+      return;
+    }
     if (worker->buffer == nullptr) {
       free(worker);
       while (work_pool_->readIfNotEmpty(worker)) {
         free(worker);
       }
-      // std::cout << "exit d" << count << std::endl;
+      Logger::udp().debug("exit udp_read_loop after %d", count);
+      terminateRL_ = false;
       return;
     }
     worker->r_endpoint.addr_storage_len = sizeof(struct sockaddr_storage);
@@ -112,8 +131,12 @@ void udp_server::udp_read_loop(const util::thread_sched_params& sched_params) {
              &worker->r_endpoint.addr_storage_len)) > 0) {
       work_pool_->write(worker);
     } else {
-      Logger::udp().error("Recvfrom failed %s\n", strerror(errno));
+      Logger::udp().error("Recvfrom failed %s", strerror(errno));
       free_pool_->write(worker);
+    }
+    if (terminateRL_) {
+      terminateRL_ = false;
+      return;
     }
     worker = nullptr;
   }
@@ -131,7 +154,7 @@ int udp_server::create_socket(
     /*
      * Socket creation has failed...
      */
-    Logger::udp().error("Socket creation failed (%s)\n", strerror(errno));
+    Logger::udp().error("Socket creation failed (%s)", strerror(errno));
     return errno;
   }
 
@@ -141,7 +164,7 @@ int udp_server::create_socket(
      * Reuse port has failed...
      */
     Logger::udp().error(
-        "Socket option reuse port failed (%s)\n", strerror(errno));
+        "Socket option reuse port failed (%s)", strerror(errno));
     return errno;
   }
 
@@ -180,7 +203,7 @@ int udp_server::create_socket(
     /*
      * Socket creation has failed...
      */
-    Logger::udp().error("Socket creation failed (%s)\n", strerror(errno));
+    Logger::udp().error("Socket creation failed (%s)", strerror(errno));
     return errno;
   }
 
@@ -243,22 +266,25 @@ void udp_server::start_receive(
     free_pool_->blockingWrite(p);
   }
   for (int i = 0; i < num_threads_; i++) {
-    std::thread t =
-        std::thread(&udp_server::udp_worker_loop, this, i, sched_params);
-    threads_.push_back(std::move(t));
+    wthread_ = std::thread(&udp_server::udp_worker_loop, this, i, sched_params);
   }
-  std::thread t = std::thread(&udp_server::udp_read_loop, this, sched_params);
-  t.detach();
-  threads_.push_back(std::move(t));
+  rthread_ = std::thread(&udp_server::udp_read_loop, this, sched_params);
 }
 //------------------------------------------------------------------------------
 void udp_server::stop(void) {
+  terminateRL_ = true;
+  terminateWL_ = true;
+
   for (int i = 0; i < num_threads_; i++) {
-    udp_packet_q_item_t* p =
-        (udp_packet_q_item_t*) calloc(1, sizeof(udp_packet_q_item_t));
+    udp_packet_q_item_t* p = nullptr;
     work_pool_->blockingWrite(p);
   }
-  udp_packet_q_item_t* p =
-      (udp_packet_q_item_t*) calloc(1, sizeof(udp_packet_q_item_t));
-  free_pool_->blockingWrite(p);
+  if (tmp_thread != 0) {
+    int res;
+    res = pthread_cancel(tmp_thread);
+    if (res != 0) {
+      Logger::udp().error("could not cancel thread");
+    }
+    tmp_thread = 0;
+  }
 }
