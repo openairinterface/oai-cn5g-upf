@@ -68,9 +68,15 @@ void pfcp_switch::pdn_worker(
   uint64_t count      = 0;
   iovec_q_item_t* iov = nullptr;
 
-  sched_params.apply(TASK_NONE, Logger::udp());
+  terminatePW_ = false;
+  sched_params.apply(TASK_NONE, Logger::pfcp_switch());
+
   while (1) {
     work_pool_->blockingRead(iov);
+    if (terminatePW_) {
+      terminatePW_ = false;
+      return;
+    }
     ++count;
     // std::cout << "DL worker " << id << " count " << count << std::endl;
     // exit thread
@@ -98,6 +104,9 @@ void pfcp_switch::pdn_read_loop(
   iovec_q_item_t* iov = nullptr;
   // struct sockaddr_in   sin = {};
 
+  prThreadToCancel = pthread_self();
+  Logger::pfcp_switch().debug(
+      "pdn_read thread to cancel is 0x%08x", prThreadToCancel);
   // Producer should not interfere with consumer for not de-sequence IP packets
   sched_params.sched_priority -= 1;
   sched_params.apply(TASK_NONE, Logger::pfcp_switch());
@@ -374,12 +383,10 @@ void pfcp_switch::setup_pdn_interfaces() {
 
       sock_w = sock_r;
 
-      std::thread t = thread(
+      prThread_ = std::thread(
           &pfcp_switch::pdn_read_loop, this, sock_r,
           upf_cfg.n6.thread_rd_sched_params);
-      t.detach();
-      threads_.push_back(std::move(t));
-      socks_r.push_back(sock_r);
+      socks_r_ptr[index] = sock_r;
     }
   }
 
@@ -411,13 +418,13 @@ pfcp_switch::pfcp_switch()
       ue_ipv4_hbo2pfcp_pdr(PFCP_SWITCH_MAX_PDRS),
       ul_n3_teid2pfcp_pdr(PFCP_SWITCH_MAX_PDRS),
       up_seid2pfcp_sessions(PFCP_SWITCH_MAX_SESSIONS),
-      threads_(16),
-      socks_r(16),
       sock_w(0) {
   num_threads_   = upf_cfg.n6.thread_rd_sched_params.thread_pool_size;
   int num_blocks = num_threads_ * 16;
   free_pool_     = new folly::MPMCQueue<iovec_q_item_t*>(num_blocks);
   work_pool_     = new folly::MPMCQueue<iovec_q_item_t*>(num_blocks);
+
+  socks_r_ptr = new int[16];
 
   recv_buffer_alloc_ = (char*) calloc(num_blocks, PFCP_SWITCH_RECV_BUFFER_SIZE);
 
@@ -433,10 +440,10 @@ pfcp_switch::pfcp_switch()
     free_pool_->blockingWrite(v);
   }
   if (!upf_cfg.enable_bpf_datapath) {
+    // num_threads_ is currently fixed to 1
     for (int i = 0; i < num_threads_; i++) {
-      std::thread t = std::thread(
+      pwThread_ = std::thread(
           &pfcp_switch::pdn_worker, this, i, upf_cfg.n6.thread_rd_sched_params);
-      threads_.push_back(std::move(t));
     }
     timer_min_commit_interval_id = 0;
     timer_max_commit_interval_id = 0;
@@ -444,6 +451,35 @@ pfcp_switch::pfcp_switch()
     pdn_if_index = -1;
     setup_pdn_interfaces();
   }
+}
+//------------------------------------------------------------------------------
+pfcp_switch::~pfcp_switch() {
+  Logger::pfcp_switch().info("Starting pfcp_switch destructor.");
+  int res;
+
+  for (int index = 0; index < upf_cfg.pdns.size(); index++) {
+    shutdown(socks_r_ptr[index], SHUT_RDWR);
+  }
+  Logger::pfcp_switch().debug(
+      "Cancelling pdn read thread : 0x%08x", prThreadToCancel);
+  res = pthread_cancel(prThreadToCancel);
+  if (res != 0) {
+    Logger::pfcp_switch().error("could not cancel pdn_read thread");
+  }
+  // Stopping the pdn_worker thread
+  terminatePW_        = true;
+  iovec_q_item_t* iov = nullptr;
+  work_pool_->blockingWrite(iov);
+  while (terminatePW_) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  Logger::pfcp_switch().debug("Joining all reading threads");
+  prThread_.join();
+  Logger::pfcp_switch().debug("Joining pdn_worker thread");
+  pwThread_.join();
+  Logger::pfcp_switch().info("Deleting arrays");
+  delete[] socks_r_ptr;
+  Logger::pfcp_switch().info("Done with pfcp_switch destructor.");
 }
 //------------------------------------------------------------------------------
 bool pfcp_switch::get_pfcp_session_by_cp_fseid(

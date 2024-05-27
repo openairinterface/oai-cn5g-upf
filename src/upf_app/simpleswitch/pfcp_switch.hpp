@@ -49,6 +49,8 @@
 #include <SessionManager.h>
 #include <variant>
 
+#include <pthread.h>
+
 namespace oai {
 namespace upf {
 namespace app {
@@ -72,9 +74,12 @@ class pfcp_switch {
   uint32_t num_threads_;
   char* recv_buffer_alloc_;
   char recv_buffer_[PFCP_SWITCH_RECV_BUFFER_SIZE];
-  std::vector<std::thread> threads_;
-  std::vector<int> socks_r;
+  std::thread pwThread_;
+  std::thread prThread_;
+  pthread_t prThreadToCancel;
+  int* socks_r_ptr;
   int sock_w;
+  bool terminatePW_;
   // std::string                               gw_mac_address;
   int pdn_if_index;
 
@@ -149,6 +154,7 @@ class pfcp_switch {
   pfcp_switch();
   pfcp_switch(pfcp_switch const&) = delete;
   void operator=(pfcp_switch const&) = delete;
+  ~pfcp_switch();
 
   void add_pfcp_dl_pdr_by_ue_ip(
       const uint32_t ue_ip, std::shared_ptr<pfcp::pfcp_pdr>&);
