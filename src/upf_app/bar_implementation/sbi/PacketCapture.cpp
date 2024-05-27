@@ -8,38 +8,159 @@
 
 
 
-int PacketCapture::capturePackets(int delay, Sqlite3Helper& sqlite3Helper, pcap_dumper_t* pcapDumper) {
+
+pcap_t* open_pcap(const char *interface){
     char errbuf[PCAP_ERRBUF_SIZE];
     pcap_t* handle;
 
     // Open the interface for packet capturing
-    handle = pcap_open_live("wlp0s20f3", BUFSIZ, 1, 1000, errbuf);
-    if (handle == nullptr) {
-        std::cerr << "Error opening interface: " << errbuf << std::endl;
-        return -1;
+    if (not (handle = pcap_open_live(interface, BUFSIZ, 1, 1000, errbuf)){
+        std::cerr << "Error opening interface %s: " << interface << errbuf << std::endl;
     }
+    return handle;
+}
 
+/*------------------------------------------------------------------------------------*/
+pcap_dumper_t* getPcapDumper(){
+    return pcapDumper;
+}
 
-///////////////////////////////////////////////////////////////
-      // Open a pcap file for writing
-    if (pcapDumper == nullptr) {
-        std::cerr << "Error opening output file." << std::endl;
-        pcap_close(handle);
-        return -1;
-    }
+/*------------------------------------------------------------------------------------*/
+void setPcapDumper(pcap_dumper_t* pcap){
+    pcapDumper = pcap;
+}
 
-/////////////////////////////////////////////////////////////////////////
+/*------------------------------------------------------------------------------------*/
+int PacketCapture::capturePackets(pcap_t* handle, int delay, pcap_dumper_t* pcapDumper, char* interface) {    
+    // // Open a pcap file for writing
+    // if (pcapDumper == nullptr) {
+    //     std::cerr << "Error opening output file." << std::endl;
+    //     pcap_close(handle);
+    //     return -1;
+    // }
 
-    // Structure to pass delay and sqlite3Helper to packetHandler
-    PacketHandlerData handlerData = {delay, &sqlite3Helper, pcapDumper};
+    // // Structure to pass delay to packetHandler
+    // PacketHandlerData handlerData = {delay, pcapDumper};
 
-    // Start capturing packets                                    
-    pcap_loop(handle, 0, packetHandler, reinterpret_cast<u_char*>(&handlerData)); // Pass pcapDumper
+    // Start capturing packets           
+//int pcap_loop(pcap_t *p, int cnt, pcap_handler callback, u_char *user);                   
+    pcap_loop(handle, 1, packetHandler, reinterpret_cast<u_char*>(&handlerData)); // Pass pcapDumper
 
     // Close the interface
     pcap_close(handle);
     return 0;
 }
+
+
+// int PacketCapture::capturePackets(pcap_t* handle, int delay, pcap_dumper_t* pcapDumper, char* interface) {    
+//     // Open a pcap file for writing
+//     if (pcapDumper == nullptr) {
+//         std::cerr << "Error opening output file." << std::endl;
+//         pcap_close(handle);
+//         return -1;
+//     }
+
+//     // Structure to pass delay to packetHandler
+//     PacketHandlerData handlerData = {delay, pcapDumper};
+
+//     // Start capturing packets                                    
+//     pcap_loop(handle, 1, packetHandler, reinterpret_cast<u_char*>(&handlerData)); // Pass pcapDumper
+
+//     // Close the interface
+//     pcap_close(handle);
+//     return 0;
+// }
+
+
+
+void PacketCapture::eth_handle(u_char *userData, const struct pcap_pkthdr* pkthdr, const u_char* packetData) {
+    PacketHandlerData* handlerData = reinterpret_cast<PacketHandlerData*>(userData);
+    int delay = handlerData->delay;
+
+    // // Retrieve Sqlite3Helper object
+    // Sqlite3Helper* sqlite3Helper = handlerData->sqlite3Helper;
+
+    // Create an instance of SplitPacket to process the packet.
+    SplitPacket splitPacket;
+
+    // Write the packet to the pcap file
+     if (handlerData->pcapDumper != nullptr) {
+        pcap_dump(reinterpret_cast<u_char*>(handlerData->pcapDumper), pkthdr, packetData);
+    }
+
+    // Process the captured packet using SplitPacket to process the captured packet.
+    splitPacket.processPacket(packetData, pkthdr->len);
+
+
+      // Insert data into database (Extracts Ethernet and IPv4 data from the packet. Initializes vectors for TCP, UDP, ICMP, and GTP-U data)
+    std::vector<std::string> ethernetData = splitPacket.extractEthernetData(reinterpret_cast<const struct ethhdr*>(packetData));
+    std::vector<std::string> ipv4Data = splitPacket.extractIPv4Data(reinterpret_cast<const struct iphdr*>(packetData + sizeof(struct ethhdr)));
+    std::vector<std::string> tcpData, udpData, icmpData;// icmpv6Data, gtpuData, dnsData, igmpData, nbnsData, mdnsData, smbData, quicData;
+
+    // Checks if IPv4 data is empty. If so, exit the function because the packet is not an IPv4 packet.
+    if (ipv4Data.empty()) {
+        // Handle error or non-IPv4 packets
+        return;
+    }
+
+      // Extract header length
+    size_t headerLength = sizeof(struct ethhdr) + (ipv4Data[1].size() * sizeof(char));
+
+    // Use switch-case for protocol checks
+    std::string protocolString = ipv4Data[7]; //extract the string representing the protocol encapsulated in the IPv4 packet.
+    if (std::all_of(protocolString.begin(), protocolString.end(), ::isdigit)) {//check if all characters in protocol String are digits to ensure the string represents a valid protocol number
+        int protocol = std::stoi(protocolString);
+        switch (protocol) {
+            case IPPROTO_TCP:
+                std::cout << "Inserting TCP header data..." << std::endl;
+                tcpData = splitPacket.extractTCPData(reinterpret_cast<const struct tcphdr*>(packetData + headerLength));
+                if (tcpFields.size() == tcpData.size()) {
+                    sqlite3Helper->insert_into_table("tcp_header", tcpFields, tcpData);
+                } else {
+                    std::cerr << "Error: Number of TCP fields doesn't match number of values!" << std::endl;
+                }
+                break;
+            case IPPROTO_UDP:
+                std::cout << "Inserting UDP header data..." << std::endl;
+                udpData = splitPacket.extractUDPData(reinterpret_cast<const struct udphdr*>(packetData + headerLength), pkthdr->len - headerLength);
+
+                if (udpFields.size() == udpData.size()) {
+                    sqlite3Helper->insert_into_table("udp_header", udpFields, udpData);
+                } else {
+                    std::cerr << "Error: Number of UDP fields doesn't match number of values!" << std::endl;
+                }
+                break;
+            case IPPROTO_ICMP:
+                std::cout << "Inserting ICMP header data..." << std::endl;
+                icmpData = splitPacket.extractICMPData(reinterpret_cast<const struct icmphdr*>(packetData + headerLength));
+                if (icmpFields.size() == icmpData.size()) {
+                    sqlite3Helper->insert_into_table("icmp_header", icmpFields, icmpData);
+                } else {
+                    std::cerr << "Error: Number of ICMP fields doesn't match number of values!" << std::endl;
+                }
+                break;
+            // Add cases for other protocols as needed
+        }
+    }
+ // Insert Ethernet and IPv4 data into the database
+    if (ethFields.size() == ethernetData.size()) {
+        sqlite3Helper->insert_into_table("eth_header", ethFields, ethernetData);
+    } else {
+        std::cerr << "Error: Number of Ethernet fields doesn't match number of values!" << std::endl;
+    }
+
+    if (ipv4Fields.size() == ipv4Data.size()) {
+        sqlite3Helper->insert_into_table("ipv4_header", ipv4Fields, ipv4Data);
+    } else {
+        std::cerr << "Error: Number of IPv4 fields doesn't match number of values!" << std::endl;
+    }
+}
+
+
+
+
+
+
 
 void PacketCapture::packetHandler(u_char *userData, const struct pcap_pkthdr* pkthdr, const u_char* packetData) {
     PacketHandlerData* handlerData = reinterpret_cast<PacketHandlerData*>(userData);
@@ -76,8 +197,8 @@ void PacketCapture::packetHandler(u_char *userData, const struct pcap_pkthdr* pk
     size_t headerLength = sizeof(struct ethhdr) + (ipv4Data[1].size() * sizeof(char));
 
     // Use switch-case for protocol checks
-    std::string protocolString = ipv4Data[7];
-    if (std::all_of(protocolString.begin(), protocolString.end(), ::isdigit)) {
+    std::string protocolString = ipv4Data[7]; //extract the string representing the protocol encapsulated in the IPv4 packet.
+    if (std::all_of(protocolString.begin(), protocolString.end(), ::isdigit)) {//check if all characters in protocol String are digits to ensure the string represents a valid protocol number
         int protocol = std::stoi(protocolString);
         switch (protocol) {
             case IPPROTO_TCP:

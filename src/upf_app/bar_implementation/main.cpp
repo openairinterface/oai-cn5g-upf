@@ -5,6 +5,45 @@
 #include <pcap.h>
 
 int main() {
+    pcap_t* handle = nullptr;
+    const char * interface = "wlp0s20f3";
+
+    /*
+    *
+    * 1. Capture Traffic
+    * 
+    */
+    PacketCapture packetCapture = new PacketCapture();
+    handle = packetCapture.open_pcap(&interface);
+    int rc = packetCapture.capturePackets();
+
+
+
+    /*
+    *
+    * 2. Split Traffic
+    * 
+    */
+    PacketSplit packetSplit = new PacketSplit();
+
+
+
+
+    /*
+    *
+    * 3. Create DB and Tables
+    * 
+    */ 
+
+
+
+
+
+
+
+
+
+
     // Get the unique instance of the database manager
     DatabaseManager& dbManager = DatabaseManager::getInstance();
     
@@ -12,10 +51,9 @@ int main() {
     std::unique_ptr<Sqlite3Helper> sqlite3Helper = dbManager.createSqlite3Helper();
 
     std::string db_name = "Buffer";
-    int rc = 0;
 
     // Create the database
-    rc = sqlite3Helper->create_database(db_name);  
+    int rc = sqlite3Helper->create_database(db_name);  
 
      // Create tables
          if (!rc) {
@@ -50,45 +88,6 @@ int main() {
         }
     }
          
-    
-     // Create the IPv4 Header table
-    //rc = sqlite3Helper->create_table("ipv4_header", ipv4Fields);
-    // Create the TCP Header table
-    //if (!rc)
-        //rc = sqlite3Helper->create_table("tcp_header", tcpFields);
-    // Create the UDP Header table
-    //if (!rc) 
-        //rc = sqlite3Helper->create_table("udp_header", udpFields);
-    // Create the ICMP Header table
-    //if (!rc)
-        // rc = sqlite3Helper->create_table("icmp_header", icmpFields);
-    // Create the ICMPv6 Header table
-    //if (!rc)
-        //rc = sqlite3Helper->create_table("icmpv6_header", icmpv6Fields);
-    // Create the DNS Header table
-    //if (!rc)
-        //rc = sqlite3Helper->create_table("dns_header", dnsFields);
-    // Create the IGMP Header table
-    //if (!rc)
-        //rc = sqlite3Helper->create_table("igmp_header", igmpFields);
-    // Create the NBNS Header table
-    //if (!rc)
-        //rc = sqlite3Helper->create_table("nbns_header", nbnsFields);
-    // Create the mDNS Header table
-    //if (!rc)
-        //rc = sqlite3Helper->create_table("mdns_header", mdnsFields);
-    // Create the SMB Header table
-    //if (!rc)
-        //rc = sqlite3Helper->create_table("smb_header", smbFields);
-    // Create the QUIC Header table
-    //if (!rc)
-        //rc = sqlite3Helper->create_table("quic_header", quicFields);
-    //Create the GTPU table
-    //if(!rc) 
-        //rc = sqlite3Helper->create_table("gtpu", gtpuFields);
-    // Create the Data table
-   // if (!rc)
-        //rc = sqlite3Helper->create_table("data_header", dataFields);
 
     // Check if tables are created successfully
     if (rc) {

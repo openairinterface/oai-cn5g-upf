@@ -5,18 +5,27 @@
 #include <pcap.h>
 #include <iostream>
 
-struct PacketHandlerData {
-    int delay;
-    Sqlite3Helper* sqlite3Helper;//Pointer to a Sqlite3Helper object to allow the package management function to insert data into the database.
-    pcap_dumper_t* pcapDumper;
-};
+// struct PacketHandlerData {
+//     int delay;
+//     //Sqlite3Helper* sqlite3Helper;//Pointer to a Sqlite3Helper object to allow the package management function to insert data into the database.
+//     pcap_dumper_t* pcapDumper;
+// };
 
 class PacketCapture {
 public:
-    int capturePackets(int delay, Sqlite3Helper& sqlite3Helper, pcap_dumper_t* pcapDumper); // Reference to a Sqlite3Helper object to interact with the database.
+    int capturePackets(int delay, pcap_dumper_t* pcapDumper); // Reference to a Sqlite3Helper object to interact with the database.
+    
+    pcap_dumper_t* getPcapDumper();
+    
+    
+    pcap_dumper_t* pcapDumper;
+
 
 private:
     static void packetHandler(u_char *userData, const struct pcap_pkthdr* pkthdr, const u_char* packetData);
+    
+    int delay;
+    
 };
 
 #endif // PACKET_CAPTURE_HPP

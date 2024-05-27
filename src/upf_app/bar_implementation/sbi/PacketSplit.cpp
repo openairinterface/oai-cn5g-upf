@@ -7,10 +7,10 @@
 // Extract Ethernet header information
 std::vector<std::string> SplitPacket::extractEthernetData(const struct ethhdr* ethernetHeader) {
     std::vector<std::string> ethernetData;
-    ethernetData.push_back("Source MAC: " + std::string(ether_ntoa((struct ether_addr*)&ethernetHeader->h_source)));
-    ethernetData.push_back("Destination MAC: " + std::string(ether_ntoa((struct ether_addr*)&ethernetHeader->h_dest)));
-    ethernetData.push_back("Ether Type: " + std::to_string(ntohs(ethernetHeader->h_proto)));
-    // Affichage direct des valeurs
+    ethernetData.push_back(std::string(ether_ntoa((struct ether_addr*)&ethernetHeader->h_source)));
+    ethernetData.push_back(std::string(ether_ntoa((struct ether_addr*)&ethernetHeader->h_dest)));
+    ethernetData.push_back(std::to_string(ntohs(ethernetHeader->h_proto)));
+    // // Displaying fields
     std::cout << "Ethernet Data:" << std::endl;
     for (const std::string& data : ethernetData) {
         std::cout << data << std::endl;
@@ -34,6 +34,11 @@ std::vector<std::string> SplitPacket::extractIPv4Data(const struct iphdr* ipHead
     ipv4Data.push_back("Header Checksum: " + std::to_string(ntohs(ipHeader->check)));
     ipv4Data.push_back("Source IP: " + std::string(inet_ntoa(*(struct in_addr*)&(ipHeader->saddr))));
     ipv4Data.push_back("Destination IP: " + std::string(inet_ntoa(*(struct in_addr*)&(ipHeader->daddr))));
+    // // Displaying fields
+    std::cout << "IPv4 Data:" << std::endl;
+    for (const std::string& data : ipv4Data) {
+        std::cout << data << std::endl;
+    }
     return ipv4Data;
 }
 
@@ -54,6 +59,11 @@ std::vector<std::string> SplitPacket::extractTCPData(const struct tcphdr* tcpHea
     if (tcpHeader->doff > 5) {
         unsigned int optionsSize = (tcpHeader->doff - 5) * 4;
         tcpData.push_back("TCP Options Size: " + std::to_string(optionsSize) + " bytes");
+     }
+    // // Displaying fields
+    std::cout << "TCP Data:" << std::endl;
+    for (const std::string& data : tcpData) {
+        std::cout << data << std::endl;
     }
     return tcpData;
 }
@@ -67,15 +77,24 @@ std::vector<std::string> SplitPacket::extractUDPData(const struct udphdr* udpHea
     udpData.push_back("Checksum: " + std::to_string(ntohs(udpHeader->check)));
     int udpPayloadLength = packetLength - sizeof(struct ethhdr) - sizeof(struct iphdr) - sizeof(struct udphdr);
     udpData.push_back("UDP Payload Length: " + std::to_string(udpPayloadLength) + " bytes");
+    // // Displaying fields
+    std::cout << "UDP Data:" << std::endl;
+    for (const std::string& data : udpData) {
+        std::cout << data << std::endl;
+    }
     return udpData;
 }
-
 // Extract ICMP header information
 std::vector<std::string> SplitPacket::extractICMPData(const struct icmphdr* icmpHeader) {
     std::vector<std::string> icmpData;
     icmpData.push_back("Type: " + std::to_string((unsigned int)icmpHeader->type));
     icmpData.push_back("Code: " + std::to_string((unsigned int)icmpHeader->code));
     icmpData.push_back("Checksum: " + std::to_string(ntohs(icmpHeader->checksum)));
+    // // Displaying fields
+    std::cout << "ICMP Data:" << std::endl;
+    for (const std::string& data : icmpData) {
+        std::cout << data << std::endl;
+    }
     return icmpData;
 }
 
