@@ -203,7 +203,7 @@ std::vector<std::string> SplitPacket::extractICMPData(const struct icmphdr* icmp
     //gtpuData.push_back("Length: " + std::to_string(ntohs(*(uint16_t*)&packetData[offset + 2])));
     //gtpuData.push_back("TEID: " + std::to_string(ntohl(*(uint32_t*)&packetData[offset + 4])));
     //return gtpuData;
-//}
+///}
 
 void SplitPacket::processPacket(const u_char* packetData, int packetLength) {
     struct ethhdr* ethernetHeader = (struct ethhdr*)packetData;

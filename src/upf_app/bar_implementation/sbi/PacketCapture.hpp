@@ -9,7 +9,7 @@
 //     int delay;
 //     //Sqlite3Helper* sqlite3Helper;//Pointer to a Sqlite3Helper object to allow the package management function to insert data into the database.
 //     pcap_dumper_t* pcapDumper;
-// };
+/// };
 
 class PacketCapture {
 public:

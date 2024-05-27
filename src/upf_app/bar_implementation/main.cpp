@@ -21,7 +21,7 @@ int main() {
 
     /*
     *
-    * 2. Split Traffic
+    * 2. Split Traffic 
     * 
     */
     PacketSplit packetSplit = new PacketSplit();
@@ -44,7 +44,7 @@ int main() {
 
 
 
-    // Get the unique instance of the database manager
+    /// Get the unique instance of the database manager
     DatabaseManager& dbManager = DatabaseManager::getInstance();
     
     // Get a reference to the instance of Sqlite3Helper
