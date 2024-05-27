@@ -73,24 +73,36 @@ std::unique_ptr<upf_config_yaml> upf_cfg_yaml = nullptr;
 
 //------------------------------------------------------------------------------
 void my_app_signal_handler(int s) {
-  std::cout << "Caught signal " << s << std::endl;
-  Logger::system().startup("exiting");
+  Logger::system().info("Caught signal %d", s);
+
   if (upf_nrf_inst) {
     upf_nrf_inst->deregister_to_nrf();
   }
   itti_inst->send_terminate_msg(TASK_UPF_APP);
   itti_inst->wait_tasks_end();
-  std::cout << "Freeing Allocated memory..." << std::endl;
-  if (async_shell_cmd_inst) delete async_shell_cmd_inst;
-  async_shell_cmd_inst = nullptr;
-  std::cout << "Async Shell CMD memory done." << std::endl;
-  if (itti_inst) delete itti_inst;
-  itti_inst = nullptr;
-  std::cout << "ITTI memory done." << std::endl;
-  if (upf_app_inst) delete upf_app_inst;
-  upf_app_inst = nullptr;
-  std::cout << "UPF APP memory done." << std::endl;
-  std::cout << "Freeing Allocated memory done" << std::endl;
+
+  Logger::system().debug("Freeing Allocated memory...");
+
+  if (async_shell_cmd_inst) {
+    delete async_shell_cmd_inst;
+    async_shell_cmd_inst = nullptr;
+    Logger::system().debug("Async Shell CMD memory done.");
+  }
+
+  if (upf_app_inst) {
+    delete upf_app_inst;
+    upf_app_inst = nullptr;
+    Logger::system().debug("UPF APP memory done.");
+  }
+
+  if (itti_inst) {
+    delete itti_inst;
+    itti_inst = nullptr;
+    Logger::system().debug("ITTI memory done.");
+  }
+
+  Logger::system().info("Freeing Allocated memory done.");
+  Logger::system().info("Bye");
   exit(0);
 }
 //------------------------------------------------------------------------------
