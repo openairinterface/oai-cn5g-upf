@@ -60,6 +60,7 @@ upf_config upf_cfg;
 boost::asio::io_service io_service;
 // TODO These global variables are ugly :| -> refactor together with nrf client
 extern upf_nrf* upf_nrf_inst;
+bool single_teardown_call;
 
 #ifndef N3_IF_NAME
 #define N3_IF_NAME upf_cfg.n3.if_name
@@ -73,6 +74,10 @@ std::unique_ptr<upf_config_yaml> upf_cfg_yaml = nullptr;
 
 //------------------------------------------------------------------------------
 void my_app_signal_handler(int s) {
+  if (single_teardown_call) {
+    return;
+  }
+  single_teardown_call = true;
   // Setting log level arbitrarly to debug to show the whole
   // shutdown procedure in the logs even in case of off-logging
   Logger::set_level(spdlog::level::debug);
@@ -179,6 +184,7 @@ int main(int argc, char** argv) {
 
   std::signal(SIGTERM, my_app_signal_handler);
   std::signal(SIGINT, my_app_signal_handler);
+  single_teardown_call = false;
 
   // Config
   std::string conf_file_name = Options::getlibconfigConfig();

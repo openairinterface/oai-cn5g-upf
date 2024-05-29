@@ -424,7 +424,8 @@ pfcp_switch::pfcp_switch()
   free_pool_     = new folly::MPMCQueue<iovec_q_item_t*>(num_blocks);
   work_pool_     = new folly::MPMCQueue<iovec_q_item_t*>(num_blocks);
 
-  socks_r_ptr = new int[16];
+  socks_r_ptr      = new int[16];
+  prThreadToCancel = (pthread_t) 0;
 
   recv_buffer_alloc_ = (char*) calloc(num_blocks, PFCP_SWITCH_RECV_BUFFER_SIZE);
 
@@ -460,23 +461,25 @@ pfcp_switch::~pfcp_switch() {
   for (int index = 0; index < upf_cfg.pdns.size(); index++) {
     shutdown(socks_r_ptr[index], SHUT_RDWR);
   }
-  Logger::pfcp_switch().debug(
-      "Cancelling pdn read thread : 0x%08x", prThreadToCancel);
-  res = pthread_cancel(prThreadToCancel);
-  if (res != 0) {
-    Logger::pfcp_switch().error("could not cancel pdn_read thread");
+  if (prThreadToCancel != ((pthread_t) 0)) {
+    Logger::pfcp_switch().debug(
+        "Cancelling pdn read thread : 0x%08x", prThreadToCancel);
+    res = pthread_cancel(prThreadToCancel);
+    if (res != 0) {
+      Logger::pfcp_switch().error("could not cancel pdn_read thread");
+    }
+    // Stopping the pdn_worker thread
+    terminatePW_        = true;
+    iovec_q_item_t* iov = nullptr;
+    work_pool_->blockingWrite(iov);
+    while (terminatePW_) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    Logger::pfcp_switch().debug("Joining all reading threads");
+    prThread_.join();
+    Logger::pfcp_switch().debug("Joining pdn_worker thread");
+    pwThread_.join();
   }
-  // Stopping the pdn_worker thread
-  terminatePW_        = true;
-  iovec_q_item_t* iov = nullptr;
-  work_pool_->blockingWrite(iov);
-  while (terminatePW_) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  }
-  Logger::pfcp_switch().debug("Joining all reading threads");
-  prThread_.join();
-  Logger::pfcp_switch().debug("Joining pdn_worker thread");
-  pwThread_.join();
   Logger::pfcp_switch().info("Deleting arrays");
   delete[] socks_r_ptr;
   Logger::pfcp_switch().info("Done with pfcp_switch destructor.");
