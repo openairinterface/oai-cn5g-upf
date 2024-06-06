@@ -115,9 +115,11 @@ upf_nrf::upf_nrf() {
     Logger::upf_app().error("Cannot create task TASK_UPF_NRF");
     throw std::runtime_error("Cannot create task TASK_UPF_NRF");
   }
+  // Generate UPF profile
+  generate_upf_profile();
 
-  // Register to NRF
-  register_to_nrf();
+  // Register to NRF if needed
+  if (upf_cfg.register_nrf) register_to_nrf();
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -167,7 +169,7 @@ bool upf_nrf::send_register_nf_instance(const std::string& url) {
 }
 
 //-----------------------------------------------------------------------------------------------------
-void upf_nrf::send_update_nf_instance(
+bool upf_nrf::send_update_nf_instance(
     const std::string& url, const nlohmann::json& data) {
   Logger::upf_app().info("Send NF Update to NRF");
 
@@ -183,9 +185,13 @@ void upf_nrf::send_update_nf_instance(
   if ((http_code == HTTP_STATUS_CODE_200_OK) or
       (http_code == HTTP_STATUS_CODE_204_NO_CONTENT)) {
     Logger::upf_app().info("Got successful response from NRF");
+    return true;
   } else {
     Logger::upf_app().warn("Could not get response from NRF");
+    return false;
   }
+
+  return false;
 }
 
 //-----------------------------------------------------------------------------------------------------
@@ -233,9 +239,6 @@ void upf_nrf::generate_upf_profile() {
 
 //---------------------------------------------------------------------------------------------
 void upf_nrf::register_to_nrf() {
-  // Create a NF profile for this instance
-  generate_upf_profile();
-  // Then register to NRF
   std::string nrf_api_root = {};
   get_nrf_api_root(nrf_api_root);
   if (send_register_nf_instance(
@@ -287,16 +290,19 @@ void upf_nrf::timer_nrf_heartbeat_timeout(
   std::string nrf_api_root = {};
   get_nrf_api_root(nrf_api_root);
 
-  Logger::upf_app().debug(
-      "Set a timer to the next Heart-beat (%d)",
-      upf_profile.get_nf_heartBeat_timer());
-  timer_nrf_heartbeat = itti_inst->timer_setup(
-      upf_profile.get_nf_heartBeat_timer(), 0, TASK_UPF_NRF,
-      TASK_UPF_NRF_TIMEOUT_NRF_HEARTBEAT,
-      0);  // TODO arg2_user
-
-  send_update_nf_instance(
-      nrf_api_root + NNRF_NF_REGISTER_URL + upf_instance_id, json_data);
+  if (send_update_nf_instance(
+          nrf_api_root + NNRF_NF_REGISTER_URL + upf_instance_id, json_data)) {
+    Logger::upf_app().debug(
+        "Set a timer to the next Heart-beat (%d)",
+        upf_profile.get_nf_heartBeat_timer());
+    timer_nrf_heartbeat = itti_inst->timer_setup(
+        upf_profile.get_nf_heartBeat_timer(), 0, TASK_UPF_NRF,
+        TASK_UPF_NRF_TIMEOUT_NRF_HEARTBEAT,
+        0);  // TODO arg2_user
+  } else {
+    // Try to register again
+    register_to_nrf();
+  }
 }
 
 //---------------------------------------------------------------------------------------------
