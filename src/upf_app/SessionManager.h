@@ -132,12 +132,52 @@ class SessionManager {
   void updateBPFSessionDL(
       std::shared_ptr<pfcp::pfcp_session> pSession,
       std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl);
+ 
+  /*****************************************************************************************************************/
+    void processPDRDetails(
+    std::shared_ptr<pfcp::pfcp_session> pSession,
+    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedence,
+    int interfaceValue,
+    const std::string& direction);
 
-  /*---------------------------------------------------------------------------------------------------------------*/
-  bool extractPdiAndInterface(
-      std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi,
-      pfcp::source_interface_t& sourceInterface,
-      pfcp::ue_ip_address_t& ueIpAddress);
+  /*****************************************************************************************************************/
+  /**
+   * @brief Process PDRs to populate uplink and downlink vectors
+   * @param std::shared_ptr<pfcp::pfcp_session>
+   */
+  void processPDRs(std::shared_ptr<pfcp::pfcp_session> pSession_establishment);
+
+  /*****************************************************************************************************************/
+  /**
+   * @brief Sort uplink and downlink vectors
+   * @param std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_uplink
+   * @param std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_downlink
+   */
+  void sortPDRs(
+      std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_uplink,
+      std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_downlink);
+
+  /*****************************************************************************************************************/
+  /**
+   * @brief Create BPF session for specific direction
+   * @param std::shared_ptr<pfcp::pfcp_session> pSession_establishment
+   * @param std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs
+   * @param const std::string& direction
+   */
+  void createSessionDirection(
+      std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
+      std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs,
+      const std::string& direction);
+  
+  /*****************************************************************************************************************/
+  bool extractPdi(std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi);
+
+  /*****************************************************************************************************************/
+  bool extractSourceIface(
+      pfcp::pdi& pdi, pfcp::source_interface_t& sourceInterface);
+
+  /*****************************************************************************************************************/
+  bool extractUeIpv4(pfcp::pdi& pdi, pfcp::ue_ip_address_t& ueIpAddress);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   bool extractFar(
@@ -145,8 +185,8 @@ class SessionManager {
       std::shared_ptr<pfcp::pfcp_session> session,
       std::shared_ptr<pfcp::pfcp_far>& outFar);
 
-  /*---------------------------------------------------------------------------------------------------------------*/
-  bool extractForwardingParameters(
+  /*****************************************************************************************************************/
+  bool extractForwardingParams(
       std::shared_ptr<pfcp::pfcp_far> far,
       pfcp::forwarding_parameters& forwardingParams);
 
