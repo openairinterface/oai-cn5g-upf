@@ -17,13 +17,13 @@
 using namespace oai::config;
 extern upf_config upf_cfg;
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 SessionManager::SessionManager() {}
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 SessionManager::~SessionManager() {}
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 // Helper function to extract PDI and source interface
 bool SessionManager::extractPdiAndInterface(
     std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi,
@@ -32,7 +32,7 @@ bool SessionManager::extractPdiAndInterface(
   return (pdr->get(pdi) && pdi.get(sourceInterface) && pdi.get(ueIpAddress));
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 // Helper function to extract FAR
 bool SessionManager::extractFar(
     std::shared_ptr<pfcp::pfcp_pdr> pdr,
@@ -45,7 +45,7 @@ bool SessionManager::extractFar(
   return false;
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 // Helper function to extract Forwarding Parameters
 bool SessionManager::extractForwardingParameters(
     std::shared_ptr<pfcp::pfcp_far> far,
@@ -53,7 +53,7 @@ bool SessionManager::extractForwardingParameters(
   return far->get(forwardingParams);
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 // Helper function to find the Uplink TEID to update
 uint32_t SessionManager::findUplinkTeid(
     uint32_t seid,
@@ -84,14 +84,14 @@ uint32_t SessionManager::findUplinkTeid(
   return teidToUpdate;
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 void SessionManager::createSession(std::shared_ptr<SessionBpf> pSession) {
   SessionProgramManager::getInstance().create(pSession->getSeid());
   Logger::upf_app().debug(
       "Session %d Has Been Cretead Successfully", pSession->getSeid());
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 void SessionManager::createBPFSession(
     std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
     itti_n4_session_establishment_request* est_req,
@@ -176,7 +176,7 @@ void SessionManager::createBPFSession(
   mSeidToSession[pSession_establishment->get_up_seid()] =
       pSession_establishment;
 }
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 void SessionManager::createBPFSessionUL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl) {
@@ -211,7 +211,8 @@ void SessionManager::createBPFSessionUL(
       ueIpAddress.ipv4_address.s_addr, pFar, false, 0);
 }
 
-/*****************************************************************************************************************/
+
+/*---------------------------------------------------------------------------------------------------------------*/
 void SessionManager::createBPFSessionDL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl) {
@@ -247,7 +248,7 @@ void SessionManager::createBPFSessionDL(
       ueIpAddress.ipv4_address.s_addr, pFar, false, 0);
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 void SessionManager::updateBPFSession(
     std::shared_ptr<pfcp::pfcp_session> pSession,
     itti_n4_session_establishment_request* est_req,
@@ -329,7 +330,7 @@ void SessionManager::updateBPFSession(
   }
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 void SessionManager::updateBPFSessionUL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl) {
@@ -363,7 +364,7 @@ void SessionManager::updateBPFSessionUL(
   Logger::upf_app().warn("TODO: update Uplink PDRs ...");
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 
 // Function to update the Downlink Direction of a session
 void SessionManager::updateBPFSessionDL(
@@ -420,7 +421,7 @@ void SessionManager::updateBPFSessionDL(
   }
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 void SessionManager::removeBPFSession(
     std::shared_ptr<pfcp::pfcp_session> pSession,
     itti_n4_session_establishment_request* est_req,
@@ -438,7 +439,7 @@ void SessionManager::removeBPFSession(
   Logger::upf_app().debug("Session 0x%x Has Been Removed Successfully", seid);
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 bool SessionManager::comparePDR(
     const std::shared_ptr<pfcp::pfcp_pdr>& pFirst,
     const std::shared_ptr<pfcp::pfcp_pdr>& pSecond) {
@@ -449,10 +450,10 @@ bool SessionManager::comparePDR(
   return precedenceFirst.precedence < precedenceSecond.precedence;
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 void SessionManager::removeSession(uint64_t seid) {
   SessionProgramManager::getInstance().remove(seid);
   Logger::upf_app().debug("Session %d has been removed", seid);
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/

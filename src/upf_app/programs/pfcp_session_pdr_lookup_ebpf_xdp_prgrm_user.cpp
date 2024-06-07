@@ -7,7 +7,7 @@
 #include <wrappers/BPFMaps.h>
 #include <wrappers/BPFMap.hpp>
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 PFCP_Session_PDR_LookupProgram::PFCP_Session_PDR_LookupProgram(
     const std::string& gtpInterface, const std::string& udpInterface)
     : mGTPInterface(gtpInterface), mUDPInterface(udpInterface) {
@@ -18,10 +18,10 @@ PFCP_Session_PDR_LookupProgram::PFCP_Session_PDR_LookupProgram(
       pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c__destroy);
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 PFCP_Session_PDR_LookupProgram::~PFCP_Session_PDR_LookupProgram() {}
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 // TODO: Pass configuration throught args.
 void PFCP_Session_PDR_LookupProgram::setup() {
   mpLifeCycle->open();
@@ -30,57 +30,57 @@ void PFCP_Session_PDR_LookupProgram::setup() {
   mpLifeCycle->attach();
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_PDR_LookupProgram::tearDown() {
   mpLifeCycle->tearDown();
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 int PFCP_Session_PDR_LookupProgram::getUplinkFileDescriptor() const {
   return bpf_program__fd(
       mpLifeCycle->getBPFSkeleton()->progs.uplink_entry_point);
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 int PFCP_Session_PDR_LookupProgram::getDownlinkFileDescriptor() const {
   return bpf_program__fd(
       mpLifeCycle->getBPFSkeleton()->progs.downlink_entry_point);
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getFARMap() const {
   return mpFARMap;
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getUplinkPDRsMap()
     const {
   return mpUplinkPDRsMap;
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getDownlinkPDRsMap()
     const {
   return mpDownlinkPDRsMap;
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getCounterMap() const {
   return mpCounterMap;
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getEgressInterfaceMap()
     const {
   return mpEgressInterfaceMap;
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_PDR_LookupProgram::getArpTableMap() const {
   return mpArpTableMap;
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_PDR_LookupProgram::initializeMaps() {
   // Store all maps available in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
@@ -95,4 +95,4 @@ void PFCP_Session_PDR_LookupProgram::initializeMaps() {
       std::make_shared<BPFMap>(mpMaps->getMap("m_redirect_interfaces"));
   mpArpTableMap = std::make_shared<BPFMap>(mpMaps->getMap("m_arp_table"));
 }
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/

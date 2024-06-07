@@ -86,6 +86,10 @@ RUN apt-get update && \
       iproute2 \
       ethtool \
       arping \
+      libnl-3-dev \
+      libnl-genl-3-dev \
+      libnl-route-3-dev \
+      libnl-nf-3-dev \
       sudo \
       iptables \
       netbase \

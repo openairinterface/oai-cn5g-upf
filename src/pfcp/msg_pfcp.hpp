@@ -6528,6 +6528,17 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
     return false;
   }
 
+    bool get(const pfcp::qer_id_t& fid, pfcp::create_qer& create_qer) const {
+    for (auto it : create_qers) {
+      pfcp::qer_id_t qer_id = {};
+      if ((it.get(qer_id)) && (fid.qer_id == qer_id.qer_id)) {
+        create_qer = it;
+        return true;
+      }
+    }
+    return false;
+  }
+
   void set(const pfcp::node_id_t& v) {
     node_id.first  = true;
     node_id.second = v;

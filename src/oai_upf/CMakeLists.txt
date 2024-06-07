@@ -256,6 +256,15 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
 
+
+set(CMAKE_MODULE_PATH "${SRC_TOP_DIR}/upf_app/cmake" "${CMAKE_MODULE_PATH}")
+include(FindPkgConfig)
+find_package (LibNL REQUIRED)
+include(${SRC_TOP_DIR}/upf_app/cmake/FindLibNL.cmake)
+
+
+
+
 ################################################################
 # Add sub modules
 ################################################################
@@ -289,6 +298,7 @@ include_directories(${SRC_TOP_DIR}/pfcp)
 include_directories(${SRC_TOP_DIR}/udp)
 include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
+include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/include)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 include_directories(${SRC_TOP_DIR}/upf_app/interfaces)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
@@ -310,6 +320,7 @@ IF(STATIC_LINKING)
   SET(ASAN asan)
 ENDIF(STATIC_LINKING)
 
+
 ## Common modules
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger/logger.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/config/config.cmake)
@@ -317,22 +328,25 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf/nrf_model.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model/common_model.cmake)
 
-# folly glog dl double-conversion for FB folly library
-target_link_libraries (upf 
-${ASAN}  -Wl,--start-group CN_UTILS
-${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so 
-APP
-SIMPLE_SWITCH
-interfaces
-UDP
-GTPV1U
-PFCP
-far_ebpf_xdp
-pfcp_session_pdr_lookup_ebpf_xdp
-pfcp_session_lookup_ebpf_xdp
-UPF_XDP
-gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group
-pthread m rt config++
-event boost_system curl yaml-cpp
-)
 
+# folly glog dl double-conversion for FB folly library
+
+target_link_libraries (upf 
+  ${ASAN}  -Wl,--start-group CN_UTILS
+  ${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so 
+  APP
+  SIMPLE_SWITCH
+  interfaces
+  UDP
+  GTPV1U
+  PFCP
+  far_ebpf_xdp
+  pfcp_session_pdr_lookup_ebpf_xdp
+  pfcp_session_lookup_ebpf_xdp
+  qer_ebpf_tc
+  UPF_XDP
+  UPF_TC
+  gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group
+  pthread m rt config++ 
+  event boost_system curl yaml-cpp
+)

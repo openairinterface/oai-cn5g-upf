@@ -61,15 +61,22 @@ boost::asio::io_service io_service;
 // TODO These global variables are ugly :| -> refactor together with nrf client
 extern upf_nrf* upf_nrf_inst;
 
+
 #ifndef N3_IF_NAME
 #define N3_IF_NAME upf_cfg.n3.if_name
-#endif
+#endif //N3_IF_NAME
 
 #ifndef N6_IF_NAME
 #define N6_IF_NAME upf_cfg.n6.if_name
-#endif
+#endif //N6_IF_NAME
+
+#ifndef HTB_SCHEDULER
+#define HTB_SCHEDULER "htb"
+#endif //HTB_SCHEDULER
+    
 
 std::unique_ptr<upf_config_yaml> upf_cfg_yaml = nullptr;
+
 
 //------------------------------------------------------------------------------
 void my_app_signal_handler(int s) {
@@ -93,6 +100,8 @@ void my_app_signal_handler(int s) {
   std::cout << "Freeing Allocated memory done" << std::endl;
   exit(0);
 }
+
+
 //------------------------------------------------------------------------------
 // We are doing a check to see if an existing process already runs this program.
 // We have seen that running at least twice this program in a container may lead
@@ -127,8 +136,10 @@ int my_check_redundant_process(char* exec_name) {
   delete[] cmd;
   return result;
 }
+
+
 //------------------------------------------------------------------------------
-void setup_bpf() {
+void setup_bpf(const char* qdisc_scheduler = nullptr) {
   std::shared_ptr<RulesUtilities> mpRulesFactory;
   mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
 
@@ -136,10 +147,16 @@ void setup_bpf() {
   string sUDPInterface = N6_IF_NAME;
   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
   Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
-  UserPlaneComponent::getInstance().setup(
-      mpRulesFactory, sGTPInterface, sUDPInterface);
-  // spSessionManager = UserPlaneComponent::getInstance().getSessionManager();
+  
+
+  if(qdisc_scheduler){
+    UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface, qdisc_scheduler);
+  } else {
+    UserPlaneComponent::getInstance().setup(mpRulesFactory, sGTPInterface, sUDPInterface);
+  }
 }
+
+
 //------------------------------------------------------------------------------
 int main(int argc, char** argv) {
   // Checking if another instance of UPF is running
@@ -205,7 +222,15 @@ int main(int argc, char** argv) {
   fflush(fp);
   fclose(fp);
 
-  if (upf_cfg.enable_bpf_datapath) setup_bpf();
+  if (upf_cfg.enable_bpf_datapath){
+    const char* qdisc_scheduler = nullptr;
+    
+    if(upf_cfg.enable_qos){
+      qdisc_scheduler = HTB_SCHEDULER;
+    } 
+    
+    setup_bpf(qdisc_scheduler);
+  }
   // once all udp servers initialized
   io_service.run();
 

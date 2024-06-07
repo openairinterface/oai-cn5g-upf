@@ -10,6 +10,7 @@
 #include <next_prog_rule_map.h>
 #include <next_prog_rule_key.h>
 #include "interfaces.h"
+#include "session_id.h"
 //#include "traffic_classification.h"
 // #include "session_mapping.h"
 // #include "ue_teid_qfi_matching.h"
@@ -19,7 +20,7 @@
 #define INTERFACE_ENTRIES_MAX 12
 #define MAX_UEs 100000
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 // Maps TEID to PFCP_Session_PDR_LookupProgram
 
 struct bpf_map_def SEC("maps") m_teid_session = {
@@ -32,7 +33,7 @@ struct bpf_map_def SEC("maps") m_teid_session = {
     .max_entries = MAX_LENGTH,  // 10000,  //!< TODO: Is it enought?
 };
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 // Maps UE IPv4 address to PFCP_Session_PDR_LookupProgram
 // FIXME: Select a primary key. We could use a hash value of the IP as a key.
 
@@ -46,7 +47,7 @@ struct bpf_map_def SEC("maps") m_ueip_session = {
     .max_entries = MAX_UEs,  //!< TODO: Is it enought?
 };
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 
 struct bpf_map_def SEC("maps") m_ue_ip_pdr = {
     .type        = BPF_MAP_TYPE_HASH,
@@ -55,7 +56,7 @@ struct bpf_map_def SEC("maps") m_ue_ip_pdr = {
     .max_entries = MAX_UEs,
 };
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 
 struct bpf_map_def SEC("maps") m_next_rule_prog_index = {
     .type        = BPF_MAP_TYPE_HASH,
@@ -64,7 +65,7 @@ struct bpf_map_def SEC("maps") m_next_rule_prog_index = {
     .max_entries = MAX_LENGTH,  // 10,
 };
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 
 struct bpf_map_def SEC("maps") m_upf_interfaces = {
     .type        = BPF_MAP_TYPE_HASH,
@@ -73,16 +74,24 @@ struct bpf_map_def SEC("maps") m_upf_interfaces = {
     .max_entries = INTERFACE_ENTRIES_MAX,  // 6,
 };
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
+
+// struct bpf_map_def SEC("maps") m_session_mapping = {
+//     .type        = BPF_MAP_TYPE_HASH,
+//     .key_size    = sizeof(u32),  // ue_ip_address
+//     .value_size  = sizeof(u32),  // teid_dl
+//     .max_entries = MAX_LENGTH,
+// };
 
 struct bpf_map_def SEC("maps") m_session_mapping = {
     .type        = BPF_MAP_TYPE_HASH,
     .key_size    = sizeof(u32),  // ue_ip_address
-    .value_size  = sizeof(u32),  // teid_dl
+    .value_size  = sizeof(struct session_id),  // < teid_ul, teid_dl, seid >
     .max_entries = MAX_LENGTH,
 };
 
-/*****************************************************************************************************************/
+
+/*---------------------------------------------------------------------------------------------------------------*/
 
 // struct bpf_map_def SEC("maps") m_traffic_classification = {
 //     .type        = BPF_MAP_TYPE_HASH,
@@ -91,7 +100,7 @@ struct bpf_map_def SEC("maps") m_session_mapping = {
 //     .max_entries = MAX_LENGTH,
 // };
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 
 // struct bpf_map_def SEC("maps") m_ue_qfi_teid = {
 //     .type        = BPF_MAP_TYPE_HASH,
@@ -100,7 +109,7 @@ struct bpf_map_def SEC("maps") m_session_mapping = {
 //     .max_entries = MAX_LENGTH,
 // };
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 
 // struct bpf_map_def SEC("maps") m_qos_flow_map = {
 //     .type        = BPF_MAP_TYPE_HASH,

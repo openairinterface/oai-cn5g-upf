@@ -31,7 +31,7 @@
 #include "xdp_stats_kern.h"
 #include "xdp_stats_kern_user.h"
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 
 static u32 tail_call_next_prog(
     struct xdp_md* p_ctx, teid_t_ teid, u8 source_value, u32 ipv4_address) {
@@ -61,18 +61,18 @@ static u32 tail_call_next_prog(
   return XDP_DROP;
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 
 static u32 handle_downlink_traffic(struct xdp_md* p_ctx, u32 ue_ip_address) {
-  // u32* teid_dl = NULL;
+  struct session_id* session = NULL;
+  session = bpf_map_lookup_elem(&m_session_mapping, &ue_ip_address); 
 
-  u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, &ue_ip_address);
-
-  if (teid_dl) {
+  if (session) {
+    u32 teid_dl = session->teid_dl;
     bpf_printk(
         "TEID downlink: 0x%x was found for UE IP: 0x%x", ue_ip_address,
-        *teid_dl);
-    tail_call_next_prog(p_ctx, *teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
+         teid_dl);
+    tail_call_next_prog(p_ctx, teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
   }
 
   bpf_debug("BPF tail call was not executed!");
@@ -80,7 +80,7 @@ static u32 handle_downlink_traffic(struct xdp_md* p_ctx, u32 ue_ip_address) {
   return XDP_PASS;
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 /**
  * Uplink SECTION.
  */
@@ -146,7 +146,7 @@ static u32 handle_uplink_traffic(struct xdp_md* p_ctx, struct udphdr* udph) {
   return XDP_PASS;
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 
 /**
  * IP SECTION.
@@ -187,7 +187,7 @@ static u32 ipv4_handle(struct xdp_md* p_ctx, struct iphdr* iph) {
   }
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 /**
  * ETHERNET SECTION.
  */
@@ -248,7 +248,7 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
   }
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
 SEC("xdp_entry_point")
 int entry_point(struct xdp_md* p_ctx) {
   bpf_debug("==========< PFCP Session Lookup >==========");
@@ -265,4 +265,4 @@ int entry_point(struct xdp_md* p_ctx) {
 
 char _license[] SEC("license") = "GPL";
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/

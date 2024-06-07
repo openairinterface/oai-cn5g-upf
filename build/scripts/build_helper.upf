@@ -24,6 +24,14 @@
 # author Laurent Thomas, Lionel GAUTHIER
 #
 #######################################
+
+GREEN='\033[0;32m'   # ANSI color code for green
+RED='\033[0;31m'     # ANSI color code for red
+YELLOW='\033[1;93m'  # ANSI color code for brighten yellow
+NC='\033[0m'         # ANSI color code to reset to default
+
+
+
 ################################
 # include helper functions
 ################################
@@ -36,6 +44,7 @@ source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.spdlog
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.yamlcpp
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.nlohmann
 
+CONFIG_FILE=$THIS_SCRIPT_PATH/../../etc/config.yaml
 # Get the kernel version
 KERNEL_VERSION=$(uname -r | cut -d'-' -f1,2 | cut -d'.' -f1,2)
 # The validated kernel versions for bpf-tool are between 5.7 and 5.15
@@ -53,9 +62,12 @@ elif [[ $MAJOR_VERSION -eq 5 ]]; then
   fi
 fi
 
+
+
 #-------------------------------------------------------------------------------
 install_libbpf_from_git() {
-  echo "Starting to install libbpf from source"
+  echo "Install libbpf from source"
+  echo ""
   if [ $1 -eq 0 ]; then
     read -p "Do you want to install libbpf ? <y/N> " prompt
     OPTION=""
@@ -119,9 +131,42 @@ install_libbpf_from_git() {
   return 0
 }
 
+
+#-------------------------------------------------------------------------------
+check_enable_bpf_datapath() {
+  # Parse the YAML Config file and check if enable_bpf_datapath is set to yes
+  enable_bpf_datapath=$(grep -A 3 "upf:" $CONFIG_FILE | grep "enable_bpf_datapath:" | awk '{print $2}')
+  if [ "$enable_bpf_datapath" == "yes" ]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+
+#-------------------------------------------------------------------------------
+check_enable_qos() {
+  # Parse the YAML Config file and check if enable_qos is set to yes
+  enable_qos=$(grep -A 3 "upf:" $CONFIG_FILE | grep "enable_qos:" | awk '{print $2}')
+  if [ "$enable_qos" == "yes" ]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+
+#-------------------------------------------------------------------------------
+install_netlink_libraries() {
+  echo ""
+  echo "Install Netlink libraries:"
+  apt-get install -y libnl-3-dev libnl-genl-3-dev libnl-route-3-dev libnl-nf-3-dev
+}
+
+
 #-------------------------------------------------------------------------------
 install_bpftool_from_git() {
-  echo "Starting to install bpftool from source"
+  echo "Install bpftool from source"
   if [ $1 -eq 0 ]; then
     read -p "Do you want to install bpftool ? <y/N> " prompt
     OPTION=""
@@ -180,6 +225,7 @@ install_bpftool_from_git() {
   echo "bpftool installation complete"
   return 0
 }
+
 
 #-------------------------------------------------------------------------------
 #arg1 is force (0 or 1) (no interactive script)
@@ -294,11 +340,46 @@ check_install_upf_deps() {
   ret=$?;[[ $ret -ne 0 ]] && return $ret
 
   echo_info "distro libs installation complete"
+  
+  echo ""
+  echo "Auto-detecting UPF features:"
+  check_enable_bpf_datapath
+  if [ $? -eq 0 ]; then  
+    check_enable_qos
+    if [ $? -eq 0 ]; then
+      echo -e "     BPF Datapath: [$GREEN on $NC  ]"
+      echo -e "      QoS Feature: [$GREEN on $NC  ]"
+      echo ""
+    else
+      echo -e "     BPF Datapath: [$GREEN on $NC  ]"
+      echo -e "      QoS Feature: [$RED off $NC ]"
+      echo ""
+    fi
+  else
+    echo -e "     BPF Datapath: [$RED off $NC ]"
+    echo -e "      QoS Feature: [$RED off $NC ]"
+    echo ""
+  fi  
+  
+  echo -e "$YELLOW WARNINGS: "
+  echo -e "           1. Even when "BPF Datapath" and/or "QoS Feature" are/is disabled"
+  echo -e "              we still build and install BPF and Netlinks libraries."
+  echo -e "              The purpose is to have one-time UPF build process with all these libs"
+  echo -e "              built and linked to the project. Thie difference would be on the"
+  echo -e "              execution path, which depends on enabling or disabling these features."
+  echo ""
+  echo -e "           2. The QoS Feature is only available for the BPF Datapath mode, "
+  echo -e "              so not usable for the Simple Switch mode. This is due to the "
+  echo -e "              use of eBPF TC programming for qdisc filtering and classifying. $NC"
+  echo ""
 
   install_libbpf_from_git $1 $2
   ret=$?;[[ $ret -ne 0 ]] && return $ret
-
+  echo ""
   install_bpftool_from_git $1 $2
+  ret=$?;[[ $ret -ne 0 ]] && return $ret
+  echo ""
+  install_netlink_libraries $1 $2
   ret=$?;[[ $ret -ne 0 ]] && return $ret
 
   install_fb_folly_from_source $1 $2
