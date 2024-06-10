@@ -160,7 +160,11 @@ check_enable_qos() {
 install_netlink_libraries() {
   echo ""
   echo "Install Netlink libraries:"
-  apt-get install -y libnl-3-dev libnl-genl-3-dev libnl-route-3-dev libnl-nf-3-dev
+  if [[ $OS_DISTRO == "ubuntu" ]]; then
+    $SUDO $INSTALLER install -y libnl-3-dev libnl-genl-3-dev libnl-route-3-dev libnl-nf-3-dev
+  elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
+    $SUDO $INSTALLER install -y libnl3-devel libnl3-cli
+  fi
 }
 
 
