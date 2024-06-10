@@ -132,13 +132,12 @@ class SessionManager {
   void updateBPFSessionDL(
       std::shared_ptr<pfcp::pfcp_session> pSession,
       std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl);
- 
+
   /*****************************************************************************************************************/
-    void processPDRDetails(
-    std::shared_ptr<pfcp::pfcp_session> pSession,
-    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedence,
-    int interfaceValue,
-    const std::string& direction);
+  void processPDRDetails(
+      std::shared_ptr<pfcp::pfcp_session> pSession,
+      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedence, int interfaceValue,
+      const std::string& direction);
 
   /*****************************************************************************************************************/
   /**
@@ -168,7 +167,7 @@ class SessionManager {
       std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
       std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs,
       const std::string& direction);
-  
+
   /*****************************************************************************************************************/
   bool extractPdi(std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi);
 

@@ -16,7 +16,6 @@ int is_little_endian2() {
   return (*byte == 1);
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
     const std::string& gtpInterface, const std::string& udpInterface)
@@ -28,10 +27,8 @@ PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
       pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__destroy);
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 PFCP_Session_LookupProgram::~PFCP_Session_LookupProgram() {}
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_LookupProgram::setup() {
@@ -55,12 +52,10 @@ void PFCP_Session_LookupProgram::setup() {
   mpLifeCycle->link("xdp_entry_point", mGTPInterface.c_str());
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMaps> PFCP_Session_LookupProgram::getMaps() {
   return mpMaps;
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // TODO: Check when kill when running.
@@ -69,12 +64,10 @@ void PFCP_Session_LookupProgram::tearDown() {
   mpLifeCycle->tearDown();
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_LookupProgram::updateProgramMap(uint32_t key, uint32_t fd) {
   mpTeidSessionMap->update(key, fd, BPF_ANY);
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_LookupProgram::removeProgramMap(uint32_t key) {
@@ -85,24 +78,20 @@ void PFCP_Session_LookupProgram::removeProgramMap(uint32_t key) {
   }
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getTeidSessionMap() const {
   return mpTeidSessionMap;
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getUeIpSessionMap() const {
   return mpUeIpSessionMap;
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getNextProgRuleMap() const {
   return mpNextProgRuleMap;
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getNextProgRuleIndexMap()
@@ -110,13 +99,11 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getNextProgRuleIndexMap()
   return mpNextProgRuleIndexMap;
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSessionMappingMap()
     const {
   return mpSessionMappingMap;
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_LookupProgram::initializeMaps() {
@@ -133,6 +120,5 @@ void PFCP_Session_LookupProgram::initializeMaps() {
   mpSessionMappingMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_session_mapping"));
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/

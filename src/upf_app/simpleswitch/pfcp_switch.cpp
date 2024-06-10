@@ -704,24 +704,23 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             delete session;
             break;
           }
-          
+
           /*======================================================================*/
-    
+
           /*
-          *  Add create_qers
-          */
+           *  Add create_qers
+           */
           pfcp::qer_id_t qer_id = {};
-          if (not cr_pdr.get(qer_id)){
+          if (not cr_pdr.get(qer_id)) {
             // TODO
           }
-          
+
           pfcp::create_qer cr_qer = {};
-          if (not req->pfcp_ies.get(qer_id, cr_qer)){
+          if (not req->pfcp_ies.get(qer_id, cr_qer)) {
             // TODO
-          }  
-            
-                  
-          /*======================================================================*/ 
+          }
+
+          /*======================================================================*/
 
           if (not session->create(
                   cr_pdr, cause, offending_ie.offending_ie, allocated_fteid)) {
@@ -737,7 +736,6 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
           created_pdr.set(cr_pdr.pdr_id.second);
           created_pdr.set(allocated_fteid);
           resp->pfcp_ies.set(created_pdr);
-
         }
       }
 
@@ -886,21 +884,24 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       }
     }
     /*======================================================================*/
-    
+
     /*
-    *  Add remove_qers
-    */
+     *  Add remove_qers
+     */
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.remove_qers) {
         if (upf_cfg.enable_bpf_datapath) {
           Logger::pfcp_switch().info("Modifying datapath: remove QERs");
-          start_datapath(NULL, req, NULL, session, spSessionManager, &SessionManager::updateBPFSession);
+          start_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::updateBPFSession);
         }
 
         remove_qer& qer = it;
 
         if (not session->remove(qer, cause, offending_ie.offending_ie)) {
-          if (cause.cause_value == CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
+          if (cause.cause_value ==
+              CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
             failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_QER;
             failed_rule.rule_id_value = qer.qer_id.second.qer_id;
             resp->pfcp_ies.set(failed_rule);
@@ -909,7 +910,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
     }
-    
+
     /*======================================================================*/
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
@@ -974,11 +975,11 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     }
 
     /*======================================================================*/
-    
-      /*
-      *  Add create_qers
-      */
-      
+
+    /*
+     *  Add create_qers
+     */
+
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.create_qers) {
         if (upf_cfg.enable_bpf_datapath) {
@@ -993,11 +994,10 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
     }
-    
+
     /*======================================================================*/
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
-
       for (auto it : req->pfcp_ies.update_pdrs) {
         if (upf_cfg.enable_bpf_datapath) {
           Logger::pfcp_switch().info("Modifying datapath: update PDRs");
@@ -1036,10 +1036,10 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       }
 
       /*======================================================================*/
-    
+
       /*
-      *  Add update_qers
-      */
+       *  Add update_qers
+       */
       for (auto it : req->pfcp_ies.update_qers) {
         if (upf_cfg.enable_bpf_datapath) {
           Logger::pfcp_switch().info("Modifying datapath: update QERs");
@@ -1103,7 +1103,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     }
   }
 }
-
 
 //------------------------------------------------------------------------------
 void pfcp_switch::handle_pfcp_session_deletion_request(

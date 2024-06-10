@@ -59,7 +59,8 @@ class upf_support_features : public config_type {
   option_config_value m_enable_snat{};
 
  public:
-  explicit upf_support_features(bool enable_bpf_datapath, bool enable_qos, bool enable_snat);
+  explicit upf_support_features(
+      bool enable_bpf_datapath, bool enable_qos, bool enable_snat);
 
   void from_yaml(const YAML::Node& node) override;
 

@@ -17,35 +17,33 @@
 
 #ifndef QUANTUM
 #define QUANTUM 1
-#endif //QUATUM
+#endif  // QUATUM
 
 #ifndef DEFAULT_CLASS
-#define DEFAULT_CLASS 30 //0xffff
-#endif //DEFAULT_CLASS
+#define DEFAULT_CLASS 30  // 0xffff
+#endif                    // DEFAULT_CLASS
 
 /*---------------------------------------------------------------------------------------------------------------*/
 UserPlaneComponent::UserPlaneComponent() {
-  // Set new handlers for libbpf.
-  #ifdef DEBUG_LIBBPF
-    libbpf_set_print(UserPlaneComponent::printLibbpfLog);
-  #endif
+// Set new handlers for libbpf.
+#ifdef DEBUG_LIBBPF
+  libbpf_set_print(UserPlaneComponent::printLibbpfLog);
+#endif
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 UserPlaneComponent::~UserPlaneComponent() {
   tearDown();
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<SessionManager> UserPlaneComponent::getSessionManager() const {
   return mpSessionManager;
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
-// std::shared_ptr<NetlinkManager> UserPlaneComponent::getNetlinkManager() const {
+// std::shared_ptr<NetlinkManager> UserPlaneComponent::getNetlinkManager() const
+// {
 //   return mpNetlinkManager;
 // }
 
@@ -54,65 +52,56 @@ std::shared_ptr<RulesUtilities> UserPlaneComponent::getRulesUtilities() const {
   return mpRulesUtilities;
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<PFCP_Session_LookupProgram>
 UserPlaneComponent::getPFCP_Session_LookupProgram() const {
   return mpPFCP_Session_LookupProgram;
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 std::string UserPlaneComponent::getGTPInterface() const {
   return mGTPInterface;
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::string UserPlaneComponent::getUDPInterface() const {
   return mUDPInterface;
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 const char* UserPlaneComponent::getRootQdiscScheduler() const {
   return qdiscAtt->scheduler;
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 uint32_t UserPlaneComponent::getRootQdiscQuantum() const {
   return qdiscAtt->quantum;
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 uint32_t UserPlaneComponent::getRootQdiscDefaultClass() const {
   return qdiscAtt->defaultClass;
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 const char* UserPlaneComponent::getRootClassScheduler() const {
   return classAtt->scheduler;
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 uint32_t UserPlaneComponent::getRootClassRate() const {
   return classAtt->rate;
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 uint32_t UserPlaneComponent::getRootClassCeil() const {
   return classAtt->ceil;
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 // Method definition to initialize class_params
-void UserPlaneComponent::setRootClassAttributes(std::string interface, const char *scheduler) {
+void UserPlaneComponent::setRootClassAttributes(
+    std::string interface, const char* scheduler) {
   NicInformationGetter nicInfoGet;
   // Initialize classAtt members
 
@@ -120,33 +109,31 @@ void UserPlaneComponent::setRootClassAttributes(std::string interface, const cha
 
   if (classAtt == nullptr) {
     Logger::upf_app().error("Failed to allocate memory for classAtt");
-    exit(EXIT_FAILURE); // or handle the error in some other way
+    exit(EXIT_FAILURE);  // or handle the error in some other way
   }
 
   classAtt->scheduler = scheduler;
-  classAtt->rate = nicInfoGet.retrieveRate(interface);
-  classAtt->ceil = nicInfoGet.retrieveCeil(interface);
-  classAtt->burst = 0;
-  classAtt->cburst = 0;
-  classAtt->priority = 0;
+  classAtt->rate      = nicInfoGet.retrieveRate(interface);
+  classAtt->ceil      = nicInfoGet.retrieveCeil(interface);
+  classAtt->burst     = 0;
+  classAtt->cburst    = 0;
+  classAtt->priority  = 0;
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // Method definition to initialize qdisc_root_params
-void UserPlaneComponent::setRootQdiscAttributes(const char *scheduler) {
+void UserPlaneComponent::setRootQdiscAttributes(const char* scheduler) {
   qdiscAtt = new struct qdiscRootParams;
 
   if (qdiscAtt == nullptr) {
     Logger::upf_app().error("Failed to allocate memory for qdiscAtt");
-    exit(EXIT_FAILURE); // or handle the error in some other way
+    exit(EXIT_FAILURE);  // or handle the error in some other way
   }
 
-  qdiscAtt->scheduler = scheduler;
-  qdiscAtt->quantum = QUANTUM;
+  qdiscAtt->scheduler    = scheduler;
+  qdiscAtt->quantum      = QUANTUM;
   qdiscAtt->defaultClass = DEFAULT_CLASS;
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void UserPlaneComponent::onNewSessionProgram(
@@ -154,12 +141,10 @@ void UserPlaneComponent::onNewSessionProgram(
   mpPFCP_Session_LookupProgram->updateProgramMap(programId, fileDescriptor);
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 void UserPlaneComponent::onDestroySessionProgram(u_int32_t programId) {
   mpPFCP_Session_LookupProgram->removeProgramMap(programId);
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 int UserPlaneComponent::printLibbpfLog(
@@ -167,18 +152,16 @@ int UserPlaneComponent::printLibbpfLog(
   return vfprintf(stderr, fmt, args);
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 UserPlaneComponent& UserPlaneComponent::getInstance() {
   static UserPlaneComponent sInstance;
   return sInstance;
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
-void UserPlaneComponent::setMembers(std::shared_ptr<RulesUtilities> pRulesUtilities,
-    const std::string& gtpInterface, const std::string& udpInterface){
-  
+void UserPlaneComponent::setMembers(
+    std::shared_ptr<RulesUtilities> pRulesUtilities,
+    const std::string& gtpInterface, const std::string& udpInterface) {
   mpRulesUtilities = pRulesUtilities;
   mGTPInterface    = gtpInterface;
   mUDPInterface    = udpInterface;
@@ -190,34 +173,30 @@ void UserPlaneComponent::setMembers(std::shared_ptr<RulesUtilities> pRulesUtilit
     Logger::upf_app().error("The eBPF Program is Not Initialized");
     throw std::runtime_error("The eBPF Program is Not Initialized");
   }
-
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void UserPlaneComponent::setup(
     std::shared_ptr<RulesUtilities> pRulesUtilities,
     const std::string& gtpInterface, const std::string& udpInterface) {
-
   setMembers(pRulesUtilities, gtpInterface, udpInterface);
   SignalHandler::getInstance().enable();
   mpPFCP_Session_LookupProgram->setup();
 
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();
-  //mpNetlinkManager = std::make_shared<NetlinkManager>(NetlinkManager::getInstance(gtpInterface));
-  //NetlinkManager::getInstance(gtpInterface);
-
+  // mpNetlinkManager =
+  // std::make_shared<NetlinkManager>(NetlinkManager::getInstance(gtpInterface));
+  // NetlinkManager::getInstance(gtpInterface);
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void UserPlaneComponent::setup(
     std::shared_ptr<RulesUtilities> pRulesUtilities,
-    const std::string& gtpInterface, const std::string& udpInterface, const char* qdiscScheduler) {
-
+    const std::string& gtpInterface, const std::string& udpInterface,
+    const char* qdiscScheduler) {
   QdiscHelper qdiscHelper;
-  
+
   setMembers(pRulesUtilities, gtpInterface, udpInterface);
 
   sock = NetlinkManager::getInstance(mGTPInterface).getSocket();
@@ -228,12 +207,12 @@ void UserPlaneComponent::setup(
 
   NetlinkManager::getInstance(gtpInterface);
 
-  if (!(rootQdisc = qdiscHelper.createQdisc(sock))){
+  if (!(rootQdisc = qdiscHelper.createQdisc(sock))) {
     Logger::upf_app().error("Unable to create a new Root qdisc");
     exit(EXIT_FAILURE);
   }
 
-  if (!(rootClass = qdiscHelper.createClass(sock))){
+  if (!(rootClass = qdiscHelper.createClass(sock))) {
     Logger::upf_app().error("Unable to create a Root Qdisc Class");
     exit(EXIT_FAILURE);
   }
@@ -246,9 +225,9 @@ void UserPlaneComponent::setup(
 
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();
-  //mpNetlinkManager = std::make_shared<NetlinkManager>(NetlinkManager::getInstance(gtpInterface));
+  // mpNetlinkManager =
+  // std::make_shared<NetlinkManager>(NetlinkManager::getInstance(gtpInterface));
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void UserPlaneComponent::tearDown() {

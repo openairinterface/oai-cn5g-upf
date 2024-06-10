@@ -33,14 +33,14 @@ namespace oai::config {
 //------------------------------------------------------------------------------
 upf_support_features::upf_support_features(
     bool enable_bpf_datapath, bool enable_qos, bool enable_snat) {
-  m_config_name         = "Supported Features";
-  
+  m_config_name = "Supported Features";
+
   m_enable_bpf_datapath = option_config_value(
       UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF_LABEL, enable_bpf_datapath);
-  
+
   m_enable_qos = option_config_value(
       UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS_LABEL, enable_qos);
-  
+
   m_enable_snat = option_config_value(
       UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT_LABEL, enable_snat);
 }
@@ -53,8 +53,7 @@ void upf_support_features::from_yaml(const YAML::Node& node) {
   }
 
   if (node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS]) {
-    m_enable_qos.from_yaml(
-        node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS]);
+    m_enable_qos.from_yaml(node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS]);
   }
 
   if (node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT]) {
@@ -75,15 +74,14 @@ std::string upf_support_features::to_string(const std::string& indent) const {
       BASE_FORMATTER, INNER_LIST_ELEM,
       UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF_LABEL, inner_width,
       enable_bpf_datapath));
-    
-  // Enable QoS 
+
+  // Enable QoS
   std::string enable_qos = m_enable_qos.get_value() ?
-                                        UPF_CONFIG_OPTION_YES_STR :
-                                        UPF_CONFIG_OPTION_NO_STR;
+                               UPF_CONFIG_OPTION_YES_STR :
+                               UPF_CONFIG_OPTION_NO_STR;
   out.append(indent).append(fmt::format(
       BASE_FORMATTER, INNER_LIST_ELEM,
-      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS_LABEL, inner_width,
-      enable_qos));
+      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS_LABEL, inner_width, enable_qos));
 
   // Enable SNAT
   std::string enable_snat = m_enable_snat.get_value() ?
@@ -384,9 +382,10 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   cfg.sbi.addr4       = local().get_sbi().get_addr4();
   cfg.sbi.if_name     = local().get_sbi().get_if_name();
 
-  cfg.enable_bpf_datapath = upf_local->get_support_features().get_option_enable_bpf_datapath();
-  cfg.enable_qos          = upf_local->get_support_features().get_option_enable_qos();
-  cfg.enable_snat         = upf_local->get_support_features().get_option_enable_snat();
+  cfg.enable_bpf_datapath =
+      upf_local->get_support_features().get_option_enable_bpf_datapath();
+  cfg.enable_qos  = upf_local->get_support_features().get_option_enable_qos();
+  cfg.enable_snat = upf_local->get_support_features().get_option_enable_snat();
 
   auto snssai_upf_list = upf_local->get_upf_info().getSNssaiUpfInfoList();
   for (const auto& snssai : snssai_upf_list) {

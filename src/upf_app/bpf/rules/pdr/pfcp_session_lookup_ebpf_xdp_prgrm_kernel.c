@@ -65,13 +65,13 @@ static u32 tail_call_next_prog(
 
 static u32 handle_downlink_traffic(struct xdp_md* p_ctx, u32 ue_ip_address) {
   struct session_id* session = NULL;
-  session = bpf_map_lookup_elem(&m_session_mapping, &ue_ip_address); 
+  session = bpf_map_lookup_elem(&m_session_mapping, &ue_ip_address);
 
   if (session) {
     u32 teid_dl = session->teid_dl;
     bpf_printk(
         "TEID downlink: 0x%x was found for UE IP: 0x%x", ue_ip_address,
-         teid_dl);
+        teid_dl);
     tail_call_next_prog(p_ctx, teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
   }
 

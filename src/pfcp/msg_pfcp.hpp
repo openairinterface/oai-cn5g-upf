@@ -1106,13 +1106,13 @@ class pfcp_ies_container {
   //  PFCP_IE_PDN_TYPE
   virtual bool get(pfcp::pdn_type_t& v) const {
     throw pfcp_msg_illegal_ie_exception(
-      0, PFCP_IE_PDN_TYPE, __FILE__, __LINE__);
+        0, PFCP_IE_PDN_TYPE, __FILE__, __LINE__);
   }
   virtual void set(const pfcp::pdn_type_t& v) {
     throw pfcp_msg_illegal_ie_exception(
-      0, PFCP_IE_PDN_TYPE, __FILE__, __LINE__);
+        0, PFCP_IE_PDN_TYPE, __FILE__, __LINE__);
   }
-  
+
   //  PFCP_IE_FAILED_RULE_ID
   virtual bool get(pfcp::failed_rule_id_t& v) const {
     throw pfcp_msg_illegal_ie_exception(
@@ -1457,15 +1457,13 @@ class pfcp_ies_container {
 
   //  PFCP_IE_APN_DNN
   virtual bool get(pfcp::apn_dnn_t& v) const {
-    throw pfcp_msg_illegal_ie_exception(
-        0, PFCP_IE_APN_DNN, __FILE__, __LINE__);
+    throw pfcp_msg_illegal_ie_exception(0, PFCP_IE_APN_DNN, __FILE__, __LINE__);
   }
   virtual void set(const pfcp::apn_dnn_t& v) {
-    throw pfcp_msg_illegal_ie_exception(
-        0, PFCP_IE_APN_DNN, __FILE__, __LINE__);
+    throw pfcp_msg_illegal_ie_exception(0, PFCP_IE_APN_DNN, __FILE__, __LINE__);
   }
 
- //  PFCP_IE_3GPP_INTERFACE_TYPE
+  //  PFCP_IE_3GPP_INTERFACE_TYPE
   virtual bool get(pfcp::_3gpp_interface_type_t& v) const {
     throw pfcp_msg_illegal_ie_exception(
         0, PFCP_IE_3GPP_INTERFACE_TYPE, __FILE__, __LINE__);
@@ -6536,7 +6534,6 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
     return false;
   }
 
-
   bool get(pfcp::trace_information_t& v) const {
     if (trace_information.first) {
       v = trace_information.second;
@@ -6555,7 +6552,7 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
     return false;
   }
 
-    bool get(const pfcp::qer_id_t& fid, pfcp::create_qer& create_qer) const {
+  bool get(const pfcp::qer_id_t& fid, pfcp::create_qer& create_qer) const {
     for (auto it : create_qers) {
       pfcp::qer_id_t qer_id = {};
       if ((it.get(qer_id)) && (fid.qer_id == qer_id.qer_id)) {

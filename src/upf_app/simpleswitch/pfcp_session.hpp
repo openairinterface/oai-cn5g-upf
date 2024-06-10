@@ -73,19 +73,16 @@ class pfcp_session {
     pdrs.reserve(8);
     fars.reserve(8);
   }
-  
-  
+
   /*---------------------------------------------------------------------------------------------------------------*/
   pfcp_session(pfcp::fseid_t& cp, uint64_t up_seid) : pfcp_session() {
     cp_fseid = cp;
     seid     = up_seid;
   }
 
-  
   /*---------------------------------------------------------------------------------------------------------------*/
   pfcp_session(const pfcp_session& c)
       : cp_fseid(c.cp_fseid), seid(c.seid), pdrs(c.pdrs), fars(c.fars) {}
-
 
   /*---------------------------------------------------------------------------------------------------------------*/
   virtual ~pfcp_session() {
@@ -94,98 +91,85 @@ class pfcp_session {
     seid     = {};
   };
 
-
   /*---------------------------------------------------------------------------------------------------------------*/
   void cleanup();
-
 
   /*---------------------------------------------------------------------------------------------------------------*/
   std::string to_string() const;
 
-
   /*---------------------------------------------------------------------------------------------------------------*/
   uint64_t get_up_seid() const { return seid; };
-  
-  
+
   /*---------------------------------------------------------------------------------------------------------------*/
   bool get(const uint32_t, std::shared_ptr<pfcp::pfcp_far>&) const;
-  
-  
+
   /*---------------------------------------------------------------------------------------------------------------*/
   bool get(const uint16_t, std::shared_ptr<pfcp::pfcp_pdr>&) const;
-  
-  
+
   /*---------------------------------------------------------------------------------------------------------------*/
   bool get(const uint16_t, std::shared_ptr<pfcp::pfcp_qer>&) const;
-  
+
   bool get(const uint32_t, std::shared_ptr<pfcp::pfcp_qer>&) const;
   /*---------------------------------------------------------------------------------------------------------------*/
   bool update(const pfcp::update_far& update, uint8_t& cause_value);
-  
-  
+
   /*---------------------------------------------------------------------------------------------------------------*/
   bool update(const pfcp::update_pdr& update, uint8_t& cause_value);
-  
-  
+
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Update QoS Enforcement Rule
-   * 
-   * @param update 
-   * @param cause_value 
-   * @return true 
-   * @return false 
+   *
+   * @param update
+   * @param cause_value
+   * @return true
+   * @return false
    */
   bool update(const pfcp::update_qer& update, uint8_t& cause_value);
-
 
   /*---------------------------------------------------------------------------------------------------------------*/
   bool create(
       const pfcp::create_far& cr_far, pfcp::cause_t& cause,
       uint16_t& offending_ie);
-  
-  
+
   /*---------------------------------------------------------------------------------------------------------------*/
   bool create(
       const pfcp::create_pdr& cr_pdr, pfcp::cause_t& cause,
       uint16_t& offending_ie, pfcp::fteid_t& allocated_fteid);
-  
-  
+
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief create QoS Enforcement Rule
-   * 
-   * @param cr_qer 
-   * @param cause 
-   * @param offending_ie 
-   * @return true 
-   * @return false 
+   *
+   * @param cr_qer
+   * @param cause
+   * @param offending_ie
+   * @return true
+   * @return false
    */
   bool create(
       const pfcp::create_qer& cr_qer, pfcp::cause_t& cause,
       uint16_t& offending_ie);
-
 
   /*---------------------------------------------------------------------------------------------------------------*/
   bool remove(
       const pfcp::remove_far& rm_far, pfcp::cause_t& cause,
       uint16_t& offending_ie);
 
-
-  /*---------------------------------------------------------------------------------------------------------------*/    
+  /*---------------------------------------------------------------------------------------------------------------*/
   bool remove(
       const pfcp::remove_pdr& rm_pdr, pfcp::cause_t& cause,
       uint16_t& offending_ie);
 
-  /*---------------------------------------------------------------------------------------------------------------*/  
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Remove QoS Enforcement Rule
-   * 
-   * @param rm_qer 
-   * @param cause 
-   * @param offending_ie 
-   * @return true 
-   * @return false 
+   *
+   * @param rm_qer
+   * @param cause
+   * @param offending_ie
+   * @return true
+   * @return false
    */
   bool remove(
       const pfcp::remove_qer& rm_qer, pfcp::cause_t& cause,

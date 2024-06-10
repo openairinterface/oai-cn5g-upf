@@ -281,10 +281,10 @@ void SessionManager::createBPFSessionUL(
     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl) {
   auto& logger = Logger::upf_app();
 
- // Common PDR processing
-  processPDRDetails(pSession, pdrHighPrecedenceUl, INTERFACE_VALUE_ACCESS, "Uplink");
+  // Common PDR processing
+  processPDRDetails(
+      pSession, pdrHighPrecedenceUl, INTERFACE_VALUE_ACCESS, "Uplink");
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void SessionManager::createBPFSessionDL(
@@ -293,14 +293,14 @@ void SessionManager::createBPFSessionDL(
   auto& logger = Logger::upf_app();
 
   // Common PDR processing
-  processPDRDetails(pSession, pdrHighPrecedenceDl, INTERFACE_VALUE_CORE, "Downlink");
+  processPDRDetails(
+      pSession, pdrHighPrecedenceDl, INTERFACE_VALUE_CORE, "Downlink");
 }
 
 /*****************************************************************************************************************/
 void SessionManager::processPDRDetails(
     std::shared_ptr<pfcp::pfcp_session> pSession,
-    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedence,
-    int interfaceValue,
+    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedence, int interfaceValue,
     const std::string& direction) {
   auto& logger = Logger::upf_app();
 
@@ -311,8 +311,8 @@ void SessionManager::processPDRDetails(
   uint16_t pdr_id = pdrHighPrecedence->pdr_id.rule_id;
 
   logger.debug(
-      "Create the {} Direction Datapath for Session {}",
-      direction, pSession->get_up_seid());
+      "Create the {} Direction Datapath for Session {}", direction,
+      pSession->get_up_seid());
 
   if (!(pdrHighPrecedence->get(pdi) && pdi.get(sourceInterface))) {
     throw std::runtime_error(
@@ -320,30 +320,39 @@ void SessionManager::processPDRDetails(
         std::to_string(pdr_id));
   }
 
-  if (!pdi.get(fteid)){
-    if (fteid.ch){}
+  if (!pdi.get(fteid)) {
+    if (fteid.ch) {
+    }
     fteid.teid = -1;
     logger.debug("FTEID is missing");
-    logger.warn("TODO: This IE shall not be present if Traffic Endpoint ID is present");
-    logger.warn("TODO: The CP function shall set the CHOOSE (CH) bit to 1 if the" );
-    logger.warn("UP function supports the allocation of F-TEID and the CP function"); 
-    logger.warn("requests the UP function to assign a local F-TEID to the PDR.");
+    logger.warn(
+        "TODO: This IE shall not be present if Traffic Endpoint ID is present");
+    logger.warn(
+        "TODO: The CP function shall set the CHOOSE (CH) bit to 1 if the");
+    logger.warn(
+        "UP function supports the allocation of F-TEID and the CP function");
+    logger.warn(
+        "requests the UP function to assign a local F-TEID to the PDR.");
   }
 
   if (!pdi.get(ueIpAddress)) {
     ueIpAddress.ipv4_address.s_addr = 0;
     logger.debug("UE IP Address is missing");
-    logger.warn("TODO: This IE shall not be present if Traffic Endpoint ID is present");
+    logger.warn(
+        "TODO: This IE shall not be present if Traffic Endpoint ID is present");
   }
 
   logger.debug("PDI extracted from {} PDR {}", direction, pdr_id);
-  logger.debug("Extract {} FAR from the highest precedence {} PDR", direction, direction);
+  logger.debug(
+      "Extract {} FAR from the highest precedence {} PDR", direction,
+      direction);
 
   std::shared_ptr<pfcp::pfcp_far> pFar;
 
   if (!extractFar(pdrHighPrecedence, pSession, pFar)) {
     throw std::runtime_error(
-        "Failed to extract {} FAR for PDR " + direction + " " + std::to_string(pdr_id));
+        "Failed to extract {} FAR for PDR " + direction + " " +
+        std::to_string(pdr_id));
   }
 
   SessionProgramManager::getInstance().createPipeline(

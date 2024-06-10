@@ -4,10 +4,10 @@
 
 #include <types.h>
 
-struct pduSessionIds{
+struct pduSessionIds {
   uint64_t seid;
   uint64_t teidUl;
   uint64_t teidDl;
 };
 
-#endif //__PDU_SESSION_H__
+#endif  //__PDU_SESSION_H__

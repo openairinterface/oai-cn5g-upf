@@ -4,7 +4,6 @@
 #include <types.h>
 #include <stdint.h>
 
-
 struct session_id {
   u32 teid_ul;
   u32 teid_dl;

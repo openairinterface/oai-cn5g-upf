@@ -85,11 +85,10 @@ struct bpf_map_def SEC("maps") m_upf_interfaces = {
 
 struct bpf_map_def SEC("maps") m_session_mapping = {
     .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(u32),  // ue_ip_address
+    .key_size    = sizeof(u32),                // ue_ip_address
     .value_size  = sizeof(struct session_id),  // < teid_ul, teid_dl, seid >
     .max_entries = MAX_LENGTH,
 };
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 

@@ -18,25 +18,23 @@
 #include <arpa/inet.h>
 #include <sstream>
 
-
 #define COMMAND_MAX_LENGTH 256
 #define OUTPUT_MAX_LENGTH 256
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // Function to read a value from a file
 std::string readValueFromFile(const std::string& path) {
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        std::cerr << "Error: Failed to open file " << path << std::endl;
-        return "";
-    }
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    std::cerr << "Error: Failed to open file " << path << std::endl;
+    return "";
+  }
 
-    std::string value;
-    file >> value;
-    file.close();
-    return value;
+  std::string value;
+  file >> value;
+  file.close();
+  return value;
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
@@ -44,29 +42,29 @@ NicInformationGetter::NicInformationGetter() {}
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // const char *NicInformationGetter::setScheduler(const char*) {
-  
+
 // }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 uint64_t NicInformationGetter::retrieveRate(std::string interface) {
   // Paths to files containing interface information speed rate
-    std::string speedPath = INTERFACE_DIR + interface + "/speed";
-    
-    // Read speed
-    std::string speed = readValueFromFile(speedPath);
+  std::string speedPath = INTERFACE_DIR + interface + "/speed";
 
-    uint64_t rate = 0;
-    std::istringstream iss(speed);
-    iss >> rate;
+  // Read speed
+  std::string speed = readValueFromFile(speedPath);
 
-    return rate;
+  uint64_t rate = 0;
+  std::istringstream iss(speed);
+  iss >> rate;
+
+  return rate;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 uint64_t NicInformationGetter::retrieveCeil(std::string interface) {
- // Paths to files containing interface information speed rate
+  // Paths to files containing interface information speed rate
   std::string speedPath = INTERFACE_DIR + interface + "/speed";
-  
+
   // Read speed
   std::string speed = readValueFromFile(speedPath);
 

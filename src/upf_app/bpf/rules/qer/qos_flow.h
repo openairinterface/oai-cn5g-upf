@@ -4,10 +4,10 @@
 
 #include <types.h>
 
-struct  qosFlow{
+struct qosFlow {
   uint64_t qfi;
   uint64_t gbr;
   uint64_t mbr;
 };
 
-#endif //__QOS_FLOW_H__
+#endif  //__QOS_FLOW_H__

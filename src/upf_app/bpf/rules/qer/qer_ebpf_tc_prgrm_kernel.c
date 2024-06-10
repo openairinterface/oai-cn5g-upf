@@ -38,7 +38,6 @@
 #include <linux/netdevice.h>
 #include <linux/pkt_sched.h>
 
-
 // struct qfi_data {
 //   __u32 qfi;
 // };
@@ -70,7 +69,6 @@
 //     .max_entries = 1024,
 // };
 
-
 // SEC("traffic_shape")
 // int token_bucket_filter(struct __sk_buff* skb) {
 //   // Retrieve the QFI from the packet data
@@ -82,7 +80,7 @@
 //     // QER not configured for the QFI, allow the packet
 //     return TC_ACT_OK;
 //   }
- 
+
 //   // Retrieve token bucket for the QFI
 //   __u64* tokens = bpf_map_lookup_elem(&token_bucket_map, &qfi);
 //   if (!tokens) {
@@ -93,7 +91,8 @@
 //   // Calculate tokens based on rate
 //   __u64 elapsed_time = bpf_ktime_get_ns() / 1000 - qer->token_bucket_size;
 //   __u64 tokens_per_sec =
-//       qer->rate / 1000000;  // Convert rate from bps to tokens per microsecond
+//       qer->rate / 1000000;  // Convert rate from bps to tokens per
+//       microsecond
 //   __u64 elapsed_tokens = elapsed_time * tokens_per_sec;
 
 //   // Refill token bucket
@@ -166,21 +165,21 @@
 //   }
 // }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 /**
- * @brief Filter the Uplink traffic 
- * 
- * @param skb 
+ * @brief Filter the Uplink traffic
+ *
+ * @param skb
  * @param udph UDP header
  * @return __inline u32 the TC action taken
  */
 
-static __always_inline u32 uplink_sdf_filter(struct __sk_buff *skb, struct ethhdr* ethh, struct udphdr* udph) {
+static __always_inline u32 uplink_sdf_filter(
+    struct __sk_buff* skb, struct ethhdr* ethh, struct udphdr* udph) {
   void* data_end = (void*) (long) skb->data_end;
 
   struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
-  
+
   // Check if the GTP header extends beyond the data end.
   if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
     bpf_debug("Invalid GTPU packet");
@@ -203,18 +202,18 @@ static __always_inline u32 uplink_sdf_filter(struct __sk_buff *skb, struct ethhd
   }
 
   struct filter_key* key = {0};
-  
-  u8 protocol   = iph_inner->protocol;
-  
+
+  u8 protocol = iph_inner->protocol;
+
   key->src_ip   = iph_inner->saddr;
   key->dst_ip   = iph_inner->daddr;
   key->protocol = iph_inner->protocol;
 
   switch (protocol) {
-    case IPPROTO_UDP: {   
+    case IPPROTO_UDP: {
       // Extract UDP header
       struct udphdr* udph = (struct udphdr*) (iph_inner + 1);
-  
+
       if ((void*) (udph + 1) > data_end) {
         bpf_debug("Invalid UDP header");
         return TC_ACT_SHOT;
@@ -222,10 +221,10 @@ static __always_inline u32 uplink_sdf_filter(struct __sk_buff *skb, struct ethhd
 
       key->dst_port = udph->dest;
     }
-    case IPPROTO_TCP: {   
+    case IPPROTO_TCP: {
       // Extract TCP header
       struct tcphdr* tcph = (struct tcphdr*) (iph_inner + 1);
-  
+
       if ((void*) (tcph + 1) > data_end) {
         bpf_debug("Invalid TCP header");
         return TC_ACT_SHOT;
@@ -233,54 +232,52 @@ static __always_inline u32 uplink_sdf_filter(struct __sk_buff *skb, struct ethhd
 
       key->dst_port = tcph->dest;
     }
-    case IPPROTO_ICMP: {   
+    case IPPROTO_ICMP: {
       // TODO: Check how to implement this use case
     }
     default: {
       bpf_debug("Unknown header");
-      bpf_debug("Use best effort QoS flow (i.e. default qfi)");    
+      bpf_debug("Use best effort QoS flow (i.e. default qfi)");
     }
   }
-   
+
   struct session_id* session = {0};
   session = bpf_map_lookup_elem(&m_session_mapping, &key->src_ip);
 
-  if (session){
-    u32 seid = session->seid;
-    u8 qfi = gtpu_ext_h->qfi;
-    skb->tc_classid = ((u32)qfi << 24) | seid;
+  if (session) {
+    u32 seid        = session->seid;
+    u8 qfi          = gtpu_ext_h->qfi;
+    skb->tc_classid = ((u32) qfi << 24) | seid;
     /*
     SHould we make it even more unique than unique value ?
     u32 teid_ul = session->teid_ul;
     u32 teid_dl = session->teid_dl;
-    skb->tc_classid = ((u32)qfi << 24) | (seid & teid_ul & teid_dl); //   
+    skb->tc_classid = ((u32)qfi << 24) | (seid & teid_ul & teid_dl); //
     */
     return TC_ACT_REDIRECT;
   }
-
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
-static __always_inline u32 downlink_sdf_filter(struct __sk_buff *skb, struct ethhdr* ethh, struct iphdr* iph) {
+static __always_inline u32 downlink_sdf_filter(
+    struct __sk_buff* skb, struct ethhdr* ethh, struct iphdr* iph) {
   void* data_end = (void*) (long) skb->data_end;
 
   struct filter_key* filter = {0};
-  u8 protocol = iph->protocol;
-  u32 ip_src  = iph->saddr;
-  u32 ip_dst  = iph->daddr;
-  
+  u8 protocol               = iph->protocol;
+  u32 ip_src                = iph->saddr;
+  u32 ip_dst                = iph->daddr;
+
   filter->src_ip   = ip_src;
   filter->dst_ip   = ip_dst;
-  filter->protocol = protocol; 
-
-
+  filter->protocol = protocol;
 
   switch (protocol) {
-    case IPPROTO_UDP: {   
+    case IPPROTO_UDP: {
       // Extract UDP header
       struct udphdr* udph = (struct udphdr*) (iph + 1);
-  
+
       if ((void*) (udph + 1) > data_end) {
         bpf_debug("Invalid UDP header");
         return TC_ACT_SHOT;
@@ -288,10 +285,10 @@ static __always_inline u32 downlink_sdf_filter(struct __sk_buff *skb, struct eth
 
       filter->dst_port = udph->dest;
     }
-    case IPPROTO_TCP: {   
+    case IPPROTO_TCP: {
       // Extract TCP header
       struct tcphdr* tcph = (struct tcphdr*) (iph + 1);
-  
+
       if ((void*) (tcph + 1) > data_end) {
         bpf_debug("Invalid TCP header");
         return TC_ACT_SHOT;
@@ -299,35 +296,35 @@ static __always_inline u32 downlink_sdf_filter(struct __sk_buff *skb, struct eth
 
       filter->dst_port = tcph->dest;
     }
-    case IPPROTO_ICMP: {   
+    case IPPROTO_ICMP: {
       // TODO: Check how to implement this use case
     }
     default: {
       bpf_debug("Unknown header");
-      bpf_debug("Use best effort QoS flow (i.e. default qfi)");    
+      bpf_debug("Use best effort QoS flow (i.e. default qfi)");
     }
   }
-   
+
   // Get QFI value
-  e_qfi* qfi = bpf_map_lookup_elem(&m_filter, &filter); 
-  if (qfi){
+  e_qfi* qfi = bpf_map_lookup_elem(&m_filter, &filter);
+  if (qfi) {
     bpf_debug("\t IP SRC: 0x%x", filter->src_ip);
     bpf_debug("\t IP DST: 0x%x", filter->dst_ip);
     bpf_debug("\t IP PROTO: 0x%x", filter->protocol);
     bpf_debug("\t DST PORT: 0x%x", filter->dst_port);
 
     struct session_id* session = NULL;
-    
+
     session = bpf_map_lookup_elem(&m_session_mapping, &ip_dst);
-    
-    if (session){
-      u32 seid = session->seid;
-      skb->tc_classid = ((u32)(*qfi) << 24) | seid;
+
+    if (session) {
+      u32 seid        = session->seid;
+      skb->tc_classid = ((u32) (*qfi) << 24) | seid;
       /*
       SHould we make it even more unique than unique value ?
       u32 teid_ul = session->teid_ul;
       u32 teid_dl = session->teid_dl;
-      skb->tc_classid = ((u32)qfi << 24) | (seid & teid_ul & teid_dl); //   
+      skb->tc_classid = ((u32)qfi << 24) | (seid & teid_ul & teid_dl); //
       */
       return TC_ACT_REDIRECT;
     }
@@ -335,7 +332,7 @@ static __always_inline u32 downlink_sdf_filter(struct __sk_buff *skb, struct eth
 
   return TC_ACT_OK;
 }
-  
+
 /*---------------------------------------------------------------------------------------------------------------*/
 /**
  * IP SECTION.
@@ -349,15 +346,16 @@ static __always_inline u32 downlink_sdf_filter(struct __sk_buff *skb, struct eth
  * @return u32 The TC action.
  */
 
-static __always_inline u32 ipv4_sdf_filter(struct __sk_buff *skb, struct ethhdr* ethh, struct iphdr* iph) {
+static __always_inline u32
+ipv4_sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh, struct iphdr* iph) {
   void* data_end = (void*) (long) skb->data_end;
-  u8 protocol = iph->protocol;
+  u8 protocol    = iph->protocol;
 
   switch (protocol) {
     case IPPROTO_UDP: {
       // Extract UDP header
       struct udphdr* udph = (struct udphdr*) (iph + 1);
-  
+
       if ((void*) (udph + 1) > data_end) {
         bpf_debug("Invalid UDP header");
         return TC_ACT_SHOT;
@@ -378,16 +376,17 @@ static __always_inline u32 ipv4_sdf_filter(struct __sk_buff *skb, struct ethhdr*
 
 /**
  * @brief Filter traffic according to ETH_TYPE
- * 
- * @param skb 
+ *
+ * @param skb
  * @param ethh Ethernet header
  * @return ** __inline TC taken action
  */
-static __always_inline u32 sdf_filter(struct __sk_buff *skb, struct ethhdr* ethh){
-  //void *data      = (void *)(long) skb->data;
-	void *data_end  = (void *)(long) skb->data_end;
-	//void *data_meta = (void *)(long) skb->data_meta;
-	//struct meta_info *meta = data_meta;
+static __always_inline u32
+sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
+  // void *data      = (void *)(long) skb->data;
+  void* data_end = (void*) (long) skb->data_end;
+  // void *data_meta = (void *)(long) skb->data_meta;
+  // struct meta_info *meta = data_meta;
 
   u16 eth_type = htons(ethh->h_proto);
   bpf_debug("Debug: eth_type:0x%x", eth_type);
@@ -396,7 +395,7 @@ static __always_inline u32 sdf_filter(struct __sk_buff *skb, struct ethhdr* ethh
     case ETH_P_IP: {
       // Extract IP header
       struct iphdr* iph = (struct iphdr*) (ethh + 1);
-  
+
       if ((void*) (iph + 1) > data_end) {
         bpf_debug("Invalid IPv4 header");
         return TC_ACT_SHOT;
@@ -407,7 +406,6 @@ static __always_inline u32 sdf_filter(struct __sk_buff *skb, struct ethhdr* ethh
     case ETH_P_IPV6: {
       // TODO: Check if traitment is needed here
       return TC_ACT_OK;
-    
     }
     case ETH_P_8021Q: {
       // TODO: Check if traitment is needed here
@@ -423,7 +421,7 @@ static __always_inline u32 sdf_filter(struct __sk_buff *skb, struct ethhdr* ethh
     }
     default: {
       // TODO: Check if traitment is needed here
-      return TC_ACT_OK; 
+      return TC_ACT_OK;
     }
   }
 }
@@ -432,12 +430,12 @@ static __always_inline u32 sdf_filter(struct __sk_buff *skb, struct ethhdr* ethh
 
 /**
  * @brief sections to be ran as eBPF tc code
- * 
+ *
  */
 
 // SEC("ingress_filter")
 // int ingress_filter_entry_point(struct __sk_buff *skb) {
-// bpf_debug("==========< INGRESS FILTER >==========\n");  
+// bpf_debug("==========< INGRESS FILTER >==========\n");
 // Extract Ethernet header
 // struct ethhdr* ethh = bpf_hdr_pointer(skb);
 
@@ -449,40 +447,42 @@ static __always_inline u32 sdf_filter(struct __sk_buff *skb, struct ethhdr* ethh
 // }
 
 /*
-To forward packets from the Traffic Control (tc) ingress to tc egress, 
-you need to create an appropriate setup for traffic shaping and queuing. 
-This involves setting up both the ingress and egress qdiscs 
-along with filters to direct the traffic accordingly. 
+To forward packets from the Traffic Control (tc) ingress to tc egress,
+you need to create an appropriate setup for traffic shaping and queuing.
+This involves setting up both the ingress and egress qdiscs
+along with filters to direct the traffic accordingly.
 Here's a basic example using tc commands:
 
 1. Create an Ingress Queue:
 bash
   tc qdisc add dev <ingress_interface> handle ffff: ingress
-  
+
 
 2. Create an Egress Queue:
 
   tc qdisc add dev <egress_interface> root handle 1: htb default 10
-  tc class add dev <egress_interface> parent 1: classid 1:1 htb rate <egress_rate>
+  tc class add dev <egress_interface> parent 1: classid 1:1 htb rate
+<egress_rate>
 
-Replace <egress_interface> with the name of your egress interface 
+Replace <egress_interface> with the name of your egress interface
 (e.g., eth0) and <egress_rate> with the desired rate for outgoing traffic.
 
 3. Filter Ingress Traffic and Redirect to Egress:
 bash
-  tc filter add dev <ingress_interface> parent ffff: protocol ip u32 match u32 0 0 action mirred egress redirect dev <egress_interface>
+  tc filter add dev <ingress_interface> parent ffff: protocol ip u32 match u32 0
+0 action mirred egress redirect dev <egress_interface>
 
-This filter rule matches all incoming IP traffic on the <ingress_interface> 
+This filter rule matches all incoming IP traffic on the <ingress_interface>
 and redirects it to the egress interface <egress_interface>.
 
-Adjust the interface names, rates, and other parameters based on your 
-network configuration. The above commands provide a basic example, 
+Adjust the interface names, rates, and other parameters based on your
+network configuration. The above commands provide a basic example,
 and you may need to customize them for your specific requirements.
 
-Keep in mind that this is a simple example, and real-world scenarios might 
-involve more complex configurations, especially if you need to apply specific 
-traffic shaping policies or prioritize different types of traffic. 
-Additionally, the effectiveness of traffic shaping depends on the traffic 
+Keep in mind that this is a simple example, and real-world scenarios might
+involve more complex configurations, especially if you need to apply specific
+traffic shaping policies or prioritize different types of traffic.
+Additionally, the effectiveness of traffic shaping depends on the traffic
 patterns and the specific use case.
 
 TO DO IT WITHIN THE CODE:
@@ -516,19 +516,18 @@ int handle_ingress(struct __sk_buff *skb) {
 
 */
 
-
 SEC("egress_filter")
-int egress_filter_entry_point(struct __sk_buff *skb) {
+int egress_filter_entry_point(struct __sk_buff* skb) {
   bpf_debug("==========< EGRESS FILTER >==========\n");
 
   // Extract Ethernet header
   struct ethhdr* ethh = (void*) (long) skb->data;
-  
+
   if ((void*) (ethh + 1) > (void*) (long) skb->data_end) {
     bpf_debug("Invalid Ethernet header");
     return TC_ACT_SHOT;
   }
-  
+
   return sdf_filter(skb, ethh);
 }
 
