@@ -225,7 +225,6 @@ class udp_server {
   char* recv_buffer_alloc_;
   // udp_packet_q_item_t *udp_packet_q_item_alloc_;
   udp_application* app_;
-  // std::vector<std::thread> threads_;
   std::thread rthread_;
   std::thread wthread_;
   bool terminateRL_;

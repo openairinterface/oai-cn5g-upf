@@ -120,7 +120,6 @@ itti_mw::itti_mw()
 
 //------------------------------------------------------------------------------
 itti_mw::~itti_mw() {
-  Logger::itti().info("~itti()");
   // Making sure the timer thread has finished.
   // detach is not good since we don't control when the thread will end.
   // we also start a dummy timer for the loop to exit
@@ -128,7 +127,6 @@ itti_mw::~itti_mw() {
     timer_id_t stopping = itti_inst->timer_setup(1, 0, TASK_GTPV1_U, 0, 0);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    Logger::itti().debug("Joining timer_thread");
     timer_thread.join();
 
     itti_inst->timer_remove(stopping);
@@ -139,7 +137,6 @@ itti_mw::~itti_mw() {
       delete itti_task_ctxts[t];
     }
   }
-  Logger::itti().info("~itti() Done!");
 }
 
 //------------------------------------------------------------------------------

@@ -175,24 +175,18 @@ upf_app::upf_app(const std::string& config_file) {
 
 //------------------------------------------------------------------------------
 upf_app::~upf_app() {
-  Logger::upf_app().info("Starting the upf_app destructor");
   if (upf_n3_inst) {
-    Logger::upf_app().debug("Deleting the N3 object");
     delete upf_n3_inst;
   }
   if (upf_n4_inst) {
-    Logger::upf_app().debug("Deleting the N4 object");
     delete upf_n4_inst;
   }
   if (upf_nrf_inst) {
-    Logger::upf_app().debug("Deleting the NRF-SBI object");
     delete upf_nrf_inst;
   }
   if (pfcp_switch_inst) {
-    Logger::upf_app().debug("Deleting the PFCP-Switch object");
     delete pfcp_switch_inst;
   }
-  Logger::upf_app().info("Done with the upf_app destructor");
 }
 //------------------------------------------------------------------------------
 void upf_app::handle_itti_msg(std::shared_ptr<itti_n3_echo_request> m) {
