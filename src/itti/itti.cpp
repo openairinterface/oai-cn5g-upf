@@ -45,11 +45,19 @@ void itti_mw::timer_manager_task(
   Logger::itti().info("Starting timer_manager_task");
   sched_params.apply(TASK_ITTI_TIMER, Logger::itti());
   while (true) {
-    if (itti_inst->terminate) return;
-    {
+    if (itti_inst->terminate) {
+      Logger::itti().info("timer_manager_task is stopped!");
+      itti_inst->terminate = false;
+      return;
+    } else {
       std::unique_lock<std::mutex> lx(itti_inst->m_timers);
       while (itti_inst->timers.empty()) {
         itti_inst->c_timers.wait(lx);
+      }
+      if (itti_inst->terminate) {
+        Logger::itti().info("timer_manager_task is stopped!");
+        itti_inst->terminate = false;
+        return;
       }
       std::set<itti_timer>::iterator it = itti_inst->timers.begin();
       itti_inst->current_timer          = std::ref(*it);
@@ -112,18 +120,23 @@ itti_mw::itti_mw()
 
 //------------------------------------------------------------------------------
 itti_mw::~itti_mw() {
-  std::cout << "~itti()" << std::endl;
-  timer_thread.detach();
-  // wake up thread timer if necessary
-  std::unique_lock<std::mutex> l2(m_timeout);
-  c_timeout.notify_one();
+  // Making sure the timer thread has finished.
+  // detach is not good since we don't control when the thread will end.
+  // we also start a dummy timer for the loop to exit
+  if (terminate) {
+    timer_id_t stopping = itti_inst->timer_setup(1, 0, TASK_GTPV1_U, 0, 0);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    timer_thread.join();
+
+    itti_inst->timer_remove(stopping);
+  }
 
   for (int t = TASK_FIRST; t < TASK_MAX; t++) {
     if (itti_task_ctxts[t]) {
       delete itti_task_ctxts[t];
     }
   }
-  std::cout << "~itti() Done!" << std::endl;
 }
 
 //------------------------------------------------------------------------------
@@ -257,8 +270,8 @@ int itti_mw::send_broadcast_msg(std::shared_ptr<itti_msg> message) {
 
 //------------------------------------------------------------------------------
 int itti_mw::send_terminate_msg(task_id_t src_task_id) {
+  itti_inst->terminate = true;
   itti_msg_terminate msg(src_task_id, TASK_ALL);
-  terminate = true;
   std::shared_ptr<itti_msg_terminate> smsg =
       std::make_shared<itti_msg_terminate>(msg);
   int ret = itti_inst->send_broadcast_msg(smsg);

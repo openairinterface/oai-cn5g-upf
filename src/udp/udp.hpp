@@ -47,6 +47,7 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include <pthread.h>
 
 class udp_application {
  public:
@@ -95,7 +96,9 @@ class udp_server {
         port_(port_num),
         free_pool_(nullptr),
         work_pool_(nullptr) {
-    socket_ = create_socket(address, port_);
+    socket_      = create_socket(address, port_);
+    terminateRL_ = false;
+    terminateWL_ = false;
     if (socket_ > 0) {
       Logger::udp().debug(
           "udp_server::udp_server(%s:%d)", conv::toString(address).c_str(),
@@ -116,7 +119,9 @@ class udp_server {
         port_(port_num),
         free_pool_(nullptr),
         work_pool_(nullptr) {
-    socket_ = create_socket(address, port_);
+    socket_      = create_socket(address, port_);
+    terminateRL_ = false;
+    terminateWL_ = false;
     if (socket_ > 0) {
       Logger::udp().debug("udp_server::udp_server(%s:%d)", address, port_);
     } else {
@@ -128,12 +133,35 @@ class udp_server {
   }
 
   ~udp_server() {
-    close(socket_);
+    int res;
+
+    Logger::udp().info("Starting the udp_server destruction");
+    stop();
+
+    // closing a socket is not enough for a blocking API call to stop.
+    // shutdown is required. recvfrom will stop automically
+    // and bytes_received should be equal to 0.
+    shutdown(socket_, SHUT_RDWR);
+    // waiting for the read thread to end
+    while (terminateRL_) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    // now we can close the socket
+    res = close(socket_);
+    if (res != 0) {
+      Logger::udp().error("close on socket_ failed %s", strerror(errno));
+    }
+
+    // Joining on all threads for completion
+    rthread_.join();
+    wthread_.join();
+
     // TODO delete/release elements in  the pool
-    delete free_pool_;
-    delete work_pool_;
-    free(recv_buffer_alloc_);
+    if (free_pool_) delete free_pool_;
+    if (work_pool_) delete work_pool_;
+    if (recv_buffer_alloc_) free(recv_buffer_alloc_);
     // free(udp_packet_q_item_alloc_);
+    Logger::udp().info("Finished the udp_server destruction");
   }
 
   void udp_read_loop(const util::thread_sched_params& thread_sched_params);
@@ -197,10 +225,14 @@ class udp_server {
   char* recv_buffer_alloc_;
   // udp_packet_q_item_t *udp_packet_q_item_alloc_;
   udp_application* app_;
-  std::vector<std::thread> threads_;
+  std::thread rthread_;
+  std::thread wthread_;
+  bool terminateRL_;
+  bool terminateWL_;
   int socket_;
   uint16_t port_;
   sa_family_t sa_family;
+  pthread_t tmp_thread;
 };
 
 #endif /* FILE_UDP_HPP_SEEN */

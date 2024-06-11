@@ -223,7 +223,7 @@ function main()
   cd ./build
   OS_BASE=$(grep "^ID_LIKE=" /etc/os-release | sed "s/ID_LIKE=//" | sed "s/\"//g")
   echo "OS_BASE = ${OS_BASE}"
-  $CMAKE $cmake_args .. > /dev/null
+  $CMAKE $cmake_args ..
   ret=$?;[[ $ret -ne 0 ]] && return $ret
 
   compilations upf upf $OPENAIRCN_DIR/build/upf/build/upf $verbose
