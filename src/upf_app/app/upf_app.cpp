@@ -188,6 +188,15 @@ upf_app::~upf_app() {
     delete pfcp_switch_inst;
   }
 }
+
+//------------------------------------------------------------------------------
+void upf_app::stop() {
+  if (upf_nrf_inst) {
+    upf_nrf_inst->deregister_to_nrf();
+  }
+  // TODO: upf_n4, pfcp_switch
+}
+
 //------------------------------------------------------------------------------
 void upf_app::handle_itti_msg(std::shared_ptr<itti_n3_echo_request> m) {
   Logger::upf_app().debug("Received %s ", m->get_msg_name());
