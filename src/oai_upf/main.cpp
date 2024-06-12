@@ -42,14 +42,10 @@
 #include <SessionProgramManager.h>
 #include <UserPlaneComponent.h>
 
-// #include "upf_config.hpp"
-//  extern oai::config::upf_config upf_cfg;
 using namespace oai::upf::app;
 using namespace oai::config;
 using namespace util;
 using namespace std;
-
-// static std::shared_ptr<SessionManager> spSessionManager;
 
 itti_mw* itti_inst                    = nullptr;
 async_shell_cmd* async_shell_cmd_inst = nullptr;
@@ -57,6 +53,7 @@ pfcp_switch* pfcp_switch_inst         = nullptr;
 upf_app* upf_app_inst                 = nullptr;
 upf_config upf_cfg;
 boost::asio::io_service io_service;
+bool single_teardown_call;
 
 #ifndef N3_IF_NAME
 #define N3_IF_NAME upf_cfg.n3.if_name
@@ -70,8 +67,15 @@ std::unique_ptr<upf_config_yaml> upf_cfg_yaml = nullptr;
 
 //------------------------------------------------------------------------------
 void my_app_signal_handler(int s) {
-  std::cout << "Caught signal " << s << std::endl;
-  Logger::system().startup("exiting");
+
+  if (single_teardown_call) {
+    return;
+  }
+  single_teardown_call = true;
+  // Setting log level arbitrarly to debug to show the whole
+  // shutdown procedure in the logs even in case of off-logging
+  Logger::set_level(spdlog::level::debug);
+  Logger::system().info("Caught signal %d", s);
 
   // Stop on-going tasks
   if (upf_app_inst) {
@@ -81,25 +85,31 @@ void my_app_signal_handler(int s) {
   itti_inst->wait_tasks_end();
 
   std::cout << "Freeing Allocated memory..." << std::endl;
+
   if (async_shell_cmd_inst) {
     delete async_shell_cmd_inst;
     async_shell_cmd_inst = nullptr;
+    std::cout << "Async Shell CMD memory done." << std::endl;
   }
-  std::cout << "Async Shell CMD memory done." << std::endl;
-  if (itti_inst) {
-    delete itti_inst;
-    itti_inst = nullptr;
-  }
-  std::cout << "ITTI memory done." << std::endl;
 
   if (upf_app_inst) {
     delete upf_app_inst;
     upf_app_inst = nullptr;
+    std::cout << "UPF APP memory done." << std::endl;
   }
-  std::cout << "UPF APP memory done." << std::endl;
-  std::cout << "Freeing Allocated memory done" << std::endl;
+  
+    if (itti_inst) {
+    delete itti_inst;
+    itti_inst = nullptr;
+    std::cout << "ITTI memory done." << std::endl;
+  }
+ 
+  Logger::system().info("Freeing Allocated memory done.");
+  Logger::system().info("Bye");
+
   exit(0);
 }
+
 //------------------------------------------------------------------------------
 // We are doing a check to see if an existing process already runs this program.
 // We have seen that running at least twice this program in a container may lead
@@ -134,6 +144,7 @@ int my_check_redundant_process(char* exec_name) {
   delete[] cmd;
   return result;
 }
+
 //------------------------------------------------------------------------------
 void setup_bpf() {
   std::shared_ptr<RulesUtilities> mpRulesFactory;
@@ -147,6 +158,7 @@ void setup_bpf() {
       mpRulesFactory, sGTPInterface, sUDPInterface);
   // spSessionManager = UserPlaneComponent::getInstance().getSessionManager();
 }
+
 //------------------------------------------------------------------------------
 int main(int argc, char** argv) {
   // Checking if another instance of UPF is running
@@ -171,6 +183,7 @@ int main(int argc, char** argv) {
 
   std::signal(SIGTERM, my_app_signal_handler);
   std::signal(SIGINT, my_app_signal_handler);
+  single_teardown_call = false;
 
   // Config
   std::string conf_file_name = Options::getlibconfigConfig();

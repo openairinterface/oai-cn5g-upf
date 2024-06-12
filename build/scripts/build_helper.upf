@@ -335,10 +335,14 @@ check_install_upf_deps() {
     ret=$?;[[ $ret -ne 0 ]] && return $ret
   fi
 
-  if [[ "$OS_BASEDISTRO" == "fedora" ]]; then
-    rm -f /usr/bin/g++ /usr/bin/gcc
+  if [[ $IS_CONTAINER -eq 1 ]] && [[ "$OS_BASEDISTRO" == "fedora" ]]; then
+    echo "Changing gcc/g++ version to 12"
+    mv /usr/bin/g++ /usr/bin/g++-11
+    mv /usr/bin/gcc /usr/bin/gcc-11
+    mv /usr/bin/c++ /usr/bin/c++-11
     update-alternatives --install /usr/bin/gcc gcc /opt/rh/gcc-toolset-12/root/bin/gcc 20
     update-alternatives --install /usr/bin/g++ g++ /opt/rh/gcc-toolset-12/root/bin/g++ 20
+    update-alternatives --install /usr/bin/c++ c++ /opt/rh/gcc-toolset-12/root/bin/c++ 20
   fi
 
   $SUDO ldconfig

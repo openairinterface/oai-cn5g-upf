@@ -175,8 +175,18 @@ upf_app::upf_app(const std::string& config_file) {
 
 //------------------------------------------------------------------------------
 upf_app::~upf_app() {
-  if (upf_n4_inst) delete upf_n4_inst;
-  if (upf_nrf_inst) delete upf_nrf_inst;
+  if (upf_n3_inst) {
+    delete upf_n3_inst;
+  }
+  if (upf_n4_inst) {
+    delete upf_n4_inst;
+  }
+  if (upf_nrf_inst) {
+    delete upf_nrf_inst;
+  }
+  if (pfcp_switch_inst) {
+    delete pfcp_switch_inst;
+  }
 }
 
 //------------------------------------------------------------------------------
