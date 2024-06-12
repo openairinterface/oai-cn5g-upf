@@ -57,6 +57,8 @@ class upf_app {
   upf_app(upf_app const&) = delete;
   void operator=(upf_app const&) = delete;
 
+  void stop();
+
   teid_t generate_s5s8_up_teid();
 
   void handle_itti_msg(std::shared_ptr<itti_n3_echo_request> m);

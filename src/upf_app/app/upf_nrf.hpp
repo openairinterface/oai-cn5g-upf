@@ -74,7 +74,7 @@ class upf_nrf {
    * @param [nlohmann::json &] data: Json data to be sent
    * @return void
    */
-  void send_update_nf_instance(
+  bool send_update_nf_instance(
       const std::string& url, const nlohmann::json& data);
 
   /*

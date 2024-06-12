@@ -24,7 +24,6 @@
 #include "upf_app.hpp"
 #include "upf_config.hpp"
 #include "upf_config_yaml.hpp"
-#include "upf_nrf.hpp"
 
 #include <boost/asio.hpp>
 #include <iostream>
@@ -43,14 +42,9 @@
 #include <SessionProgramManager.h>
 #include <UserPlaneComponent.h>
 
-// #include "upf_config.hpp"
-//  extern oai::config::upf_config upf_cfg;
 using namespace oai::upf::app;
 using namespace oai::config;
 using namespace util;
-using namespace std;
-
-// static std::shared_ptr<SessionManager> spSessionManager;
 
 itti_mw* itti_inst                    = nullptr;
 async_shell_cmd* async_shell_cmd_inst = nullptr;
@@ -58,8 +52,7 @@ pfcp_switch* pfcp_switch_inst         = nullptr;
 upf_app* upf_app_inst                 = nullptr;
 upf_config upf_cfg;
 boost::asio::io_service io_service;
-// TODO These global variables are ugly :| -> refactor together with nrf client
-extern upf_nrf* upf_nrf_inst;
+bool single_teardown_call;
 
 #ifndef N3_IF_NAME
 #define N3_IF_NAME upf_cfg.n3.if_name
@@ -77,60 +70,46 @@ std::unique_ptr<upf_config_yaml> upf_cfg_yaml = nullptr;
 
 //------------------------------------------------------------------------------
 void my_app_signal_handler(int s) {
-  std::cout << "Caught signal " << s << std::endl;
-  Logger::system().startup("exiting");
-  if (upf_nrf_inst) {
-    upf_nrf_inst->deregister_to_nrf();
+  if (single_teardown_call) {
+    return;
+  }
+  single_teardown_call = true;
+  // Setting log level arbitrarly to debug to show the whole
+  // shutdown procedure in the logs even in case of off-logging
+  Logger::set_level(spdlog::level::debug);
+  Logger::system().info("Caught signal %d", s);
+
+  // Stop on-going tasks
+  if (upf_app_inst) {
+    upf_app_inst->stop();
   }
   itti_inst->send_terminate_msg(TASK_UPF_APP);
   itti_inst->wait_tasks_end();
-  std::cout << "Freeing Allocated memory..." << std::endl;
-  if (async_shell_cmd_inst) delete async_shell_cmd_inst;
-  async_shell_cmd_inst = nullptr;
-  std::cout << "Async Shell CMD memory done." << std::endl;
-  if (itti_inst) delete itti_inst;
-  itti_inst = nullptr;
-  std::cout << "ITTI memory done." << std::endl;
-  if (upf_app_inst) delete upf_app_inst;
-  upf_app_inst = nullptr;
-  std::cout << "UPF APP memory done." << std::endl;
-  std::cout << "Freeing Allocated memory done" << std::endl;
-  exit(0);
-}
 
-//------------------------------------------------------------------------------
-// We are doing a check to see if an existing process already runs this program.
-// We have seen that running at least twice this program in a container may lead
-// to the container host to crash.
-int my_check_redundant_process(char* exec_name) {
-  FILE* fp;
-  char* cmd = new char[200];
-  std::vector<std::string> words;
-  int result     = 0;
-  size_t retSize = 0;
+  Logger::system().info("Freeing Allocated memory...");
 
-  // Retrieving only the executable name
-  boost::split(words, exec_name, boost::is_any_of("/"));
-  memset(cmd, 0, 200);
-  sprintf(
-      cmd, "ps aux | grep -v grep | grep -v nohup | grep -c %s || true",
-      words[words.size() - 1].c_str());
-  fp = popen(cmd, "r");
-
-  // clearing the buffer
-  memset(cmd, 0, 200);
-  retSize = fread(cmd, 1, 200, fp);
-  fclose(fp);
-
-  // if something wrong, then we don't know
-  if (retSize == 0) {
-    delete[] cmd;
-    return 10;
+  if (async_shell_cmd_inst) {
+    delete async_shell_cmd_inst;
+    async_shell_cmd_inst = nullptr;
+    Logger::system().debug("Async Shell CMD memory done.");
   }
 
-  result = atoi(cmd);
-  delete[] cmd;
-  return result;
+  if (upf_app_inst) {
+    delete upf_app_inst;
+    upf_app_inst = nullptr;
+    Logger::system().debug("UPF APP memory done.");
+  }
+
+  if (itti_inst) {
+    delete itti_inst;
+    itti_inst = nullptr;
+    Logger::system().debug("ITTI memory done.");
+  }
+
+  Logger::system().info("Freeing Allocated memory done.");
+  Logger::system().info("Bye");
+
+  exit(0);
 }
 
 //------------------------------------------------------------------------------
@@ -138,8 +117,8 @@ void setup_bpf(const char* qdisc_scheduler = nullptr) {
   std::shared_ptr<RulesUtilities> mpRulesFactory;
   mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
 
-  string sGTPInterface = N3_IF_NAME;
-  string sUDPInterface = N6_IF_NAME;
+  std::string sGTPInterface = N3_IF_NAME;
+  std::string sUDPInterface = N6_IF_NAME;
   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
   Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
 
@@ -154,15 +133,6 @@ void setup_bpf(const char* qdisc_scheduler = nullptr) {
 
 //------------------------------------------------------------------------------
 int main(int argc, char** argv) {
-  // Checking if another instance of UPF is running
-  // int nb_processes = my_check_redundant_process(argv[0]);
-  // if (nb_processes > 1) {
-  //   std::cout << "An instance of " << argv[0] << " is maybe already called!"
-  //             << std::endl;
-  //   std::cout << "  " << nb_processes << " were detected" << std::endl;
-  //   return -1;
-  // }
-
   // Command line options
   if (!Options::parse(argc, argv)) {
     std::cout << "Options::parse() failed" << std::endl;
@@ -176,6 +146,7 @@ int main(int argc, char** argv) {
 
   std::signal(SIGTERM, my_app_signal_handler);
   std::signal(SIGINT, my_app_signal_handler);
+  single_teardown_call = false;
 
   // Config
   std::string conf_file_name = Options::getlibconfigConfig();
@@ -204,7 +175,8 @@ int main(int argc, char** argv) {
 
   // PID file
   // Currently hard-coded value. TODO: add as config option.
-  string pid_file_name = get_exe_absolute_path("/var/run", upf_cfg.instance);
+  std::string pid_file_name =
+      get_exe_absolute_path("/var/run", upf_cfg.instance);
   if (!is_pid_file_lock_success(pid_file_name.c_str())) {
     Logger::upf_app().error("Lock PID file %s failed\n", pid_file_name.c_str());
     exit(-EDEADLK);
