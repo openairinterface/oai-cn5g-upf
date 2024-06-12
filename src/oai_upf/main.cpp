@@ -45,7 +45,6 @@
 using namespace oai::upf::app;
 using namespace oai::config;
 using namespace util;
-using namespace std;
 
 itti_mw* itti_inst                    = nullptr;
 async_shell_cmd* async_shell_cmd_inst = nullptr;
@@ -67,7 +66,6 @@ std::unique_ptr<upf_config_yaml> upf_cfg_yaml = nullptr;
 
 //------------------------------------------------------------------------------
 void my_app_signal_handler(int s) {
-
   if (single_teardown_call) {
     return;
   }
@@ -84,26 +82,26 @@ void my_app_signal_handler(int s) {
   itti_inst->send_terminate_msg(TASK_UPF_APP);
   itti_inst->wait_tasks_end();
 
-  std::cout << "Freeing Allocated memory..." << std::endl;
+  Logger::system().info("Freeing Allocated memory...");
 
   if (async_shell_cmd_inst) {
     delete async_shell_cmd_inst;
     async_shell_cmd_inst = nullptr;
-    std::cout << "Async Shell CMD memory done." << std::endl;
+    Logger::system().debug("Async Shell CMD memory done.");
   }
 
   if (upf_app_inst) {
     delete upf_app_inst;
     upf_app_inst = nullptr;
-    std::cout << "UPF APP memory done." << std::endl;
+    Logger::system().debug("UPF APP memory done.");
   }
-  
-    if (itti_inst) {
+
+  if (itti_inst) {
     delete itti_inst;
     itti_inst = nullptr;
-    std::cout << "ITTI memory done." << std::endl;
+    Logger::system().debug("ITTI memory done.");
   }
- 
+
   Logger::system().info("Freeing Allocated memory done.");
   Logger::system().info("Bye");
 
@@ -111,65 +109,20 @@ void my_app_signal_handler(int s) {
 }
 
 //------------------------------------------------------------------------------
-// We are doing a check to see if an existing process already runs this program.
-// We have seen that running at least twice this program in a container may lead
-// to the container host to crash.
-int my_check_redundant_process(char* exec_name) {
-  FILE* fp;
-  char* cmd = new char[200];
-  std::vector<std::string> words;
-  int result     = 0;
-  size_t retSize = 0;
-
-  // Retrieving only the executable name
-  boost::split(words, exec_name, boost::is_any_of("/"));
-  memset(cmd, 0, 200);
-  sprintf(
-      cmd, "ps aux | grep -v grep | grep -v nohup | grep -c %s || true",
-      words[words.size() - 1].c_str());
-  fp = popen(cmd, "r");
-
-  // clearing the buffer
-  memset(cmd, 0, 200);
-  retSize = fread(cmd, 1, 200, fp);
-  fclose(fp);
-
-  // if something wrong, then we don't know
-  if (retSize == 0) {
-    delete[] cmd;
-    return 10;
-  }
-
-  result = atoi(cmd);
-  delete[] cmd;
-  return result;
-}
-
-//------------------------------------------------------------------------------
 void setup_bpf() {
   std::shared_ptr<RulesUtilities> mpRulesFactory;
   mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
 
-  string sGTPInterface = N3_IF_NAME;
-  string sUDPInterface = N6_IF_NAME;
+  std::string sGTPInterface = N3_IF_NAME;
+  std::string sUDPInterface = N6_IF_NAME;
   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
   Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
   UserPlaneComponent::getInstance().setup(
       mpRulesFactory, sGTPInterface, sUDPInterface);
-  // spSessionManager = UserPlaneComponent::getInstance().getSessionManager();
 }
 
 //------------------------------------------------------------------------------
 int main(int argc, char** argv) {
-  // Checking if another instance of UPF is running
-  // int nb_processes = my_check_redundant_process(argv[0]);
-  // if (nb_processes > 1) {
-  //   std::cout << "An instance of " << argv[0] << " is maybe already called!"
-  //             << std::endl;
-  //   std::cout << "  " << nb_processes << " were detected" << std::endl;
-  //   return -1;
-  // }
-
   // Command line options
   if (!Options::parse(argc, argv)) {
     std::cout << "Options::parse() failed" << std::endl;
@@ -212,7 +165,8 @@ int main(int argc, char** argv) {
 
   // PID file
   // Currently hard-coded value. TODO: add as config option.
-  string pid_file_name = get_exe_absolute_path("/var/run", upf_cfg.instance);
+  std::string pid_file_name =
+      get_exe_absolute_path("/var/run", upf_cfg.instance);
   if (!is_pid_file_lock_success(pid_file_name.c_str())) {
     Logger::upf_app().error("Lock PID file %s failed\n", pid_file_name.c_str());
     exit(-EDEADLK);
