@@ -244,7 +244,7 @@ void upf_nf_profile::to_json(nlohmann::json& data) const {
   for (auto s : snssais) {
     nlohmann::json tmp = {};
     tmp["sst"]         = s.sst;
-    tmp["sd"]          = std::to_string(s.sd);
+    tmp["sd"]          = s.sd;
     data["sNssais"].push_back(tmp);
   }
   data["fqdn"] = fqdn;
@@ -264,7 +264,7 @@ void upf_nf_profile::to_json(nlohmann::json& data) const {
   for (auto s : upf_info.snssai_upf_info_list) {
     nlohmann::json tmp    = {};
     tmp["sNssai"]["sst"]  = s.snssai.sst;
-    tmp["sNssai"]["sd"]   = std::to_string(s.snssai.sd);
+    tmp["sNssai"]["sd"]   = s.snssai.sd;
     tmp["dnnUpfInfoList"] = nlohmann::json::array();
     for (auto d : s.dnn_upf_info_list) {
       nlohmann::json dnn_json = {};
@@ -304,8 +304,7 @@ void upf_nf_profile::from_json(const nlohmann::json& data) {
       snssai_t s = {};
       s.sst      = it["sst"].get<int>();
       if (it["sNssai"].find("sd") != it["sNssai"].end()) {
-        xgpp_conv::sd_string_to_int(
-            it["sNssai"]["sd"].get<std::string>(), s.sd);
+        s.sd = it["sNssai"]["sd"].get<std::string>();
       }
       snssais.push_back(s);
     }
@@ -318,11 +317,13 @@ void upf_nf_profile::from_json(const nlohmann::json& data) {
       struct in_addr addr4 = {};
       std::string address  = it.get<std::string>();
       unsigned char buf_in_addr[sizeof(struct in_addr)];
-      if (inet_pton(AF_INET, util::trim(address).c_str(), buf_in_addr) == 1) {
+      if (inet_pton(AF_INET, oai::utils::trim(address).c_str(), buf_in_addr) ==
+          1) {
         memcpy(&addr4, buf_in_addr, sizeof(struct in_addr));
       } else {
         Logger::upf_app().warn(
-            "Address conversion: Bad value %s", util::trim(address).c_str());
+            "Address conversion: Bad value %s",
+            oai::utils::trim(address).c_str());
       }
       add_nf_ipv4_addresses(addr4);
     }
@@ -352,8 +353,7 @@ void upf_nf_profile::from_json(const nlohmann::json& data) {
           if (it["sNssai"].find("sst") != it["sNssai"].end())
             upf_info_item.snssai.sst = it["sNssai"]["sst"].get<int>();
           if (it["sNssai"].find("sd") != it["sNssai"].end()) {
-            xgpp_conv::sd_string_to_int(
-                it["sNssai"]["sd"].get<std::string>(), upf_info_item.snssai.sd);
+            upf_info_item.snssai.sd = it["sNssai"]["sd"].get<std::string>();
           }
         }
         if (it.find("dnnUpfInfoList") != it.end()) {

@@ -88,12 +88,4 @@ typedef struct gNB_id_s {
   }
 } gNB_id_t;  // 22bits to 32bits
 
-typedef struct global_ran_node_id_s {
-  plmn_t plmn_id;
-  //    n3IwfId:
-  gNB_id_t gNbId;
-  //        ngeNbId:
-
-} global_ran_node_id_t;
-
 #endif

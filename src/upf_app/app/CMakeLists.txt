@@ -33,10 +33,15 @@ include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/udp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/config)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/common)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/http)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
 # It is already in include of utils.cmake but we need it here again?
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf/nrf_model.cmake)
+include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/http/http.cmake)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model.cmake)
 
 add_definitions("-DPACKAGE_NAME=\"UPF\"")
 

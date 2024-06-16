@@ -301,9 +301,9 @@ in_addr upf_config_yaml::resolve_nf(const std::string& host) {
           "address in your DNS configuration for the host {}.",
           host));
     }
-    return conv::fromString(ip_address);
+    return oai::utils::conv::fromString(ip_address);
   }
-  return conv::fromString(host);
+  return oai::utils::conv::fromString(host);
 }
 
 //------------------------------------------------------------------------------
@@ -321,7 +321,7 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
     throw("DO NOT SUPPORT IPV6 ADDR FOR NRF!");
   } else {  // IPv4
     IPV4_STR_ADDR_TO_INADDR(
-        util::trim(remote_n6_addr).c_str(), cfg.remote_n6,
+        oai::utils::trim(remote_n6_addr).c_str(), cfg.remote_n6,
         "BAD IPv4 ADDRESS FORMAT FOR N6 DN !");
   }
 
@@ -338,7 +338,7 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
         throw("DO NOT SUPPORT IPV6 ADDR FOR SMF!");
       } else {  // IPv4
         IPV4_STR_ADDR_TO_INADDR(
-            util::trim(smf_addr).c_str(), n.u1.ipv4_address,
+            oai::utils::trim(smf_addr).c_str(), n.u1.ipv4_address,
             "BAD IPv4 ADDRESS FORMAT FOR SMF !");
       }
       cfg.smfs.push_back(n);
@@ -387,11 +387,12 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
     logger::logger_registry::get_logger(LOGGER_NAME)
         .debug(
             "PDN Network validation for UE Subnet:  %s ",
-            conv::toString(cfg_dnn.get_ipv4_subnet()));
+            oai::utils::conv::toString(cfg_dnn.get_ipv4_subnet()));
     logger::logger_registry::get_logger(LOGGER_NAME)
         .debug(
-            "IP Pool :  %s - %s", conv::toString(cfg_dnn.get_ipv4_pool_start()),
-            conv::toString(cfg_dnn.get_ipv4_pool_end()));
+            "IP Pool :  %s - %s",
+            oai::utils::conv::toString(cfg_dnn.get_ipv4_pool_start()),
+            oai::utils::conv::toString(cfg_dnn.get_ipv4_pool_end()));
     cfg.pdns.push_back(pdn_cfg);
   }
 

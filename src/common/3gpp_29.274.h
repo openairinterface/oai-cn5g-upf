@@ -1122,9 +1122,11 @@ typedef struct gtpc2c_ecgi_field_s {
 
   //------------------------------------------------------------------------------
   std::string toString() const {
-    std::string s    = {};
-    std::string mccs = conv::mccToString(mcc_digit_1, mcc_digit_2, mcc_digit_3);
-    std::string mncs = conv::mncToString(mnc_digit_1, mnc_digit_2, mnc_digit_3);
+    std::string s = {};
+    std::string mccs =
+        oai::utils::conv::mccToString(mcc_digit_1, mcc_digit_2, mcc_digit_3);
+    std::string mncs =
+        oai::utils::conv::mncToString(mnc_digit_1, mnc_digit_2, mnc_digit_3);
     s.append("mcc=").append(mccs).append(", MNC=").append(mncs);
     s.append(", ECI=").append(std::to_string(eci));
     uint32_t we_utran_cell_identifier =
@@ -1308,10 +1310,10 @@ struct fully_qualified_tunnel_endpoint_identifier_s {
       s.append("Interface type=").append(iface_type.toString());
       s.append(", TEID=").append(std::to_string(teid_gre_key));
       if (v4) {
-        s.append(", IPv4=").append(conv::toString(ipv4_address));
+        s.append(", IPv4=").append(oai::utils::conv::toString(ipv4_address));
       }
       if (v6) {
-        s.append(", IPv6=").append(conv::toString(ipv6_address));
+        s.append(", IPv6=").append(oai::utils::conv::toString(ipv6_address));
       }
     } else {
       s.append("null_fteid");

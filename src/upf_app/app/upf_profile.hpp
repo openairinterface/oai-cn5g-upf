@@ -44,6 +44,8 @@ namespace oai {
 namespace upf {
 namespace app {
 
+using namespace oai::common::sbi;
+
 class upf_nf_profile : public std::enable_shared_from_this<upf_nf_profile> {
  public:
   upf_nf_profile()

@@ -307,13 +307,15 @@ void pfcp_switch::setup_pdn_interfaces() {
 
       if (index == 0) {
         cmd = fmt::format(
-            "ip addr add {}/{} dev tun{}", conv::toString(address4).c_str(),
-            it.prefix_ipv4, index);
+            "ip addr add {}/{} dev tun{}",
+            oai::utils::conv::toString(address4).c_str(), it.prefix_ipv4,
+            index);
         rc = system((const char*) cmd.c_str());
       } else {
         // Remove defult route
         // cmd = fmt::format(
-        //     "ip route del {}/{}", conv::toString(it.network_ipv4).c_str(),
+        //     "ip route del {}/{}",
+        //     oai::utils::conv::toString(it.network_ipv4).c_str(),
         //     it.prefix_ipv4);
         // rc = system((const char*) cmd.c_str());
 
@@ -323,8 +325,8 @@ void pfcp_switch::setup_pdn_interfaces() {
 
         cmd = fmt::format(
             "ip route add {}/{} via {} dev tun0",
-            conv::toString(it.network_ipv4).c_str(), it.prefix_ipv4,
-            conv::toString(address4_gw).c_str());
+            oai::utils::conv::toString(it.network_ipv4).c_str(), it.prefix_ipv4,
+            oai::utils::conv::toString(address4_gw).c_str());
         rc = system((const char*) cmd.c_str());
       }
 
@@ -332,9 +334,9 @@ void pfcp_switch::setup_pdn_interfaces() {
         cmd = fmt::format(
             "iptables -t nat -A POSTROUTING -s {}/{} -o {} -j SNAT --to "
             "{}",
-            conv::toString(it.network_ipv4).c_str(), it.prefix_ipv4,
+            oai::utils::conv::toString(it.network_ipv4).c_str(), it.prefix_ipv4,
             upf_cfg.n6.if_name.c_str(),
-            conv::toString(upf_cfg.n6.addr4).c_str());
+            oai::utils::conv::toString(upf_cfg.n6.addr4).c_str());
         rc = system((const char*) cmd.c_str());
       }
     }
@@ -346,15 +348,15 @@ void pfcp_switch::setup_pdn_interfaces() {
       struct in6_addr addr6 = it.network_ipv6;
       addr6.s6_addr[15]     = 1;
       cmd                   = fmt::format(
-          "ip -6 addr add {}/{} dev tun{}", conv::toString(addr6).c_str(),
-          it.prefix_ipv6, index);
+          "ip -6 addr add {}/{} dev tun{}",
+          oai::utils::conv::toString(addr6).c_str(), it.prefix_ipv6, index);
       rc = system((const char*) cmd.c_str());
       // if ((it.enable_snat) && (/* SGI has IPv6 address*/)) {
       //   cmd = fmt::format(
       //       "ip6tables -t nat -A POSTROUTING -s {}/{} -o {} -j
       //       SNAT-- to -
-      //       source {} ", conv::toString(addr6).c_str(), it.prefix_ipv6,
-      //       xxx);
+      //       source {} ", oai::utils::conv::toString(addr6).c_str(),
+      //       it.prefix_ipv6, xxx);
       //   rc = system((const char*) cmd.c_str());
       // }
     }
