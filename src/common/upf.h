@@ -37,7 +37,7 @@ typedef uint64_t supi64_t;
 
 #define SUPI_DIGITS_MAX 15
 
-const std::string SD_NO_VALUE_STR = "0xFFFFFF";
+const std::string SD_NO_VALUE_STR = "FFFFFF";
 
 typedef struct {
   uint32_t length;

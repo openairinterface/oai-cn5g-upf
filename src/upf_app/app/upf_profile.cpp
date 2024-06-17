@@ -208,7 +208,7 @@ void upf_nf_profile::display() const {
     Logger::upf_app().debug("    SNSSAI:");
   }
   for (auto s : snssais) {
-    Logger::upf_app().debug("        SST, SD: %d, %d", s.sst, s.sd);
+    Logger::upf_app().debug("        SST, SD: %d, %s", s.sst, s.sd.c_str());
   }
 
   // IPv4 Addresses
@@ -225,7 +225,7 @@ void upf_nf_profile::display() const {
   }
   for (auto s : upf_info.snssai_upf_info_list) {
     Logger::upf_app().debug(
-        "        SNSSAI (SST %d, SD %d)", s.snssai.sst, s.snssai.sd);
+        "        SNSSAI (SST %d, SD %s)", s.snssai.sst, s.snssai.sd.c_str());
     for (auto d : s.dnn_upf_info_list) {
       Logger::upf_app().debug("            DNN %s", d.dnn.c_str());
     }

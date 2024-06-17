@@ -364,7 +364,7 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   auto snssai_upf_list = upf_local->get_upf_info().getSNssaiUpfInfoList();
   for (const auto& snssai : snssai_upf_list) {
     snssai_upf_info_item_t item;
-    item.snssai.sd  = snssai.getSNssai().getSdInt();
+    item.snssai.sd  = snssai.getSNssai().getSd();
     item.snssai.sst = snssai.getSNssai().getSst();
     for (const auto& dnn : snssai.getDnnUpfInfoList()) {
       dnn_upf_info_item_t dnn_item = {};
