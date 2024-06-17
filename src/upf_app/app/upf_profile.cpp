@@ -302,11 +302,13 @@ void upf_nf_profile::from_json(const nlohmann::json& data) {
   if (data.find("sNssais") != data.end()) {
     for (auto it : data["sNssais"]) {
       snssai_t s = {};
-      s.sst      = it["sst"].get<int>();
-      if (it["sNssai"].find("sd") != it["sNssai"].end()) {
-        s.sd = it["sNssai"]["sd"].get<std::string>();
+      if (it["sNssai"].find("sst") != it["sNssai"].end()) {
+        s.sst = it["sNssai"]["sst"].get<int>();
+        if (it["sNssai"].find("sd") != it["sNssai"].end()) {
+          s.sd = it["sNssai"]["sd"].get<std::string>();
+        }
+        snssais.push_back(s);
       }
-      snssais.push_back(s);
     }
   }
 
@@ -338,33 +340,36 @@ void upf_nf_profile::from_json(const nlohmann::json& data) {
   }
 
   // UPF info
+  upf_info.snssai_upf_info_list.clear();
   if (data.find("upfInfo") != data.end()) {
     nlohmann::json info = data["upfInfo"];
 
-    dnn_upf_info_item_t dnn_item = {};
-
     if (info.find("sNssaiUpfInfoList") != info.end()) {
-      nlohmann::json snssai_upf_info_list =
-          data["upfInfo"]["sNssaiUpfInfoList"];
+      nlohmann::json snssai_upf_info_list = info["sNssaiUpfInfoList"];
 
       for (auto it : snssai_upf_info_list) {
         snssai_upf_info_item_t upf_info_item = {};
+        bool found_snssai                    = false;
         if (it.find("sNssai") != it.end()) {
-          if (it["sNssai"].find("sst") != it["sNssai"].end())
+          if (it["sNssai"].find("sst") != it["sNssai"].end()) {
             upf_info_item.snssai.sst = it["sNssai"]["sst"].get<int>();
-          if (it["sNssai"].find("sd") != it["sNssai"].end()) {
-            upf_info_item.snssai.sd = it["sNssai"]["sd"].get<std::string>();
+            found_snssai             = true;
+            if (it["sNssai"].find("sd") != it["sNssai"].end()) {
+              upf_info_item.snssai.sd = it["sNssai"]["sd"].get<std::string>();
+            }
           }
         }
         if (it.find("dnnUpfInfoList") != it.end()) {
           for (auto d : it["dnnUpfInfoList"]) {
             if (d.find("dnn") != d.end()) {
-              dnn_item.dnn = d["dnn"].get<std::string>();
+              dnn_upf_info_item_t dnn_item = {};
+              dnn_item.dnn                 = d["dnn"].get<std::string>();
               upf_info_item.dnn_upf_info_list.insert(dnn_item);
             }
           }
         }
-        upf_info.snssai_upf_info_list.push_back(upf_info_item);
+        if (found_snssai)
+          upf_info.snssai_upf_info_list.push_back(upf_info_item);
       }
     }
   }

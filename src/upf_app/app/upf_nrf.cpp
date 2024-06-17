@@ -231,8 +231,6 @@ void upf_nrf::generate_upf_profile() {
   // Get NSSAI from conf file
   for (auto s : upf_cfg.upf_info.snssai_upf_info_list) {
     upf_profile.add_snssai(s.snssai);
-    Logger::upf_app().debug(
-        "        SNSSAI (SST %d, SD %s)", s.snssai.sst, s.snssai.sd.c_str());
   }
 
   // Get UPF Info from conf file
