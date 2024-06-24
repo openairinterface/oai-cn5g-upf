@@ -262,9 +262,11 @@ void upf_nf_profile::to_json(nlohmann::json& data) const {
   data["upfInfo"]                      = {};
   data["upfInfo"]["sNssaiUpfInfoList"] = nlohmann::json::array();
   for (auto s : upf_info.snssai_upf_info_list) {
-    nlohmann::json tmp    = {};
-    tmp["sNssai"]["sst"]  = s.snssai.sst;
-    tmp["sNssai"]["sd"]   = s.snssai.sd;
+    nlohmann::json tmp   = {};
+    tmp["sNssai"]["sst"] = s.snssai.sst;
+    tmp["sNssai"]["sd"]  = std::to_string(
+        s.snssai
+            .get_sd_int());  // TODO: should be updated to use SD in string hex
     tmp["dnnUpfInfoList"] = nlohmann::json::array();
     for (auto d : s.dnn_upf_info_list) {
       nlohmann::json dnn_json = {};
