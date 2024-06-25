@@ -35,6 +35,7 @@ source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.fmt
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.spdlog
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.yamlcpp
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.nlohmann
+source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.cpr
 
 # Get the kernel version
 KERNEL_VERSION=$(uname -r | cut -d'-' -f1,2 | cut -d'.' -f1,2)
@@ -311,6 +312,9 @@ check_install_upf_deps() {
 
   install_nlohmann_from_git $1 $2
   ret=$?;[[ $ret -ne 0 ]] && return $ret
+  
+  install_cpr_from_git $1 $2
+  ret=$?;[[ $ret -ne 0 ]] && return $ret 
 
   # latest usage of yaml-cpp suggests that we should be using 0.7+ version
   # To be sure, let's install from source all the time for the moment

@@ -45,9 +45,6 @@
 #include "logger.hpp"
 #include "Snssai.h"
 #include "DnnUpfInfoItem.h"
-// #include "upf.h"
-
-// const uint32_t SD_NO_VALUE = 0xFFFFFF;
 
 constexpr auto UPF_CONFIG_OPTION_YES_STR = "Yes";
 constexpr auto UPF_CONFIG_OPTION_NO_STR  = "No";
@@ -55,6 +52,7 @@ const oai::model::common::Snssai DEFAULT_SNSSAI{1};
 const std::vector<oai::model::nrf::DnnUpfInfoItem> DEFAULT_DNN_LIST = {
     oai::model::nrf::DnnUpfInfoItem("default")};
 using namespace libconfig;
+using namespace oai::common::sbi;
 
 namespace oai::config {
 typedef struct interface_cfg_s {

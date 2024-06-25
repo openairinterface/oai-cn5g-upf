@@ -69,7 +69,7 @@ gtpu_l4_stack::gtpu_l4_stack(
     : udp_s(udp_server(address, port_num)), send_ext_hdr(send_ext_hdr) {
   Logger::gtpv1_u().info(
       "gtpu_l4_stack created listening to %s:%d",
-      conv::toString(address).c_str(), port_num);
+      oai::utils::conv::toString(address).c_str(), port_num);
 
   id = 0;
   srand(time(NULL));
@@ -84,7 +84,7 @@ gtpu_l4_stack::gtpu_l4_stack(
     : udp_s(udp_server(address, port_num)), send_ext_hdr(send_ext_hdr) {
   Logger::gtpv1_u().info(
       "gtpu_l4_stack created listening to %s:%d",
-      conv::toString(address).c_str(), port_num);
+      oai::utils::conv::toString(address).c_str(), port_num);
 
   id = 0;
   srand(time(NULL));

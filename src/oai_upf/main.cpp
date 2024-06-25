@@ -16,6 +16,7 @@
 
 #include "async_shell_cmd.hpp"
 #include "common_defs.h"
+#include "http_client.hpp"
 #include "itti.hpp"
 #include "logger.hpp"
 #include "options.hpp"
@@ -24,6 +25,7 @@
 #include "upf_app.hpp"
 #include "upf_config.hpp"
 #include "upf_config_yaml.hpp"
+#include "sbi_helper.hpp"
 
 #include <boost/asio.hpp>
 #include <iostream>
@@ -32,7 +34,6 @@
 #include <signal.h>
 #include <stdint.h>
 #include <unistd.h>  // get_pid(), pause()
-#include <vector>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/split.hpp>
@@ -62,8 +63,8 @@ bool single_teardown_call;
 #define N6_IF_NAME upf_cfg.n6.if_name
 #endif
 
-std::unique_ptr<upf_config_yaml> upf_cfg_yaml = nullptr;
-
+std::unique_ptr<upf_config_yaml> upf_cfg_yaml            = nullptr;
+std::shared_ptr<oai::http::http_client> http_client_inst = nullptr;
 //------------------------------------------------------------------------------
 void my_app_signal_handler(int s) {
   if (single_teardown_call) {
@@ -152,6 +153,11 @@ int main(int argc, char** argv) {
   upf_cfg_yaml->to_upf_config(upf_cfg);
   upf_cfg_yaml->display();
 
+  // HTTP Client
+  http_client_inst = oai::http::http_client::create_instance(
+      Logger::upf_app(), oai::common::sbi::kNfDefaultHttpRequestTimeout,
+      upf_cfg.sbi.if_name, upf_cfg.http_version);
+
   // Inter task Interface
   itti_inst = new itti_mw();
   itti_inst->start(upf_cfg.itti.itti_timer_sched_params);
@@ -166,8 +172,8 @@ int main(int argc, char** argv) {
   // PID file
   // Currently hard-coded value. TODO: add as config option.
   std::string pid_file_name =
-      get_exe_absolute_path("/var/run", upf_cfg.instance);
-  if (!is_pid_file_lock_success(pid_file_name.c_str())) {
+      oai::utils::get_exe_absolute_path("/var/run", upf_cfg.instance);
+  if (!oai::utils::is_pid_file_lock_success(pid_file_name.c_str())) {
     Logger::upf_app().error("Lock PID file %s failed\n", pid_file_name.c_str());
     exit(-EDEADLK);
   }

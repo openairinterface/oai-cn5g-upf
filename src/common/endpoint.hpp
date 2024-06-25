@@ -76,11 +76,11 @@ class endpoint {
     std::string str;
     if (addr_storage.ss_family == AF_INET) {
       struct sockaddr_in* addr_in = (struct sockaddr_in*) &addr_storage;
-      str.append(conv::toString(addr_in->sin_addr));
+      str.append(oai::utils::conv::toString(addr_in->sin_addr));
       str.append(":").append(std::to_string(ntohs(addr_in->sin_port)));
     } else if (addr_storage.ss_family == AF_INET6) {
       struct sockaddr_in6* addr_in6 = (struct sockaddr_in6*) &addr_storage;
-      str.append(conv::toString(addr_in6->sin6_addr));
+      str.append(oai::utils::conv::toString(addr_in6->sin6_addr));
       str.append(":").append(std::to_string(ntohs(addr_in6->sin6_port)));
     }
     return str;

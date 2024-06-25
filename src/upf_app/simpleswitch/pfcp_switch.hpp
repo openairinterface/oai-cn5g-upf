@@ -83,8 +83,8 @@ class pfcp_switch {
   // std::string                               gw_mac_address;
   int pdn_if_index;
 
-  util::uint_generator<uint64_t> seid_generator_;
-  util::uint_generator<teid_t> teid_n3_generator__;
+  oai::utils::uint_generator<uint64_t> seid_generator_;
+  oai::utils::uint_generator<teid_t> teid_n3_generator__;
 
 #define TASK_UPF_PFCP_SWITCH_MAX_COMMIT_INTERVAL (0)
 #define TASK_UPF_PFCP_SWITCH_MIN_COMMIT_INTERVAL (1)

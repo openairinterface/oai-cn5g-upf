@@ -208,7 +208,7 @@ void upf_nf_profile::display() const {
     Logger::upf_app().debug("    SNSSAI:");
   }
   for (auto s : snssais) {
-    Logger::upf_app().debug("        SST, SD: %d, %d", s.sst, s.sd);
+    Logger::upf_app().debug("        SST, SD: %d, %s", s.sst, s.sd.c_str());
   }
 
   // IPv4 Addresses
@@ -225,7 +225,7 @@ void upf_nf_profile::display() const {
   }
   for (auto s : upf_info.snssai_upf_info_list) {
     Logger::upf_app().debug(
-        "        SNSSAI (SST %d, SD %d)", s.snssai.sst, s.snssai.sd);
+        "        SNSSAI (SST %d, SD %s)", s.snssai.sst, s.snssai.sd.c_str());
     for (auto d : s.dnn_upf_info_list) {
       Logger::upf_app().debug("            DNN %s", d.dnn.c_str());
     }
@@ -244,7 +244,7 @@ void upf_nf_profile::to_json(nlohmann::json& data) const {
   for (auto s : snssais) {
     nlohmann::json tmp = {};
     tmp["sst"]         = s.sst;
-    tmp["sd"]          = std::to_string(s.sd);
+    tmp["sd"]          = s.sd;
     data["sNssais"].push_back(tmp);
   }
   data["fqdn"] = fqdn;
@@ -262,9 +262,11 @@ void upf_nf_profile::to_json(nlohmann::json& data) const {
   data["upfInfo"]                      = {};
   data["upfInfo"]["sNssaiUpfInfoList"] = nlohmann::json::array();
   for (auto s : upf_info.snssai_upf_info_list) {
-    nlohmann::json tmp    = {};
-    tmp["sNssai"]["sst"]  = s.snssai.sst;
-    tmp["sNssai"]["sd"]   = std::to_string(s.snssai.sd);
+    nlohmann::json tmp   = {};
+    tmp["sNssai"]["sst"] = s.snssai.sst;
+    tmp["sNssai"]["sd"]  = std::to_string(
+        s.snssai
+            .get_sd_int());  // TODO: should be updated to use SD in string hex
     tmp["dnnUpfInfoList"] = nlohmann::json::array();
     for (auto d : s.dnn_upf_info_list) {
       nlohmann::json dnn_json = {};
@@ -302,12 +304,13 @@ void upf_nf_profile::from_json(const nlohmann::json& data) {
   if (data.find("sNssais") != data.end()) {
     for (auto it : data["sNssais"]) {
       snssai_t s = {};
-      s.sst      = it["sst"].get<int>();
-      if (it["sNssai"].find("sd") != it["sNssai"].end()) {
-        xgpp_conv::sd_string_to_int(
-            it["sNssai"]["sd"].get<std::string>(), s.sd);
+      if (it["sNssai"].find("sst") != it["sNssai"].end()) {
+        s.sst = it["sNssai"]["sst"].get<int>();
+        if (it["sNssai"].find("sd") != it["sNssai"].end()) {
+          s.sd = it["sNssai"]["sd"].get<std::string>();
+        }
+        snssais.push_back(s);
       }
-      snssais.push_back(s);
     }
   }
 
@@ -318,11 +321,13 @@ void upf_nf_profile::from_json(const nlohmann::json& data) {
       struct in_addr addr4 = {};
       std::string address  = it.get<std::string>();
       unsigned char buf_in_addr[sizeof(struct in_addr)];
-      if (inet_pton(AF_INET, util::trim(address).c_str(), buf_in_addr) == 1) {
+      if (inet_pton(AF_INET, oai::utils::trim(address).c_str(), buf_in_addr) ==
+          1) {
         memcpy(&addr4, buf_in_addr, sizeof(struct in_addr));
       } else {
         Logger::upf_app().warn(
-            "Address conversion: Bad value %s", util::trim(address).c_str());
+            "Address conversion: Bad value %s",
+            oai::utils::trim(address).c_str());
       }
       add_nf_ipv4_addresses(addr4);
     }
@@ -337,34 +342,36 @@ void upf_nf_profile::from_json(const nlohmann::json& data) {
   }
 
   // UPF info
+  upf_info.snssai_upf_info_list.clear();
   if (data.find("upfInfo") != data.end()) {
     nlohmann::json info = data["upfInfo"];
 
-    dnn_upf_info_item_t dnn_item = {};
-
     if (info.find("sNssaiUpfInfoList") != info.end()) {
-      nlohmann::json snssai_upf_info_list =
-          data["upfInfo"]["sNssaiUpfInfoList"];
+      nlohmann::json snssai_upf_info_list = info["sNssaiUpfInfoList"];
 
       for (auto it : snssai_upf_info_list) {
         snssai_upf_info_item_t upf_info_item = {};
+        bool found_snssai                    = false;
         if (it.find("sNssai") != it.end()) {
-          if (it["sNssai"].find("sst") != it["sNssai"].end())
+          if (it["sNssai"].find("sst") != it["sNssai"].end()) {
             upf_info_item.snssai.sst = it["sNssai"]["sst"].get<int>();
-          if (it["sNssai"].find("sd") != it["sNssai"].end()) {
-            xgpp_conv::sd_string_to_int(
-                it["sNssai"]["sd"].get<std::string>(), upf_info_item.snssai.sd);
+            found_snssai             = true;
+            if (it["sNssai"].find("sd") != it["sNssai"].end()) {
+              upf_info_item.snssai.sd = it["sNssai"]["sd"].get<std::string>();
+            }
           }
         }
         if (it.find("dnnUpfInfoList") != it.end()) {
           for (auto d : it["dnnUpfInfoList"]) {
             if (d.find("dnn") != d.end()) {
-              dnn_item.dnn = d["dnn"].get<std::string>();
+              dnn_upf_info_item_t dnn_item = {};
+              dnn_item.dnn                 = d["dnn"].get<std::string>();
               upf_info_item.dnn_upf_info_list.insert(dnn_item);
             }
           }
         }
-        upf_info.snssai_upf_info_list.push_back(upf_info_item);
+        if (found_snssai)
+          upf_info.snssai_upf_info_list.push_back(upf_info_item);
       }
     }
   }

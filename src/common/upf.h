@@ -37,9 +37,7 @@ typedef uint64_t supi64_t;
 
 #define SUPI_DIGITS_MAX 15
 
-const uint32_t SD_NO_VALUE               = 0xFFFFFF;
-const std::string SD_NO_VALUE_STR        = "0xFFFFFF";
-const uint8_t SST_MAX_STANDARDIZED_VALUE = 127;
+const std::string SD_NO_VALUE_STR = "FFFFFF";
 
 typedef struct {
   uint32_t length;
@@ -249,79 +247,5 @@ constexpr uint64_t SECONDS_SINCE_FIRST_EPOCH = 2208988800;
 
 #define DEFAULT_QFI 1
 #define DEFAULT_5QI 9  // TODO: from conf file
-
-typedef struct nf_service_version_s {
-  std::string api_version_in_uri;  // apiVersionInUri
-  std::string api_full_version;    // apiFullVersion
-
-  nf_service_version_s& operator=(const nf_service_version_s& s) {
-    api_version_in_uri = s.api_version_in_uri;
-    api_full_version   = s.api_full_version;
-    return *this;
-  }
-
-  std::string to_string() const {
-    std::string s = {};
-    s.append(", Version (");
-    s.append("apiVersionInUri: ");
-    s.append(api_version_in_uri);
-    s.append(", apiFullVersion: ");
-    s.append(api_full_version);
-    s.append(" )");
-    return s;
-  }
-} nf_service_version_t;
-
-typedef struct ip_endpoint_s {
-  // struct in6_addr  ipv6_address;
-  struct in_addr ipv4_address;
-  std::string transport;  // TCP
-  unsigned int port;
-  std::string to_string() const {
-    std::string s = {};
-    s.append("Ipv4 Address: ");
-    s.append(inet_ntoa(ipv4_address));
-    s.append(", TransportProtocol: ");
-    s.append(transport);
-    s.append(", Port: ");
-    s.append(std::to_string(port));
-    return s;
-  }
-} ip_endpoint_t;
-
-typedef struct nf_service_s {
-  std::string service_instance_id;
-  std::string service_name;
-  std::vector<nf_service_version_t> versions;
-  std::string scheme;
-  std::string nf_service_status;
-  std::vector<ip_endpoint_t> ip_endpoints;
-
-  std::string to_string() const {
-    std::string s = {};
-    s.append("Service Instance ID: ");
-    s.append(service_instance_id);
-    s.append(", Service name: ");
-    s.append(service_name);
-    for (const auto& v : versions) {
-      s.append(v.to_string());
-    }
-    s.append(", Scheme: ");
-    s.append(scheme);
-    s.append(", Service status: ");
-    s.append(nf_service_status);
-    s.append(",  IpEndPoints: ");
-    for (auto endpoint : ip_endpoints) {
-      s.append(endpoint.to_string());
-    }
-    return s;
-  }
-} nf_service_t;
-
-// TODO: move to 23.003
-typedef struct guami_5g_s {
-  plmn_t plmn;
-  std::string amf_id;
-} guami_5g_t;
 
 #endif

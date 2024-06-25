@@ -105,7 +105,7 @@ class pfcp_l4_stack : public udp_application {
   uint32_t get_next_seq_num();
 
   static uint64_t generate_trxn_id() {
-    return util::uint_uid_generator<uint64_t>::get_instance().get_uid();
+    return oai::utils::uint_uid_generator<uint64_t>::get_instance().get_uid();
   }
 
   static bool check_request_type(const uint8_t initial);

@@ -172,7 +172,7 @@ int udp_server::create_socket(
   addr.sin_port        = htons(port);
   addr.sin_addr.s_addr = address.s_addr;
 
-  std::string ipv4 = conv::toString(address);
+  std::string ipv4 = oai::utils::conv::toString(address);
   Logger::udp().debug(
       "Creating new listen socket on address %s and port %" PRIu16 "\n",
       ipv4.c_str(), port);
@@ -211,7 +211,7 @@ int udp_server::create_socket(
   addr.sin6_port   = htons(port);
   addr.sin6_addr   = address;
 
-  std::string ipv6 = conv::toString(address);
+  std::string ipv6 = oai::utils::conv::toString(address);
   Logger::udp().debug(
       "Creating new listen socket on address %s and port %" PRIu16 "\n",
       ipv6.c_str(), port);

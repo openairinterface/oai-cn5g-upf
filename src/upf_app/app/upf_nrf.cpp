@@ -32,11 +32,12 @@
 #include <stdexcept>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <curl/curl.h>
 #include <nlohmann/json.hpp>
 
+#include "http_client.hpp"
 #include "itti.hpp"
 #include "logger.hpp"
+#include "upf.h"
 #include "3gpp_29.510.h"
 #include "3gpp_29.500.h"
 #include "upf_config.hpp"
@@ -48,15 +49,8 @@ using json = nlohmann::json;
 extern itti_mw* itti_inst;
 extern upf_nrf* upf_nrf_inst;
 extern upf_config upf_cfg;
+extern std::shared_ptr<oai::http::http_client> http_client_inst;
 void upf_nrf_task(void*);
-
-// To read content of the response from NF
-static std::size_t callback(
-    const char* in, std::size_t size, std::size_t num, std::string* out) {
-  const std::size_t totalBytes(size * num);
-  out->append(in, totalBytes);
-  return totalBytes;
-}
 
 //------------------------------------------------------------------------------
 void upf_nrf_task(void* args_p) {
@@ -137,10 +131,16 @@ bool upf_nrf::send_register_nf_instance(const std::string& url) {
       "Send NF Instance Registration to NRF, msg body: \n %s", body.c_str());
 
   std::string response = {};
-  uint32_t http_code   = {0};
-  send_curl(url, "PUT", response, http_code, body);
 
-  if (http_code == HTTP_STATUS_CODE_201_CREATED) {
+  oai::http::request http_request =
+      http_client_inst->prepare_json_request(url, body);
+  auto http_response = http_client_inst->send_http_request(
+      oai::common::sbi::method_e::PUT, http_request);
+  response = http_response.body;
+
+  if ((http_response.status_code == oai::common::sbi::http_status_code::OK) or
+      (http_response.status_code ==
+       oai::common::sbi::http_status_code::CREATED)) {
     json response_data = {};
     try {
       response_data = json::parse(response.c_str());
@@ -161,7 +161,6 @@ bool upf_nrf::send_register_nf_instance(const std::string& url) {
         TASK_UPF_NRF_TIMEOUT_NRF_HEARTBEAT,
         0);  // TODO arg2_user
     return true;
-
   } else {
     Logger::upf_app().warn("Could not get response from NRF");
     return false;
@@ -175,15 +174,16 @@ bool upf_nrf::send_update_nf_instance(
 
   std::string body = data.dump();
   Logger::upf_app().debug("Send NF Update to NRF (Msg body %s)", body.c_str());
-
   Logger::upf_app().debug("Send NF Update to NRF (NRF URL %s)", url.c_str());
 
-  std::string response = {};
-  uint32_t http_code   = {0};
-  send_curl(url, "PATCH", response, http_code, body);
+  oai::http::request http_request =
+      http_client_inst->prepare_json_request(url, body);
+  auto http_response = http_client_inst->send_http_request(
+      oai::common::sbi::method_e::PATCH, http_request);
 
-  if ((http_code == HTTP_STATUS_CODE_200_OK) or
-      (http_code == HTTP_STATUS_CODE_204_NO_CONTENT)) {
+  if ((http_response.status_code == oai::common::sbi::http_status_code::OK) or
+      (http_response.status_code ==
+       oai::common::sbi::http_status_code::NO_CONTENT)) {
     Logger::upf_app().info("Got successful response from NRF");
     return true;
   } else {
@@ -201,11 +201,12 @@ void upf_nrf::send_deregister_nf_instance(const std::string& url) {
   Logger::upf_app().debug(
       "Send NF De-register to NRF (NRF URL %s)", url.c_str());
 
-  std::string response = {};
-  uint32_t http_code   = {0};
-  send_curl(url, "DELETE", response, http_code);
+  oai::http::request http_request = http_client_inst->prepare_json_request(url);
+  auto http_response              = http_client_inst->send_http_request(
+      oai::common::sbi::method_e::DELETE, http_request);
 
-  if (http_code == HTTP_STATUS_CODE_204_NO_CONTENT) {
+  if (http_response.status_code ==
+      oai::common::sbi::http_status_code::NO_CONTENT) {
     Logger::upf_app().info("Got successful response from NRF de-registration");
   } else {
     Logger::upf_app().warn("Could not get response from NRF");
@@ -231,6 +232,7 @@ void upf_nrf::generate_upf_profile() {
   for (auto s : upf_cfg.upf_info.snssai_upf_info_list) {
     upf_profile.add_snssai(s.snssai);
   }
+
   // Get UPF Info from conf file
   upf_profile.set_upf_info(upf_cfg.upf_info);
   // Display the profile
@@ -316,60 +318,6 @@ void upf_nrf::timer_nrf_deregistration(
 void upf_nrf::timer_nrf_registration(timer_id_t timer_id, uint64_t arg2_user) {
   // timer_id and arg2_user unused?
   register_to_nrf();
-}
-
-//---------------------------------------------------------------------------------------------
-void upf_nrf::send_curl(
-    const std::string& url, const std::string& method, std::string& response,
-    uint32_t& http_code, const std::string& body) {
-  curl_global_init(CURL_GLOBAL_ALL);
-  CURL* curl = curl = curl_easy_init();
-
-  if (curl) {
-    CURLcode res               = {};
-    struct curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers, "content-type: application/json");
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1);
-    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method.c_str());
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, NRF_CURL_TIMEOUT_MS);
-    curl_easy_setopt(
-        curl, CURLOPT_INTERFACE,
-        upf_cfg.sbi.if_name.c_str());  // TODO: use another interface for UPF
-                                       // to communicate with NRF
-    if (upf_cfg.http_version == 2) {
-      if (Logger::should_log(spdlog::level::debug))
-        curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
-      // We use a self-signed test server, skip verification during debugging
-      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-      curl_easy_setopt(
-          curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_PRIOR_KNOWLEDGE);
-    }
-
-    // Response information
-    long code = {0};
-    std::unique_ptr<std::string> httpData(new std::string());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, &callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, httpData.get());
-    if (body.length() > 0) {
-      curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, body.length());
-      curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
-    }
-
-    res = curl_easy_perform(curl);
-    if (res == CURLE_OK) {
-      curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code);
-      Logger::upf_app().info("Response from NRF, HTTP Code: %ld", code);
-      http_code = code;
-      if (code != HTTP_STATUS_CODE_204_NO_CONTENT) response = *httpData.get();
-    }
-
-    curl_slist_free_all(headers);
-    curl_easy_cleanup(curl);
-  }
-  curl_global_cleanup();
 }
 
 //---------------------------------------------------------------------------------------------

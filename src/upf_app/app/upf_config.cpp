@@ -26,38 +26,14 @@
   \email: lionel.gauthier@eurecom.fr
 */
 
-#include "3gpp_conversions.hpp"
 #include "async_shell_cmd.hpp"
-#include "common_defs.h"
-#include "conversions.hpp"
-#include "get_gateway_netlink.hpp"
-#include "if.hpp"
 #include "logger.hpp"
 #include "upf_config.hpp"
-#include "string.hpp"
-#include "fqdn.hpp"
 
-#include <boost/algorithm/string.hpp>
-#include <boost/algorithm/string/classification.hpp>
-#include <boost/algorithm/string/split.hpp>
-
-#include <cstdlib>
-#include <iomanip>
-#include <iostream>
-
-using namespace std;
-using namespace libconfig;
 using namespace oai::config;
 
-// C includes
-#include <arpa/inet.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
-#include <unistd.h>
-
 namespace oai::config {
+
 //------------------------------------------------------------------------------
 int upf_config::execute() {
   return RETURNok;
@@ -84,6 +60,7 @@ int upf_config::get_pfcp_node_id(pfcp::node_id_t& node_id) {
   }
   return RETURNerror;
 }
+
 //------------------------------------------------------------------------------
 int upf_config::get_pfcp_fseid(pfcp::fseid_t& fseid) {
   int rc = RETURNerror;

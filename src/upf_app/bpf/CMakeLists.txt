@@ -2,6 +2,7 @@ include(${SRC_TOP_DIR}/upf_app/cmake/toolchain.cmake)
 include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/include)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 
 add_definitions(-DKERNEL_SPACE)
 
