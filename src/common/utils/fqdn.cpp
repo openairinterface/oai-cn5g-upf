@@ -52,10 +52,13 @@ bool fqdn::resolve(
         Logger::upf_app().debug(
             "Resolved a DNS (name %s, protocol %s): Ip Addr %s, port %u",
             host_name.c_str(), protocol.c_str(), address.c_str(), port);
-        if (endpoint.address().is_v4())
+        if (endpoint.address().is_v4()) {
           addr_type = 0;
-        else
+        } else {
           addr_type = 1;
+          // In case of IPv6, let see if IPv4 was detected.
+          continue;
+        }
         return true;
       }
     } catch (std::exception& e) {
