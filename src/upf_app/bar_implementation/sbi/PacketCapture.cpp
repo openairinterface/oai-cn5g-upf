@@ -9,28 +9,29 @@
 
 
 
-pcap_t* open_pcap(const char *interface){
-    char errbuf[PCAP_ERRBUF_SIZE];
-    pcap_t* handle;
+pcap_t* open_pcap(const char *interface){//Declares a function that returns a pointer of type pcap_t and takes an interface argument
+    char errbuf[PCAP_ERRBUF_SIZE];//a character buffer to store error messages from libpcap.
+    pcap_t* handle;//a pointer to a pcap handle.
 
     // Open the interface for packet capturing
-    if (not (handle = pcap_open_live(interface, BUFSIZ, 1, 1000, errbuf)){
+    if (not (handle = pcap_open_live(interface, BUFSIZ, 1, 1000, errbuf))){
         std::cerr << "Error opening interface %s: " << interface << errbuf << std::endl;
     }
     return handle;
 }
 
 /*-------------------------------------------------------------------------------------*/
-pcap_dumper_t* getPcapDumper(){
+pcap_dumper_t* getPcapDumper(){//access the pcap Dumper object to read its value
     return pcapDumper;
 }
 
 /*------------------------------------------------------------------------------------*/
-void setPcapDumper(pcap_dumper_t* pcap){
+void setPcapDumper(pcap_dumper_t* pcap){//set or change the value of pcapDumper.
     pcapDumper = pcap;
 }
 
 /*------------------------------------------------------------------------------------*/
+//Declares a method of the PacketCapture class that captures packets
 int PacketCapture::capturePackets(pcap_t* handle, int delay, pcap_dumper_t* pcapDumper, char* interface) {    
     // // Open a pcap file for writing
     // if (pcapDumper == nullptr) {
@@ -72,16 +73,16 @@ int PacketCapture::capturePackets(pcap_t* handle, int delay, pcap_dumper_t* pcap
 // }
 
 
-
+//Declares a method to handle Ethernet packets
 void PacketCapture::eth_handle(u_char *userData, const struct pcap_pkthdr* pkthdr, const u_char* packetData) {
-    PacketHandlerData* handlerData = reinterpret_cast<PacketHandlerData*>(userData);
+    PacketHandlerData* handlerData = reinterpret_cast<PacketHandlerData*>(userData);//Converts user Data to a pointer to PacketHandler Data.
     int delay = handlerData->delay;
 
     // // Retrieve Sqlite3Helper object
     // Sqlite3Helper* sqlite3Helper = handlerData->sqlite3Helper;
 
     // Create an instance of SplitPacket to process the packet.
-    SplitPacket splitPacket;
+    SplitPacket splitPacket;//This class is used to process captured packet data, such as extracting Ethernet and IPv4 headers.
 
     // Write the packet to the pcap file
      if (handlerData->pcapDumper != nullptr) {
@@ -89,7 +90,7 @@ void PacketCapture::eth_handle(u_char *userData, const struct pcap_pkthdr* pkthd
     }
 
     // Process the captured packet using SplitPacket to process the captured packet.
-    splitPacket.processPacket(packetData, pkthdr->len);
+    splitPacket.processPacket(packetData, pkthdr->len);//processPacket method of the splitPacket instance to process the captured packet data.
 
 
       // Insert data into database (Extracts Ethernet and IPv4 data from the packet. Initializes vectors for TCP, UDP, ICMP, and GTP-U data)
@@ -98,7 +99,7 @@ void PacketCapture::eth_handle(u_char *userData, const struct pcap_pkthdr* pkthd
     std::vector<std::string> tcpData, udpData, icmpData;// icmpv6Data, gtpuData, dnsData, igmpData, nbnsData, mdnsData, smbData, quicData;
 
     // Checks if IPv4 data is empty. If so, exit the function because the packet is not an IPv4 packet.
-    if (ipv4Data.empty()) {
+    if (ipv4Data.empty()) {//checks if the ipv4Data vector is empty by calling the empty() function
         // Handle error or non-IPv4 packets
         return;
     }
@@ -107,7 +108,7 @@ void PacketCapture::eth_handle(u_char *userData, const struct pcap_pkthdr* pkthd
     size_t headerLength = sizeof(struct ethhdr) + (ipv4Data[1].size() * sizeof(char));
 
     // Use switch-case for protocol checks
-    std::string protocolString = ipv4Data[7]; //extract the string representing the protocol encapsulated in the IPv4 packet.
+    std::string protocolString = ipv4Data[8]; //extract the string representing the protocol encapsulated in the IPv4 packet.
     if (std::all_of(protocolString.begin(), protocolString.end(), ::isdigit)) {//check if all characters in protocol String are digits to ensure the string represents a valid protocol number
         int protocol = std::stoi(protocolString);
         switch (protocol) {

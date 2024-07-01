@@ -1,15 +1,14 @@
 #include "PacketSplit.hpp"
-#include <arpa/inet.h>
-#include <iomanip>
-#include <iostream>
+#include <arpa/inet.h> //Inclusion of definitions for IP address conversion and network address manipulation functions
+#include <iostream>//Including definitions to manipulate the input/output display format
 #include "../include/headers.hpp"
 
 // Extract Ethernet header information
 std::vector<std::string> SplitPacket::extractEthernetData(const struct ethhdr* ethernetHeader) {
-    std::vector<std::string> ethernetData;
-    ethernetData.push_back(std::string(ether_ntoa((struct ether_addr*)&ethernetHeader->h_source)));
-    ethernetData.push_back(std::string(ether_ntoa((struct ether_addr*)&ethernetHeader->h_dest)));
-    ethernetData.push_back(std::to_string(ntohs(ethernetHeader->h_proto)));
+    std::vector<std::string> ethernetData; //A vector of character strings to store Ethernet header information.
+    ethernetData.push_back(std::string(ether_ntoa((struct ether_addr*)&ethernetHeader->h_source)));//Add source addresse to the Data ethernet vector. 
+    ethernetData.push_back(std::string(ether_ntoa((struct ether_addr*)&ethernetHeader->h_dest)));//Add destination addresse to the Data ethernet vector. 
+    ethernetData.push_back(std::to_string(ntohs(ethernetHeader->h_proto)));//Add protocol type to vector ethernet Data
     // // Displaying fields
     std::cout << "Ethernet Data:" << std::endl;
     for (const std::string& data : ethernetData) {
@@ -21,7 +20,7 @@ std::vector<std::string> SplitPacket::extractEthernetData(const struct ethhdr* e
 
 // Extract IPv4 header information
 std::vector<std::string> SplitPacket::extractIPv4Data(const struct iphdr* ipHeader) {
-    std::vector<std::string> ipv4Data;
+    std::vector<std::string> ipv4Data;//A vector of character strings to store IPv4 header information.
     ipv4Data.push_back("Version: " + std::to_string((unsigned int)ipHeader->version));
     ipv4Data.push_back("Header Length: " + std::to_string((unsigned int)(ipHeader->ihl * 4)) + " bytes");
     ipv4Data.push_back("Type of Service: " + std::to_string((unsigned int)ipHeader->tos));
@@ -44,7 +43,7 @@ std::vector<std::string> SplitPacket::extractIPv4Data(const struct iphdr* ipHead
 
 // Extract TCP header information
 std::vector<std::string> SplitPacket::extractTCPData(const struct tcphdr* tcpHeader) {
-    std::vector<std::string> tcpData;
+    std::vector<std::string> tcpData;//A vector of character strings to store TCP header information.
     tcpData.push_back("Source Port: " + std::to_string(ntohs(tcpHeader->source)));
     tcpData.push_back("Destination Port: " + std::to_string(ntohs(tcpHeader->dest)));
     tcpData.push_back("Sequence Number: " + std::to_string(ntohl(tcpHeader->seq)));
@@ -56,7 +55,7 @@ std::vector<std::string> SplitPacket::extractTCPData(const struct tcphdr* tcpHea
     tcpData.push_back("Checksum: " + std::to_string(ntohs(tcpHeader->check)));
     tcpData.push_back("Urgent Pointer: " + std::to_string(ntohs(tcpHeader->urg_ptr)));
     // Extracting TCP options if present
-    if (tcpHeader->doff > 5) {
+    if (tcpHeader->doff > 5) {//If doff is greater than 5, it means that the TCP header is longer than the standard 20 bytes, indicating the presence of TCP options.
         unsigned int optionsSize = (tcpHeader->doff - 5) * 4;
         tcpData.push_back("TCP Options Size: " + std::to_string(optionsSize) + " bytes");
      }
@@ -206,19 +205,19 @@ std::vector<std::string> SplitPacket::extractICMPData(const struct icmphdr* icmp
 ///}
 
 void SplitPacket::processPacket(const u_char* packetData, int packetLength) {
-    struct ethhdr* ethernetHeader = (struct ethhdr*)packetData;
-    std::vector<std::string> ethernetData = extractEthernetData(ethernetHeader);
+    struct ethhdr* ethernetHeader = (struct ethhdr*)packetData;//Interprets the start of the packet data as an Ethernet header.
+    std::vector<std::string> ethernetData = extractEthernetData(ethernetHeader); //Function to extract data from the Ethernet header, returns a vector of character strings.
 
-    if (ntohs(ethernetHeader->h_proto) == ETH_P_IP) {
-        struct iphdr* ipHeader = (struct iphdr*)(packetData + sizeof(struct ethhdr));
-        std::vector<std::string> ipv4Data = extractIPv4Data(ipHeader);
+    if (ntohs(ethernetHeader->h_proto) == ETH_P_IP) {//Converts the h_proto field of the Ethernet header to host byte order to check if it is an IPv4 protocol (ETH_P_IP).
+        struct iphdr* ipHeader = (struct iphdr*)(packetData + sizeof(struct ethhdr));//Interprets the data after the Ethernet header as an IPv4 header.
+        std::vector<std::string> ipv4Data = extractIPv4Data(ipHeader);//Function to extract data from IPv4 header,
 
-        if (ipHeader->protocol == IPPROTO_TCP) {
-            struct tcphdr* tcpHeader = (struct tcphdr*)(packetData + sizeof(struct ethhdr) + ipHeader->ihl * 4);
-            std::vector<std::string> tcpData = extractTCPData(tcpHeader);
-        } else if (ipHeader->protocol == IPPROTO_UDP) {
-            struct udphdr* udpHeader = (struct udphdr*)(packetData + sizeof(struct ethhdr) + ipHeader->ihl * 4);
-            std::vector<std::string> udpData = extractUDPData(udpHeader, packetLength);
+        if (ipHeader->protocol == IPPROTO_TCP) {//Checks if the protocol is TCP.
+            struct tcphdr* tcpHeader = (struct tcphdr*)(packetData + sizeof(struct ethhdr) + ipHeader->ihl * 4);//Interprets the data after the Ethernet header and the IPv4 header as a TCP header.
+            std::vector<std::string> tcpData = extractTCPData(tcpHeader);//Function to extract data from TCP header,
+        } else if (ipHeader->protocol == IPPROTO_UDP) {//Checks if the protocol is UDP.
+            struct udphdr* udpHeader = (struct udphdr*)(packetData + sizeof(struct ethhdr) + ipHeader->ihl * 4);//Interprets the data after the Ethernet header and the IPv4 header as a UDP header.
+            std::vector<std::string> udpData = extractUDPData(udpHeader, packetLength);//Function to extract data from UDP header,
 
             // Add GTP-U handling if necessary
         } //else if (ipHeader->protocol == IPPROTO_ICMP) {

@@ -24,7 +24,7 @@
 
 class SplitPacket {
 public:
-    // Méthodes pour extraire les données des différents en-têtes
+    // Methods to extract data from different headers
     static std::vector<std::string> extractEthernetData(const struct ethhdr* ethernetHeader);
     static std::vector<std::string> extractIPv4Data(const struct iphdr* ipHeader);
     static std::vector<std::string> extractTCPData(const struct tcphdr* tcpHeader);
@@ -39,7 +39,7 @@ public:
     //static std::vector<std::string> extractQUICData(const struct quic* quicHeader);
     //static std::vector<std::string> extractGTPUData(const struct gtpu* gtpuHeader, const u_char* packetData);
 
-    // Autres méthodes de traitement des paquets
+    // packet processing method
     static void processPacket(const u_char* packetData, int packetLength);
 };
 

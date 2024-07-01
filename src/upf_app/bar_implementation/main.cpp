@@ -1,11 +1,11 @@
 #include "sbi/DatabaseManager.hpp"
 #include "sbi/PacketCapture.hpp"
+#include "sbi/PacketSplit.hpp" 
 #include "sbi/include/headers.hpp"
 #include <iostream>
 #include <pcap.h>
 
 int main() {
-    pcap_t* handle = nullptr;
     const char * interface = "wlp0s20f3";
 
     /*
@@ -13,10 +13,12 @@ int main() {
     * 1. Capture Traffic
     * 
     */
-    PacketCapture packetCapture = new PacketCapture();
-    handle = packetCapture.open_pcap(&interface);
-    int rc = packetCapture.capturePackets();
-
+    PacketCapture* packetCapture = new PacketCapture();
+    pcap_t* handle = packetCapture->open_pcap(interface);
+    if (!handle) {
+        std::cerr << "Error opening pcap interface: " << interface << std::endl;
+        return -1;
+    }
 
 
     /*
@@ -24,7 +26,7 @@ int main() {
     * 2. Split Traffic 
     * 
     */
-    PacketSplit packetSplit = new PacketSplit();
+    PacketSplit* packetSplit = new PacketSplit();
 
 
 
