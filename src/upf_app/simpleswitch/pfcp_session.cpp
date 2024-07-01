@@ -59,6 +59,15 @@ bool pfcp_session::get(
 //------------------------------------------------------------------------------
 void pfcp_session::add(std::shared_ptr<pfcp::pfcp_far> far) {
   Logger::upf_n4().info("pfcp_session::add(far) seid " SEID_FMT " ", seid);
+
+  for (std::vector<std::shared_ptr<pfcp::pfcp_far>>::iterator it = fars.begin(); it != fars.end(); ++it) {
+    if ((*it)->far_id.far_id == far->far_id.far_id) {
+      Logger::upf_n4().info("pfcp_session::update(far) seid " SEID_FMT " ", seid);
+      (*it)->forwarding_parameters.second.outer_header_creation.second.teid = far->forwarding_parameters.second.outer_header_creation.second.teid;
+      return;
+    }
+  }
+
   fars.push_back(far);
 }
 //------------------------------------------------------------------------------
