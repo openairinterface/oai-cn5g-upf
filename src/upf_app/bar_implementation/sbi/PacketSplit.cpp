@@ -1,7 +1,7 @@
 #include "PacketSplit.hpp"
 #include <arpa/inet.h> //Inclusion of definitions for IP address conversion and network address manipulation functions
 #include <iostream>//Including definitions to manipulate the input/output display format
-#include "../include/headers.hpp"
+#include "../helpers/Sqlite3Helper.hpp"
 
 // Extract Ethernet header information
 std::vector<std::string> SplitPacket::extractEthernetData(const struct ethhdr* ethernetHeader) {

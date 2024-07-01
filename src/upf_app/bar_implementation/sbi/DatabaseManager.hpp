@@ -1,7 +1,7 @@
 #ifndef DATABASEMANAGER_HPP
 #define DATABASEMANAGER_HPP
 
-#include "../database_code/Sqlite3Helper.hpp" // Include the header file for DatabaseManager
+#include "../helpers/Sqlite3Helper.hpp" // Include the header file for DatabaseManager
 #include <memory> // Include the memory header for std::unique_ptr
 #include <vector>
 #include <string>
