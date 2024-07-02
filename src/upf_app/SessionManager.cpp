@@ -64,8 +64,8 @@ bool SessionManager::extractForwardingParams(
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // Helper function to find the Uplink TEID to update
-uint32_t SessionManager::findUplinkTeid(
-    uint32_t seid,
+uint64_t SessionManager::findUplinkTeid(
+    uint64_t seid,
     const std::vector<std::shared_ptr<pfcp::pfcp_session>>& sessions) {
   for (const auto& session : sessions) {
     if (session->get_up_seid() != seid) {
@@ -483,7 +483,7 @@ void SessionManager::updateBPFSessionUL(
 void SessionManager::updateBPFSessionDL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl) {
-  uint32_t seidul = pSession->get_up_seid();
+  uint64_t seidul = pSession->get_up_seid();
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
   pfcp::ue_ip_address_t ueIpAddress;
@@ -521,7 +521,7 @@ void SessionManager::updateBPFSessionDL(
   }
 
   fteid.teid       = forwardingParams.outer_header_creation.second.teid;
-  uint32_t teid_ul = findUplinkTeid(seidul, sessions);
+  uint64_t teid_ul = findUplinkTeid(seidul, sessions);
 
   if (teid_ul) {
     SessionProgramManager::getInstance().createPipeline(
@@ -546,7 +546,7 @@ void SessionManager::removeBPFSession(
   if (mSeidToSession.find(seid) == mSeidToSession.end()) {
     Logger::upf_app().error(
         "Session %d Does Not Exist. It Cannot be Removed", seid);
-    throw std::runtime_error("Session Does Not Exist. It Cannot be Removed");
+    // throw std::runtime_error("Session Does Not Exist. It Cannot be Removed");
   }
 
   SessionProgramManager::getInstance().removePipeline(seid);

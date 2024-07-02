@@ -649,7 +649,7 @@ bool pfcp_switch::create_packet_in_access(
 }
 
 //------------------------------------------------------------------------------
-void pfcp_switch::start_datapath(
+void pfcp_switch::call_datapath(
     itti_n4_session_establishment_request* establishment_request,
     itti_n4_session_modification_request* modification_request,
     itti_n4_session_deletion_request* deletion_request, pfcp::pfcp_session* s,
@@ -671,15 +671,15 @@ void pfcp_switch::start_datapath(
     obj->sessions.push_back(pSession);
     (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
   } else {
-    auto& sessions = spSessionManager->sessions;
-    auto it        = std::find(sessions.begin(), sessions.end(), pSession);
+    uint64_t seid  = pSession->get_up_seid();
+    auto& sessions = obj->sessions;
 
-    if (it != sessions.end()) {
-      sessions.erase(it);  // Erase the element from the vector
-      (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
-    } else {
-      Logger::upf_app().warn("Session does not exist");
-    }
+    // for (auto it = sessions.begin(); it != sessions.end(); ++it) {
+    //   if ((it->get())->get_up_seid() == seid){
+    //     sessions.erase(it);
+    //   }
+    // }
+    (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
   }
 }
 
@@ -772,7 +772,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
       if (upf_cfg.enable_bpf_datapath) {
         Logger::pfcp_switch().info(
             "Establishing datapath: create PDRs + create FARs");
-        start_datapath(
+        call_datapath(
             req, NULL, NULL, session, spSessionManager,
             &SessionManager::createBPFSession);
       }
@@ -873,7 +873,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     for (auto it : req->pfcp_ies.remove_pdrs) {
       if (upf_cfg.enable_bpf_datapath) {
         Logger::pfcp_switch().info("Modifying datapath: remove PDRs");
-        start_datapath(
+        call_datapath(
             NULL, req, NULL, session, spSessionManager,
             &SessionManager::updateBPFSession);
       }
@@ -895,7 +895,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       for (auto it : req->pfcp_ies.remove_fars) {
         if (upf_cfg.enable_bpf_datapath) {
           Logger::pfcp_switch().info("Modifying datapath: remove FARs");
-          start_datapath(
+          call_datapath(
               NULL, req, NULL, session, spSessionManager,
               &SessionManager::updateBPFSession);
         }
@@ -947,7 +947,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       for (auto it : req->pfcp_ies.create_fars) {
         if (upf_cfg.enable_bpf_datapath) {
           Logger::pfcp_switch().info("Modifying datapath: create FARs");
-          start_datapath(
+          call_datapath(
               NULL, req, NULL, session, spSessionManager,
               &SessionManager::updateBPFSession);
         }
@@ -998,7 +998,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       if (upf_cfg.enable_bpf_datapath) {
         Logger::pfcp_switch().info(
             "Modifying datapath: create PDRs + create FARs");
-        start_datapath(
+        call_datapath(
             NULL, req, NULL, session, spSessionManager,
             &SessionManager::updateBPFSession);
       }
@@ -1031,7 +1031,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       for (auto it : req->pfcp_ies.update_pdrs) {
         if (upf_cfg.enable_bpf_datapath) {
           Logger::pfcp_switch().info("Modifying datapath: update PDRs");
-          start_datapath(
+          call_datapath(
               NULL, req, NULL, session, spSessionManager,
               &SessionManager::updateBPFSession);
         }
@@ -1049,7 +1049,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       for (auto it : req->pfcp_ies.update_fars) {
         if (upf_cfg.enable_bpf_datapath) {
           Logger::pfcp_switch().info("Modifying datapath: update FARs");
-          start_datapath(
+          call_datapath(
               NULL, req, NULL, session, spSessionManager,
               &SessionManager::updateBPFSession);
         }
@@ -1155,7 +1155,7 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
     if (upf_cfg.enable_bpf_datapath) {
       Logger::pfcp_switch().info(
           "Deleting datapath: delete PDRs + delete FARs");
-      start_datapath(
+      call_datapath(
           NULL, NULL, req, session, spSessionManager,
           &SessionManager::removeBPFSession);
     }

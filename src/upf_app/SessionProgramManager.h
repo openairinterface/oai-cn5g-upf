@@ -24,7 +24,7 @@ class FARProgram;
  */
 
 struct farprograms {
-  uint32_t seid;
+  uint64_t seid;
   std::shared_ptr<FARProgram> pFARProgram;
 };
 
@@ -59,7 +59,7 @@ class SessionProgramManager {
    *
    * @param seid  The session identifier.
    */
-  void create(uint32_t seid);
+  void create(uint64_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -67,7 +67,7 @@ class SessionProgramManager {
    *
    * @param seid The session identifier.
    */
-  void remove(uint32_t seid);
+  void remove(uint64_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -94,10 +94,10 @@ class SessionProgramManager {
    * represents the session.
    */
   std::shared_ptr<PFCP_Session_PDR_LookupProgram> findSessionProgram(
-      uint32_t seid);
+      uint64_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  void addFarProgram(uint32_t seid, std::shared_ptr<FARProgram> pFARProgram);
+  void addFarProgram(uint64_t seid, std::shared_ptr<FARProgram> pFARProgram);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   void updateArpTableMap(
@@ -113,7 +113,7 @@ class SessionProgramManager {
   /*---------------------------------------------------------------------------------------------------------------*/
 
   void createPipeline(
-      uint32_t seid, uint32_t teid1, uint8_t sourceInterface,
+      uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
       uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
       bool isModification, uint32_t teid2);
 
@@ -140,7 +140,7 @@ class SessionProgramManager {
 
   /*---------------------------------------------------------------------------------------------------------------*/
   void saveSeidWithinFARProgram(
-      uint32_t seid, std::shared_ptr<FARProgram> pFARProgram,
+      uint64_t seid, std::shared_ptr<FARProgram> pFARProgram,
       const next_rule_prog_index_key& key);
 
   /*---------------------------------------------------------------------------------------------------------------*/
@@ -150,14 +150,14 @@ class SessionProgramManager {
   /*---------------------------------------------------------------------------------------------------------------*/
   void updateARPTableForN3(
       std::shared_ptr<FARProgram> pFARProgram, uint32_t gNodeBIP,
-      uint32_t upfn3IP, uint32_t seid);
+      uint32_t upfn3IP, uint64_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   uint32_t getGnodebIp(std::shared_ptr<pfcp::pfcp_far> pFar);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   void updatePipeline(
-      uint32_t seid, uint32_t teid, uint32_t gNBIpAddress, bool isModification);
+      uint64_t seid, uint32_t teid, uint32_t gNBIpAddress, bool isModification);
   /*---------------------------------------------------------------------------------------------------------------*/
   //   void storeUeQfiTeidMap(
   //       std::shared_ptr<PFCP_Session_LookupProgram>
@@ -167,11 +167,11 @@ class SessionProgramManager {
   /*---------------------------------------------------------------------------------------------------------------*/
   // void updateMap(std::shared_ptr<PFCP_Session_LookupProgram>
   // pPFCP_Session_LookupProgram,
-  //   uint32_t seid, uint32_t teid_ul, uint32_t src_ip, uint32_t teid_dl);
+  //   uint64_t seid, uint32_t teid_ul, uint32_t src_ip, uint32_t teid_dl);
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  void removePipeline(uint32_t seid);
-  std::shared_ptr<SessionPrograms> findSessionPrograms(uint32_t seid);
+  void removePipeline(uint64_t seid);
+  std::shared_ptr<SessionPrograms> findSessionPrograms(uint64_t seid);
 
   // std::shared_ptr<vector><struct farprograms> farPrograms;
 

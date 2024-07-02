@@ -190,8 +190,8 @@ class SessionManager {
       pfcp::forwarding_parameters& forwardingParams);
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  uint32_t findUplinkTeid(
-      uint32_t seid,
+  uint64_t findUplinkTeid(
+      uint64_t seid,
       const std::vector<std::shared_ptr<pfcp::pfcp_session>>& sessions);
 
   /*---------------------------------------------------------------------------------------------------------------*/

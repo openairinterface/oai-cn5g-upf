@@ -66,7 +66,7 @@ void SessionProgramManager::setTeidSessionMap(
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void SessionProgramManager::addFarProgram(
-    uint32_t seid, std::shared_ptr<FARProgram> pFARProgram) {
+    uint64_t seid, std::shared_ptr<FARProgram> pFARProgram) {
   // Create a new 'farprograms' object
   farprograms farprogam = {};
   //__builtin_memset(&farprogam, 0, sizeof(farprograms));
@@ -237,7 +237,7 @@ void SessionProgramManager::updateARPTableForN6(
 // Function to update ARP table with remoteN3 IP and MAC address
 void SessionProgramManager::updateARPTableForN3(
     std::shared_ptr<FARProgram> pFARProgram, uint32_t gNodeBIP,
-    uint32_t upfn3IP, uint32_t seid) {
+    uint32_t upfn3IP, uint64_t seid) {
   try {
     NextHopFinder finder;
 
@@ -257,7 +257,7 @@ void SessionProgramManager::updateARPTableForN3(
 
     for (auto it = farPrograms->begin(); it != farPrograms->end(); ++it) {
       // Access the members of the 'farprograms' struct
-      uint32_t savedSeid                      = it->seid;
+      uint64_t savedSeid                      = it->seid;
       std::shared_ptr<FARProgram> pFARProgram = it->pFARProgram;
 
       if (savedSeid == seid) {
@@ -275,10 +275,10 @@ void SessionProgramManager::updateARPTableForN3(
 /*---------------------------------------------------------------------------------------------------------------*/
 // Helper function to save SEID with FAR program
 void SessionProgramManager::saveSeidWithinFARProgram(
-    uint32_t seid, std::shared_ptr<FARProgram> pFARProgram,
+    uint64_t seid, std::shared_ptr<FARProgram> pFARProgram,
     const next_rule_prog_index_key& key) {
   // Map the deployed pipeline to the seid.
-  // The seid will be used to detroy the pipeline.
+  // The seid will be used to destroy the pipeline.
   mSessionProgramsMap[seid] =
       std::make_shared<SessionPrograms>(key, pFARProgram);
   addFarProgram(seid, pFARProgram);
@@ -306,7 +306,7 @@ uint32_t SessionProgramManager::getGnodebIp(
 /*---------------------------------------------------------------------------------------------------------------*/
 // Function to create a pipeline for a given session and FAR
 void SessionProgramManager::createPipeline(
-    uint32_t seid, uint32_t teid1, uint8_t sourceInterface,
+    uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
     uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
     bool isModification, uint32_t teid2) {
   next_rule_prog_index_key key;
@@ -364,7 +364,7 @@ void SessionProgramManager::createPipeline(
 /*---------------------------------------------------------------------------------------------------------------*/
 
 // void SessionProgramManager::createPipeline(
-//     uint32_t seid, uint32_t teid1, uint8_t sourceInterface,
+//     uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
 //     uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
 //     bool isModification, uint32_t teid2) {
 
@@ -512,7 +512,7 @@ void SessionProgramManager::createPipeline(
 // void
 // SessionProgramManager::updateMap(std::shared_ptr<PFCP_Session_LookupProgram>
 // pPFCP_Session_LookupProgram,
-//     uint32_t seid, uint32_t teid_ul, uint32_t src_ip, uint32_t teid_dl) {
+//     uint64_t seid, uint32_t teid_ul, uint32_t src_ip, uint32_t teid_dl) {
 
 //    struct s_traffic traffic_key;
 //    __builtin_memset(&traffic_key, 0, sizeof(struct s_traffic));
@@ -531,7 +531,7 @@ void SessionProgramManager::createPipeline(
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // void SessionProgramManager::updatePipeline(
-//     uint32_t seid, uint32_t teid, uint32_t gNBIpAddress, bool
+//     uint64_t seid, uint32_t teid, uint32_t gNBIpAddress, bool
 //     isModification) {
 //   struct next_rule_prog_index_key key_to_find;
 //   u32 id;
@@ -601,13 +601,13 @@ void SessionProgramManager::createPipeline(
 // }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void SessionProgramManager::removePipeline(uint32_t seid) {
+void SessionProgramManager::removePipeline(uint64_t seid) {
   Logger::upf_app().debug("Remove FARProgram index from UPFProgram map");
   auto it = mSessionProgramsMap.find(seid);
   if (it == mSessionProgramsMap.end()) {
     Logger::upf_app().error(
         "Session %d Does Not Exist. It Cannot be Removed", seid);
-    throw std::runtime_error("Session does Not Exist. It Cannot be Removed");
+    // throw std::runtime_error("Session does Not Exist. It Cannot be Removed");
   }
 
   Logger::upf_app().debug(
@@ -624,7 +624,7 @@ void SessionProgramManager::removePipeline(uint32_t seid) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void SessionProgramManager::create(uint32_t seid) {
+void SessionProgramManager::create(uint64_t seid) {
   // Check if there is a key with seid value.
   // TODO: Check if can be abstract the programMap.
 
@@ -667,7 +667,7 @@ void SessionProgramManager::create(uint32_t seid) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void SessionProgramManager::remove(uint32_t seid) {
+void SessionProgramManager::remove(uint64_t seid) {
   auto sessionProgram = findSessionProgram(seid);
   if (!sessionProgram) {
     Logger::upf_app().error(
@@ -697,7 +697,7 @@ void SessionProgramManager::setOnNewSessionObserver(
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<PFCP_Session_PDR_LookupProgram>
-SessionProgramManager::findSessionProgram(uint32_t seid) {
+SessionProgramManager::findSessionProgram(uint64_t seid) {
   std::shared_ptr<PFCP_Session_PDR_LookupProgram>
       pPFCP_Session_PDR_LookupProgram;
 
@@ -711,7 +711,7 @@ SessionProgramManager::findSessionProgram(uint32_t seid) {
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<SessionPrograms> SessionProgramManager::findSessionPrograms(
-    uint32_t seid) {
+    uint64_t seid) {
   std::shared_ptr<SessionPrograms> pSessionPrograms;
 
   auto it = mSessionProgramsMap.find(seid);
