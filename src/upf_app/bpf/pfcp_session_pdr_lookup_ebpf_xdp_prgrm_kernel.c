@@ -577,13 +577,13 @@ static u32 pfcp_pdr_lookup_downlink(struct xdp_md* p_ctx) {
 }
 /*****************************************************************************************************************/
 
-SEC("xdp_uplink_entry_point")
+SEC("xdp")
 int uplink_entry_point(struct xdp_md* p_ctx) {
   bpf_debug("==========< SESSION PDR LOOKUP CONTEXT - UPLINK >==========\n");
   return xdp_stats_record_action(p_ctx, pfcp_pdr_lookup_uplink(p_ctx));
 }
 
-SEC("xdp_downlink_entry_point")
+SEC("xdp")
 int downlink_entry_point(struct xdp_md* p_ctx) {
   bpf_debug("==========< SESSION PDR LOOKUP CONTEXT - DOWNLINK >==========\n");
   return xdp_stats_record_action(p_ctx, pfcp_pdr_lookup_downlink(p_ctx));

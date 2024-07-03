@@ -29,7 +29,7 @@
 /**
  * WARNING: Redirect require an XDP bpf_prog loaded on the TX device.
  */
-SEC("xdp_redirect_dummy")
+SEC("xdp")
 int xdp_redirect_gtpu(struct xdp_md* p_ctx) {
   // PASS.
   bpf_debug("Redirecting packets");
@@ -445,7 +445,7 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
 // }
 
 /*****************************************************************************************************************/
-SEC("xdp_far")
+SEC("xdp")
 int far_entry_point(struct xdp_md* p_ctx) {
   bpf_debug("==========< FAR CONTEXT >==========");
 
