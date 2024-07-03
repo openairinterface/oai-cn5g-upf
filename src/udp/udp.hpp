@@ -78,13 +78,13 @@ class udp_server {
     socket_ = create_socket(address, port_);
     if (socket_ > 0) {
       Logger::udp().debug(
-          "udp_server::udp_server(%s:%d)", conv::toString(address).c_str(),
-          port_);
+          "udp_server::udp_server(%s:%d)",
+          oai::utils::conv::toString(address).c_str(), port_);
       sa_family = AF_INET;
     } else {
       Logger::udp().error(
-          "udp_server::udp_server(%s:%d)", conv::toString(address).c_str(),
-          port_);
+          "udp_server::udp_server(%s:%d)",
+          oai::utils::conv::toString(address).c_str(), port_);
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
       throw std::system_error(
           socket_, std::generic_category(), "GTPV1-U socket creation failed!");
@@ -101,13 +101,13 @@ class udp_server {
     terminateWL_ = false;
     if (socket_ > 0) {
       Logger::udp().debug(
-          "udp_server::udp_server(%s:%d)", conv::toString(address).c_str(),
-          port_);
+          "udp_server::udp_server(%s:%d)",
+          oai::utils::conv::toString(address).c_str(), port_);
       sa_family = AF_INET6;
     } else {
       Logger::udp().error(
-          "udp_server::udp_server(%s:%d)", conv::toString(address).c_str(),
-          port_);
+          "udp_server::udp_server(%s:%d)",
+          oai::utils::conv::toString(address).c_str(), port_);
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
       throw std::system_error(
           socket_, std::generic_category(), "GTPV1-U socket creation failed!");

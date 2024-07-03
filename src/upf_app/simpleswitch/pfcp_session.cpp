@@ -531,9 +531,9 @@ std::string pfcp_session::to_string() const {
                     .outer_header_creation_description) {
           case pfcp::OUTER_HEADER_CREATION_GTPU_UDP_IPV4: {
             s.append("|GTPU_UDP_IPV4:");
-            std::string ip =
-                conv::toString(far->forwarding_parameters.second
-                                   .outer_header_creation.second.ipv4_address);
+            std::string ip = oai::utils::conv::toString(
+                far->forwarding_parameters.second.outer_header_creation.second
+                    .ipv4_address);
             ip.resize(INET_ADDRSTRLEN, ' ');
             s.append(ip);
             s.append(fmt::format(
@@ -542,9 +542,9 @@ std::string pfcp_session::to_string() const {
           } break;
           case pfcp::OUTER_HEADER_CREATION_GTPU_UDP_IPV6: {
             s.append("|GTPU_UDP_IPV6:");
-            std::string ip =
-                conv::toString(far->forwarding_parameters.second
-                                   .outer_header_creation.second.ipv6_address);
+            std::string ip = oai::utils::conv::toString(
+                far->forwarding_parameters.second.outer_header_creation.second
+                    .ipv6_address);
             ip.resize(INET_ADDRSTRLEN, ' ');
             s.append(fmt::format(
                 ":{:08x}", far->forwarding_parameters.second
@@ -552,18 +552,18 @@ std::string pfcp_session::to_string() const {
           } break;
           case pfcp::OUTER_HEADER_CREATION_UDP_IPV4: {
             s.append("|UDP_IPV4     :");
-            std::string ip =
-                conv::toString(far->forwarding_parameters.second
-                                   .outer_header_creation.second.ipv4_address);
+            std::string ip = oai::utils::conv::toString(
+                far->forwarding_parameters.second.outer_header_creation.second
+                    .ipv4_address);
             ip.resize(INET_ADDRSTRLEN, ' ');
             s.append(ip);
             s.append(9, ' ');
           } break;
           case pfcp::OUTER_HEADER_CREATION_UDP_IPV6: {
             s.append("|UDP_IPV6     :");
-            std::string ip =
-                conv::toString(far->forwarding_parameters.second
-                                   .outer_header_creation.second.ipv6_address);
+            std::string ip = oai::utils::conv::toString(
+                far->forwarding_parameters.second.outer_header_creation.second
+                    .ipv6_address);
             ip.resize(INET_ADDRSTRLEN, ' ');
             s.append(ip);
             s.append(9, ' ');
@@ -617,8 +617,8 @@ std::string pfcp_session::to_string() const {
       if (pdr->pdi.second.ue_ip_address.first) {
         std::string ip = {};
         if (pdr->pdi.second.ue_ip_address.second.v4) {
-          ip =
-              conv::toString(pdr->pdi.second.ue_ip_address.second.ipv4_address);
+          ip = oai::utils::conv::toString(
+              pdr->pdi.second.ue_ip_address.second.ipv4_address);
         }
         ip.resize(INET_ADDRSTRLEN, ' ');
         s.append(ip);

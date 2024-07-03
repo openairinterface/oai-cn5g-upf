@@ -154,23 +154,3 @@ bool xgpp_conv::endpoint_to_gtp_u_peer_address(
       return false;
   }
 }
-
-//------------------------------------------------------------------------------
-void xgpp_conv::sd_string_to_int(const std::string& sd_str, uint32_t& sd) {
-  sd = SD_NO_VALUE;
-  if (sd_str.empty()) return;
-  uint8_t base = 10;
-  try {
-    if (sd_str.size() > 2) {
-      if (boost::iequals(sd_str.substr(0, 2), "0x")) {
-        base = 16;
-      }
-    }
-    sd = std::stoul(sd_str, nullptr, base);
-  } catch (const std::exception& e) {
-    Logger::upf_app().error(
-        "Error when converting from string to int for S-NSSAI SD, error: %s",
-        e.what());
-    sd = SD_NO_VALUE;
-  }
-}

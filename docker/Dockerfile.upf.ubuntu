@@ -122,6 +122,7 @@ WORKDIR /usr/local/lib
 COPY --from=oai-upf-builder \
     /usr/local/lib/libfmt.so \
     /usr/local/lib/libyaml-cpp.so.0.? \
+    /usr/local/lib/libcpr.so.1 \    
 # Ubuntu 20 --> libbfd-2.34
 # Ubuntu 22 --> libbfd-2.38
     /usr/lib/x86_64-linux-gnu/libbfd-2.3?-system.so \

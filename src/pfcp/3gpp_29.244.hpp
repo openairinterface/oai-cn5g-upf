@@ -874,7 +874,7 @@ class pfcp_network_instance_ie : public pfcp_ie {
   explicit pfcp_network_instance_ie(const pfcp::network_instance_t& b)
       : pfcp_ie(PFCP_IE_NETWORK_INSTANCE) {
     network_instance = b.network_instance;
-    util::string_to_dotted(network_instance, network_instance_dotted);
+    oai::utils::string_to_dotted(network_instance, network_instance_dotted);
     network_instance = network_instance_dotted;
     tlv.set_length(network_instance.size());
   }

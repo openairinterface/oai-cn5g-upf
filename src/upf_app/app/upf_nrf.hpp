@@ -33,7 +33,6 @@
 #include <thread>
 
 #include "itti.hpp"
-#include <curl/curl.h>
 #include "3gpp_29.510.h"
 #include "upf_profile.hpp"
 
@@ -133,19 +132,6 @@ class upf_nrf {
    * @return void
    */
   void timer_nrf_registration(timer_id_t timer_id, uint64_t arg2_user);
-
-  /*
-   * Send Curl command
-   * @param [const std::string&] url: request url
-   * @param [const std::string&] method: HTTP method
-   * @param [std::string&] response: response from server
-   * @param [uint32_t&] http_code: response code
-   * @param [const std::string&] body: request body
-   * @return void
-   */
-  void send_curl(
-      const std::string& url, const std::string& method, std::string& response,
-      uint32_t& http_code, const std::string& body = "");
 
   /*
    * Get NRF API Root

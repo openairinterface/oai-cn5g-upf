@@ -10,6 +10,7 @@ include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/qer)
 #include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/bar)
 #include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/mar)
 include_directories(${SRC_TOP_DIR}/upf_app/include)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 
 add_definitions(-DKERNEL_SPACE)
 

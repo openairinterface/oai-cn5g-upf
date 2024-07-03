@@ -469,10 +469,10 @@ struct fteid_s {
     if ((v4) || (v6)) {
       s.append("TEID=").append(std::to_string(teid));
       if (v4) {
-        s.append(", IPv4=").append(conv::toString(ipv4_address));
+        s.append(", IPv4=").append(oai::utils::conv::toString(ipv4_address));
       }
       if (v6) {
-        s.append(", IPv6=").append(conv::toString(ipv6_address));
+        s.append(", IPv6=").append(oai::utils::conv::toString(ipv6_address));
       }
     } else {
       s.append("null_fteid");
@@ -1126,9 +1126,9 @@ struct node_id_s {
       return fqdn;
     }
     if (NODE_ID_TYPE_IPV4_ADDRESS == this->node_id_type) {
-      return conv::toString(u1.ipv4_address);
+      return oai::utils::conv::toString(u1.ipv4_address);
     } else if (NODE_ID_TYPE_IPV6_ADDRESS == this->node_id_type) {
-      return conv::toString(u1.ipv6_address);
+      return oai::utils::conv::toString(u1.ipv6_address);
     }
     return std::string("Node id - unknown node id type");
   }
