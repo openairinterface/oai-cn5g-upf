@@ -249,8 +249,8 @@ static u32 eth_handle(struct xdp_md* p_ctx, struct ethhdr* ethh) {
 }
 
 /*****************************************************************************************************************/
-SEC("xdp_entry_point")
-int entry_point(struct xdp_md* p_ctx) {
+SEC("xdp")
+int xdp_entry_point(struct xdp_md* p_ctx) {
   bpf_debug("==========< PFCP Session Lookup >==========");
 
   struct ethhdr* ethh = (void*) (long) p_ctx->data;

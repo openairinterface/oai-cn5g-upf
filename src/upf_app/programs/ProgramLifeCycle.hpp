@@ -178,7 +178,7 @@ void ProgramLifeCycle<BPFSkeletonType>::link(
   struct bpf_program* prog;
   auto ifIndex = if_nametoindex(interface.c_str());
   int fd;
-  std::string section;
+  std::string prog_name;
 
   // TODO: Remove hardcoded.
   if (!ifIndex) {
@@ -189,8 +189,8 @@ void ProgramLifeCycle<BPFSkeletonType>::link(
 
   bpf_object__for_each_program(prog, mpSkeleton->obj) {
     // Get section name.
-    section = std::string(bpf_program__section_name(prog));
-    if (section == sectionName) {
+    prog_name = std::string(bpf_program__name(prog));
+    if (prog_name == sectionName) {
       // Get programs FD from skeleton object.
       fd = bpf_program__fd(prog);
       // Link program (fd) to the interface.
@@ -203,7 +203,7 @@ void ProgramLifeCycle<BPFSkeletonType>::link(
 
       // Add a new entry if doesnt exist.
       // Cc, push back the ney entry to the exist.
-      auto it = mSectionLinkInterfacesMap.find(section);
+      auto it = mSectionLinkInterfacesMap.find(prog_name);
       if (it == mSectionLinkInterfacesMap.end()) {
         std::vector<uint32_t> linkVector;
         linkVector.push_back(ifIndex);
@@ -228,33 +228,34 @@ template<class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::tearDown() {
   std::lock_guard<std::mutex> lock(sTearDownMutex);
   struct bpf_program* prog;
-  std::string section;
+  std::string prog_name;
 
   if (mState != ProgramState::IDLE) {
     if (mState == LINKED) {
       Logger::upf_app().debug("There are some programs in LINKED state");
       bpf_object__for_each_program(prog, mpSkeleton->obj) {
         // Get section name.
-        section = std::string(bpf_program__section_name(prog));
+        prog_name = std::string(bpf_program__name(prog));
         // Find the section.
-        auto it = mSectionLinkInterfacesMap.find(section);
+        auto it = mSectionLinkInterfacesMap.find(prog_name);
         if (it == mSectionLinkInterfacesMap.end()) {
           Logger::upf_app().debug(
-              "BPF program %s are not link to any interface", section.c_str());
+              "BPF program %s are not link to any interface",
+              prog_name.c_str());
           continue;
         }
         // For each link in this section, do unlink.
         for (auto linkEntry : it->second) {
           Logger::upf_app().debug(
-              "BPF program %s is in a HOOKED state", section.c_str());
+              "BPF program %s is in a HOOKED state", prog_name.c_str());
           if (bpf_xdp_attach(linkEntry, -1, mFlags, NULL)) {
             Logger::upf_app().error(
                 "BPF program %s cannot unlink the %d interface",
-                section.c_str(), linkEntry);
+                prog_name.c_str(), linkEntry);
             throw std::runtime_error("BPF program cannot unlink");
           };
           Logger::upf_app().info(
-              "BPF program %s unlink to %d interface", section.c_str(),
+              "BPF program %s unlink to %d interface", prog_name.c_str(),
               linkEntry);
         }
       }
