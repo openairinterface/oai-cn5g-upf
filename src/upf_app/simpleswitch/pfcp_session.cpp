@@ -332,38 +332,73 @@ bool pfcp_session::create(
 bool pfcp_session::create(
     const pfcp::create_qer& cr_qer, pfcp::cause_t& cause,
     uint16_t& offending_ie) {
-  // if (not cr_qer.qer_id.first) {
-  //   // should be caught in lower layer
-  //   cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-  //   offending_ie      = PFCP_IE_QER_ID;
-  //   return false;
-  // }
-  // if (not cr_qer.apply_action.first) {
-  //   // should be caught in lower layer
-  //   cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-  //   offending_ie      = PFCP_IE_APPLY_ACTION;
-  //   return false;
-  // }
-  // if (cr_qer.apply_action.second.forw) {
-  //   if (not cr_qer.forwarding_parameters.first) {
-  //     // should be caught in lower layer
-  //     cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-  //     offending_ie      = PFCP_IE_FORWARDING_PARAMETERS;
-  //     return false;
-  //   }
-  // }
-  // if (cr_qer.apply_action.second.dupl) {
-  //   if (not cr_qer.duplicating_parameters.first) {
-  //     // should be caught in lower layer
-  //     cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-  //     offending_ie      = PFCP_IE_DUPLICATING_PARAMETERS;
-  //     return false;
-  //   }
-  // }
-  pfcp_qer* qer                  = new pfcp_qer(cr_qer);
-  std::shared_ptr<pfcp_qer> sqer = std::shared_ptr<pfcp_qer>(qer);
-  add(sqer);
-  return true;
+
+if (not cr_qer.qer_id.first) {
+  cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
+  offending_ie      = PFCP_IE_QER_ID;
+  return false;
+}
+
+/*
+if (not cr_qer.qer_correlation_id.first) {
+  cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
+  offending_ie      = PFCP_IE_QER_CORRELATION_ID;
+  return false;
+}
+*/
+
+if (not cr_qer.gate_status.first) {
+  cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
+  offending_ie      = PFCP_IE_GATE_STATUS;
+  return false;
+}
+
+if (not cr_qer.maximum_bitrate.first) {
+  cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
+  offending_ie      = PFCP_IE_MBR;
+  return false;
+}
+
+if (not cr_qer.guaranteed_bitrate.first) {
+  cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
+  offending_ie      = PFCP_IE_GBR;
+  return false;
+}
+
+/*
+if (not cr_qer.packet_rate.first) {
+  cause.cause_value = CAUSE_VALUE_SERVICE_NOT_SUPPORTED;
+  offending_ie      = PFCP_IE_PACKET_RATE;
+  return false;
+}
+*/
+
+/*
+if (not cr_qer.dl_flow_level_marking.first) {
+  cause.cause_value = CAUSE_VALUE_SERVICE_NOT_SUPPORTED;
+  offending_ie      = PFCP_IE_DL_FLOW_LEVEL_MARKING;
+  return false;
+}
+*/
+
+if (not cr_qer.qos_flow_identifier.first) {
+  cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
+  offending_ie      = PFCP_IE_QFI;
+  return false;
+}
+
+/*
+if (not cr_qer.reflective_qos.first) {
+  cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
+  offending_ie      = PFCP_IE_RQI;
+  return false;
+}
+*/
+
+pfcp_qer* qer                  = new pfcp_qer(cr_qer);
+std::shared_ptr<pfcp_qer> sqer = std::shared_ptr<pfcp_qer>(qer);
+add(sqer);
+return true;
 }
 
 //------------------------------------------------------------------------------

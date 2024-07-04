@@ -743,14 +743,22 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
            *  Add create_qers
            */
           pfcp::qer_id_t qer_id = {};
-          if (not cr_pdr.get(qer_id)) {
-            // TODO
-          }
+          if (cr_pdr.get(qer_id)) {
+            pfcp::create_qer cr_qer = {};
+            if (not req->pfcp_ies.get(qer_id, cr_qer)) {
+              cause.cause_value         = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
+              offending_ie.offending_ie = PFCP_IE_CREATE_QER;
+            }
 
-          pfcp::create_qer cr_qer = {};
-          if (not req->pfcp_ies.get(qer_id, cr_qer)) {
-            // TODO
-          }
+            // if (not session->create(cr_qer, cause,
+            // offending_ie.offending_ie)) {
+            //   session->cleanup();
+            //   delete session;
+            //   break;
+            // }
+
+            session->create(cr_qer, cause, offending_ie.offending_ie);
+           }
 
           /*======================================================================*/
 
@@ -773,7 +781,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
 
       if (upf_cfg.enable_bpf_datapath) {
         Logger::pfcp_switch().info(
-            "Establishing datapath: create PDRs + create FARs");
+            "Establishing datapath: create PDRs + create FARs + create QERs (if any)");
         call_datapath(
             req, NULL, NULL, session, spSessionManager,
             &SessionManager::createBPFSession);
