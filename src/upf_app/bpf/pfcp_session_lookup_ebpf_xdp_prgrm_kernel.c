@@ -260,7 +260,7 @@ int entry_point(struct xdp_md* p_ctx) {
     return XDP_DROP;
   }
 
-  return xdp_stats_record_action(p_ctx, eth_handle(p_ctx, ethh));
+  return XDP_PASS;
 }
 
 char _license[] SEC("license") = "GPL";
