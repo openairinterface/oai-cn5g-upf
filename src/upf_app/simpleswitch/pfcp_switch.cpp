@@ -758,7 +758,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             // }
 
             session->create(cr_qer, cause, offending_ie.offending_ie);
-           }
+          }
 
           /*======================================================================*/
 
@@ -781,7 +781,8 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
 
       if (upf_cfg.enable_bpf_datapath) {
         Logger::pfcp_switch().info(
-            "Establishing datapath: create PDRs + create FARs + create QERs (if any)");
+            "Establishing datapath: create PDRs + create FARs + create QERs "
+            "(if any)");
         call_datapath(
             req, NULL, NULL, session, spSessionManager,
             &SessionManager::createBPFSession);

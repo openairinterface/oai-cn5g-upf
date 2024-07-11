@@ -129,12 +129,12 @@ class QERProgram : public BPFProgram {
    * @return std::shared_ptr<BPFMap> The filter.
    */
   std::shared_ptr<BPFMap> getFilterMap() const;
-  
+
   /*---------------------------------------------------------------------------------------------------------------*/
   std::shared_ptr<BPFMap> get5GQoSFlowParamsMap() const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  
+
   std::shared_ptr<BPFMap> getQoSFlowMap() const;
   /*---------------------------------------------------------------------------------------------------------------*/
 
@@ -267,7 +267,6 @@ class QERProgram : public BPFProgram {
   std::string mUDPInterface;
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  
 
   // std::vector<struct rtnl_qdisc *> parent_qdiscs;
   // std::vector<std::vector<struct rtnl_qdisc *>> child_qdiscs;

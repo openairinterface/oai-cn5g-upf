@@ -4,12 +4,7 @@
 
 #include <types.h>
 
-typedef enum {
-  OPEN,
-  CLOSE,
-  FUTURE_USE
-} e_gate_status;
-
+typedef enum { OPEN, CLOSE, FUTURE_USE } e_gate_status;
 
 struct s_mbr {
   uint64_t ul_mbr;
