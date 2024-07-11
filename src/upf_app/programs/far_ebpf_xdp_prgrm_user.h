@@ -12,8 +12,6 @@
 #include <BPFProgram.h>
 #include "interfaces.h"
 
-#include "interfaces.h"
-
 class BPFMaps;
 class BPFMap;
 class SessionManager;

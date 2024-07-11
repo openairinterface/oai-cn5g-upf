@@ -1,5 +1,6 @@
 #include "SessionProgramManager.h"
 #include <far_ebpf_xdp_prgrm_user.h>
+#include <qer_ebpf_tc_prgrm_user.h>
 #include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h>
 #include "SessionPrograms.h"
 #include <pfcp_session_lookup_ebpf_xdp_prgrm_user.h>
@@ -211,6 +212,7 @@ void SessionProgramManager::storeFARInFARMap(
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // Function to update ARP table with remoteN6 IP and MAC address
+/*
 void SessionProgramManager::updateARPTableForN6(
     std::shared_ptr<FARProgram> pFARProgram, uint32_t dnIP, uint32_t upfn6IP) {
   try {
@@ -232,9 +234,37 @@ void SessionProgramManager::updateARPTableForN6(
         "Error: The ARP table was not updated for N6 Next HOP");
   }
 }
+*/
+void SessionProgramManager::updateARPTableForN6(
+    std::shared_ptr<FARProgram> pFARProgram, uint32_t dnIP, uint32_t upfn6IP) {
+  try {
+    NextHopFinder finder;
+
+    /*
+    uint32_t ipnexremoteN6hop = (is_little_endian()) ?
+                                    htole32(getRemoteIP(upfn6IP, dnIP)) :
+                                    getRemoteIP(upfn6IP, dnIP);
+    auto remoteN6MAC          = finder.retrieveNextHopMAC(ipnexremoteN6hop);
+   */
+    std::string remoteDN    = "192.168.20.30";
+    uint32_t remoteN6IPv4   = inet_addr(remoteDN.c_str());
+    const char* remoteN6MAC = "00:61:BB:00:00:01";
+
+    struct s_arp_mapping map_table;
+    memset(&map_table, 0, sizeof(struct s_arp_mapping));
+    memcpy(map_table.mac_address, remoteN6MAC, 6);
+    map_table.ipv4_address = remoteN6IPv4;
+
+    pFARProgram->getArpTableMap()->update(upfn6IP, map_table, BPF_ANY);
+  } catch (const std::exception& ex) {
+    Logger::upf_app().error(
+        "Error: The ARP table was not updated for N6 Next HOP");
+  }
+}
 
 // /*---------------------------------------------------------------------------------------------------------------*/
 // Function to update ARP table with remoteN3 IP and MAC address
+/*
 void SessionProgramManager::updateARPTableForN3(
     std::shared_ptr<FARProgram> pFARProgram, uint32_t gNodeBIP,
     uint32_t upfn3IP, uint64_t seid) {
@@ -252,6 +282,48 @@ void SessionProgramManager::updateARPTableForN3(
     memset(&map_table, 0, sizeof(struct s_arp_mapping));
     memcpy(map_table.mac_address, remoteN3MAC->ether_addr_octet, 6);
     map_table.ipv4_address = ipnexremoteN3hop;
+
+    pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
+
+    for (auto it = farPrograms->begin(); it != farPrograms->end(); ++it) {
+      // Access the members of the 'farprograms' struct
+      uint64_t savedSeid                      = it->seid;
+      std::shared_ptr<FARProgram> pFARProgram = it->pFARProgram;
+
+      if (savedSeid == seid) {
+        pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
+      }
+    }
+  } catch (const std::exception& ex) {
+    // Handle the exception here or log it for debugging
+    // Note: It's better to handle exceptions rather than ignoring them.
+    Logger::upf_app().error(
+        "Error: The ARP table was not updated for N3 Next HOP");
+  }
+}
+*/
+
+void SessionProgramManager::updateARPTableForN3(
+    std::shared_ptr<FARProgram> pFARProgram, uint32_t gNodeBIP,
+    uint32_t upfn3IP, uint64_t seid) {
+  try {
+    NextHopFinder finder;
+
+   /* 
+    uint32_t ipnexremoteN3hop = (is_little_endian()) ?
+                                    htole32(getRemoteIP(upfn3IP, gNodeBIP)) :
+                                    getRemoteIP(upfn3IP, gNodeBIP);
+    auto remoteN3MAC          = finder.retrieveNextHopMAC(ipnexremoteN3hop);
+   */
+
+    std::string remoteGnB   = "192.168.20.20";
+    uint32_t remoteN3IPv4   = inet_addr(remoteGnB.c_str());
+    const char* remoteN3MAC = "00:31:BB:00:00:01";
+
+    struct s_arp_mapping map_table;
+    memset(&map_table, 0, sizeof(struct s_arp_mapping));
+    memcpy(map_table.mac_address, remoteN3MAC, 6);
+    map_table.ipv4_address = remoteN3IPv4;
 
     pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
 
@@ -307,7 +379,8 @@ uint32_t SessionProgramManager::getGnodebIp(
 // Function to create a pipeline for a given session and FAR
 void SessionProgramManager::createPipeline(
     uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
-    uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
+    uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar, 
+    std::shared_ptr<pfcp::pfcp_qer> pQer,
     bool isModification, uint32_t teid2) {
   next_rule_prog_index_key key;
   initializeNextRuleProgIndexKey(key, teid1, ueIpAddress, sourceInterface);
@@ -323,7 +396,6 @@ void SessionProgramManager::createPipeline(
       pFARProgram, key, pPFCP_Session_LookupProgram);
 
   Logger::upf_app().debug("Store FAR in the FAR program");
-  // Logger::upf_app().debug("############ QFI2 %u ###########", qfi);
   storeFARInFARMap(pFARProgram, pFar);
 
   uint32_t dnIP    = upf_cfg.remote_n6.s_addr;
@@ -338,6 +410,28 @@ void SessionProgramManager::createPipeline(
   //     updateARPTableForN6(pFARProgram, dnIP, upfn6IP);
   //   });
   // arpUpdateThread2.detach();
+
+
+  /******************************************************************************************/
+    /******************************************************************************************/
+      /*  
+      * ================ Manage QoS =================== 
+      */
+      // 1. Save values within the maps
+
+      // 2. call setup
+    Logger::upf_app().debug("Instantiate a new QERProgram");
+    std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
+    pQERProgram->setup();
+    // const std::string& gtpInterface, const std::string& udpInterface,
+    // const char* qdiscScheduler, std::vector<struct qosFlow*> qfis,
+    // uint64_t seid, gtpUTunnel* gtpTunnel
+    /******************************************************************************************/
+  /******************************************************************************************/
+
+
+
+
 
   if (isModification) {
     storeSessionMappingMap(pPFCP_Session_LookupProgram, ueIpAddress, teid1);

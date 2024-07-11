@@ -5,6 +5,7 @@
 #include <memory>
 #include <map>
 #include <pfcp_far.hpp>
+#include <pfcp_qer.hpp>
 #include <array>
 #include <pfcp/pfcp_far.h>
 #include <next_prog_rule_key.h>
@@ -111,11 +112,11 @@ class SessionProgramManager {
   pfcp_far_t_ createFar(std::shared_ptr<pfcp::pfcp_far> pFar);
 
   /*---------------------------------------------------------------------------------------------------------------*/
-
   void createPipeline(
-      uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
-      uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
-      bool isModification, uint32_t teid2);
+        uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
+        uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar, 
+        std::shared_ptr<pfcp::pfcp_qer> pQer = nullptr,
+        bool isModification = false, uint32_t teid2 = 0);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   void initializeNextRuleProgIndexKey(

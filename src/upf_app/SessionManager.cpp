@@ -54,6 +54,17 @@ bool SessionManager::extractFar(
   return (pdr->get(farId) && session->get(farId.far_id, outFar));
 }
 
+
+/*---------------------------------------------------------------------------------------------------------------*/
+// Helper function to extract QER
+bool SessionManager::extractQer(
+    std::shared_ptr<pfcp::pfcp_pdr> pdr,
+    std::shared_ptr<pfcp::pfcp_session> session,
+    std::shared_ptr<pfcp::pfcp_qer>& outQer) {
+  pfcp::qer_id_t qerId;
+  return (pdr->get(qerId) && session->get(qerId.qer_id, outQer));
+}
+
 /*---------------------------------------------------------------------------------------------------------------*/
 // Helper function to extract Forwarding Parameters
 bool SessionManager::extractForwardingParams(
@@ -355,9 +366,18 @@ void SessionManager::processPDRDetails(
         std::to_string(pdr_id));
   }
 
+
+  std::shared_ptr<pfcp::pfcp_qer> pQer = nullptr;
+  // if (!extractQer(pdrHighPrecedence, pSession, pQer)) {
+  //   throw std::runtime_error(
+  //       "Failed to extract {} QER for PDR " + direction + " " +
+  //       std::to_string(pdr_id));
+  // }
+  extractQer(pdrHighPrecedence, pSession, pQer);
+  
   SessionProgramManager::getInstance().createPipeline(
       pSession->get_up_seid(), fteid.teid, interfaceValue,
-      ueIpAddress.ipv4_address.s_addr, pFar, false, 0);
+      ueIpAddress.ipv4_address.s_addr, pFar, pQer, false, 0);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -523,15 +543,19 @@ void SessionManager::updateBPFSessionDL(
   fteid.teid       = forwardingParams.outer_header_creation.second.teid;
   uint64_t teid_ul = findUplinkTeid(seidul, sessions);
 
+
+  std::shared_ptr<pfcp::pfcp_qer> pQer = nullptr;
+  extractQer(pdrHighPrecedenceDl, pSession, pQer);
+
   if (teid_ul) {
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
-        ueIpAddress.ipv4_address.s_addr, pFar, true, teid_ul);
+        ueIpAddress.ipv4_address.s_addr, pFar, pQer, true, teid_ul);
   } else {
     Logger::upf_app().error("Uplink TEID not found for session: 0x%x", seidul);
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
-        ueIpAddress.ipv4_address.s_addr, pFar, true, 0);
+        ueIpAddress.ipv4_address.s_addr, pFar, pQer, true, 0);
   }
 }
 

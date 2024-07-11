@@ -12,8 +12,6 @@
 #include <BPFProgram.h>
 #include "interfaces.h"
 
-#include "interfaces.h"
-
 #include <netlink/netlink.h>
 #include <netlink/route/qdisc.h>
 #include <helpers/QdiscHelpers.hpp>
@@ -38,8 +36,7 @@ class QERProgram : public BPFProgram {
    * @brief Construct a new QERProgram object.
    *
    */
-  explicit QERProgram(
-      const std::string& gtpInterface, const std::string& udpInterface);
+  explicit QERProgram();
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -61,13 +58,13 @@ class QERProgram : public BPFProgram {
    * @param const std::string&
    * @param const std::string&
    * @param const char*
-   * @param std::vector<struct qosFlow*>
+   * @param std::vector<struct s_fiveQosFlow*>
    * @param uint64_t
    * @param struct gtpUTunnel*
    */
   void setup(
       const std::string& gtpInterface, const std::string& udpInterface,
-      const char* qdiscScheduler, std::vector<struct qosFlow*> qfis,
+      const char* qdiscScheduler, std::vector<struct s_fiveQosFlow*> qfis,
       uint64_t seid, struct gtpUTunnel* gtpTunnel);
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -132,7 +129,13 @@ class QERProgram : public BPFProgram {
    * @return std::shared_ptr<BPFMap> The filter.
    */
   std::shared_ptr<BPFMap> getFilterMap() const;
+  
+  /*---------------------------------------------------------------------------------------------------------------*/
+  std::shared_ptr<BPFMap> get5GQoSFlowParamsMap() const;
 
+  /*---------------------------------------------------------------------------------------------------------------*/
+  
+  std::shared_ptr<BPFMap> getQoSFlowMap() const;
   /*---------------------------------------------------------------------------------------------------------------*/
 
   /**
@@ -176,7 +179,7 @@ class QERProgram : public BPFProgram {
    *
    * @param qfis
    */
-  void setQosFlowsQfis(std::vector<struct qosFlow*> qfis);
+  void setQosFlowsQfis(std::vector<struct s_fiveQosFlow*> qfis);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -224,6 +227,7 @@ class QERProgram : public BPFProgram {
    */
   void initializeMaps();
 
+  void insertValuesIntoMaps();
   /*---------------------------------------------------------------------------------------------------------------*/
   // The reference of the bpf maps.
   std::shared_ptr<BPFMaps> mpMaps;
@@ -247,6 +251,14 @@ class QERProgram : public BPFProgram {
   std::shared_ptr<BPFMap> mpFilterMap;
 
   /*---------------------------------------------------------------------------------------------------------------*/
+  // The 5G QoS Flow Parameters map.
+  std::shared_ptr<BPFMap> mp5GQoSFlowParamsMap;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  // The 5G QoS Flow.
+  std::shared_ptr<BPFMap> mpQoSFlowMap;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
   // The GTP interface.
   std::string mGTPInterface;
 
@@ -255,6 +267,7 @@ class QERProgram : public BPFProgram {
   std::string mUDPInterface;
 
   /*---------------------------------------------------------------------------------------------------------------*/
+  
 
   // std::vector<struct rtnl_qdisc *> parent_qdiscs;
   // std::vector<std::vector<struct rtnl_qdisc *>> child_qdiscs;
@@ -267,7 +280,7 @@ class QERProgram : public BPFProgram {
 
   std::vector<struct classParams*> qosFlowsClassesAtt;
   std::vector<struct classPosition*> qosFlowsClassesPos;
-  std::vector<struct qosFlow*> qosFlowsQfis;
+  std::vector<struct s_fiveQosFlow*> qosFlowsQfis;
 
   struct pduSessionIds* pduSession = nullptr;
 };
