@@ -8930,32 +8930,44 @@ class pfcp_user_id_ie : public pfcp_ie {
 //      s.set(trace_information);
 //  }
 //};
-////-------------------------------------
-//// IE FRAMED_ROUTE
-// class pfcp_framed_route_ie : public pfcp_ie {
-// public:
-//  uint8_t todo;
-//
-//  //--------
-//  pfcp_framed_route_ie(const pfcp::framed_route_t& b) :
-//  pfcp_ie(PFCP_IE_FRAMED_ROUTE){
-//    todo = 0;
-//    tlv.set_length(1);
-//  }
-//  //--------
-//  pfcp_framed_route_ie() : pfcp_ie(PFCP_IE_FRAMED_ROUTE){
-//    todo = 0;
-//    tlv.set_length(1);
-//  }
-//  //--------
-//  pfcp_framed_route_ie(const pfcp_tlv& t) : pfcp_ie(t) {
-//    todo = 0;
-//  };
-//  //--------
-//  void to_core_type(pfcp::framed_route_t& b) {
-//    b.todo = todo;
-//  }
-//  //--------
+//-------------------------------------
+// IE FRAMED_ROUTE
+    class pfcp_framed_route_ie : public pfcp_ie {
+    public:
+        std::string framed_route;
+
+        //--------
+        pfcp_framed_route_ie(const pfcp::framed_route_t& b)
+                : pfcp_ie(PFCP_IE_FRAMED_ROUTE) {
+            framed_route = b.framed_route;
+            tlv.set_length(framed_route.size());
+        }
+        //--------
+        pfcp_framed_route_ie() : pfcp_ie(PFCP_IE_FRAMED_ROUTE) { tlv.set_length(0); }
+        //--------
+        pfcp_framed_route_ie(const pfcp_tlv& t) : pfcp_ie(t){};
+        //--
+        void to_core_type(pfcp::framed_route_t& b) { b.framed_route = framed_route; }
+        //--------
+        void dump_to(std::ostream& os) {
+            tlv.dump_to(os);
+            os << framed_route;
+        }
+        //--------
+        void load_from(std::istream& is) {
+            // tlv.load_from(is);
+            char e[tlv.get_length()];
+            is.read(e, tlv.get_length());
+            framed_route.assign(e, tlv.get_length());
+        }
+        //--------
+        void to_core_type(pfcp_ies_container& s) {
+            pfcp::framed_route_t framed_route = {};
+            to_core_type(framed_route);
+            s.set(framed_route);
+        }
+    };
+
 //  void dump_to(std::ostream& os) {
 //    tlv.dump_to(os);
 //    os.write(reinterpret_cast<const char*>(&todo), sizeof(todo));
@@ -9168,8 +9180,11 @@ class pfcp_pdi_ie : public pfcp_grouped_ie {
       std::shared_ptr<pfcp_qfi_ie> sie(new pfcp_qfi_ie(b.qfi.second));
       add_ie(sie);
     }
-    // if (b.framed_route.first) {std::shared_ptr<pfcp_framed_route_ie> sie(new
-    // pfcp_framed_route_ie(b.framed_route.second)); add_ie(sie);} if
+     if (b.framed_route.first)
+     {
+         std::shared_ptr<pfcp_framed_route_ie> sie(new
+     pfcp_framed_route_ie(b.framed_route.second)); add_ie(sie);}
+     // if
     // (b.framed_routing.first) {std::shared_ptr<pfcp_framed_routing_ie> sie(new
     // pfcp_framed_routing_ie(b.framed_routing.second)); add_ie(sie);} if
     // (b.framed_ipv6_route.first) {std::shared_ptr<pfcp_framed_ipv6_route_ie>

@@ -38,6 +38,8 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf/nrf_model.cmake)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/bstr)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model)
+include_directories(${SRC_TOP_DIR}/upf_app/framed_routing)
+
 
 
 #find_library(FOLLY folly)
@@ -48,5 +50,6 @@ add_library (SIMPLE_SWITCH STATIC
   pfcp_session.cpp
   pfcp_switch.cpp
   simple_switch.cpp
+        ${SRC_TOP_DIR}/upf_app/framed_routing/FramedRouting.cpp
   )
   

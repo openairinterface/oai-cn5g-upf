@@ -28,7 +28,7 @@
 #ifndef FILE_PFCP_SWITCH_HPP_SEEN
 #define FILE_PFCP_SWITCH_HPP_SEEN
 
-//#include "concurrentqueue.h"
+// #include "concurrentqueue.h"
 #include "itti.hpp"
 #include "itti_msg_n4.hpp"
 #include "msg_pfcp.hpp"
@@ -50,6 +50,7 @@
 #include <variant>
 
 #include <pthread.h>
+#include "framed_routing/FramedRouting.hpp"
 
 namespace oai {
 namespace upf {
@@ -93,6 +94,8 @@ class pfcp_switch {
 #define PFCP_SWITCH_MIN_COMMIT_INTERVAL_MILLISECONDS 50
 
   // switching_data_per_cpu_socket             switching_data[];
+  const std::shared_ptr<fr::FramedRouting> fr =
+      std::make_shared<fr::FramedRouting>();
   std::unordered_map<pfcp::fseid_t, std::shared_ptr<pfcp::pfcp_session>>
       cp_fseid2pfcp_sessions;
   folly::AtomicHashMap<uint64_t, std::shared_ptr<pfcp::pfcp_session>>
@@ -152,7 +155,7 @@ class pfcp_switch {
 
  public:
   pfcp_switch();
-  pfcp_switch(pfcp_switch const&) = delete;
+  pfcp_switch(pfcp_switch const&)    = delete;
   void operator=(pfcp_switch const&) = delete;
   ~pfcp_switch();
 
@@ -172,10 +175,10 @@ class pfcp_switch {
       const endpoint& r_endpoint, const uint32_t tunnel_id);
   void pfcp_session_look_up_pack_in_access(
       struct iphdr* const iph, const std::size_t num_bytes,
-      const endpoint& r_endpoint){};
+      const endpoint& r_endpoint) {};
   void pfcp_session_look_up_pack_in_access(
       struct ipv6hdr* const iph, const std::size_t num_bytes,
-      const endpoint& r_endpoint){};
+      const endpoint& r_endpoint) {};
   // void pfcp_session_look_up(struct ethhdr* const ethh, const std::size_t
   // num_bytes);
 
@@ -194,7 +197,7 @@ class pfcp_switch {
       itti_n4_session_modification_request* modification_request,
       itti_n4_session_deletion_request* deletion_req, pfcp::pfcp_session* s,
       std::shared_ptr<SessionManager> obj,
-      void (SessionManager::*crud_func)(
+      void (SessionManager::* crud_func)(
           std::shared_ptr<pfcp::pfcp_session>,
           itti_n4_session_establishment_request* est_req,
           itti_n4_session_modification_request* mod_req,

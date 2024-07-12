@@ -277,6 +277,8 @@ ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/simpleswitch ${CMAKE_CURRENT_BINARY_DIR}
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/gtpv1u ${CMAKE_CURRENT_BINARY_DIR}/gtpv1u)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/udp ${CMAKE_CURRENT_BINARY_DIR}/udp)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/interfaces ${CMAKE_CURRENT_BINARY_DIR}/interfaces)
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/framed_routing ${CMAKE_CURRENT_BINARY_DIR}/framed_routing)
+
 ################################################################################
 # Specific part for oai_upf folder
 
@@ -295,6 +297,7 @@ include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 include_directories(${SRC_TOP_DIR}/upf_app/interfaces)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
+include_directories(${SRC_TOP_DIR}/upf_app/framed_routing)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/common)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf)
@@ -345,3 +348,34 @@ pthread m rt config++
 event boost_system curl yaml-cpp cpr::cpr
 )
 
+################################################################
+# Gtest
+################################################################
+
+if (NOT DEFINED ENV{GTEST})
+    set(ENV{GTEST} "off")
+endif ()
+
+if ($ENV{GTEST} STREQUAL "on")
+    message("Test")
+    set(gtest_disable_pthreads ON)
+    include(FetchContent)
+    FetchContent_Declare(
+            googletest
+            # Specify the commit/tag you depend on and update it regularly is a must. especialy if its not buidling anymore ;-), or switch to conan2.
+            GIT_REPOSITORY https://github.com/google/googletest.git
+            GIT_TAG main
+            OVERRIDE_FIND_PACKAGE
+    )
+    # For Windows: Prevent overriding the parent project's compiler/linker settings
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+
+
+    ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/tests ${CMAKE_CURRENT_BINARY_DIR}/tests)
+    #include(${SRC_TOP_DIR}/upf_app/tests)
+
+    include(CTest)
+    add_test(NAME UPFTest COMMAND FramedRoutingTest)
+
+endif ()
