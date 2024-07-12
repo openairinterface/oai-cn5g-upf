@@ -119,6 +119,8 @@ class upf_config {
   } nf_addr;
 
   bool enable_snat;
+  bool enable_fr;
+
   std::vector<pdn_cfg_t> pdns;
   std::vector<pfcp::node_id_t> smfs;
 
@@ -150,6 +152,7 @@ class upf_config {
         max_pfcp_sessions(100),
         nsf(),
         enable_snat(false),
+        enable_fr(false),
         nrf_addr() {
     itti.itti_timer_sched_params.sched_priority = 85;
     itti.n3_sched_params.sched_priority         = 84;

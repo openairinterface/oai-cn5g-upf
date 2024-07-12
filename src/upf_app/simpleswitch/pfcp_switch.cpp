@@ -96,6 +96,7 @@ void pfcp_switch::pdn_worker(
     iov = nullptr;
   }
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::pdn_read_loop(
     int sock_r, util::thread_sched_params sched_params) {
@@ -147,6 +148,7 @@ void pfcp_switch::pdn_read_loop(
     }
   }
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::send_to_core(char* const ip_packet, const ssize_t len) {
   ssize_t bytes_sent;
@@ -156,6 +158,7 @@ void pfcp_switch::send_to_core(char* const ip_packet, const ssize_t len) {
         "write fd %d failed rc=%d:%s", sock_w, bytes_sent, strerror(errno));
   }
 }
+
 //------------------------------------------------------------------------------
 int pfcp_switch::create_pdn_socket(
     const char* const ifname, const bool promisc, int& if_index) {
@@ -219,6 +222,7 @@ int pfcp_switch::create_pdn_socket(
   }
   return sd;
 }
+
 //------------------------------------------------------------------------------
 int pfcp_switch::create_pdn_socket(const char* const ifname) {
   struct sockaddr_in addr = {};
@@ -263,6 +267,7 @@ int pfcp_switch::create_pdn_socket(const char* const ifname) {
   }
   return RETURNerror;
 }
+
 //------------------------------------------------------------------------------
 int pfcp_switch::tun_open(char* devname, int flags) {
   struct ifreq ifr;
@@ -282,6 +287,7 @@ int pfcp_switch::tun_open(char* devname, int flags) {
   }
   return fd;
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::setup_pdn_interfaces() {
   std::string cmd = {};
@@ -323,11 +329,11 @@ void pfcp_switch::setup_pdn_interfaces() {
         struct in_addr address4_gw = {};
         address4_gw.s_addr = upf_cfg.pdns[0].network_ipv4.s_addr + be32toh(1);
 
-        cmd = fmt::format(
-            "ip route add {}/{} via {} dev tun0",
-            oai::utils::conv::toString(it.network_ipv4).c_str(), it.prefix_ipv4,
-            oai::utils::conv::toString(address4_gw).c_str());
-        rc = system((const char*) cmd.c_str());
+        auto routing_info = fr::RoutingInformation{
+            oai::utils::conv::toString(it.network_ipv4),
+            static_cast<uint32_t>(it.prefix_ipv4), "tun0",
+            oai::utils::conv::toString(address4_gw)};
+        local_routing->addRoute(routing_info);
       }
 
       if (upf_cfg.enable_snat) {
@@ -411,6 +417,7 @@ pfcp::fteid_t pfcp_switch::generate_fteid_n3() {
   }
   return fteid;
 }
+
 //------------------------------------------------------------------------------
 pfcp_switch::pfcp_switch()
     : seid_generator_(),
@@ -453,6 +460,7 @@ pfcp_switch::pfcp_switch()
     setup_pdn_interfaces();
   }
 }
+
 //------------------------------------------------------------------------------
 pfcp_switch::~pfcp_switch() {
   int res;
@@ -477,6 +485,7 @@ pfcp_switch::~pfcp_switch() {
   }
   delete[] socks_r_ptr;
 }
+
 //------------------------------------------------------------------------------
 bool pfcp_switch::get_pfcp_session_by_cp_fseid(
     const pfcp::fseid_t& fseid,
@@ -491,6 +500,7 @@ bool pfcp_switch::get_pfcp_session_by_cp_fseid(
     return true;
   }
 }
+
 //------------------------------------------------------------------------------
 bool pfcp_switch::get_pfcp_session_by_up_seid(
     const uint64_t cp_seid,
@@ -505,6 +515,7 @@ bool pfcp_switch::get_pfcp_session_by_up_seid(
     return true;
   }
 }
+
 //------------------------------------------------------------------------------
 bool pfcp_switch::get_pfcp_ul_pdrs_by_up_teid(
     const teid_t teid,
@@ -519,6 +530,7 @@ bool pfcp_switch::get_pfcp_ul_pdrs_by_up_teid(
     return true;
   }
 }
+
 //------------------------------------------------------------------------------
 bool pfcp_switch::get_pfcp_dl_pdrs_by_ue_ip(
     const uint32_t ue_ip,
@@ -533,18 +545,21 @@ bool pfcp_switch::get_pfcp_dl_pdrs_by_ue_ip(
     return true;
   }
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::add_pfcp_session_by_cp_fseid(
     const pfcp::fseid_t& fseid, std::shared_ptr<pfcp::pfcp_session>& session) {
   std::pair<fseid_t, std::shared_ptr<pfcp::pfcp_session>> entry(fseid, session);
   cp_fseid2pfcp_sessions.insert(entry);
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::add_pfcp_session_by_up_seid(
     const uint64_t seid, std::shared_ptr<pfcp::pfcp_session>& session) {
   std::pair<uint64_t, std::shared_ptr<pfcp::pfcp_session>> entry(seid, session);
   up_seid2pfcp_sessions.insert(entry);
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::remove_pfcp_session(
     std::shared_ptr<pfcp::pfcp_session>& session) {
@@ -552,6 +567,7 @@ void pfcp_switch::remove_pfcp_session(
   cp_fseid2pfcp_sessions.erase(session->cp_fseid);
   up_seid2pfcp_sessions.erase(session->seid);
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::remove_pfcp_session(const pfcp::fseid_t& cp_fseid) {
   std::shared_ptr<pfcp::pfcp_session> session = {};
@@ -571,6 +587,7 @@ void pfcp_switch::add_pfcp_ul_pdr_by_up_teid(
         std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>(
             new std::vector<std::shared_ptr<pfcp::pfcp_pdr>>());
     pdrs->push_back(pdr);
+
     std::pair<
         teid_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>
         entry(teid, pdrs);
@@ -592,6 +609,7 @@ void pfcp_switch::add_pfcp_ul_pdr_by_up_teid(
     }
   }
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::remove_pfcp_ul_pdrs_by_up_teid(const teid_t teid) {
   ul_n3_teid2pfcp_pdr.erase(teid);
@@ -612,6 +630,11 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
         uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>
         entry(ue_ip, pdrs);
     ue_ipv4_hbo2pfcp_pdr.insert(entry);
+    if (upf_cfg.enable_fr) {
+      fr->addFramedRoute(
+          ue_ip, pdr->pdi.second.framed_route.second,
+          upf_cfg.pdns[0].network_ipv4.s_addr + be32toh(1));
+    }
     // Logger::pfcp_switch().info( "add_pfcp_dl_pdr_by_ue_ip UE IP %8x", ue_ip);
   } else {
     // sort by precedence
@@ -628,10 +651,15 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
     }
   }
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::remove_pfcp_dl_pdrs_by_ue_ip(const uint32_t ue_ip) {
   ue_ipv4_hbo2pfcp_pdr.erase(ue_ip);
+  if (upf_cfg.enable_fr) {
+    this->fr->removeEntry(ue_ip);
+  }
 }
+
 //------------------------------------------------------------------------------
 std::string pfcp_switch::to_string() const {
   std::string s = {};
@@ -1039,6 +1067,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     }
   }
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::handle_pfcp_session_deletion_request(
     std::shared_ptr<itti_n4_session_deletion_request> sreq,
@@ -1106,6 +1135,7 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
     }
   }
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::pfcp_session_look_up_pack_in_access(
     struct iphdr* const iph, const std::size_t num_bytes,
@@ -1119,7 +1149,8 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
                pdrs->begin();
            it_pdr < pdrs->end(); ++it_pdr) {
         if ((*it_pdr)->look_up_pack_in_access(
-                iph, num_bytes, r_endpoint, tunnel_id)) {
+                iph, num_bytes, r_endpoint, tunnel_id) ||
+            (upf_cfg.enable_fr && fr->retrieveFramedUEIp(iph->saddr) > 0)) {
           std::shared_ptr<pfcp::pfcp_session> ssession = {};
           uint64_t lseid                               = 0;
           if ((*it_pdr)->get(lseid)) {
@@ -1135,8 +1166,9 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
                 }
               }
             }
+            return;
           }
-          return;
+
         } else {
           Logger::pfcp_switch().info(
               "pfcp_session_look_up_pack_in_access failed PDR id %4x ",
@@ -1156,6 +1188,7 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
     }
   }
 }
+
 //------------------------------------------------------------------------------
 bool pfcp_switch::no_internal_loop(
     struct iphdr* const iph, const std::size_t num_bytes) {
@@ -1167,20 +1200,31 @@ bool pfcp_switch::no_internal_loop(
   }
   return true;
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::pfcp_session_look_up_pack_in_access(
     struct ipv6hdr* const ip6h, const std::size_t num_bytes,
     const endpoint& r_endpoint, const uint32_t tunnel_id) {
   // TODO
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::pfcp_session_look_up_pack_in_core(
     const char* buffer, const std::size_t num_bytes) {
   struct iphdr* iph = (struct iphdr*) buffer;
   std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs;
   if (iph->version == 4) {
-    uint32_t ue_ip = be32toh(iph->daddr);
-    if (get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs)) {
+    uint32_t ue_ip    = be32toh(iph->daddr);
+    bool is_pdr_ue_ip = get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs);
+    Logger::pfcp_switch().info("Is PDR", is_pdr_ue_ip);
+    if (!is_pdr_ue_ip && upf_cfg.enable_fr) {
+      uint32_t fr_ip = fr->retrieveFramedUEIp(ue_ip);
+      Logger::pfcp_switch().info("Fr IP", fr_ip);
+      Logger::pfcp_switch().info("UE", ue_ip);
+      ue_ip        = fr_ip != 0 ? fr_ip : ue_ip;
+      is_pdr_ue_ip = get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs);
+    }
+    if (is_pdr_ue_ip) {
       bool nocp = false;
       bool buff = false;
       for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it =
