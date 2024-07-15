@@ -30,34 +30,31 @@ struct bpf_map_def SEC("maps") m_filter = {
     .max_entries = QFI_MAX_ENTRIES,
 };
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 struct bpf_map_def SEC("maps") m_5g_qos_flow_parameters = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(u32), //5qi  
-    .value_size  = sizeof(struct QosFlowParams),   
+    .type       = BPF_MAP_TYPE_HASH,
+    .key_size   = sizeof(u32),  // 5qi
+    .value_size = sizeof(struct QosFlowParams),
     /*
-    * 5qi <  
-    *       resource_type, 
-    *       default_priority_level, 
-    *       packet_delay_budget, 
-    *       packet_error_rate, 
-    *       default_maximum_data_burst_volume, 
-    *       default_averaging_window, 
-    *       //example_services
-    *      >
-    */
+     * 5qi <
+     *       resource_type,
+     *       default_priority_level,
+     *       packet_delay_budget,
+     *       packet_error_rate,
+     *       default_maximum_data_burst_volume,
+     *       default_averaging_window,
+     *       //example_services
+     *      >
+     */
     .max_entries = FIVE_QI_MAX_ENTRIES,
 };
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 struct bpf_map_def SEC("maps") m_qos_flow = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(u32), //qer_id
-    .value_size  = sizeof(struct s_fiveQosFlow),   
+    .type        = BPF_MAP_TYPE_HASH,
+    .key_size    = sizeof(u32),  // qer_id
+    .value_size  = sizeof(struct s_fiveQosFlow),
     .max_entries = QOS_FLOWS_MAX_ENTRIES,
 };
-
 
 #endif  // __QER_MAPS_H__

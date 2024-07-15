@@ -54,7 +54,6 @@ bool SessionManager::extractFar(
   return (pdr->get(farId) && session->get(farId.far_id, outFar));
 }
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 // Helper function to extract QER
 bool SessionManager::extractQer(
@@ -366,7 +365,6 @@ void SessionManager::processPDRDetails(
         std::to_string(pdr_id));
   }
 
-
   std::shared_ptr<pfcp::pfcp_qer> pQer = nullptr;
   // if (!extractQer(pdrHighPrecedence, pSession, pQer)) {
   //   throw std::runtime_error(
@@ -374,7 +372,7 @@ void SessionManager::processPDRDetails(
   //       std::to_string(pdr_id));
   // }
   extractQer(pdrHighPrecedence, pSession, pQer);
-  
+
   SessionProgramManager::getInstance().createPipeline(
       pSession->get_up_seid(), fteid.teid, interfaceValue,
       ueIpAddress.ipv4_address.s_addr, pFar, pQer, false, 0);
@@ -542,7 +540,6 @@ void SessionManager::updateBPFSessionDL(
 
   fteid.teid       = forwardingParams.outer_header_creation.second.teid;
   uint64_t teid_ul = findUplinkTeid(seidul, sessions);
-
 
   std::shared_ptr<pfcp::pfcp_qer> pQer = nullptr;
   extractQer(pdrHighPrecedenceDl, pSession, pQer);
