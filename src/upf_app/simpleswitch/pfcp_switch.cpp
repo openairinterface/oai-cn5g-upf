@@ -631,6 +631,8 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
                 entry(ue_ip, pdrs);
         ue_ipv4_hbo2pfcp_pdr.insert(entry);
         if (upf_cfg.enable_fr) {
+            Logger::pfcp_switch().info(
+                    "Fr IP", pdr->pdi.second.framed_route.second.framed_route);
             fr->addFramedRoute(ue_ip, pdr->pdi.second.framed_route.second);
         }
         // Logger::pfcp_switch().info( "add_pfcp_dl_pdr_by_ue_ip UE IP %8x", ue_ip);
@@ -1212,8 +1214,14 @@ void pfcp_switch::pfcp_session_look_up_pack_in_core(
     if (iph->version == 4) {
         uint32_t ue_ip = be32toh(iph->daddr);
         bool is_pdr_ue_ip = get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs);
+        Logger::pfcp_switch().info(
+                "Is PDR", is_pdr_ue_ip);
         if (!is_pdr_ue_ip && upf_cfg.enable_fr) {
             uint32_t fr_ip = fr->retrieveFramedUEIp(ue_ip);
+            Logger::pfcp_switch().info(
+                    "Fr IP", fr_ip);
+            Logger::pfcp_switch().info(
+                    "UE", ue_ip);
             ue_ip = fr_ip != 0 ? fr_ip : ue_ip;
             is_pdr_ue_ip = get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs);
         }
