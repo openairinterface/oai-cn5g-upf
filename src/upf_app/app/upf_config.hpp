@@ -29,22 +29,25 @@
 #ifndef FILE_UPF_CONFIG_HPP_SEEN
 #define FILE_UPF_CONFIG_HPP_SEEN
 
-#include "3gpp_29.244.h"
-#include "3gpp_29.510.h"
-#include "3gpp_23.003.h"
-#include "gtpv1u.hpp"
-#include "pfcp.hpp"
-#include "thread_sched.hpp"
+#include <netinet/in.h>
+#include <stdbool.h>
+#include <stdint.h>
+
+#include <config_types.hpp>
 #include <libconfig.h++>
 #include <mutex>
-#include <netinet/in.h>
-#include <stdint.h>
-#include <stdbool.h>
 #include <string>
-#include <config_types.hpp>
-#include "logger.hpp"
-#include "Snssai.h"
+
+#include "3gpp_23.003.h"
+#include "3gpp_29.244.h"
+#include "3gpp_29.510.h"
 #include "DnnUpfInfoItem.h"
+#include "Snssai.h"
+#include "gtpv1u.hpp"
+#include "logger.hpp"
+#include "pfcp.hpp"
+#include "sbi_helper.hpp"
+#include "thread_sched.hpp"
 
 constexpr auto UPF_CONFIG_OPTION_YES_STR = "Yes";
 constexpr auto UPF_CONFIG_OPTION_NO_STR  = "No";
@@ -126,13 +129,11 @@ class upf_config {
   upf_info_t upf_info;
 
   unsigned int http_version;
+  uint32_t request_timeout;
 
   nf_addr smf_addr;
   sbi_interface nrf_addr;
-
   interface_cfg_t sbi;
-  unsigned int sbi_http2_port;
-  std::string sbi_api_version;
 
   upf_config()
       : m_rw_lock(),
@@ -169,7 +170,9 @@ class upf_config {
     register_nrf        = false;
     upf_info            = {};
 
-    log_level = spdlog::level::debug;
+    log_level       = spdlog::level::debug;
+    http_version    = 2;
+    request_timeout = oai::common::sbi::kNfDefaultHttpRequestTimeout;
   };
 
   void lock() { m_rw_lock.lock(); };
