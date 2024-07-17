@@ -313,7 +313,7 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   cfg.instance                   = upf_local->get_instance_id();
   cfg.log_level                  = spdlog::level::from_str(log_level());
   cfg.register_nrf               = register_nrf();
-  cfg.request_timeout            = get_curl_timeout();
+  cfg.http_request_timeout       = get_http_request_timeout();
 
   std::string remote_n6_addr;
   uint8_t addr_type = {};

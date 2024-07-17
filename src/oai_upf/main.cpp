@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
   // HTTP Client
   // HTTP Client
   http_client_inst = oai::http::http_client::create_instance(
-      Logger::upf_app(), upf_cfg.request_timeout, upf_cfg.sbi.if_name,
+      Logger::upf_app(), upf_cfg.http_request_timeout, upf_cfg.sbi.if_name,
       upf_cfg.http_version);
 
   // Inter task Interface
