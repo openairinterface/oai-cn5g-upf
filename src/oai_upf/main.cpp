@@ -34,6 +34,7 @@
 #include <signal.h>
 #include <stdint.h>
 #include <unistd.h>  // get_pid(), pause()
+#include <chrono>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/split.hpp>
@@ -67,6 +68,7 @@ std::unique_ptr<upf_config_yaml> upf_cfg_yaml            = nullptr;
 std::shared_ptr<oai::http::http_client> http_client_inst = nullptr;
 //------------------------------------------------------------------------------
 void my_app_signal_handler(int s) {
+  auto shutdown_start = std::chrono::system_clock::now();
   if (single_teardown_call) {
     return;
   }
@@ -104,8 +106,9 @@ void my_app_signal_handler(int s) {
   }
 
   Logger::system().info("Freeing Allocated memory done.");
-  Logger::system().info("Bye");
-
+  auto elapsed = std::chrono::system_clock::now() - shutdown_start;
+  auto ms_diff = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed);
+  Logger::system().info("Bye. Shutdown Procedure took %d ms", ms_diff.count());
   exit(0);
 }
 
