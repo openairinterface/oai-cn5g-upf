@@ -17,6 +17,9 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <arp_table_maps.h>
+// #include <qos_flow.h>
+// #include <gtp_u_tunnel_key.h>
+// #include <filter_key.h>
 #include "upf_config.hpp"
 #include <thread>
 
@@ -249,6 +252,10 @@ void SessionProgramManager::updateARPTableForN6(
     std::string remoteDN    = "192.168.20.30";
     uint32_t remoteN6IPv4   = inet_addr(remoteDN.c_str());
     const char* remoteN6MAC = "00:61:BB:00:00:01";
+    Logger::upf_app().error(
+        "updateARPTableForN6 is modified with hard values to test with "
+        "Keysight! you need to comment this code and uncomment previous "
+        "function");
 
     struct s_arp_mapping map_table;
     memset(&map_table, 0, sizeof(struct s_arp_mapping));
@@ -319,7 +326,10 @@ void SessionProgramManager::updateARPTableForN3(
     std::string remoteGnB   = "192.168.20.20";
     uint32_t remoteN3IPv4   = inet_addr(remoteGnB.c_str());
     const char* remoteN3MAC = "00:31:BB:00:00:01";
-
+    Logger::upf_app().error(
+        "updateARPTableForN3 is modified with hard values to test with "
+        "Keysight! you need to comment this code and uncomment previous "
+        "function");
     struct s_arp_mapping map_table;
     memset(&map_table, 0, sizeof(struct s_arp_mapping));
     memcpy(map_table.mac_address, remoteN3MAC, 6);
@@ -380,7 +390,8 @@ uint32_t SessionProgramManager::getGnodebIp(
 void SessionProgramManager::createPipeline(
     uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
     uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
-    std::shared_ptr<pfcp::pfcp_qer> pQer, bool isModification, uint32_t teid2) {
+    std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer, bool isModification,
+    uint32_t teid2) {
   next_rule_prog_index_key key;
   initializeNextRuleProgIndexKey(key, teid1, ueIpAddress, sourceInterface);
 
@@ -415,15 +426,15 @@ void SessionProgramManager::createPipeline(
   /*
    * ================ Manage QoS ===================
    */
-  // 1. Save values within the maps
-
   // 2. call setup
   Logger::upf_app().debug("Instantiate a new QERProgram");
   std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
-  pQERProgram->setup();
+  pQERProgram->setup(seid, pQer);
+
   // const std::string& gtpInterface, const std::string& udpInterface,
   // const char* qdiscScheduler, std::vector<struct qosFlow*> qfis,
   // uint64_t seid, gtpUTunnel* gtpTunnel
+
   /******************************************************************************************/
   /******************************************************************************************/
 
@@ -449,6 +460,7 @@ void SessionProgramManager::createPipeline(
     saveSeidWithinFARProgram(seid, pFARProgram, key);
   }
 }
+
 /*---------------------------------------------------------------------------------------------------------------*/
 
 // void SessionProgramManager::createPipeline(

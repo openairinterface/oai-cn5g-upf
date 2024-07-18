@@ -115,7 +115,7 @@ class SessionProgramManager {
   void createPipeline(
       uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
       uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
-      std::shared_ptr<pfcp::pfcp_qer> pQer = nullptr,
+      std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
       bool isModification = false, uint32_t teid2 = 0);
 
   /*---------------------------------------------------------------------------------------------------------------*/
@@ -159,6 +159,7 @@ class SessionProgramManager {
   /*---------------------------------------------------------------------------------------------------------------*/
   void updatePipeline(
       uint64_t seid, uint32_t teid, uint32_t gNBIpAddress, bool isModification);
+
   /*---------------------------------------------------------------------------------------------------------------*/
   //   void storeUeQfiTeidMap(
   //       std::shared_ptr<PFCP_Session_LookupProgram>

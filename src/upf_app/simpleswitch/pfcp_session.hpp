@@ -66,6 +66,11 @@ class pfcp_session {
   std::vector<std::shared_ptr<pfcp::pfcp_pdr>> fars_uplink;
   std::vector<std::shared_ptr<pfcp::pfcp_pdr>> fars_downlink;
 
+  struct s_qerIdsPerPDR {
+    std::shared_ptr<pfcp::pfcp_pdr> pdr;
+    std::vector<std::shared_ptr<pfcp::pfcp_qer>> qers;
+  } qerIDsPerPDR;
+
   pfcp::fteid_t teid_uplink = {};
 
   /*---------------------------------------------------------------------------------------------------------------*/

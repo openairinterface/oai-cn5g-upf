@@ -85,6 +85,16 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_pdr> pdr) {
 void pfcp_session::add(std::shared_ptr<pfcp::pfcp_qer> qer) {
   Logger::upf_n4().info("pfcp_session::add(qer) seid " SEID_FMT " ", seid);
   qers.push_back(qer);
+  /*
+  In this Use case, we only considered the high precedence PDR.
+  TODO: check the others, and if needed to save the qers of all PDRs.
+  */
+  /*
+  qerIDsPerPDR.pdr = pdrs_downlink[0];
+  Logger::upf_n4().info("xxxxxxxxxxxxxxxxxx 13");
+  qerIDsPerPDR.qers.push_back(qer);
+  Logger::upf_n4().info("xxxxxxxxxxxxxxxxxx 14");
+  */
 }
 
 //------------------------------------------------------------------------------
@@ -397,6 +407,7 @@ bool pfcp_session::create(
   pfcp_qer* qer                  = new pfcp_qer(cr_qer);
   std::shared_ptr<pfcp_qer> sqer = std::shared_ptr<pfcp_qer>(qer);
   add(sqer);
+  Logger::upf_n4().info("xxxxxxxxxxxxxxxxxx 10");
   return true;
 }
 

@@ -18,7 +18,7 @@
 #include <pdu_session.h>
 #include <qos_flow.h>
 #include "gtp_u_tunnel_key.h"
-
+#include <pfcp_session.hpp>
 class BPFMaps;
 class BPFMap;
 class SessionManager;
@@ -62,10 +62,7 @@ class QERProgram : public BPFProgram {
    * @param uint64_t
    * @param struct gtpUTunnel*
    */
-  void setup(
-      const std::string& gtpInterface, const std::string& udpInterface,
-      const char* qdiscScheduler, std::vector<struct s_fiveQosFlow*> qfis,
-      uint64_t seid, struct gtpUTunnel* gtpTunnel);
+  void setup(uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer);
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the BPFMaps object.
@@ -173,13 +170,13 @@ class QERProgram : public BPFProgram {
       struct nl_sock* sock, struct rtnl_qdisc* parent, uint32_t childId);
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  /**
-   * @brief Setter
-   * Save the QFI vector
-   *
-   * @param qfis
-   */
-  void setQosFlowsQfis(std::vector<struct s_fiveQosFlow*> qfis);
+  //   /**
+  //    * @brief Setter
+  //    * Save the QFI vector
+  //    *
+  //    * @param pQer
+  //    */
+  //   void setQosFlowsQfis(std::shared_ptr<pfcp::pfcp_qer> pQer);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -210,7 +207,7 @@ class QERProgram : public BPFProgram {
    * @brief Set the pdu session class position object
    *
    */
-  void setPduSessionClassPosition();
+  void setPduSessionClassPosition(uint64_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -228,6 +225,7 @@ class QERProgram : public BPFProgram {
   void initializeMaps();
 
   void insertValuesIntoMaps();
+  void storeQosFlow(std::shared_ptr<pfcp::pfcp_qer> pQer);
   /*---------------------------------------------------------------------------------------------------------------*/
   // The reference of the bpf maps.
   std::shared_ptr<BPFMaps> mpMaps;
@@ -279,7 +277,7 @@ class QERProgram : public BPFProgram {
 
   std::vector<struct classParams*> qosFlowsClassesAtt;
   std::vector<struct classPosition*> qosFlowsClassesPos;
-  std::vector<struct s_fiveQosFlow*> qosFlowsQfis;
+  std::vector<struct s_fiveQosFlow> qosFlowsQfis;
 
   struct pduSessionIds* pduSession = nullptr;
 };

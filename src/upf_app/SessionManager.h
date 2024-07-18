@@ -188,7 +188,7 @@ class SessionManager {
   bool extractQer(
       std::shared_ptr<pfcp::pfcp_pdr> pdr,
       std::shared_ptr<pfcp::pfcp_session> session,
-      std::shared_ptr<pfcp::pfcp_qer>& outQer);
+      std::vector<std::shared_ptr<pfcp::pfcp_qer>>* outQer);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   bool extractForwardingParams(
