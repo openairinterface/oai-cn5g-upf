@@ -157,9 +157,10 @@ int main(int argc, char** argv) {
   upf_cfg_yaml->display();
 
   // HTTP Client
+  // HTTP Client
   http_client_inst = oai::http::http_client::create_instance(
-      Logger::upf_app(), oai::common::sbi::kNfDefaultHttpRequestTimeout,
-      upf_cfg.sbi.if_name, upf_cfg.http_version);
+      Logger::upf_app(), upf_cfg.http_request_timeout, upf_cfg.sbi.if_name,
+      upf_cfg.http_version);
 
   // Inter task Interface
   itti_inst = new itti_mw();

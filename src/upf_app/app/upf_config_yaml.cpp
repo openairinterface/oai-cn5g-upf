@@ -20,13 +20,14 @@
  */
 
 #include "upf_config_yaml.hpp"
-#include <regex>
-#include "fqdn.hpp"
-#include "conversions.hpp"
-#include "logger.hpp"
+
 #include <boost/algorithm/string.hpp>
-#include "conversions.hpp"
+#include <regex>
+
 #include "conv.hpp"
+#include "conversions.hpp"
+#include "fqdn.hpp"
+#include "logger.hpp"
 
 namespace oai::config {
 
@@ -312,6 +313,7 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   cfg.instance                   = upf_local->get_instance_id();
   cfg.log_level                  = spdlog::level::from_str(log_level());
   cfg.register_nrf               = register_nrf();
+  cfg.http_request_timeout       = get_http_request_timeout();
 
   std::string remote_n6_addr;
   uint8_t addr_type = {};
@@ -351,11 +353,9 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
 
   cfg.http_version = get_http_version();
 
-  cfg.sbi_api_version = local().get_sbi().get_api_version();
-  cfg.sbi_http2_port  = local().get_sbi().get_port();
-  cfg.sbi.port        = local().get_sbi().get_port();
-  cfg.sbi.addr4       = local().get_sbi().get_addr4();
-  cfg.sbi.if_name     = local().get_sbi().get_if_name();
+  cfg.sbi.port    = local().get_sbi().get_port();
+  cfg.sbi.addr4   = local().get_sbi().get_addr4();
+  cfg.sbi.if_name = local().get_sbi().get_if_name();
 
   cfg.enable_bpf_datapath =
       upf_local->get_support_features().get_option_enable_bpf_datapath();
