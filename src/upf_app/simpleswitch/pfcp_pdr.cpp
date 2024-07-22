@@ -29,16 +29,16 @@
 #include "pfcp_pdr.hpp"
 #include "upf_n4.hpp"
 #include "upf_config.hpp"
-
 using namespace pfcp;
 using namespace oai::upf::app;
+
 
 extern upf_n4* upf_n4_inst;
 extern oai::config::upf_config upf_cfg;
 //------------------------------------------------------------------------------
 bool pfcp_pdr::look_up_pack_in_access(
     struct iphdr* const iph, const std::size_t num_bytes,
-    const endpoint& r_endpoint, const uint32_t tunnel_id,const std::shared_ptr<fr::FramedRouting> fr) {
+    const endpoint& r_endpoint, const uint32_t tunnel_id) {
   // implicit packet arrives from ACCESS interface
   if (outer_header_removal.first) {
     if (outer_header_removal.second.outer_header_removal_description !=
@@ -66,11 +66,8 @@ bool pfcp_pdr::look_up_pack_in_access(
       if (!pdi.second.ue_ip_address.second.v4) {
         return false;
       }
-      if (pdi.second.ue_ip_address.second.ipv4_address.s_addr != iph->saddr) {
-          if (!upf_cfg.enable_fr && fr->retrieveFramedUEIp(iph->saddr)==0)
-          {
+      if (!upf_cfg.enable_fr&&pdi.second.ue_ip_address.second.ipv4_address.s_addr != iph->saddr) {
               return false;
-          }
       }
     }
     // SDF filter

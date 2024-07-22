@@ -33,8 +33,8 @@
 #include "endpoint.hpp"
 #include "msg_pfcp.hpp"
 #include <mutex>
+#include <memory>
 #include "framed_routing/FramedRouting.hpp"
-
 namespace pfcp {
 
 class pfcp_session;
@@ -51,7 +51,6 @@ class pfcp_pdr {
   std::pair<bool, pfcp::urr_id_t> urr_id;
   std::pair<bool, pfcp::qer_id_t> qer_id;
   std::pair<bool, pfcp::activate_predefined_rules_t> activate_predefined_rules;
-
   bool notified_cp;
 
   explicit pfcp_pdr(uint64_t lseid)
@@ -188,7 +187,7 @@ class pfcp_pdr {
 
   bool look_up_pack_in_access(
       struct iphdr* const iph, const std::size_t num_bytes,
-      const endpoint& r_endpoint, const uint32_t tunnel_id,const std::shared_ptr<fr::FramedRouting> fr);
+      const endpoint& r_endpoint, const uint32_t tunnel_id);
   bool look_up_pack_in_core(
       struct iphdr* const iph, const std::size_t num_bytes);
 

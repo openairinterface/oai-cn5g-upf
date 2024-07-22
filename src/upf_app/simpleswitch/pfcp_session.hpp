@@ -32,6 +32,7 @@
 #include "msg_pfcp.hpp"
 #include "pfcp_far.hpp"
 #include "pfcp_pdr.hpp"
+#include "framed_routing/FramedRouting.hpp"
 
 namespace pfcp {
 

@@ -41,8 +41,8 @@ namespace fr {
 
         [[nodiscard]] std::pair<uint32_t, uint32_t> extractIPCidr(const std::string &fr_subnet) const;
 
-        [[nodiscard]] FramedRoutingKey createFramedRoutingKey(const std::pair<uint32_t, uint32_t> ipCidr) const;
-        [[nodiscard]] RoutingInformation createLocalRoutingInformation(const std::pair<uint32_t, uint32_t> ipCidr, const uint32_t gateway_ip) const;
+        [[nodiscard]] FramedRoutingKey createFramedRoutingKey(std::pair<uint32_t, uint32_t> ipCidr) const;
+        [[nodiscard]] RoutingInformation createLocalRoutingInformation(std::pair<uint32_t, uint32_t> ipCidr, uint32_t gateway_ip) const;
     };
 
 
