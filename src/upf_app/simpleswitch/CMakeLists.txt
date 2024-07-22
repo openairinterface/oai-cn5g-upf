@@ -51,5 +51,7 @@ add_library (SIMPLE_SWITCH STATIC
   pfcp_switch.cpp
   simple_switch.cpp
         ${SRC_TOP_DIR}/upf_app/framed_routing/FramedRouting.cpp
-  )
+        ${SRC_TOP_DIR}/upf_app/framed_routing/LocalRouting.cpp
+
+)
   

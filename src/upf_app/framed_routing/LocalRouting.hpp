@@ -7,24 +7,25 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <linux/route.h>
 
 namespace fr {
     struct RoutingInformation {
         std::string destination;
-        std::string netmask;
+        uint32_t netmask;
         std::string device;
         std::string gateway_address;
     };
-
+//todo (kw) rename class
     class LocalRouting {
     public:
-        [[nodiscard]] bool addRoute(RoutingInformation routing_information);
+        [[nodiscard]] virtual bool addRoute(const RoutingInformation &routing_information);
 
-        [[nodiscard]] bool deleteRoute(RoutingInformation routing_information) const;
+        [[nodiscard]] virtual bool deleteRoute(const uint32_t & network_address);
 
     private:
-        std::unordered_map<uint32_t, std::shared_ptr<rtentry>> routeInfoToRtEntry{};
+
+        std::unordered_map<std::string, RoutingInformation> routeInfoToRtEntry{};
+
 
        short getInterfaceIndex(const std::string& interfaceName);
 

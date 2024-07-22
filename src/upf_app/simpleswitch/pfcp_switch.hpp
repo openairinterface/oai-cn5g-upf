@@ -51,6 +51,7 @@
 
 #include <pthread.h>
 #include "framed_routing/FramedRouting.hpp"
+#include "framed_routing/LocalRouting.hpp"
 
 namespace oai {
 namespace upf {
@@ -94,8 +95,11 @@ class pfcp_switch {
 #define PFCP_SWITCH_MIN_COMMIT_INTERVAL_MILLISECONDS 50
 
   // switching_data_per_cpu_socket             switching_data[];
+
+  const std::shared_ptr<fr::LocalRouting> local_routing =
+      std::make_shared<fr::LocalRouting>();
   const std::shared_ptr<fr::FramedRouting> fr =
-      std::make_shared<fr::FramedRouting>();
+      std::make_shared<fr::FramedRouting>(local_routing);
   std::unordered_map<pfcp::fseid_t, std::shared_ptr<pfcp::pfcp_session>>
       cp_fseid2pfcp_sessions;
   folly::AtomicHashMap<uint64_t, std::shared_ptr<pfcp::pfcp_session>>
@@ -110,38 +114,51 @@ class pfcp_switch {
   // moodycamel::ConcurrentQueue<pfcp::pfcp_session*> create_session_q;
 
   void pdn_worker(const int id, const util::thread_sched_params& sched_params);
+
   void pdn_read_loop(int sock_r, util::thread_sched_params sched_params);
+
   int create_pdn_socket(
       const char* const ifname, const bool promisc, int& if_index);
+
   int create_pdn_socket(const char* const ifname);
+
   int tun_open(char* devname, int flags);
+
   void setup_pdn_interfaces();
 
   timer_id_t timer_max_commit_interval_id;
   timer_id_t timer_min_commit_interval_id;
 
   void stop_timer_min_commit_interval();
+
   void start_timer_min_commit_interval();
+
   void stop_timer_max_commit_interval();
+
   void start_timer_max_commit_interval();
 
   void commit_changes();
 
   bool get_pfcp_session_by_cp_fseid(
       const pfcp::fseid_t&, std::shared_ptr<pfcp::pfcp_session>&) const;
+
   bool get_pfcp_session_by_up_seid(
       const uint64_t, std::shared_ptr<pfcp::pfcp_session>&) const;
+
   bool get_pfcp_ul_pdrs_by_up_teid(
       const teid_t,
       std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>&) const;
+
   bool get_pfcp_dl_pdrs_by_ue_ip(
       const uint32_t,
       std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>&) const;
 
   void add_pfcp_session_by_cp_fseid(
       const pfcp::fseid_t&, std::shared_ptr<pfcp::pfcp_session>&);
+
   void add_pfcp_session_by_up_seid(
       const uint64_t, std::shared_ptr<pfcp::pfcp_session>&);
+
   void add_pfcp_ul_pdr_by_up_teid(
       const teid_t teid, std::shared_ptr<pfcp::pfcp_pdr>&);
 
@@ -155,14 +172,18 @@ class pfcp_switch {
 
  public:
   pfcp_switch();
-  pfcp_switch(pfcp_switch const&)    = delete;
+
+  pfcp_switch(pfcp_switch const&) = delete;
+
   void operator=(pfcp_switch const&) = delete;
+
   ~pfcp_switch();
 
   void add_pfcp_dl_pdr_by_ue_ip(
       const uint32_t ue_ip, std::shared_ptr<pfcp::pfcp_pdr>&);
 
   pfcp::fteid_t generate_fteid_n3();
+
   bool create_packet_in_access(
       std::shared_ptr<pfcp::pfcp_pdr>& pdr, const pfcp::fteid_t& in,
       uint8_t& cause);
@@ -170,15 +191,18 @@ class pfcp_switch {
   void pfcp_session_look_up_pack_in_access(
       struct iphdr* const iph, const std::size_t num_bytes,
       const endpoint& r_endpoint, const uint32_t tunnel_id);
+
   void pfcp_session_look_up_pack_in_access(
       struct ipv6hdr* const iph, const std::size_t num_bytes,
       const endpoint& r_endpoint, const uint32_t tunnel_id);
+
   void pfcp_session_look_up_pack_in_access(
       struct iphdr* const iph, const std::size_t num_bytes,
-      const endpoint& r_endpoint) {};
+      const endpoint& r_endpoint){};
+
   void pfcp_session_look_up_pack_in_access(
       struct ipv6hdr* const iph, const std::size_t num_bytes,
-      const endpoint& r_endpoint) {};
+      const endpoint& r_endpoint){};
   // void pfcp_session_look_up(struct ethhdr* const ethh, const std::size_t
   // num_bytes);
 
@@ -186,6 +210,7 @@ class pfcp_switch {
       const char* buffer, const std::size_t num_bytes);
 
   bool no_internal_loop(struct iphdr* const iph, const std::size_t num_bytes);
+
   void send_to_core(char* const ip_packet, const ssize_t len);
 
   using itti_n4_session_request = std::variant<
@@ -197,7 +222,7 @@ class pfcp_switch {
       itti_n4_session_modification_request* modification_request,
       itti_n4_session_deletion_request* deletion_req, pfcp::pfcp_session* s,
       std::shared_ptr<SessionManager> obj,
-      void (SessionManager::* crud_func)(
+      void (SessionManager::*crud_func)(
           std::shared_ptr<pfcp::pfcp_session>,
           itti_n4_session_establishment_request* est_req,
           itti_n4_session_modification_request* mod_req,
@@ -206,18 +231,23 @@ class pfcp_switch {
   void handle_pfcp_session_establishment_request(
       std::shared_ptr<itti_n4_session_establishment_request> sreq,
       itti_n4_session_establishment_response*);
+
   void handle_pfcp_session_modification_request(
       std::shared_ptr<itti_n4_session_modification_request> sreq,
       itti_n4_session_modification_response*);
+
   void handle_pfcp_session_deletion_request(
       std::shared_ptr<itti_n4_session_deletion_request> sreq,
       itti_n4_session_deletion_response*);
 
   void time_out_min_commit_interval(const uint32_t timer_id);
+
   void time_out_max_commit_interval(const uint32_t timer_id);
 
   void remove_pfcp_session(const pfcp::fseid_t& cp_fseid);
+
   void remove_pfcp_ul_pdrs_by_up_teid(const teid_t);
+
   void remove_pfcp_dl_pdrs_by_ue_ip(const uint32_t);
 
   std::string to_string() const;
