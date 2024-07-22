@@ -193,16 +193,16 @@ void SessionManager::createBPFSession(
     itti_n4_session_establishment_request* est_req,
     itti_n4_session_modification_request* mod_req,
     itti_n4_session_deletion_request* del_req) {
-  auto& logger  = Logger::upf_app();
+  auto& logger  = Logger::upf_n4();
   uint64_t seid = pSession_establishment->get_up_seid();
 
-  logger.debug("Session {} Received", seid);
+  logger.debug("Session %d Received", seid);
   logger.debug("Preparing the Datapath ...");
   logger.debug("Find the PDR with Highest Precedence");
 
   auto& pdrs_uplink   = pSession_establishment->pdrs_uplink;
   auto& pdrs_downlink = pSession_establishment->pdrs_downlink;
-
+  
   // Process PDRs to populate uplink and downlink vectors
   processPDRs(pSession_establishment);
 
@@ -228,16 +228,19 @@ void SessionManager::processPDRs(
     std::shared_ptr<pfcp::pfcp_session> pSession_establishment) {
   auto& pdrs_uplink   = pSession_establishment->pdrs_uplink;
   auto& pdrs_downlink = pSession_establishment->pdrs_downlink;
-
+  
   // Iterate over PDRs and categorize them into uplink and downlink vectors
   for (auto& pdr : pSession_establishment->pdrs) {
     pfcp::pdi pdi;
+    pfcp::pfcp_qer qer;
     pfcp::source_interface_t sourceInterface;
     if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
       throw std::runtime_error(
           "Missing Mandatory IE (PDI or Source Interface) within PDR: " +
           std::to_string(pdr->pdr_id.rule_id));
     }
+
+    //pdr->get(qer);
 
     switch (sourceInterface.interface_value) {
       case INTERFACE_VALUE_ACCESS:
@@ -370,7 +373,7 @@ void SessionManager::processPDRDetails(
   // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer =
   // pSession->qerIDsPerPDR.qers;
   std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer = pSession->qers;
-
+  
   // if (!extractQer(pdrHighPrecedence, pSession, pQer)) {
   //   throw std::runtime_error(
   //       "Failed to extract {} QER for PDR " + direction + " " +

@@ -85,16 +85,6 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_pdr> pdr) {
 void pfcp_session::add(std::shared_ptr<pfcp::pfcp_qer> qer) {
   Logger::upf_n4().info("pfcp_session::add(qer) seid " SEID_FMT " ", seid);
   qers.push_back(qer);
-  /*
-  In this Use case, we only considered the high precedence PDR.
-  TODO: check the others, and if needed to save the qers of all PDRs.
-  */
-  /*
-  qerIDsPerPDR.pdr = pdrs_downlink[0];
-  Logger::upf_n4().info("xxxxxxxxxxxxxxxxxx 13");
-  qerIDsPerPDR.qers.push_back(qer);
-  Logger::upf_n4().info("xxxxxxxxxxxxxxxxxx 14");
-  */
 }
 
 //------------------------------------------------------------------------------
@@ -345,7 +335,7 @@ bool pfcp_session::create(
   if (not cr_qer.qer_id.first) {
     cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
     offending_ie      = PFCP_IE_QER_ID;
-    return false;
+    //return false;
   }
 
   /*
@@ -359,19 +349,19 @@ bool pfcp_session::create(
   if (not cr_qer.gate_status.first) {
     cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
     offending_ie      = PFCP_IE_GATE_STATUS;
-    return false;
+    //return false;
   }
 
   if (not cr_qer.maximum_bitrate.first) {
     cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
     offending_ie      = PFCP_IE_MBR;
-    return false;
+    //return false;
   }
 
   if (not cr_qer.guaranteed_bitrate.first) {
     cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
     offending_ie      = PFCP_IE_GBR;
-    return false;
+    //return false;
   }
 
   /*
@@ -393,7 +383,7 @@ bool pfcp_session::create(
   if (not cr_qer.qos_flow_identifier.first) {
     cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
     offending_ie      = PFCP_IE_QFI;
-    return false;
+    //return false;
   }
 
   /*
@@ -407,7 +397,6 @@ bool pfcp_session::create(
   pfcp_qer* qer                  = new pfcp_qer(cr_qer);
   std::shared_ptr<pfcp_qer> sqer = std::shared_ptr<pfcp_qer>(qer);
   add(sqer);
-  Logger::upf_n4().info("xxxxxxxxxxxxxxxxxx 10");
   return true;
 }
 
