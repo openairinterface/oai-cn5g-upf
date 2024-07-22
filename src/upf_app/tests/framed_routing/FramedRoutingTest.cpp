@@ -1,6 +1,5 @@
 #include "FramedRoutingTest.h"
 
-#include <gtest/gtest.h>
 
 namespace fr {
 TEST_F(FramedRoutingTest, CreateFramedRoute) {
