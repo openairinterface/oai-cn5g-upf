@@ -12,8 +12,9 @@
 namespace fr {
     struct RoutingInformation {
         std::string destination;
-        std::string networkMask;
+        std::string netmask;
         std::string device;
+        std::string gateway_address;
     };
 
     class LocalRouting {
