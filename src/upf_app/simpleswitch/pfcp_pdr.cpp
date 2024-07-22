@@ -67,11 +67,10 @@ bool pfcp_pdr::look_up_pack_in_access(
         return false;
       }
       if (pdi.second.ue_ip_address.second.ipv4_address.s_addr != iph->saddr) {
-          if (upf_cfg.enable_fr && fr->retrieveFramedUEIp(iph->saddr)==0)
+          if (!upf_cfg.enable_fr && fr->retrieveFramedUEIp(iph->saddr)==0)
           {
               return false;
           }
-        return false;
       }
     }
     // SDF filter

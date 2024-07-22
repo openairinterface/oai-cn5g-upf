@@ -33,7 +33,7 @@
 #include "endpoint.hpp"
 #include "msg_pfcp.hpp"
 #include <mutex>
-#include <FramedRouting.hpp>
+#include "framed_routing/FramedRouting.hpp"
 
 namespace pfcp {
 
