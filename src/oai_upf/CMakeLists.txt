@@ -376,6 +376,6 @@ if ($ENV{GTEST} STREQUAL "on")
     #include(${SRC_TOP_DIR}/upf_app/tests)
 
     include(CTest)
-    add_test(NAME UPFTest COMMAND FramedRoutingTest)
+    add_test(NAME UPFTest COMMAND FramedRoutingTest LocalRoutingTest)
 
 endif ()

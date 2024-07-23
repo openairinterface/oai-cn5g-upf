@@ -18,9 +18,9 @@ namespace fr {
 //todo (kw) rename class
     class LocalRouting {
     public:
-        [[nodiscard]] virtual bool addRoute(const RoutingInformation &routing_information);
+        [[nodiscard]] virtual void addRoute(const RoutingInformation &routing_information);
 
-        [[nodiscard]] virtual bool deleteRoute(const uint32_t & network_address);
+        [[nodiscard]] virtual void deleteRoute(const uint32_t & network_address);
 
     private:
 

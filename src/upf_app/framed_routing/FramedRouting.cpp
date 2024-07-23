@@ -5,6 +5,7 @@
 #include "FramedRouting.hpp"
 #include <utility>
 #include <sstream>
+#include <iostream>
 
 namespace fr {
 
@@ -15,17 +16,14 @@ void FramedRouting::addFramedRoute(
     const uint32_t ue_ip, const pfcp::framed_route_s& framed_route_s,
     uint32_t gatewayIP) {
   std::stringstream ss(framed_route_s.framed_route);
-  // todo make configuratable?
   const char delimiter = ' ';
   std::string ipsubnetmask;
   while (std::getline(ss, ipsubnetmask, delimiter)) {
-    // todo(kw) 32 bit? to lazy to calculate but FramedRoutingKey could be 32bit
-    // and networkAdress too.
     std::pair<uint32_t, uint32_t> ipCidr = this->extractIPCidr(ipsubnetmask);
     auto key                             = createFramedRoutingKey(ipCidr);
     auto routing_info = createLocalRoutingInformation(ipCidr, gatewayIP);
     this->KeyToIp.insert({key, ue_ip});
-    auto const isRouteAdded = localRouting->addRoute(routing_info);
+    localRouting->addRoute(routing_info);
   }
 }
 
@@ -48,7 +46,7 @@ void FramedRouting::removeEntry(uint32_t ue_ip) {
     auto ip                           = this->KeyToIp.find(framedRoutingKey);
     if (ip != KeyToIp.end()) {
       this->KeyToIp.erase(ip);
-      this->localRouting->deleteRoute(ip->second);
+ this->localRouting->deleteRoute(ip->second);
     };
   };
 }
@@ -72,9 +70,9 @@ uint32_t FramedRouting::framedIPToUeIP(const std::string& ip) const {
 uint32_t FramedRouting::frameSubnetToUInt(std::string& subnet) const {
   // todo be a method?
   std::string temp_subnet = "";
-    if (subnet.length()>2){
-        return  32;
-    }
+  if (subnet.length() > 2) {
+    return 32;
+  }
   for (auto i = subnet.length(); i > 0; i--) {
     temp_subnet.push_back(subnet.at(i - 1));
   }

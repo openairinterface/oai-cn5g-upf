@@ -4,25 +4,31 @@
 
 #include <fmt/format.h>
 #include <arpa/inet.h>
+#include <iostream>
+#include <logger.hpp>
 #include "LocalRouting.hpp"
 
 namespace fr {
 
-bool LocalRouting::addRoute(const RoutingInformation& routing_information) {
+void LocalRouting::addRoute(const RoutingInformation& routing_information) {
+    auto original_cerr_streambuf = std::cerr.rdbuf(nullptr );
   auto cmd = fmt::format(
       "ip route add {}/{} via {} dev tun0", routing_information.destination,
       routing_information.netmask, routing_information.gateway_address);
   auto rc = system((const char*) cmd.c_str());
-  if (rc == 0) {
+    if (rc == 0) {
+        Logger::pfcp_switch().info(
+                "Route deleted");
       this->routeInfoToRtEntry.insert({routing_information.destination,routing_information});
-    return true;
   }
-  return false;
+    Logger::pfcp_switch().warn(
+            "Route information not correct or does not exists!");
 }
 
-bool LocalRouting::deleteRoute(const uint32_t& network_address) {
+void LocalRouting::deleteRoute(const uint32_t& network_address) {
   // todo(phine.tech) create function remove dublicated_code
-  struct in_addr addr;
+    auto original_cerr_streambuf = std::cerr.rdbuf(nullptr );
+    struct in_addr addr;
   addr.s_addr                = htonl(network_address);
   std::string destination    = inet_ntoa(addr);
   auto routing_info_iterator = this->routeInfoToRtEntry.find(destination);
@@ -31,12 +37,13 @@ bool LocalRouting::deleteRoute(const uint32_t& network_address) {
     auto cmd                       = fmt::format(
         "ip route del {}/{} via {} dev tun0", routing_information.destination,
         routing_information.netmask, routing_information.gateway_address);
-    auto rc = system((const char*) cmd.c_str());
+    auto rc = system((const char*) cmd.c_str() );
     if (rc == 0) {
-      return true;
+        Logger::pfcp_switch().info(
+                "Route deleted");
     }
-    return false;
+      Logger::pfcp_switch().warn(
+              "Route information not correct or does not exists!");
   }
-  return false;
 };
 }  // namespace fr
