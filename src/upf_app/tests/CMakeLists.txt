@@ -1,4 +1,3 @@
-include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
 include_directories(${SRC_TOP_DIR}/common)
 include_directories(${SRC_TOP_DIR}/common/msg)
 include_directories(${SRC_TOP_DIR}/common/utils)
@@ -20,6 +19,13 @@ include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/bstr)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model)
 include_directories(${SRC_TOP_DIR}/upf_app/framed_routing)
+include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/config/config.cmake)
+include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/http/http.cmake)
+include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger/logger.cmake)
+include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf/nrf_model.cmake)
+include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model/common_model.cmake)
+include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
+
 
 add_executable(
                 UPFTest
@@ -27,6 +33,8 @@ add_executable(
         framed_routing/FramedRoutingTest.cpp
         framed_routing/mocks/LocalRoutingMock.h
 )
+
+add_dependencies(UPFTest upf)
         target_link_libraries(UPFTest PUBLIC FRAMED_ROUTING SIMPLE_SWITCH GTest::gtest_main GTest::gmock_main fmt)
         include(GoogleTest)
         gtest_discover_tests(UPFTest)

@@ -340,6 +340,9 @@ void pfcp_switch::setup_pdn_interfaces() {
               "destination: %s\n ",
               "CIDR: %s\n ", "Gateway: %s\n ", routing_info.destination,
               routing_info.netmask, routing_info.gateway_address);
+        } else {
+          Logger::pfcp_switch().info(
+              "Route added: %s", routing_info.destination);
         }
       }
 
@@ -639,10 +642,12 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
     ue_ipv4_hbo2pfcp_pdr.insert(entry);
     if (upf_cfg.enable_fr) {
       Logger::pfcp_switch().info(
-          "Fr IP", pdr->pdi.second.framed_route.second.framed_route);
+          "Fr IP:", pdr->pdi.second.framed_route.second.framed_route);
       fr->addFramedRoute(
           ue_ip, pdr->pdi.second.framed_route.second,
           upf_cfg.pdns[0].network_ipv4.s_addr + be32toh(1));
+        Logger::pfcp_switch().info(
+                "Fr IP End %s:", pdr->pdi.second.framed_route.second.framed_route);
     }
     // Logger::pfcp_switch().info( "add_pfcp_dl_pdr_by_ue_ip UE IP %8x", ue_ip);
   } else {
@@ -1158,29 +1163,25 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
                pdrs->begin();
            it_pdr < pdrs->end(); ++it_pdr) {
         if ((*it_pdr)->look_up_pack_in_access(
-                iph, num_bytes, r_endpoint, tunnel_id)) {
-          if (upf_cfg.enable_fr) {
-            if (fr->retrieveFramedUEIp(iph->saddr) > 0) {
-              std::shared_ptr<pfcp::pfcp_session> ssession = {};
-              uint64_t lseid                               = 0;
-              if ((*it_pdr)->get(lseid)) {
-                if (get_pfcp_session_by_up_seid(lseid, ssession)) {
-                  pfcp::far_id_t far_id = {};
-                  if ((*it_pdr)->get(far_id)) {
-                    std::shared_ptr<pfcp::pfcp_far> sfar = {};
-                    if (ssession->get(far_id.far_id, sfar)) {
-                      // Maintain uplink QFI in session
-                      uint8_t qfi   = (*it_pdr)->pdi.second.qfi.second.qfi;
-                      ssession->qfi = qfi;
-                      sfar->apply_forwarding_rules(
-                          iph, num_bytes, nocp, buff, 0);
-                    }
-                  }
+                iph, num_bytes, r_endpoint, tunnel_id) || (upf_cfg.enable_fr&&fr->retrieveFramedUEIp(iph->saddr) > 0)) {
+            std::shared_ptr<pfcp::pfcp_session> ssession = {};
+            uint64_t lseid                               = 0;
+            if ((*it_pdr)->get(lseid)) {
+              if (get_pfcp_session_by_up_seid(lseid, ssession)) {
+                pfcp::far_id_t far_id = {};
+                if ((*it_pdr)->get(far_id)) {
+                  std::shared_ptr<pfcp::pfcp_far> sfar = {};
+                  if (ssession->get(far_id.far_id, sfar)) {
+                    // Maintain uplink QFI in session
+                    uint8_t qfi   = (*it_pdr)->pdi.second.qfi.second.qfi;
+                    ssession->qfi = qfi;
+                    sfar->apply_forwarding_rules(iph, num_bytes, nocp, buff, 0);
                 }
               }
-              return;
             }
+            return;
           }
+
         } else {
           Logger::pfcp_switch().info(
               "pfcp_session_look_up_pack_in_access failed PDR id %4x ",

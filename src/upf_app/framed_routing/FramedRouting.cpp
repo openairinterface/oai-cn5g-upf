@@ -5,6 +5,7 @@
 #include "FramedRouting.hpp"
 #include <utility>
 #include <sstream>
+#include <iostream>
 
 namespace fr {
 
@@ -25,7 +26,18 @@ void FramedRouting::addFramedRoute(
     auto key                             = createFramedRoutingKey(ipCidr);
     auto routing_info = createLocalRoutingInformation(ipCidr, gatewayIP);
     this->KeyToIp.insert({key, ue_ip});
-    auto const isRouteAdded = localRouting->addRoute(routing_info);
+
+      Logger::upf_app().info(
+              "add route");
+      auto const isRouteAdded = localRouting->addRoute(routing_info);
+    if (isRouteAdded) {
+
+        Logger::upf_app().info(
+                "route added");
+    } else {
+        Logger::upf_app().error(
+                "no route");
+    }
   }
 }
 
@@ -72,9 +84,9 @@ uint32_t FramedRouting::framedIPToUeIP(const std::string& ip) const {
 uint32_t FramedRouting::frameSubnetToUInt(std::string& subnet) const {
   // todo be a method?
   std::string temp_subnet = "";
-    if (subnet.length()>2){
-        return  32;
-    }
+  if (subnet.length() > 2) {
+    return 32;
+  }
   for (auto i = subnet.length(); i > 0; i--) {
     temp_subnet.push_back(subnet.at(i - 1));
   }

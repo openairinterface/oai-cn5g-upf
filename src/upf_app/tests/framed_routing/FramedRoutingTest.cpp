@@ -15,8 +15,6 @@ TEST_F(FramedRoutingTest, AddRoutes) {
 
   FramedRoutingTest::fr->addFramedRoute(ue_ip_one, framed_route, gatewayip);
 
-  EXPECT_CALL(*local_routing, addRoute(testing::_))
-                .WillRepeatedly(testing::Return(true));
   EXPECT_NO_FATAL_FAILURE();
 }
 
