@@ -192,8 +192,10 @@ class QERProgram : public BPFProgram {
   /**
    * @brief Set the PDU session Qdisc Class Attributes
    * @param const char *
+   * @param const char *
    */
-  void setPduSessionClassAttributes(const char* qdiscScheduler);
+  void setPduSessionClassAttributes(
+      const char* qdiscScheduler, std::string interface);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -278,6 +280,7 @@ class QERProgram : public BPFProgram {
   std::vector<struct classParams*> qosFlowsClassesAtt;
   std::vector<struct classPosition*> qosFlowsClassesPos;
   std::vector<struct s_fiveQosFlow> qosFlowsQfis;
+  std::vector<std::shared_ptr<pfcp::pfcp_qer>> savedQers;
 
   struct pduSessionIds* pduSession = nullptr;
 };

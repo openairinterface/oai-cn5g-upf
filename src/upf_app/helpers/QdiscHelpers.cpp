@@ -249,8 +249,12 @@ int QdiscHelper::configureParentClass(
   rtnl_tc_set_link(TC_CAST(parentClass), link);
   rtnl_tc_set_parent(
       TC_CAST(parentClass), TC_HANDLE(pos->parentMaj, pos->parentMin));
+  Logger::upf_app().error("parent qdisc %d:%d", pos->parentMaj, pos->parentMin);
+
   rtnl_tc_set_handle(
       TC_CAST(parentClass), TC_HANDLE(pos->childMaj, pos->childMin));
+
+  Logger::upf_app().error("parent class %d:%d", pos->childMaj, pos->childMin);
 
   if ((err = rtnl_tc_set_kind(TC_CAST(parentClass), classAtt->scheduler))) {
     Logger::upf_app().error(
@@ -305,7 +309,13 @@ int QdiscHelper::configureLeafClass(
   rtnl_tc_set_link(TC_CAST(leafClass), link);
   rtnl_tc_set_parent(
       TC_CAST(leafClass), TC_HANDLE(pos->parentMaj, pos->parentMin));
-  rtnl_tc_set_handle(TC_CAST(leafClass), TC_HANDLE(pos->parentMin, 0));
+  Logger::upf_app().error(
+      "Leaf class parent %d:%d", pos->parentMaj, pos->parentMin);
+
+  rtnl_tc_set_handle(
+      TC_CAST(leafClass), TC_HANDLE(pos->parentMin, pos->childMin));
+  Logger::upf_app().error(
+      "Leaf class child %d:%d", pos->parentMaj, pos->childMin);
 
   if ((err = rtnl_tc_set_kind(TC_CAST(leafClass), classAtt->scheduler))) {
     Logger::upf_app().error(
@@ -317,12 +327,6 @@ int QdiscHelper::configureLeafClass(
     if (classAtt->priority > 0) {
       rtnl_htb_set_prio(leafClass, classAtt->priority);
     }
-
-    /*
-    TODO: - Do we need to divide by 8 ?
-        - rate = rate/8;
-        - ceil = ceil/8;
-    */
 
     if (classAtt->rate > 0) {
       rtnl_htb_set_rate(leafClass, classAtt->rate);

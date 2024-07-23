@@ -15,6 +15,7 @@
 #include <netlink/route/qdisc/htb.h>
 #include <NetlinkManager.h>
 #include "standardized_5qi.h"
+#include "helpers/GetNicInformation.hpp"
 //#include "standardized_5qi_qos_mapping.h"
 //#include "qer_maps.h"
 
@@ -144,18 +145,90 @@ void QERProgram::storeQosFlow(std::shared_ptr<pfcp::pfcp_qer> pQer) {
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // Method definition to initialize class_params
-void QERProgram::setPduSessionClassAttributes(const char* qdiscScheduler) {
+void QERProgram::setPduSessionClassAttributes(
+    const char* qdiscScheduler, std::string interface) {
+  NicInformationGetter nicConfiguration;
   // Initialize classAtt members
-  Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 33");
+  pduSessionClassAtt            = new classParams();
   pduSessionClassAtt->scheduler = qdiscScheduler;
-  Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 333");
-  Logger::upf_app().error(
-      "Need to properly define to values for GBR/MBR of PDU Session");
-  pduSessionClassAtt->rate = 800;   // min(qer.gbr)? max(qer.gbr)? sum(qer.gbr)?
-  pduSessionClassAtt->ceil = 1024;  // max(qer.gbr)? sum(qer.gbr)?
-  pduSessionClassAtt->burst    = -1;
-  pduSessionClassAtt->cburst   = -1;
-  pduSessionClassAtt->priority = -1;
+  pduSessionClassAtt->rate      = nicConfiguration.retrieveRate(interface);
+  pduSessionClassAtt->ceil      = nicConfiguration.retrieveCeil(interface);
+  pduSessionClassAtt->burst     = nicConfiguration.retrieveBurst(interface);
+  pduSessionClassAtt->cburst    = nicConfiguration.retrieveCBurst(interface);
+  pduSessionClassAtt->priority  = -1;
+
+  Logger::upf_app().debug(
+      "QDISC Root Rate (GBR) : %d", pduSessionClassAtt->rate);
+  Logger::upf_app().debug(
+      "QDISC Root Ceil (MBR) : %d", pduSessionClassAtt->ceil);
+  Logger::upf_app().debug(
+      "QDISC Root Burst      : %d", pduSessionClassAtt->burst);
+  Logger::upf_app().debug(
+      "QDISC Root CBurst     : %d", pduSessionClassAtt->cburst);
+  Logger::upf_app().debug(
+      "QDISC Root Priority   : %d", pduSessionClassAtt->priority);
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+// Method definition to initialize class_params
+void QERProgram::setQosFlowsClassesAttributes() {
+  struct classParams* classAtt = new classParams();
+
+  for (int i = 0; i < savedQers.size() && i < qosFlowsQfis.size(); ++i) {
+    const auto& qer = savedQers[i];
+
+    classAtt->scheduler = pduSessionClassAtt->scheduler;
+    classAtt->rate      = qosFlowsQfis[i].gbr.dl_gbr;
+    classAtt->ceil      = qosFlowsQfis[i].mbr.dl_mbr;
+    classAtt->burst     = 0;
+    classAtt->cburst    = 0;
+    classAtt->priority  = -1;
+
+    qosFlowsClassesAtt.push_back(classAtt);
+
+    Logger::upf_app().debug(
+        "    HTB Class ID (QER) ........... %d",
+        savedQers[i]->qer_id.second.qer_id);
+    Logger::upf_app().debug("         Class QFI:      %d", qosFlowsQfis[i].qfi);
+    Logger::upf_app().debug("         Class Rate:     %d", classAtt->rate);
+    Logger::upf_app().debug("         Class Ceil:     %d", classAtt->ceil);
+    Logger::upf_app().debug("         Class Burst:    %d", classAtt->burst);
+    Logger::upf_app().debug("         Class CBurst:   %d", classAtt->cburst);
+    Logger::upf_app().debug("         Class Priority: %d", classAtt->priority);
+  }
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+// Method definition to set pduSession class position
+void QERProgram::setPduSessionClassPosition(uint64_t seid) {
+  pduSessionClassPos            = new classPosition();
+  pduSessionClassPos->parentMaj = 1;
+  pduSessionClassPos->parentMin = 0;
+  pduSessionClassPos->childMaj  = 1;
+  pduSessionClassPos->childMin  = seid;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+// Method definition to set pduSession class position
+void QERProgram::setQosFlowsClassesPositions() {
+  for (int i = 0; i < savedQers.size(); i++) {
+    struct classPosition* classPos = new classPosition();
+
+    classPos->parentMaj = pduSessionClassPos->parentMaj;
+    classPos->parentMin = pduSessionClassPos->parentMin;
+    classPos->childMaj  = pduSessionClassPos->childMin;
+    classPos->childMin  = savedQers[i]->qer_id.second.qer_id;
+
+    qosFlowsClassesPos.push_back(classPos);
+
+    Logger::upf_app().debug(
+        "QDISC Root Position: %d:%d", classPos->parentMaj, classPos->parentMin);
+    Logger::upf_app().debug(
+        "QDISC Root-Child Position: %d:%d", classPos->childMaj,
+        classPos->childMin);
+    Logger::upf_app().debug(
+        "HTB Class Position  %d:%d", classPos->childMaj, classPos->childMin);
+  }
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -166,69 +239,57 @@ void QERProgram::setup(
   initializeMaps();
   mpLifeCycle->load();
   mpLifeCycle->attach();
-  Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 0");
+
+  savedQers = pQer;
+
+  auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
+  auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
+
   for (const auto& qer : pQer) {
-    Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 1");
-    storeQosFlow(qer);  // ok
-    Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 2");
+    storeQosFlow(qer);
   }
 
-  // setPduSessionIds(seid, gtpTunnel);
-  Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 3");
-  setPduSessionClassAttributes(HTB_SCHEDULER);  // ok
-  Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 4");
-  setQosFlowsClassesAttributes();  // ok
-  Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 5");
-  setPduSessionClassPosition(seid);  // ok
-  Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 6");
-  setQosFlowsClassesPositions();  // ok
-  Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 7");
+  setPduSessionClassAttributes(HTB_SCHEDULER, gtpInterface);
+  setQosFlowsClassesAttributes();
+  setPduSessionClassPosition(seid);
+  setQosFlowsClassesPositions();
+
   struct nl_sock* socket = nullptr;
   struct rtnl_link* link = nullptr;
 
-  /*correct the dataplane; it doesn't exist
-  and add functions get_socket(), get_link()
-  */
-  auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
-  auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
-  Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 8");
   if (!(socket = NetlinkManager::getInstance(gtpInterface).getSocket())) {
-    Logger::upf_app().error("Unable to retrieve existing socket");
+    Logger::upf_app().debug("Unable to retrieve existing socket");
     exit(EXIT_FAILURE);
   }
-  Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 9");
+
   if (!(link = NetlinkManager::getInstance(gtpInterface).getLink())) {
-    Logger::upf_app().error("Unable to retrieve existing link");
+    Logger::upf_app().debug("Unable to retrieve existing link");
     exit(EXIT_FAILURE);
   }
-  Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 10");
+
   if (!classPduSession) {
     if (!(classPduSession = qdiscHelper.createClass(socket))) {
-      Logger::upf_app().error("Unable to create a pduSession Qdisc Class");
+      Logger::upf_app().debug("Unable to create a pduSession Qdisc Class");
       exit(EXIT_FAILURE);
     }
-    Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 11");
+
     qdiscHelper.configureParentClass(
         socket, link, classPduSession, pduSessionClassAtt, pduSessionClassPos);
   }
-  Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 12");
-  for (int i = 0; i < sizeof(pQer); i++) {
-    Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 13");
+
+  for (int i = 0; i < qosFlowsClassesAtt.size(); i++) {
     struct rtnl_class* qfiFlowClass;
+
     if (!(qfiFlowClass = qdiscHelper.createClass(socket))) {
-      Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 14");
-      Logger::upf_app().error("Unable to create a QFI_FLOW Qdisc Class");
+      Logger::upf_app().debug("Unable to create a QFI_FLOW Qdisc Class");
       // exit(EXIT_FAILURE);
     }
-    Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 15");
+
     classesQfiFlows.push_back(qfiFlowClass);
-    Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 16");
     qdiscHelper.configureLeafClass(
         socket, link, classesQfiFlows[i], qosFlowsClassesAtt[i],
         qosFlowsClassesPos[i]);
-    Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 17");
   }
-  Logger::upf_app().error("+++++++++++++++++++++++++++++++++++ 18");
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -262,49 +323,6 @@ void QERProgram::setup() {
 //   }
 
 // }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-// Method definition to initialize class_params
-void QERProgram::setQosFlowsClassesAttributes() {
-  struct classParams* classAtt;
-
-  for (int i = 0; i < sizeof(qosFlowsQfis); i++) {
-    classAtt->scheduler = pduSessionClassAtt->scheduler;
-    classAtt->rate =
-        qosFlowsQfis[i].gbr.dl_gbr;  // check 5QI table to get this value
-    classAtt->ceil = qosFlowsQfis[i].mbr.dl_mbr;  // check 5QI to get this value
-    classAtt->burst    = -1;
-    classAtt->cburst   = -1;
-    classAtt->priority = -1;
-
-    qosFlowsClassesAtt.push_back(classAtt);
-  }
-}
-
-/*---------------------------------------------------------------------------------------------------------------*/
-// Method definition to set pduSession class position
-void QERProgram::setPduSessionClassPosition(uint64_t seid) {
-  pduSessionClassPos->parentMaj = 1;
-  pduSessionClassPos->parentMin = 0;
-  pduSessionClassPos->childMaj  = 1;
-  pduSessionClassPos->childMin  = seid;
-}
-
-/*---------------------------------------------------------------------------------------------------------------*/
-// Method definition to set pduSession class position
-void QERProgram::setQosFlowsClassesPositions() {
-  struct classPosition* classPos;
-
-  classPos->parentMaj = pduSessionClassPos->parentMaj;
-  classPos->parentMin = pduSessionClassPos->parentMin;
-  classPos->childMaj  = pduSessionClassPos->childMin;
-
-  for (int i = 0; i < sizeof(qosFlowsQfis); i++) {
-    classPos->childMin = qosFlowsQfis[i].qfi;
-
-    qosFlowsClassesPos.push_back(classPos);
-  }
-}
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMaps> QERProgram::getMaps() {
