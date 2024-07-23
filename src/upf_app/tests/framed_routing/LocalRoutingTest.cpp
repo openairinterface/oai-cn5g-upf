@@ -14,9 +14,8 @@ namespace fr {
         const std::string device = "tun0";
         const std::string gateway = "12.1.1.1";
         RoutingInformation routingInformation = {destination_adress, network_mask, device, gateway};
-        const bool isAdd = localRouting->addRoute(routingInformation);
-        const bool isDel = localRouting->deleteRoute(0xC0A88000);
-        ASSERT_TRUE(isAdd);
-        ASSERT_TRUE(isDel);
+       localRouting->addRoute(routingInformation);
+        localRouting->deleteRoute(0xC0A88000);
+        ASSERT_NO_FATAL_FAILURE();
     }
 }

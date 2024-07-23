@@ -46,7 +46,7 @@ void FramedRouting::removeEntry(uint32_t ue_ip) {
     auto ip                           = this->KeyToIp.find(framedRoutingKey);
     if (ip != KeyToIp.end()) {
       this->KeyToIp.erase(ip);
- this->localRouting->deleteRoute(ip->second);
+      this->localRouting->deleteRoute(ip->second);
     };
   };
 }

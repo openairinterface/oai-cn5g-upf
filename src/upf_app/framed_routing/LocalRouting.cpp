@@ -18,7 +18,7 @@ void LocalRouting::addRoute(const RoutingInformation& routing_information) {
   auto rc = system((const char*) cmd.c_str());
     if (rc == 0) {
         Logger::pfcp_switch().info(
-                "Route deleted");
+                "Route created");
       this->routeInfoToRtEntry.insert({routing_information.destination,routing_information});
   }
     Logger::pfcp_switch().warn(
