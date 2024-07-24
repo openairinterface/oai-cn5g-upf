@@ -22,15 +22,18 @@ namespace fr {
         virtual ~FramedRouting() = default;
 
         [[nodiscard]] uint32_t
-        retrieveFramedUEIp(const uint32_t destination_ip) const;
+        retrieveUEIp(const uint32_t destination_ip) const;
 
-        void addFramedRoute(uint32_t ue_ip, const pfcp::framed_route_s &framed_route_s,uint32_t gatewayIP);
+        [[nodiscard]] uint32_t retrieveUEIp(const pfcp::framed_route_s &framed_route_s) const;
 
-        void removeEntry(uint32_t ue_ip);
+        void addFramedRoute(uint32_t ue_ip, const pfcp::framed_route_s &framed_route_s);
+
+        void remove_entry(uint32_t ue_ip);
 
         // todo(kw) create a facade for fr options.
 
     private:
+        const char pdi_fr_delimeter = ' ';
 
         // todo(kw) discuss size or use constant
         std::shared_ptr<LocalRouting> localRouting;
@@ -43,7 +46,13 @@ namespace fr {
         [[nodiscard]] std::pair<uint32_t, uint32_t> extractIPCidr(const std::string &fr_subnet) const;
 
         [[nodiscard]] FramedRoutingKey createFramedRoutingKey(std::pair<uint32_t, uint32_t> ipCidr) const;
-        [[nodiscard]] RoutingInformation createLocalRoutingInformation(std::pair<uint32_t, uint32_t> ipCidr, uint32_t gateway_ip) const;
+
+        [[nodiscard]] RoutingInformation
+        createLocalRoutingInformation(const std::pair<uint32_t, uint32_t> &ipCidr) const;
+
+        [[nodiscard]]   SourceNatInformation
+        createLocalSnatInformation(const std::pair<uint32_t, uint32_t> &ipCidr) const;
+
     };
 
 

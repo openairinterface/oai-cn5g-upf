@@ -333,17 +333,15 @@ void pfcp_switch::setup_pdn_interfaces() {
             oai::utils::conv::toString(it.network_ipv4),
             static_cast<uint32_t>(it.prefix_ipv4), "tun0",
             oai::utils::conv::toString(address4_gw)};
-        local_routing->addRoute(routing_info);
+        local_routing->add_route(routing_info);
       }
 
       if (upf_cfg.enable_snat) {
-        cmd = fmt::format(
-            "iptables -t nat -A POSTROUTING -s {}/{} -o {} -j SNAT --to "
-            "{}",
-            oai::utils::conv::toString(it.network_ipv4).c_str(), it.prefix_ipv4,
-            upf_cfg.n6.if_name.c_str(),
-            oai::utils::conv::toString(upf_cfg.n6.addr4).c_str());
-        rc = system((const char*) cmd.c_str());
+        auto snat_info = fr::SourceNatInformation{
+            oai::utils::conv::toString(it.network_ipv4),
+            static_cast<uint32_t>(it.prefix_ipv4), upf_cfg.n6.if_name,
+            oai::utils::conv::toString(upf_cfg.n6.addr4)};
+        local_routing->add_source_snat(snat_info);
       }
     }
     if (it.prefix_ipv6) {
@@ -631,9 +629,11 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
         entry(ue_ip, pdrs);
     ue_ipv4_hbo2pfcp_pdr.insert(entry);
     if (upf_cfg.enable_fr) {
-      fr->addFramedRoute(
-          ue_ip, pdr->pdi.second.framed_route.second,
-          upf_cfg.pdns[0].network_ipv4.s_addr + be32toh(1));
+      Logger::pfcp_switch().info("fr_ue_ip %4x ", ue_ip);
+      Logger::pfcp_switch().info(
+          "framed routing ip: " +
+          pdr->pdi.second.framed_route.second.framed_route);
+      fr->addFramedRoute(ue_ip, pdr->pdi.second.framed_route.second);
     }
     // Logger::pfcp_switch().info( "add_pfcp_dl_pdr_by_ue_ip UE IP %8x", ue_ip);
   } else {
@@ -656,7 +656,8 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
 void pfcp_switch::remove_pfcp_dl_pdrs_by_ue_ip(const uint32_t ue_ip) {
   ue_ipv4_hbo2pfcp_pdr.erase(ue_ip);
   if (upf_cfg.enable_fr) {
-    this->fr->removeEntry(ue_ip);
+    std::cout << "remove fr entry" << std::endl;
+    this->fr->remove_entry(ue_ip);
   }
 }
 
@@ -1140,17 +1141,43 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
 void pfcp_switch::pfcp_session_look_up_pack_in_access(
     struct iphdr* const iph, const std::size_t num_bytes,
     const endpoint& r_endpoint, const uint32_t tunnel_id) {
+  bool isInAccess = false;
   if (!upf_cfg.nsf.bypass_ul_pfcp_rules) {
     std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs = {};
     if (get_pfcp_ul_pdrs_by_up_teid(tunnel_id, pdrs)) {
       bool nocp = false;
       bool buff = false;
-      for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it_pdr =
-               pdrs->begin();
-           it_pdr < pdrs->end(); ++it_pdr) {
-        if ((*it_pdr)->look_up_pack_in_access(
-                iph, num_bytes, r_endpoint, tunnel_id) ||
-            (upf_cfg.enable_fr && fr->retrieveFramedUEIp(iph->saddr) > 0)) {
+      for (auto it_pdr = pdrs->begin(); it_pdr < pdrs->end(); ++it_pdr) {
+        // todo (kw) framed route ip
+        isInAccess = (*it_pdr)->look_up_pack_in_access(
+            iph, num_bytes, r_endpoint, tunnel_id);
+        if (upf_cfg.enable_fr) {
+          std::cout
+              << it_pdr->get()->pdi.second.framed_route.second.framed_route
+              << std::endl;
+
+          const auto fr_ue_ip = fr->retrieveUEIp(be32toh(iph->saddr));
+          Logger::pfcp_switch().info(
+              "iph->saddr %d ",
+              it_pdr->get()->pdi.second.framed_route.second.framed_route);
+          Logger::pfcp_switch().info("iph->daddr %4x ", iph->daddr);
+          Logger::pfcp_switch().info("iph->saddr %4x ", iph->saddr);
+          Logger::pfcp_switch().info("fr_ue_ip %4x ", fr_ue_ip);
+          Logger::pfcp_switch().info(
+              "ipv4_address.s_addr: %4x ",
+              it_pdr->get()
+                  ->pdi.second.ue_ip_address.second.ipv4_address.s_addr);
+          isInAccess =
+              fr_ue_ip ==
+              it_pdr->get()
+                  ->pdi.second.ue_ip_address.second.ipv4_address.s_addr;
+        }
+        if (isInAccess) {
+          Logger::pfcp_switch().info(
+              "PDR/PDI IP is %4x ",
+              it_pdr->get()
+                  ->pdi.second.ue_ip_address.second.ipv4_address.s_addr);
+          Logger::pfcp_switch().info("Upstream IP is %4x ", iph->saddr);
           std::shared_ptr<pfcp::pfcp_session> ssession = {};
           uint64_t lseid                               = 0;
           if ((*it_pdr)->get(lseid)) {
@@ -1218,11 +1245,9 @@ void pfcp_switch::pfcp_session_look_up_pack_in_core(
     bool is_pdr_ue_ip = get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs);
     Logger::pfcp_switch().info("Is PDR", is_pdr_ue_ip);
     if (!is_pdr_ue_ip && upf_cfg.enable_fr) {
-      uint32_t fr_ip = fr->retrieveFramedUEIp(ue_ip);
-      Logger::pfcp_switch().info("Fr IP", fr_ip);
-      Logger::pfcp_switch().info("UE", ue_ip);
-      ue_ip        = fr_ip != 0 ? fr_ip : ue_ip;
-      is_pdr_ue_ip = get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs);
+      uint32_t fr_ip = fr->retrieveUEIp(ue_ip);
+      ue_ip          = fr_ip != 0 ? fr_ip : ue_ip;
+      is_pdr_ue_ip   = get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs);
     }
     if (is_pdr_ue_ip) {
       bool nocp = false;

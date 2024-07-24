@@ -6,6 +6,9 @@
 #include <utility>
 #include <sstream>
 #include <iostream>
+#include <upf_config.hpp>
+
+extern oai::config::upf_config upf_cfg;
 
 namespace fr {
 
@@ -13,40 +16,68 @@ FramedRouting::FramedRouting(std::shared_ptr<LocalRouting> localRouting)
     : localRouting(std::move(localRouting)) {}
 
 void FramedRouting::addFramedRoute(
-    const uint32_t ue_ip, const pfcp::framed_route_s& framed_route_s,
-    uint32_t gatewayIP) {
+    const uint32_t ue_ip, const pfcp::framed_route_s& framed_route_s) {
   std::stringstream ss(framed_route_s.framed_route);
-  const char delimiter = ' ';
   std::string ipsubnetmask;
-  while (std::getline(ss, ipsubnetmask, delimiter)) {
+  while (std::getline(ss, ipsubnetmask, this->pdi_fr_delimeter)) {
     std::pair<uint32_t, uint32_t> ipCidr = this->extractIPCidr(ipsubnetmask);
     auto key                             = createFramedRoutingKey(ipCidr);
-    auto routing_info = createLocalRoutingInformation(ipCidr, gatewayIP);
+    auto routing_info = createLocalRoutingInformation(ipCidr);
+    auto snat_info    = createLocalSnatInformation(ipCidr);
+    std::cout << "retrieve dest ip subnet: " << ipCidr.second << std::endl;
+    std::cout << "retrieve network ip: " << key.networkAdress << std::endl;
     this->KeyToIp.insert({key, ue_ip});
-    localRouting->addRoute(routing_info);
+    localRouting->add_route(routing_info);
+    localRouting->add_source_snat(snat_info);
   }
 }
 
-uint32_t FramedRouting::retrieveFramedUEIp(
-    const uint32_t destination_ip) const {
+uint32_t FramedRouting::retrieveUEIp(const uint32_t destination_ip) const {
+  std::cout << "retrieve dest ip " << destination_ip << std::endl;
   for (uint32_t i = 32; i > 0; --i) {
     FramedRoutingKey framedRoutingKey =
         createFramedRoutingKey({destination_ip, i});
+    std::cout << "retrieve dest ip subnet: " << i << std::endl;
+    std::cout << "retrieve network ip: " << framedRoutingKey.networkAdress
+              << std::endl;
+
     auto ip = this->KeyToIp.find(framedRoutingKey);
+
     if (ip != KeyToIp.end()) {
+      std::cout << "find at: " << i << std::endl;
       return ip->second;
     };
   };
   return 0;
 };
 
-void FramedRouting::removeEntry(uint32_t ue_ip) {
+uint32_t FramedRouting::retrieveUEIp(
+    const pfcp::framed_route_s& framed_route_s) const {
+  std::cout << framed_route_s.framed_route << std::endl;
+
+  std::stringstream ss(framed_route_s.framed_route);
+  std::string ipsubnetmask;
+  Logger::pfcp_switch().info(
+      "Retrieving Frame string: " + framed_route_s.framed_route);
+  while (std::getline(ss, ipsubnetmask, this->pdi_fr_delimeter)) {
+    Logger::pfcp_switch().info("Retrieving Frame string: " + ipsubnetmask);
+    std::pair<uint32_t, uint32_t> ipCidr = this->extractIPCidr(ipsubnetmask);
+    FramedRoutingKey framedRoutingKey =
+        createFramedRoutingKey({ipCidr.first, ipCidr.second});
+    auto ip = this->KeyToIp.find(framedRoutingKey);
+    if (ip != KeyToIp.end()) {
+      return ip->second;
+    }
+  }
+  return 0;
+};
+void FramedRouting::remove_entry(uint32_t ue_ip) {
   for (uint32_t i = 32; i > 0; --i) {
     FramedRoutingKey framedRoutingKey = createFramedRoutingKey({ue_ip, i});
     auto ip                           = this->KeyToIp.find(framedRoutingKey);
     if (ip != KeyToIp.end()) {
       this->KeyToIp.erase(ip);
-      this->localRouting->deleteRoute(ip->second);
+      this->localRouting->delete_route(ip->second);
     };
   };
 }
@@ -106,20 +137,33 @@ FramedRoutingKey FramedRouting::createFramedRoutingKey(
   return FramedRoutingKey{networkAdress, subnet_adress};
 }
 
+// todo(phine.tech) replace with better method in local routing.
 RoutingInformation FramedRouting::createLocalRoutingInformation(
-    const std::pair<uint32_t, uint32_t> ipCidr,
-    const uint32_t gateway_ip) const {
+    const std::pair<uint32_t, uint32_t>& ipCidr) const {
   struct in_addr addr;
   addr.s_addr             = htonl(ipCidr.first);
   std::string destination = inet_ntoa(addr);
   uint32_t netmask        = ipCidr.second;
   std::string device      = "tun0";
   // todo (phine.tech) use correct DNN
-  struct in_addr address4_gw  = {};
-  address4_gw.s_addr          = gateway_ip;
+  struct in_addr address4_gw = {};
+  address4_gw.s_addr         = upf_cfg.pdns[0].network_ipv4.s_addr + be32toh(1);
   std::string gateway_address = inet_ntoa(address4_gw);
 
   return fr::RoutingInformation{destination, netmask, device, gateway_address};
+}
+
+// todo(phine.tech) replace with better method in local routing.
+SourceNatInformation FramedRouting::createLocalSnatInformation(
+    const std::pair<uint32_t, uint32_t>& ipCidr) const {
+  struct in_addr addr;
+  addr.s_addr              = htonl(ipCidr.first);
+  std::string destination  = inet_ntoa(addr);
+  uint32_t netmask         = ipCidr.second;
+  std::string device       = upf_cfg.n6.if_name;
+  std::string snat_address = oai::utils::conv::toString(upf_cfg.n6.addr4);
+
+  return SourceNatInformation{destination, netmask, device, snat_address};
 }
 
 }  // namespace fr
