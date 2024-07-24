@@ -32,7 +32,6 @@
 using namespace pfcp;
 using namespace oai::upf::app;
 
-
 extern upf_n4* upf_n4_inst;
 extern oai::config::upf_config upf_cfg;
 //------------------------------------------------------------------------------
@@ -66,8 +65,8 @@ bool pfcp_pdr::look_up_pack_in_access(
       if (!pdi.second.ue_ip_address.second.v4) {
         return false;
       }
-      if (!upf_cfg.enable_fr&&pdi.second.ue_ip_address.second.ipv4_address.s_addr != iph->saddr) {
-              return false;
+      if (pdi.second.ue_ip_address.second.ipv4_address.s_addr != iph->saddr) {
+        return false;
       }
     }
     // SDF filter
@@ -103,7 +102,8 @@ bool pfcp_pdr::look_up_pack_in_core(
       return false;
     }
 
-    if (!upf_cfg.enable_fr&& pdi.second.ue_ip_address.second.ipv4_address.s_addr != iph->daddr) {
+    if (!upf_cfg.enable_fr &&
+        pdi.second.ue_ip_address.second.ipv4_address.s_addr != iph->daddr) {
       // Logger::pfcp_switch().info( "look_up_pack_in_core failed PDR id %4x,
       // cause PDR ue_ip_address %8X do not match IP dest %8X of packet ",
       //    pdr_id.rule_id, pdi.second.ue_ip_address.second.ipv4_address.s_addr,

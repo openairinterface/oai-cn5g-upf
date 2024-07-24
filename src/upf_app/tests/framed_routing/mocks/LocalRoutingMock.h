@@ -9,7 +9,7 @@
 namespace fr {
     class MockLocalRouting : public LocalRouting {
     public:
-        MOCK_METHOD(bool, addRoute,(const RoutingInformation & routing_information),(override));
-        MOCK_METHOD(bool, deleteRoute,(const uint32_t & network_address),(override));
+        MOCK_METHOD(void, add_route,(const RoutingInformation & routing_information),(override));
+        MOCK_METHOD(void, delete_route,(const uint32_t & network_address),(override));
     };
 }

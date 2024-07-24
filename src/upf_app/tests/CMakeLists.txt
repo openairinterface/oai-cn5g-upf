@@ -33,9 +33,8 @@ add_executable(
         framed_routing/FramedRoutingTest.cpp
         framed_routing/mocks/LocalRoutingMock.h
 )
-
-add_dependencies(UPFTest upf)
-        target_link_libraries(UPFTest PUBLIC FRAMED_ROUTING SIMPLE_SWITCH GTest::gtest_main GTest::gmock_main fmt)
+set_property(TARGET upf PROPERTY ${CMAKE_CURRENT_BINARY_DIR}../upf)
+        target_link_libraries(UPFTest PUBLIC  GTest::gtest_main GTest::gmock_main fmt)
         include(GoogleTest)
         gtest_discover_tests(UPFTest)
 
