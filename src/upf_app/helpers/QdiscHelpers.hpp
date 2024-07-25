@@ -120,7 +120,7 @@ class QdiscHelper {
   int configureLeafClass(
       struct nl_sock* socket, struct rtnl_link* link,
       struct rtnl_class* leafClass, struct classParams* classAtt,
-      struct classPosition* pos);
+      struct classParams* pduClassAtt, struct classPosition* pos);
 
   /*------------------------------------------------------------------------------------------------------------------*/
   /**

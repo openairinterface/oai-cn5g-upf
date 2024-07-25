@@ -172,17 +172,24 @@ void QERProgram::setPduSessionClassAttributes(
 /*---------------------------------------------------------------------------------------------------------------*/
 // Method definition to initialize class_params
 void QERProgram::setQosFlowsClassesAttributes() {
-  struct classParams* classAtt = new classParams();
-
   for (int i = 0; i < savedQers.size() && i < qosFlowsQfis.size(); ++i) {
-    const auto& qer = savedQers[i];
+    const auto& qer              = savedQers[i];
+    struct classParams* classAtt = new classParams();
 
     classAtt->scheduler = pduSessionClassAtt->scheduler;
-    classAtt->rate      = qosFlowsQfis[i].gbr.dl_gbr;
-    classAtt->ceil      = qosFlowsQfis[i].mbr.dl_mbr;
-    classAtt->burst     = 0;
-    classAtt->cburst    = 0;
-    classAtt->priority  = -1;
+    if (qosFlowsQfis[i].qfi != 5) {
+      classAtt->rate     = qosFlowsQfis[i].gbr.dl_gbr;
+      classAtt->ceil     = qosFlowsQfis[i].mbr.dl_mbr;
+      classAtt->burst    = 0;
+      classAtt->cburst   = 0;
+      classAtt->priority = -1;
+    } else {
+      classAtt->rate     = 100;
+      classAtt->ceil     = 200;
+      classAtt->burst    = 0;
+      classAtt->cburst   = 0;
+      classAtt->priority = -1;
+    }
 
     qosFlowsClassesAtt.push_back(classAtt);
 
@@ -190,8 +197,8 @@ void QERProgram::setQosFlowsClassesAttributes() {
         "    HTB Class ID (QER) ........... %d",
         savedQers[i]->qer_id.second.qer_id);
     Logger::upf_app().debug("         Class QFI:      %d", qosFlowsQfis[i].qfi);
-    Logger::upf_app().debug("         Class Rate:     %d", classAtt->rate);
-    Logger::upf_app().debug("         Class Ceil:     %d", classAtt->ceil);
+    Logger::upf_app().debug("         Class Rate:     %dkbps", classAtt->rate);
+    Logger::upf_app().debug("         Class Ceil:     %dkbps", classAtt->ceil);
     Logger::upf_app().debug("         Class Burst:    %d", classAtt->burst);
     Logger::upf_app().debug("         Class CBurst:   %d", classAtt->cburst);
     Logger::upf_app().debug("         Class Priority: %d", classAtt->priority);
@@ -251,6 +258,7 @@ void QERProgram::setup(
 
   setPduSessionClassAttributes(HTB_SCHEDULER, gtpInterface);
   setQosFlowsClassesAttributes();
+
   setPduSessionClassPosition(seid);
   setQosFlowsClassesPositions();
 
@@ -288,7 +296,7 @@ void QERProgram::setup(
     classesQfiFlows.push_back(qfiFlowClass);
     qdiscHelper.configureLeafClass(
         socket, link, classesQfiFlows[i], qosFlowsClassesAtt[i],
-        qosFlowsClassesPos[i]);
+        pduSessionClassAtt, qosFlowsClassesPos[i]);
   }
 }
 

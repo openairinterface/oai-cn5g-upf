@@ -202,7 +202,10 @@ void SessionManager::createBPFSession(
 
   auto& pdrs_uplink   = pSession_establishment->pdrs_uplink;
   auto& pdrs_downlink = pSession_establishment->pdrs_downlink;
-  
+
+  auto& qers_uplink   = pSession_establishment->qers_uplink;
+  auto& qers_downlink = pSession_establishment->qers_downlink;
+
   // Process PDRs to populate uplink and downlink vectors
   processPDRs(pSession_establishment);
 
@@ -228,11 +231,13 @@ void SessionManager::processPDRs(
     std::shared_ptr<pfcp::pfcp_session> pSession_establishment) {
   auto& pdrs_uplink   = pSession_establishment->pdrs_uplink;
   auto& pdrs_downlink = pSession_establishment->pdrs_downlink;
-  
+
+  auto& qers_uplink   = pSession_establishment->qers_uplink;
+  auto& qers_downlink = pSession_establishment->qers_downlink;
+
   // Iterate over PDRs and categorize them into uplink and downlink vectors
   for (auto& pdr : pSession_establishment->pdrs) {
     pfcp::pdi pdi;
-    pfcp::pfcp_qer qer;
     pfcp::source_interface_t sourceInterface;
     if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
       throw std::runtime_error(
@@ -240,14 +245,29 @@ void SessionManager::processPDRs(
           std::to_string(pdr->pdr_id.rule_id));
     }
 
-    //pdr->get(qer);
+    uint64_t qer_id                     = pdr->qer_id.second.qer_id;
+    std::shared_ptr<pfcp::pfcp_qer> qer = nullptr;
+
+    for (auto& q : pSession_establishment->qers) {
+      if (q->qer_id.second.qer_id == qer_id) {
+        qer = q;
+        break;
+      }
+    }
+
+    if (qer == nullptr) {
+      Logger::upf_n4().error(
+          "QER not found for PDR: " + std::to_string(pdr->pdr_id.rule_id));
+    }
 
     switch (sourceInterface.interface_value) {
       case INTERFACE_VALUE_ACCESS:
         pdrs_uplink.push_back(pdr);
+        qers_uplink.push_back(qer);
         break;
       case INTERFACE_VALUE_CORE:
         pdrs_downlink.push_back(pdr);
+        qers_downlink.push_back(qer);
         break;
       case INTERFACE_VALUE_SGI_LAN_N6_LAN:
       case INTERFACE_VALUE_CP_FUNCTION:
@@ -280,7 +300,7 @@ void SessionManager::createSessionDirection(
   if (!pdrs.empty()) {
     auto pdrHighPrecedence = pdrs.front();
     logger.debug(
-        "The {}link PDR {} has the Highest Precedence", direction,
+        "The $s PDR %d has the Highest Precedence", direction,
         pdrHighPrecedence->pdr_id.rule_id);
     if (direction == "Uplink") {
       createBPFSessionUL(pSession_establishment, pdrHighPrecedence);
@@ -326,7 +346,7 @@ void SessionManager::processPDRDetails(
   uint16_t pdr_id = pdrHighPrecedence->pdr_id.rule_id;
 
   logger.debug(
-      "Create the {} Direction Datapath for Session {}", direction,
+      "Create the %s Direction Datapath for Session %d", direction,
       pSession->get_up_seid());
 
   if (!(pdrHighPrecedence->get(pdi) && pdi.get(sourceInterface))) {
@@ -357,29 +377,21 @@ void SessionManager::processPDRDetails(
         "TODO: This IE shall not be present if Traffic Endpoint ID is present");
   }
 
-  logger.debug("PDI extracted from {} PDR {}", direction, pdr_id);
+  logger.debug("PDI extracted from %s PDR %d", direction, pdr_id);
   logger.debug(
-      "Extract {} FAR from the highest precedence {} PDR", direction,
+      "Extract %s FAR from the highest precedence %s PDR", direction,
       direction);
 
   std::shared_ptr<pfcp::pfcp_far> pFar;
 
   if (!extractFar(pdrHighPrecedence, pSession, pFar)) {
     throw std::runtime_error(
-        "Failed to extract {} FAR for PDR " + direction + " " +
+        "Failed to extract %s FAR for PDR " + direction + " " +
         std::to_string(pdr_id));
   }
 
-  // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer =
-  // pSession->qerIDsPerPDR.qers;
-  std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer = pSession->qers;
-  
-  // if (!extractQer(pdrHighPrecedence, pSession, pQer)) {
-  //   throw std::runtime_error(
-  //       "Failed to extract {} QER for PDR " + direction + " " +
-  //       std::to_string(pdr_id));
-  // }
-  // extractQer(pdrHighPrecedence, pSession, &pQer);
+  std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer =
+      (direction == "Uplink") ? pSession->qers_uplink : pSession->qers_downlink;
 
   SessionProgramManager::getInstance().createPipeline(
       pSession->get_up_seid(), fteid.teid, interfaceValue,

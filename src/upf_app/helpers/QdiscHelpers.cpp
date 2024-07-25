@@ -249,12 +249,12 @@ int QdiscHelper::configureParentClass(
   rtnl_tc_set_link(TC_CAST(parentClass), link);
   rtnl_tc_set_parent(
       TC_CAST(parentClass), TC_HANDLE(pos->parentMaj, pos->parentMin));
-  Logger::upf_app().error("parent qdisc %d:%d", pos->parentMaj, pos->parentMin);
+  Logger::upf_app().debug("parent qdisc %d:%d", pos->parentMaj, pos->parentMin);
 
   rtnl_tc_set_handle(
       TC_CAST(parentClass), TC_HANDLE(pos->childMaj, pos->childMin));
 
-  Logger::upf_app().error("parent class %d:%d", pos->childMaj, pos->childMin);
+  Logger::upf_app().debug("parent class %d:%d", pos->childMaj, pos->childMin);
 
   if ((err = rtnl_tc_set_kind(TC_CAST(parentClass), classAtt->scheduler))) {
     Logger::upf_app().error(
@@ -272,11 +272,11 @@ int QdiscHelper::configureParentClass(
     */
 
     if (classAtt->rate > 0) {
-      rtnl_htb_set_rate(parentClass, classAtt->rate);
+      rtnl_htb_set_rate(parentClass, classAtt->rate * 1000 * 1000 / 8);
     }
 
     if (classAtt->ceil > 0) {
-      rtnl_htb_set_ceil(parentClass, classAtt->ceil);
+      rtnl_htb_set_ceil(parentClass, classAtt->ceil * 1000 * 1000 / 8);
     }
 
     if (classAtt->burst > 0) {
@@ -302,19 +302,19 @@ int QdiscHelper::configureParentClass(
 int QdiscHelper::configureLeafClass(
     struct nl_sock* socket, struct rtnl_link* link,
     struct rtnl_class* leafClass, struct classParams* classAtt,
-    struct classPosition* pos) {
+    struct classParams* pduClassAtt, struct classPosition* pos) {
   int err;
 
   Logger::upf_app().info("Set Leaf Class Attributes:");
   rtnl_tc_set_link(TC_CAST(leafClass), link);
   rtnl_tc_set_parent(
       TC_CAST(leafClass), TC_HANDLE(pos->parentMaj, pos->parentMin));
-  Logger::upf_app().error(
+  Logger::upf_app().debug(
       "Leaf class parent %d:%d", pos->parentMaj, pos->parentMin);
 
   rtnl_tc_set_handle(
       TC_CAST(leafClass), TC_HANDLE(pos->parentMin, pos->childMin));
-  Logger::upf_app().error(
+  Logger::upf_app().debug(
       "Leaf class child %d:%d", pos->parentMaj, pos->childMin);
 
   if ((err = rtnl_tc_set_kind(TC_CAST(leafClass), classAtt->scheduler))) {
@@ -324,16 +324,25 @@ int QdiscHelper::configureLeafClass(
   }
 
   if (strcmp(rtnl_tc_get_kind(TC_CAST(leafClass)), HTB_SCHEDULER) == 0) {
+    uint64_t flowRate = classAtt->rate * 1000 / 8;
+    uint64_t flowCeil = classAtt->ceil * 1000 / 8;
+    uint64_t pduRate  = pduClassAtt->rate * 1000 * 1000 / 8;
+    uint64_t pduCeil  = pduClassAtt->ceil * 1000 * 1000 / 8;
+
     if (classAtt->priority > 0) {
       rtnl_htb_set_prio(leafClass, classAtt->priority);
     }
 
-    if (classAtt->rate > 0) {
-      rtnl_htb_set_rate(leafClass, classAtt->rate);
+    if ((flowRate < 0) || (flowRate > pduRate)) {
+      rtnl_htb_set_rate(leafClass, pduRate);
+    } else {
+      rtnl_htb_set_rate(leafClass, flowRate);
     }
 
-    if (classAtt->ceil > 0) {
-      rtnl_htb_set_ceil(leafClass, classAtt->ceil);
+    if ((flowCeil < 0) || (flowCeil > pduCeil)) {
+      rtnl_htb_set_ceil(leafClass, pduCeil);
+    } else {
+      rtnl_htb_set_ceil(leafClass, flowCeil);
     }
 
     if (classAtt->burst > 0) {
