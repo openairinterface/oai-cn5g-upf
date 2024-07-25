@@ -664,7 +664,7 @@ void pfcp_switch::call_datapath(
   std::shared_ptr<pfcp::pfcp_session> pSession =
       std::make_shared<pfcp::pfcp_session>(*s);
   obj = UserPlaneComponent::getInstance().getSessionManager();
- 
+
   itti_n4_session_establishment_request* est_req = establishment_request;
   itti_n4_session_modification_request* mod_req  = modification_request;
   itti_n4_session_deletion_request* del_req      = deletion_request;
@@ -684,7 +684,6 @@ void pfcp_switch::call_datapath(
     (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
   }
 }
-
 
 //------------------------------------------------------------------------------
 void pfcp_switch::handle_pfcp_session_establishment_request(
