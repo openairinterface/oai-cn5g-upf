@@ -335,7 +335,7 @@ bool pfcp_session::create(
   if (not cr_qer.qer_id.first) {
     cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
     offending_ie      = PFCP_IE_QER_ID;
-    //return false;
+    // return false;
   }
 
   /*
@@ -349,19 +349,19 @@ bool pfcp_session::create(
   if (not cr_qer.gate_status.first) {
     cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
     offending_ie      = PFCP_IE_GATE_STATUS;
-    //return false;
+    // return false;
   }
 
   if (not cr_qer.maximum_bitrate.first) {
     cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
     offending_ie      = PFCP_IE_MBR;
-    //return false;
+    // return false;
   }
 
   if (not cr_qer.guaranteed_bitrate.first) {
     cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
     offending_ie      = PFCP_IE_GBR;
-    //return false;
+    // return false;
   }
 
   /*
@@ -383,7 +383,7 @@ bool pfcp_session::create(
   if (not cr_qer.qos_flow_identifier.first) {
     cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
     offending_ie      = PFCP_IE_QFI;
-    //return false;
+    // return false;
   }
 
   /*
