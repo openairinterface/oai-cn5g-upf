@@ -634,6 +634,9 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
           "framed routing ip: " +
           pdr->pdi.second.framed_route.second.at(0).framed_route);
       for (const auto& item : pdr->pdi.second.framed_route.second) {
+          Logger::pfcp_switch().debug(
+                  "framed routing ip: %s",
+                          item.framed_route);
         fr->addFramedRoute(ue_ip, item);
       }
     }
@@ -1160,15 +1163,19 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
             Logger::pfcp_switch().debug(
                 "Framed Routing string: %s", item.framed_route);
             fr_ue_ip = fr->retrieveUEIp(item);
-
             if (fr_ue_ip > 0) {
+                Logger::pfcp_switch().debug(
+                        "break");
               break;
             }
           }
+          std::cout << "fr_ue_ip after break: "<< fr_ue_ip << std::endl;
+          std::cout << "fr_ue_ip after break: "<< it_pdr->get()
+                  ->pdi.second.ue_ip_address.second.ipv4_address.s_addr << std::endl;
           isInAccess =
               fr_ue_ip ==
-              it_pdr->get()
-                  ->pdi.second.ue_ip_address.second.ipv4_address.s_addr;
+                      be32toh(it_pdr->get()
+                  ->pdi.second.ue_ip_address.second.ipv4_address.s_addr);
         }
         if (isInAccess) {
           Logger::pfcp_switch().info(
