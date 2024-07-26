@@ -1169,8 +1169,6 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
               break;
             }
           }
-          std::cout << "fr_ue_ip after break: "<< fr_ue_ip << std::endl;
-          std::cout << "fr_ue_ip after break: "<< it_pdr->get()
                   ->pdi.second.ue_ip_address.second.ipv4_address.s_addr << std::endl;
           isInAccess =
               fr_ue_ip ==

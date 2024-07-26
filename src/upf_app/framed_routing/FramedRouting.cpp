@@ -24,8 +24,6 @@ namespace fr {
             auto key = createFramedRoutingKey(ipCidr);
             auto routing_info = createLocalRoutingInformation(ipCidr);
             auto snat_info = createLocalSnatInformation(ipCidr);
-            std::cout << "retrieve dest ip subnet: " << ipCidr.second << std::endl;
-            std::cout << "retrieve network ip: " << key.networkAdress << std::endl;
             this->KeyToIp.insert({key, ue_ip});
             localRouting->add_route(routing_info);
             localRouting->add_source_snat(snat_info);
@@ -33,18 +31,14 @@ namespace fr {
     }
 
     uint32_t FramedRouting::retrieveUEIp(const uint32_t destination_ip) const {
-        std::cout << "retrieve dest ip " << destination_ip << std::endl;
         for (uint32_t i = 32; i > 0; --i) {
             FramedRoutingKey framedRoutingKey =
                     createFramedRoutingKey({destination_ip, i});
-            std::cout << "retrieve dest ip subnet: " << i << std::endl;
-            std::cout << "retrieve network ip: " << framedRoutingKey.networkAdress
                       << std::endl;
 
             auto ip = this->KeyToIp.find(framedRoutingKey);
 
             if (ip != KeyToIp.end()) {
-                std::cout << "find at: " << i << std::endl;
                 return ip->second;
             };
         };
@@ -55,13 +49,9 @@ namespace fr {
             const pfcp::framed_route_s &framed_route_s) const {
         std::stringstream ss(framed_route_s.framed_route);
         std::string ipsubnetmask;
-        std::cout << "framed routing ip:" << framed_route_s.framed_route << std::endl;
 
         while (std::getline(ss, ipsubnetmask, this->pdi_fr_delimeter)) {
-            Logger::pfcp_switch().info("Retrieving Frame string in while: " + framed_route_s.framed_route);
             std::pair<uint32_t, uint32_t> ipCidr = this->extractIPCidr(ipsubnetmask);
-            std::cout << "framed routing ip:" << ipCidr.first << std::endl;
-            std::cout << "framed routing sub:" << ipCidr.second << std::endl;
             FramedRoutingKey framedRoutingKey =
                     createFramedRoutingKey({ipCidr.first, ipCidr.second});
             auto ip = this->KeyToIp.find(framedRoutingKey);
