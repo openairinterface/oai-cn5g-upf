@@ -8947,6 +8947,7 @@ class pfcp_framed_route_ie : public pfcp_ie {
   //--------
   pfcp_framed_route_ie(const pfcp_tlv& t) : pfcp_ie(t){};
   //--
+  //todo(kw) somethign with array
   void to_core_type(pfcp::framed_route_t& b) { b.framed_route = framed_route; }
   //--------
   void dump_to(std::ostream& os) {
@@ -9181,9 +9182,12 @@ class pfcp_pdi_ie : public pfcp_grouped_ie {
       add_ie(sie);
     }
     if (b.framed_route.first) {
-      std::shared_ptr<pfcp_framed_route_ie> sie(
-          new pfcp_framed_route_ie(b.framed_route.second));
-      add_ie(sie);
+        for (const auto &item: b.framed_route.second){
+            std::shared_ptr<pfcp_framed_route_ie> sie(
+                    new pfcp_framed_route_ie(item));
+            add_ie(sie);
+        }
+
     }
     // if
     // (b.framed_routing.first) {std::shared_ptr<pfcp_framed_routing_ie> sie(new
