@@ -12,54 +12,53 @@ extern oai::config::upf_config upf_cfg;
 
 namespace fr {
 
-    FramedRouting::FramedRouting(std::shared_ptr<LocalRouting> localRouting)
-            : localRouting(std::move(localRouting)) {}
+FramedRouting::FramedRouting(std::shared_ptr<LocalRouting> localRouting)
+    : localRouting(std::move(localRouting)) {}
 
-    void FramedRouting::addFramedRoute(
-            const uint32_t ue_ip, const pfcp::framed_route_s &framed_route_s) {
-        std::stringstream ss(framed_route_s.framed_route);
-        std::string ipsubnetmask;
-        while (std::getline(ss, ipsubnetmask, this->pdi_fr_delimeter)) {
-            std::pair<uint32_t, uint32_t> ipCidr = this->extractIPCidr(ipsubnetmask);
-            auto key = createFramedRoutingKey(ipCidr);
-            auto routing_info = createLocalRoutingInformation(ipCidr);
-            auto snat_info = createLocalSnatInformation(ipCidr);
-            this->KeyToIp.insert({key, ue_ip});
-            localRouting->add_route(routing_info);
-            localRouting->add_source_snat(snat_info);
-        }
-    }
+void FramedRouting::addFramedRoute(
+    const uint32_t ue_ip, const pfcp::framed_route_s& framed_route_s) {
+  std::stringstream ss(framed_route_s.framed_route);
+  std::string ipsubnetmask;
+  while (std::getline(ss, ipsubnetmask, this->pdi_fr_delimeter)) {
+    std::pair<uint32_t, uint32_t> ipCidr = this->extractIPCidr(ipsubnetmask);
+    auto key                             = createFramedRoutingKey(ipCidr);
+    auto routing_info = createLocalRoutingInformation(ipCidr);
+    auto snat_info    = createLocalSnatInformation(ipCidr);
+    this->KeyToIp.insert({key, ue_ip});
+    localRouting->add_route(routing_info);
+    localRouting->add_source_snat(snat_info);
+  }
+}
 
-    uint32_t FramedRouting::retrieveUEIp(const uint32_t destination_ip) const {
-        for (uint32_t i = 32; i > 0; --i) {
-            FramedRoutingKey framedRoutingKey =
-                    createFramedRoutingKey({destination_ip, i});
-                      << std::endl;
+uint32_t FramedRouting::retrieveUEIp(const uint32_t destination_ip) const {
+  for (uint32_t i = 32; i > 0; --i) {
+    FramedRoutingKey framedRoutingKey =
+        createFramedRoutingKey({destination_ip, i});
 
-            auto ip = this->KeyToIp.find(framedRoutingKey);
+    auto ip = this->KeyToIp.find(framedRoutingKey);
 
-            if (ip != KeyToIp.end()) {
-                return ip->second;
-            };
-        };
-        return 0;
+    if (ip != KeyToIp.end()) {
+      return ip->second;
     };
+  };
+  return 0;
+};
 
-    uint32_t FramedRouting::retrieveUEIp(
-            const pfcp::framed_route_s &framed_route_s) const {
-        std::stringstream ss(framed_route_s.framed_route);
-        std::string ipsubnetmask;
+uint32_t FramedRouting::retrieveUEIp(
+    const pfcp::framed_route_s& framed_route_s) const {
+  std::stringstream ss(framed_route_s.framed_route);
+  std::string ipsubnetmask;
 
-        while (std::getline(ss, ipsubnetmask, this->pdi_fr_delimeter)) {
-            std::pair<uint32_t, uint32_t> ipCidr = this->extractIPCidr(ipsubnetmask);
-            FramedRoutingKey framedRoutingKey =
-                    createFramedRoutingKey({ipCidr.first, ipCidr.second});
-            auto ip = this->KeyToIp.find(framedRoutingKey);
-            if (ip != KeyToIp.end()) {
-                return ip->second;
-            }
-        }
-        return 0;
+  while (std::getline(ss, ipsubnetmask, this->pdi_fr_delimeter)) {
+    std::pair<uint32_t, uint32_t> ipCidr = this->extractIPCidr(ipsubnetmask);
+    FramedRoutingKey framedRoutingKey =
+        createFramedRoutingKey({ipCidr.first, ipCidr.second});
+    auto ip = this->KeyToIp.find(framedRoutingKey);
+    if (ip != KeyToIp.end()) {
+      return ip->second;
+    }
+  }
+  return 0;
 }
 void FramedRouting::remove_entry(uint32_t ue_ip) {
   for (uint32_t i = 32; i > 0; --i) {
