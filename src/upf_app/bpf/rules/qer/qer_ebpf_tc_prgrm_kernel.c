@@ -30,6 +30,11 @@
 #include <linux/netdevice.h>
 #include <linux/pkt_sched.h>
 
+
+#define MARK_VALUE 0x12345678  // Marker value to match
+#define OFFSET 0                // Example offset where marker is stored
+
+
 /*---------------------------------------------------------------------------------------------------------------*/
 /**
  * @brief Filter the Uplink traffic
@@ -39,7 +44,7 @@
  * @return __inline u32 the TC action taken
  */
 
-static __always_inline u32 uplink_sdf_filter(
+static __always_inline u32 egress_sdf_filter(
     struct __sk_buff* skb, struct ethhdr* ethh, struct udphdr* udph) {
   void* data_end = (void*) (long) skb->data_end;
 
@@ -72,7 +77,7 @@ static __always_inline u32 uplink_sdf_filter(
 
   key->src_ip   = iph_inner->saddr;
   key->dst_ip   = iph_inner->daddr;
-  key->protocol = iph_inner->protocol;
+  key->protocol = protocol;
 
   switch (protocol) {
     case IPPROTO_UDP: {
@@ -85,6 +90,7 @@ static __always_inline u32 uplink_sdf_filter(
       }
 
       key->dst_port = udph->dest;
+      break;
     }
     case IPPROTO_TCP: {
       // Extract TCP header
@@ -96,106 +102,27 @@ static __always_inline u32 uplink_sdf_filter(
       }
 
       key->dst_port = tcph->dest;
-    }
-    case IPPROTO_ICMP: {
-      // TODO: Check how to implement this use case
+      break;
     }
     default: {
       bpf_debug("Unknown header");
       bpf_debug("Use best effort QoS flow (i.e. default qfi)");
+      key->dst_port = 65535;
     }
   }
 
-  struct session_id* session = {0};
-  session = bpf_map_lookup_elem(&m_session_mapping, &key->src_ip);
+  u8 *retrieved_qfi =  bpf_map_lookup_elem(&m_sdf_filter, &key);
 
-  if (session) {
-    u32 seid        = session->seid;
-    u8 qfi          = gtpu_ext_h->qfi;
-    skb->tc_classid = ((u32) qfi << 24) | seid;
-    /*
-    SHould we make it even more unique than unique value ?
-    u32 teid_ul = session->teid_ul;
-    u32 teid_dl = session->teid_dl;
-    skb->tc_classid = ((u32)qfi << 24) | (seid & teid_ul & teid_dl); //
-    */
-    return TC_ACT_REDIRECT;
-  }
-}
+  if (retrieved_qfi) {
+    gtpu_ext_h->qfi = *retrieved_qfi;
+    skb->tc_classid = *retrieved_qfi;
+    return TC_ACT_OK;
+  }  
 
-/*---------------------------------------------------------------------------------------------------------------*/
-
-static __always_inline u32 downlink_sdf_filter(
-    struct __sk_buff* skb, struct ethhdr* ethh, struct iphdr* iph) {
-  void* data_end = (void*) (long) skb->data_end;
-
-  struct filter_key* filter = {0};
-  u8 protocol               = iph->protocol;
-  u32 ip_src                = iph->saddr;
-  u32 ip_dst                = iph->daddr;
-
-  filter->src_ip   = ip_src;
-  filter->dst_ip   = ip_dst;
-  filter->protocol = protocol;
-
-  switch (protocol) {
-    case IPPROTO_UDP: {
-      // Extract UDP header
-      struct udphdr* udph = (struct udphdr*) (iph + 1);
-
-      if ((void*) (udph + 1) > data_end) {
-        bpf_debug("Invalid UDP header");
-        return TC_ACT_SHOT;
-      }
-
-      filter->dst_port = udph->dest;
-    }
-    case IPPROTO_TCP: {
-      // Extract TCP header
-      struct tcphdr* tcph = (struct tcphdr*) (iph + 1);
-
-      if ((void*) (tcph + 1) > data_end) {
-        bpf_debug("Invalid TCP header");
-        return TC_ACT_SHOT;
-      }
-
-      filter->dst_port = tcph->dest;
-    }
-    case IPPROTO_ICMP: {
-      // TODO: Check how to implement this use case
-    }
-    default: {
-      bpf_debug("Unknown header");
-      bpf_debug("Use best effort QoS flow (i.e. default qfi)");
-    }
-  }
-
-  // Get QFI value
-  e_qfi* qfi = bpf_map_lookup_elem(&m_filter, &filter);
-  if (qfi) {
-    bpf_debug("\t IP SRC: 0x%x", filter->src_ip);
-    bpf_debug("\t IP DST: 0x%x", filter->dst_ip);
-    bpf_debug("\t IP PROTO: 0x%x", filter->protocol);
-    bpf_debug("\t DST PORT: 0x%x", filter->dst_port);
-
-    struct session_id* session = NULL;
-
-    session = bpf_map_lookup_elem(&m_session_mapping, &ip_dst);
-
-    if (session) {
-      u32 seid        = session->seid;
-      skb->tc_classid = ((u32) (*qfi) << 24) | seid;
-      /*
-      SHould we make it even more unique than unique value ?
-      u32 teid_ul = session->teid_ul;
-      u32 teid_dl = session->teid_dl;
-      skb->tc_classid = ((u32)qfi << 24) | (seid & teid_ul & teid_dl); //
-      */
-      return TC_ACT_REDIRECT;
-    }
-  }
-
+ // default value qfi = 5 (NON-GBR QoS Flow)
+  skb->tc_classid = gtpu_ext_h->qfi;
   return TC_ACT_OK;
+    
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -228,16 +155,19 @@ ipv4_sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh, struct iphdr* iph) {
 
       if (htons(udph->dest) == GTP_UDP_PORT) {
         bpf_printk("This is a GTP traffic");
-        return uplink_sdf_filter(skb, ethh, udph);
+        return egress_sdf_filter(skb, ethh, udph);
       }
     }
     default: {
-      return downlink_sdf_filter(skb, ethh, iph);
+      return XDP_DROP;
     }
   }
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+struct meta_info {
+	__u32 mark;
+} __attribute__((aligned(4)));
 
 /**
  * @brief Filter traffic according to ETH_TYPE
@@ -248,11 +178,8 @@ ipv4_sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh, struct iphdr* iph) {
  */
 static __always_inline u32
 sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
-  // void *data      = (void *)(long) skb->data;
   void* data_end = (void*) (long) skb->data_end;
-  // void *data_meta = (void *)(long) skb->data_meta;
-  // struct meta_info *meta = data_meta;
-
+  
   u16 eth_type = htons(ethh->h_proto);
   bpf_debug("Debug: eth_type:0x%x", eth_type);
 
@@ -295,7 +222,33 @@ sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
 
 SEC("classifier")
 int cls_filter(struct __sk_buff* skb) {
-  bpf_debug("==========< EGRESS FILTER >==========\n");
+  bpf_debug("==========< QER Rules >==========\n");
+
+  void *data      = (void *)(long)skb->data;
+	void *data_meta = (void *)(long)skb->data_meta;
+	struct meta_info *meta = data_meta;
+
+
+
+
+  /* Check SKB gave us some data_meta */
+	if ((void *)(meta + 1) > data) {
+		skb->mark = 41;
+		 bpf_debug("No Meta_data found! Drop the packet");
+		return TC_ACT_SHOT;
+	}
+
+	/* Hint: See func tc_cls_act_is_valid_access() for BPF_WRITE access */
+	skb->mark = meta->mark; /* Transfer XDP-mark to SKB-mark */
+
+  
+  bpf_debug("TC Retrieves a Marker metadata value: %d", skb->mark);
+
+  // Check if the marker matches
+  if (skb->mark == htonl(MARK_VALUE)) {
+    bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer");
+    return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+  }
 
   // Extract Ethernet header
   struct ethhdr* ethh = (void*) (long) skb->data;

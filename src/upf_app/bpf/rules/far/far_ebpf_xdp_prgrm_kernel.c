@@ -24,6 +24,11 @@
 #include <string.h>  //Needed for memcpy
 #include "bpf_endian.h"
 
+
+#define MARK_VALUE 0x12345678  // Example mark value
+#define OFFSET 0                // Example offset for storing the mark
+
+
 /*---------------------------------------------------------------------------------------------------------------*/
 // TODO: Put dummy in test folder.
 /**
@@ -239,6 +244,22 @@ static u32 create_outer_header_gtpu_ipv4(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+
+/*
+ * This struct is stored in the XDP 'data_meta' area, which is located
+ * just in-front-of the raw packet payload data.  The meaning is
+ * specific to these two BPF programs that use it as a communication
+ * channel.  XDP adjust/increase the area via a bpf-helper, and TC use
+ * boundary checks to see if data have been provided.
+ *
+ * The struct must be 4 byte aligned, which here is enforced by the
+ * struct __attribute__((aligned(4))).
+ */
+struct meta_info {
+	__u32 mark;
+} __attribute__((aligned(4)));
+
+
 /**
  * @brief Apply forwarding action rules.
  *
@@ -248,12 +269,28 @@ static u32 create_outer_header_gtpu_ipv4(
  */
 
 static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
+  
+  struct meta_info *meta;
+  int ret;
+
+	/* Reserve space in-front of data pointer for our meta info.
+	 * (Notice drivers not supporting data_meta will fail here!)
+	 */
+	ret = bpf_xdp_adjust_meta(p_ctx, -(int)sizeof(*meta));
+	if (ret < 0){
+    bpf_debug("Invalid pointer");
+    return XDP_ABORTED;
+  }
+
+  /* Notice: Kernel-side verifier requires that loading of
+	 * ctx->data MUST happen _after_ helper bpf_xdp_adjust_meta(),
+	 * as pkt-data pointers are invalidated.  Helpers that require
+	 * this are determined/marked by bpf_helper_changes_pkt_data()
+	 */
   void* p_data         = (void*) (long) p_ctx->data;
   void* p_data_end     = (void*) (long) p_ctx->data_end;
+
   struct ethhdr* p_eth = p_data;
-  // TODO dupl
-  // TODO nocp
-  // TODO buff
 
   if ((void*) (p_eth + 1) > p_data_end) {
     bpf_debug("Invalid pointer");
@@ -318,9 +355,25 @@ static u32 pfcp_far_apply(struct xdp_md* p_ctx, pfcp_far_t_* p_far) {
       case OUTER_HEADER_CREATION_GTPU_UDP_IPV4:
         bpf_debug("OUTER_HEADER_CREATION_GTPU_UDP_IPV4");
         create_outer_header_gtpu_ipv4(p_ctx, p_far);
-        bpf_debug(
+        /*
+          bpf_debug(
             "The Packet is redirected to socket for transmission to AN ...");
         return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+        */
+        bpf_debug("The Packet transmitted for QoS enforcement ...");
+        
+        /* Check data_meta have room for meta_info struct */
+        meta = (void *)(unsigned long)p_ctx->data_meta;
+        if ((void *)(meta + 1) > p_data){
+          bpf_debug("No room for a marker");
+          return XDP_ABORTED;
+        }
+          
+        meta->mark = htonl(MARK_VALUE);      
+        
+        bpf_debug("XDP FAR has set a marker metadata %d: ",  meta->mark);
+
+        return XDP_PASS;
         break;
       case OUTER_HEADER_CREATION_GTPU_UDP_IPV6:
         bpf_debug("OUTER_HEADER_CREATION_GTPU_UDP_IPV6");

@@ -129,16 +129,6 @@ static u32 handle_uplink_traffic(struct xdp_md* p_ctx, struct udphdr* udph) {
     // return XDP_DROP;
   }
 
-  // bpf_debug("GTP GPDU received with Valid GTP Packet (SRC IP:0x%x)\n",
-  // src_ip);
-
-  // Check if the gtp extension header extends beyond the data end.
-  // if ((void*) ((struct gtpu_extn_pdu_session_container*) (p_gtpuh + 1) + 1) >
-  //     (void*) (long) p_ctx->data_end) {
-  //  // bpf_debug("Invalid IPv4 Inner Header\n");
-  //   return XDP_DROP;
-  // }
-
   // Jump to session context.
   tail_call_next_prog(p_ctx, p_gtpuh->teid, INTERFACE_VALUE_ACCESS, src_ip_in);
   // bpf_debug("BPF tail call was not executed! teid %d\n", p_gtpuh->teid);

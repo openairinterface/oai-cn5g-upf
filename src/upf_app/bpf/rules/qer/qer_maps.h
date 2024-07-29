@@ -22,11 +22,11 @@ struct bpf_map_def SEC("maps") m_gtp_u_tunnel = {
 };
 
 /*---------------------------------------------------------------------------------------------------------------*/
-struct bpf_map_def SEC("maps") m_filter = {
+struct bpf_map_def SEC("maps") m_sdf_filter = {
     .type = BPF_MAP_TYPE_HASH,
     .key_size =
         sizeof(struct filter_key),  // < src_ip, dst_ip, protocol, dst_port >
-    .value_size  = sizeof(e_qfi),   // QFI
+    .value_size  = sizeof(u8),   // QFI
     .max_entries = QFI_MAX_ENTRIES,
 };
 

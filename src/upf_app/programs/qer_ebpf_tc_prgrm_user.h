@@ -119,6 +119,10 @@ class QERProgram : public BPFProgram {
    */
   std::shared_ptr<BPFMap> geGtpUTunnelMap() const;
 
+
+
+  std::shared_ptr<BPFMap> getSdfFilterMap() const;
+
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the Filter Map object.
@@ -251,12 +255,17 @@ class QERProgram : public BPFProgram {
   std::shared_ptr<BPFMap> mpFilterMap;
 
   /*---------------------------------------------------------------------------------------------------------------*/
+  // The SDF Filter map.
+  std::shared_ptr<BPFMap> mpSdfFilterMap;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
   // The 5G QoS Flow Parameters map.
   std::shared_ptr<BPFMap> mp5GQoSFlowParamsMap;
 
   /*---------------------------------------------------------------------------------------------------------------*/
   // The 5G QoS Flow.
   std::shared_ptr<BPFMap> mpQoSFlowMap;
+
 
   /*---------------------------------------------------------------------------------------------------------------*/
   // The GTP interface.

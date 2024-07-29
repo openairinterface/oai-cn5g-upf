@@ -218,13 +218,13 @@ void QERProgram::setPduSessionClassPosition(uint64_t seid) {
 /*---------------------------------------------------------------------------------------------------------------*/
 // Method definition to set pduSession class position
 void QERProgram::setQosFlowsClassesPositions() {
-  for (int i = 0; i < savedQers.size(); i++) {
+  for (int i = 0; i < qosFlowsQfis.size(); i++) {
     struct classPosition* classPos = new classPosition();
 
     classPos->parentMaj = pduSessionClassPos->parentMaj;
     classPos->parentMin = pduSessionClassPos->parentMin;
     classPos->childMaj  = pduSessionClassPos->childMin;
-    classPos->childMin  = savedQers[i]->qer_id.second.qer_id;
+    classPos->childMin  = qosFlowsQfis[i].qfi;
 
     qosFlowsClassesPos.push_back(classPos);
 
@@ -350,9 +350,9 @@ std::shared_ptr<BPFMap> QERProgram::geGtpUTunnelMap() const {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> QERProgram::getFilterMap() const {
-  return mpFilterMap;
-}
+// std::shared_ptr<BPFMap> QERProgram::getFilterMap() const {
+//   return mpFilterMap;
+// }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> QERProgram::get5GQoSFlowParamsMap() const {
@@ -365,16 +365,21 @@ std::shared_ptr<BPFMap> QERProgram::getQoSFlowMap() const {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<BPFMap> QERProgram::getSdfFilterMap() const {
+  return mpSdfFilterMap;
+}
+/*---------------------------------------------------------------------------------------------------------------*/
 void QERProgram::initializeMaps() {
   // Store all maps available in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
 
   // Warning - The name of the map must be the same of the BPF program.
   mpGtpUTunnelMap = std::make_shared<BPFMap>(mpMaps->getMap("m_gtp_u_tunnel"));
-  mpFilterMap     = std::make_shared<BPFMap>(mpMaps->getMap("m_filter"));
+  // mpFilterMap     = std::make_shared<BPFMap>(mpMaps->getMap("m_filter"));
   mp5GQoSFlowParamsMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_5g_qos_flow_parameters"));
   mpQoSFlowMap = std::make_shared<BPFMap>(mpMaps->getMap("m_qos_flow"));
+  mpSdfFilterMap = std::make_shared<BPFMap>(mpMaps->getMap("m_sdf_filter"));
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
