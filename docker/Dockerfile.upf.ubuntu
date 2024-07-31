@@ -122,8 +122,8 @@ COPY --from=oai-upf-builder \
     /usr/local/lib/libyaml-cpp.so.0.? \
 # Ubuntu 20 --> libbfd-2.34
 # Ubuntu 22 --> libbfd-2.38
-    /usr/lib/x86_64-linux-gnu/libbfd-2.3?-system.so \
-    /usr/lib/x86_64-linux-gnu/libopcodes-2.3?-system.so \
+    /usr/lib/?-linux-gnu/libbfd-2.3?-system.so \
+    /usr/lib/?-linux-gnu/libopcodes-2.3?-system.so \
     /openair-upf/build/ext/libbpf/src/libbpf.so.1 \
     # /openair-upf/build/upf/build/upf_app/utils/libupfutils.so \
     ./
