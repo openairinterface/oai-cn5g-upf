@@ -88,7 +88,7 @@ uint32_t SessionManager::findUplinkTeid(
 void SessionManager::createSession(std::shared_ptr<SessionBpf> pSession) {
   SessionProgramManager::getInstance().create(pSession->getSeid());
   Logger::upf_app().debug(
-      "Session %d Has Been Cretead Successfully", pSession->getSeid());
+      "Session %d Has Been Created Successfully", pSession->getSeid());
 }
 
 /*****************************************************************************************************************/
