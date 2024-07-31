@@ -257,8 +257,8 @@ int far_entry_point(struct xdp_md* ctx) {
       bpf_debug("OUTER_HEADER_CREATION_UDP_IPV4 REDIRECT FAILED");
 
     } else if (dest_interface == INTERFACE_VALUE_ACCESS) {
-      if (!create_outer_header_gtpu_ipv4(ctx, p_far))
-        return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+      create_outer_header_gtpu_ipv4(ctx, p_far);
+      return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
     }
   }
 
