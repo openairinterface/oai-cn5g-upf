@@ -25,6 +25,37 @@
 #include "bpf_endian.h"
 
 /*****************************************************************************************************************/
+
+static __always_inline bool retrieve_upf_iface_from_map(
+    e_reference_point key, u32* iface_ip) {
+  struct s_interface* map_element =
+      bpf_map_lookup_elem(&m_upf_interfaces, &key);
+
+  if (map_element) {
+    *iface_ip = map_element->ipv4_address;
+    return true;
+  }
+
+  return false;
+}
+
+/*****************************************************************************************************************/
+static __always_inline bool update_dst_mac_address(
+    u32 ip, struct ethhdr* p_eth) {
+  struct s_arp_mapping* map_entry;
+  memset(&map_entry, 0, sizeof(struct s_arp_mapping));
+
+  map_entry = bpf_map_lookup_elem(&m_arp_table, &ip);
+
+  if (map_entry) {
+    memcpy(p_eth->h_dest, map_entry->mac_address, sizeof(p_eth->h_dest));
+    return true;
+  }
+
+  return false;
+}
+
+/*****************************************************************************************************************/
 static __always_inline u32
 create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   // bpf_debug("Create Outer Header GTPU_IPv4");
@@ -38,18 +69,13 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
 
-  // Retrieve the N3 Interface IP addresse:
-  e_reference_point key = N3_INTERFACE;
-
-  struct s_interface* map_element =
-      bpf_map_lookup_elem(&m_upf_interfaces, &key);
-
-  if (!map_element) {
-    bpf_debug("No IP address was found in the map, Drop the packet");
+  // Retrieve the N3 Interface IP address:
+  e_reference_point n3_key = N3_INTERFACE;
+  u32 n3_ip;
+  if (!retrieve_upf_iface_from_map(n3_key, &n3_ip)) {
+    bpf_debug("N3 interface is missing in UPF map, Drop the packet");
     return XDP_DROP;
   }
-
-  u32 n3_ip = map_element->ipv4_address;
 
   /*
   |----------------------------------------------------------------|
@@ -88,7 +114,7 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   iph->version  = 4;
   iph->ihl      = 5;  // No options
   iph->tos      = 0;
-  iph->tot_len  = ntohs(p_inner_ip->tot_len) + GTP_ENCAPSULATED_SIZE;
+  iph->tot_len  = htons(ntohs(p_inner_ip->tot_len) + GTP_ENCAPSULATED_SIZE);
   iph->id       = 0;       // No fragmentation
   iph->frag_off = 0x0040;  // Don't fragment; Fragment offset = 0
   iph->ttl      = 64;
@@ -123,28 +149,10 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   |-------------------------- Add GTP header ----------------------|
   |----------------------------------------------------------------|
   */
-  // bpf_debug(
-  //     "Destination MAC:%x:%x:%x:", ethh->h_dest[0], ethh->h_dest[1],
-  //     ethh->h_dest[2]);
-  // bpf_debug("%x:%x:%x", ethh->h_dest[3], ethh->h_dest[4], ethh->h_dest[5]);
-
-  void* p_mac_address = bpf_map_lookup_elem(&m_arp_table, &n3_ip);
-  if (!p_mac_address) {
-    bpf_debug("MAC address not found!!");
-    return XDP_DROP;
+  // Update destination mac address
+  if (!update_dst_mac_address(n3_ip, ethh)) {
+    bpf_debug("N3's Next Hop MAC address not found! Drop the packet");
   }
-
-  // swap_src_dst_mac(data);
-  __builtin_memcpy(ethh->h_dest, p_mac_address, sizeof(ethh->h_dest));
-
-  // bpf_debug(
-  //     "Destination MAC:%x:%x:%x:", ethh->h_dest[0], ethh->h_dest[1],
-  //     ethh->h_dest[2]);
-  // bpf_debug("%x:%x:%x", ethh->h_dest[3], ethh->h_dest[4], ethh->h_dest[5]);
-  // bpf_debug("Destination IP:0x%x, \t", iph->daddr);
-  // bpf_debug(
-  //     "Port:%d",
-  //     p_far->forwarding_parameters.outer_header_creation.port_number);
 
   struct gtpuhdr* p_gtpuh = (void*) (udph + 1);
   if ((void*) (p_gtpuh + 1) > data_end) {
@@ -154,12 +162,11 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   u8 flags = GTP_EXT_FLAGS;
   __builtin_memcpy(p_gtpuh, &flags, sizeof(u8));
   p_gtpuh->message_type   = GTPU_G_PDU;
-  p_gtpuh->message_length = ntohs(p_inner_ip->tot_len) +
-                            sizeof(struct gtpu_extn_pdu_session_container) + 4;
-  p_gtpuh->teid = p_far->forwarding_parameters.outer_header_creation.teid;
-  bpf_debug(
-      "TEID from p_far:0x%x",
-      p_far->forwarding_parameters.outer_header_creation.teid);
+  p_gtpuh->message_length = htons(
+      ntohs(p_inner_ip->tot_len) +
+      sizeof(struct gtpu_extn_pdu_session_container) + 4);
+  p_gtpuh->teid =
+      htobe32(p_far->forwarding_parameters.outer_header_creation.teid);
   p_gtpuh->sequence      = GTP_SEQ;
   p_gtpuh->pdu_number    = GTP_PDU_NUMBER;
   p_gtpuh->next_ext_type = GTP_NEXT_EXT_TYPE;
@@ -200,6 +207,7 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
 /*****************************************************************************************************************/
 SEC("xdp_far")
 int far_entry_point(struct xdp_md* ctx) {
+  bpf_debug("================< FAR Sesction >================");
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
 
@@ -244,6 +252,19 @@ int far_entry_point(struct xdp_md* ctx) {
       }
 
       __builtin_memcpy(p_new_eth, ethh, sizeof(*ethh));
+
+      // Retrieve the N6 Interface IP address:
+      e_reference_point n6_key = N6_INTERFACE;
+      u32 n6_ip;
+      if (!retrieve_upf_iface_from_map(n6_key, &n6_ip)) {
+        bpf_debug("N6 interface is missing in UPF map, Drop the packet");
+        return XDP_DROP;
+      }
+
+      // Update destination mac address
+      if (!update_dst_mac_address(n6_ip, p_new_eth)) {
+        bpf_debug("N6's Next Hop MAC address not found! Drop the packet");
+      }
 
       // Adjust head to the right.
       if (bpf_xdp_adjust_head(ctx, GTP_ENCAPSULATED_SIZE)) {
