@@ -226,6 +226,7 @@ static __always_inline u32 eth_handle(struct xdp_md* ctx, struct ethhdr* ethh) {
 /*****************************************************************************************************************/
 SEC("xdp_entry_point")
 int entry_point(struct xdp_md* ctx) {
+  bpf_debug("================< PFCP PDR Sesction >================");
   struct ethhdr* ethh = (void*) (long) ctx->data;
 
   if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
