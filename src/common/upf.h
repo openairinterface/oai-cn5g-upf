@@ -204,48 +204,15 @@ typedef struct qos_profile_s {
   } parameter;
 } qos_profile_t;
 
-// URL, N1, N2 (may get from configuration file)
-#define NAMF_COMMUNICATION_BASE "/namf-comm/"
-#define NAMF_COMMUNICATION_N1N2_MESSAGE_TRANSFER_URL                           \
-  "/ue-contexts/{}/n1-n2-messages"  // context id
-#define NUDM_SDM_BASE "/nudm-sdm/"
-#define NUDM_SDM_GET_SM_DATA_URL "/{}/sm-data"  // ue Id
-#define N1_SM_CONTENT_ID "n1SmMsg"
-#define N1N2_MESSAGE_CLASS "SM"
-#define N2_SM_CONTENT_ID "n2msg"
-#define NSMF_PDU_SESSION_BASE "/nsmf-pdusession/"
-#define NSMF_CALLBACK_N1N2_MESSAGE_TRANSFER_FAILURE                            \
-  "/callback/N1N2MsgTxfrFailureNotification/{}"  // UE Id
-#define NSMF_PDU_SESSION_SM_CONTEXT_CREATE_URL "/sm-contexts"
-#define NSMF_PDU_SESSION_SM_CONTEXT_UPDATE_URL "/sm-contexts/"
-#define NSMF_SMF_CONFIGURATION_BASE "/nsmf-configuration/"
-#define NSMF_SMF_CONFIGURATION_CREATE_DNN "/dnn-configurations"
-
 // NRF
 #define NNRF_NFM_BASE "/nnrf-nfm/"
 #define NNRF_NF_REGISTER_URL "/nf-instances/"
 #define NNRF_NF_STATUS_SUBSCRIBE_URL "/subscriptions"
 #define NNRF_NF_STATUS_NOTIFY_BASE "/nsmf-nfstatus-notify/"
 
-// for CURL
-#define NF_CURL_TIMEOUT_MS 100L
-#define MAX_WAIT_MSECS 10000  // 1 second
-#define AMF_NUMBER_RETRIES 3
-#define UDM_NUMBER_RETRIES 3
-constexpr auto CURL_MIME_BOUNDARY = "----Boundary";
-
-// for N1N2
-#define BUF_LEN 512
-
-// FOR FUTURE PROMISE
-#define FUTURE_STATUS_TIMEOUT_MS 100
-
 // for PFCP
 constexpr uint64_t SECONDS_SINCE_FIRST_EPOCH = 2208988800;
 // 8.22  Fully Qualified TEID (F-TEID) - 3GPP TS 29.274 V16.0.0
 #define TEID_GRE_KEY_LENGTH 4
-
-#define DEFAULT_QFI 1
-#define DEFAULT_5QI 9  // TODO: from conf file
 
 #endif

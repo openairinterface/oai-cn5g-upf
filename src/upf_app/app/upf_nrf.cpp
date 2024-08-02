@@ -29,17 +29,17 @@
 
 #include "upf_nrf.hpp"
 
-#include <stdexcept>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <nlohmann/json.hpp>
+#include <stdexcept>
 
+#include "3gpp_29.500.h"
+#include "3gpp_29.510.h"
 #include "http_client.hpp"
 #include "itti.hpp"
 #include "logger.hpp"
 #include "upf.h"
-#include "3gpp_29.510.h"
-#include "3gpp_29.500.h"
 #include "upf_config.hpp"
 
 using namespace oai::config;
@@ -323,5 +323,5 @@ void upf_nrf::timer_nrf_registration(timer_id_t timer_id, uint64_t arg2_user) {
 //---------------------------------------------------------------------------------------------
 void upf_nrf::get_nrf_api_root(std::string& api_root) {
   api_root = std::string(upf_cfg.nrf_addr.get_url()) + NNRF_NFM_BASE +
-             upf_cfg.sbi_api_version;
+             upf_cfg.nrf_addr.get_api_version();
 }

@@ -34,6 +34,7 @@
 #include <signal.h>
 #include <stdint.h>
 #include <unistd.h>  // get_pid(), pause()
+#include <chrono>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/split.hpp>
@@ -71,6 +72,7 @@ std::unique_ptr<upf_config_yaml> upf_cfg_yaml            = nullptr;
 std::shared_ptr<oai::http::http_client> http_client_inst = nullptr;
 //------------------------------------------------------------------------------
 void my_app_signal_handler(int s) {
+  auto shutdown_start = std::chrono::system_clock::now();
   if (single_teardown_call) {
     return;
   }
@@ -108,8 +110,9 @@ void my_app_signal_handler(int s) {
   }
 
   Logger::system().info("Freeing Allocated memory done.");
-  Logger::system().info("Bye");
-
+  auto elapsed = std::chrono::system_clock::now() - shutdown_start;
+  auto ms_diff = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed);
+  Logger::system().info("Bye. Shutdown Procedure took %d ms", ms_diff.count());
   exit(0);
 }
 
@@ -164,9 +167,10 @@ int main(int argc, char** argv) {
   upf_cfg_yaml->display();
 
   // HTTP Client
+  // HTTP Client
   http_client_inst = oai::http::http_client::create_instance(
-      Logger::upf_app(), oai::common::sbi::kNfDefaultHttpRequestTimeout,
-      upf_cfg.sbi.if_name, upf_cfg.http_version);
+      Logger::upf_app(), upf_cfg.http_request_timeout, upf_cfg.sbi.if_name,
+      upf_cfg.http_version);
 
   // Inter task Interface
   itti_inst = new itti_mw();
