@@ -140,7 +140,7 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   udph->source = bpf_htons(GTP_UDP_PORT);
   udph->dest   = bpf_htons(GTP_UDP_PORT);
   // bpf_htons(p_far->forwarding_parameters.outer_header_creation.port_number);
-  udph->len = bpf_ntohs(
+  udph->len = bpf_htons(
       bpf_ntohs(p_inner_ip->tot_len) + sizeof(*udph) + sizeof(struct gtpuhdr) +
       sizeof(struct gtpu_extn_pdu_session_container));
   udph->check = 0;
