@@ -4,6 +4,7 @@
 #include <types.h>
 // clang-format on
 #include <bpf_helpers.h>
+#include <bpf_endian.h>
 #include <endian.h>
 #include <lib/crc16.h>
 #include <linux/if_ether.h>
@@ -162,7 +163,7 @@ static __always_inline u32 ipv4_handle(struct xdp_md* ctx, struct iphdr* iph) {
         return XDP_DROP;
       }
 
-      if (htons(udph->dest) == GTP_UDP_PORT) {
+      if (bpf_htons(udph->dest) == GTP_UDP_PORT) {
         bpf_debug("This is a GTP traffic");
         return handle_uplink_traffic(ctx, udph);
       }
@@ -190,7 +191,7 @@ static __always_inline u32 ipv4_handle(struct xdp_md* ctx, struct iphdr* iph) {
 
 static __always_inline u32 eth_handle(struct xdp_md* ctx, struct ethhdr* ethh) {
   void* data_end = (void*) (long) ctx->data_end;
-  u16 eth_type   = htons(ethh->h_proto);
+  u16 eth_type   = bpf_htons(ethh->h_proto);
   u64 offset     = sizeof(*ethh);
 
   bpf_debug("Debug: eth_type:0x%x", eth_type);
@@ -211,7 +212,7 @@ static __always_inline u32 eth_handle(struct xdp_md* ctx, struct ethhdr* ethh) {
       struct vlan_hdr* vlan_hdr = (struct vlan_hdr*) (ethh + 1);
       offset += sizeof(*vlan_hdr);
       if ((void*) (vlan_hdr + 1) <= data_end)
-        eth_type = htons(vlan_hdr->h_vlan_encapsulated_proto);
+        eth_type = bpf_htons(vlan_hdr->h_vlan_encapsulated_proto);
     }
     case ETH_P_IPV6:
     case ETH_P_ARP:

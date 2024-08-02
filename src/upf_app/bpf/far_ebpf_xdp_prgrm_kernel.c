@@ -111,10 +111,11 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
     return XDP_DROP;
   }
 
-  iph->version  = 4;
-  iph->ihl      = 5;  // No options
-  iph->tos      = 0;
-  iph->tot_len  = htons(ntohs(p_inner_ip->tot_len) + GTP_ENCAPSULATED_SIZE);
+  iph->version = 4;
+  iph->ihl     = 5;  // No options
+  iph->tos     = 0;
+  iph->tot_len =
+      bpf_htons(bpf_ntohs(p_inner_ip->tot_len) + GTP_ENCAPSULATED_SIZE);
   iph->id       = 0;       // No fragmentation
   iph->frag_off = 0x0040;  // Don't fragment; Fragment offset = 0
   iph->ttl      = 64;
@@ -136,11 +137,11 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
     return XDP_DROP;
   }
 
-  udph->source = htons(GTP_UDP_PORT);
-  udph->dest   = htons(GTP_UDP_PORT);
-  // htons(p_far->forwarding_parameters.outer_header_creation.port_number);
-  udph->len = ntohs(
-      ntohs(p_inner_ip->tot_len) + sizeof(*udph) + sizeof(struct gtpuhdr) +
+  udph->source = bpf_htons(GTP_UDP_PORT);
+  udph->dest   = bpf_htons(GTP_UDP_PORT);
+  // bpf_htons(p_far->forwarding_parameters.outer_header_creation.port_number);
+  udph->len = bpf_ntohs(
+      bpf_ntohs(p_inner_ip->tot_len) + sizeof(*udph) + sizeof(struct gtpuhdr) +
       sizeof(struct gtpu_extn_pdu_session_container));
   udph->check = 0;
 
@@ -162,11 +163,11 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   u8 flags = GTP_EXT_FLAGS;
   __builtin_memcpy(p_gtpuh, &flags, sizeof(u8));
   p_gtpuh->message_type   = GTPU_G_PDU;
-  p_gtpuh->message_length = htons(
-      ntohs(p_inner_ip->tot_len) +
+  p_gtpuh->message_length = bpf_htons(
+      bpf_ntohs(p_inner_ip->tot_len) +
       sizeof(struct gtpu_extn_pdu_session_container) + 4);
   p_gtpuh->teid =
-      htobe32(p_far->forwarding_parameters.outer_header_creation.teid);
+      bpf_htonl(p_far->forwarding_parameters.outer_header_creation.teid);
   p_gtpuh->sequence      = GTP_SEQ;
   p_gtpuh->pdu_number    = GTP_PDU_NUMBER;
   p_gtpuh->next_ext_type = GTP_NEXT_EXT_TYPE;
