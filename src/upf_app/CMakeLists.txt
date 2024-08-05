@@ -69,20 +69,6 @@ target_include_directories(UPF_XDP PUBLIC
 
 add_dependencies(UPF_XDP upf_ebpf_xdp_all)
 
-# configure_file (
-#     ${PROJECT_SOURCE_DIR}/cmake/Configuration.h.in
-#     ${PROJECT_SOURCE_DIR}/src/Configuration.h
-# )
-
-# configure_file (
-#     ${PROJECT_SOURCE_DIR}/cmake/Configuration.cpp.in
-#     ${PROJECT_SOURCE_DIR}/src/Configuration.cpp
-# )
-
-# Targets:
-#   * <prefix>/lib/upf_bpf.a
-#   * header location after install: <prefix>/include/*.h
-#   * headers can be included by C++ code `#include <*/*.h>`
 install(
     TARGETS UPF_XDP
     EXPORT "${TARGETS_EXPORT_NAME}"
@@ -92,10 +78,3 @@ install(
     INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
 )
 
-# Headers:
-#   * ./*.h -> <prefix>/include/*.h
-# install(
-#     DIRECTORY "./"
-#     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
-#     FILES_MATCHING PATTERN "*.h"
-# )
