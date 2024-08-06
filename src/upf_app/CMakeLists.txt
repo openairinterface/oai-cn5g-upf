@@ -48,7 +48,7 @@ add_library(UPF_XDP STATIC
   Configuration.cpp
   SignalHandler.cpp
   helpers/NextHopFinder.cpp
-  
+  helpers/CmdRunner.cpp
   SessionProgramManager.cpp
   SessionManager.cpp
   SessionPrograms.cpp
