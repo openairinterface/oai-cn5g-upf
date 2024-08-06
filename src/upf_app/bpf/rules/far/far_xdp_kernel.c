@@ -280,7 +280,9 @@ int far_entry_point(struct xdp_md* ctx) {
 
     } else if (dest_interface == INTERFACE_VALUE_ACCESS) {
       create_outer_header_gtpu_ipv4(ctx, p_far);
-      return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+      //return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+      bpf_debug("Packet is redirected to socket for transmission to AN ...");
+      return XDP_PASS;
     }
   }
 

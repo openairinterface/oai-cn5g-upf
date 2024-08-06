@@ -2,10 +2,10 @@
 #include <RulesUtilities.h>
 #include <SessionManager.h>
 #include <NetlinkManager.h>
-#include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h>
+#include <pfcp_session_pdr_lookup_xdp_user.h>
 #include <SessionProgramManager.h>
 #include <SignalHandler.h>
-#include <pfcp_session_lookup_ebpf_xdp_prgrm_user.h>
+#include <pfcp_session_lookup_xdp_user.h>
 #include "logger.hpp"
 #include <helpers/GetNicInformation.hpp>
 #include <helpers/QdiscHelpers.hpp>

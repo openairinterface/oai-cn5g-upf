@@ -1,4 +1,4 @@
-#include "pfcp_session_lookup_ebpf_xdp_prgrm_user.h"
+#include "pfcp_session_lookup_xdp_user.h"
 #include <SessionManager.h>
 #include <bpf/bpf.h>     // bpf calls
 #include <bpf/libbpf.h>  // bpf wrappers
@@ -21,10 +21,10 @@ PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
     const std::string& gtpInterface, const std::string& udpInterface)
     : mGTPInterface(gtpInterface), mUDPInterface(udpInterface) {
   mpLifeCycle = std::make_shared<PFCP_Session_LookupProgramLifeCycle>(
-      pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__open,
-      pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__load,
-      pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__attach,
-      pfcp_session_lookup_ebpf_xdp_prgrm_kernel_c__destroy);
+      pfcp_session_lookup_xdp_kernel_c__open,
+      pfcp_session_lookup_xdp_kernel_c__load,
+      pfcp_session_lookup_xdp_kernel_c__attach,
+      pfcp_session_lookup_xdp_kernel_c__destroy);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

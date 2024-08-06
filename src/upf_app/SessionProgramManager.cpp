@@ -1,9 +1,9 @@
 #include "SessionProgramManager.h"
-#include <far_ebpf_xdp_prgrm_user.h>
-#include <qer_ebpf_tc_prgrm_user.h>
-#include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h>
+#include <far_xdp_user.h>
+#include <qer_tc_user.h>
+#include <pfcp_session_pdr_lookup_xdp_user.h>
 #include "SessionPrograms.h"
-#include <pfcp_session_lookup_ebpf_xdp_prgrm_user.h>
+#include <pfcp_session_lookup_xdp_user.h>
 #include <UserPlaneComponent.h>
 #include <net/if.h>  // if_nametoindex
 

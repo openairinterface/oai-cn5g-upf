@@ -1,4 +1,4 @@
-#include "far_ebpf_xdp_prgrm_user.h"
+#include "far_xdp_user.h"
 #include <SessionManager.h>
 #include <bpf/bpf.h>     // bpf calls
 #include <bpf/libbpf.h>  // bpf wrappers
@@ -15,9 +15,8 @@ extern upf_config upf_cfg;
 /*---------------------------------------------------------------------------------------------------------------*/
 FARProgram::FARProgram() : BPFProgram() {
   mpLifeCycle = std::make_shared<FARProgramLifeCycle>(
-      far_ebpf_xdp_prgrm_kernel_c__open, far_ebpf_xdp_prgrm_kernel_c__load,
-      far_ebpf_xdp_prgrm_kernel_c__attach,
-      far_ebpf_xdp_prgrm_kernel_c__destroy);
+      far_xdp_kernel_c__open, far_xdp_kernel_c__load, far_xdp_kernel_c__attach,
+      far_xdp_kernel_c__destroy);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

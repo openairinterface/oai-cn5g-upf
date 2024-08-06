@@ -1,13 +1,13 @@
-#ifndef __PFCP_SESSION_PDR_LOOKUP_EBPF_XDP_PRGRM_USER_H__
-#define __PFCP_SESSION_PDR_LOOKUP_EBPF_XDP_PRGRM_USER_H__
+#ifndef __PFCP_SESSION_PDR_LOOKUP_XDP_USER_H__
+#define __PFCP_SESSION_PDR_LOOKUP_XDP_USER_H__
 
 #include <memory>
 #include <map>
-#include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_skel.h>
+#include <pfcp_session_pdr_lookup_xdp_kernel_skel.h>
 #include <ProgramLifeCycle.hpp>
 
 using PFCP_Session_PDR_LookupProgramLifeCycle =
-    ProgramLifeCycle<pfcp_session_pdr_lookup_ebpf_xdp_prgrm_kernel_c>;
+    ProgramLifeCycle<pfcp_session_pdr_lookup_xdp_kernel_c>;
 
 class BPFMaps;
 class BPFMap;
@@ -160,4 +160,4 @@ class PFCP_Session_PDR_LookupProgram {
   // The UDP interface.
   std::string mUDPInterface;
 };
-#endif  // __PFCP_SESSION_PDR_LOOKUP_EBPF_XDP_PRGRM_USER_H__
+#endif  // __PFCP_SESSION_PDR_LOOKUP_XDP_USER_H__

@@ -46,11 +46,13 @@ class ProgramLifeCycle {
    *
    */
   virtual ~ProgramLifeCycle();
+
   /**
    * @brief Open the BPF program.
    *
    */
   BPFSkeletonType* open();
+
   /**
    * @brief Load the BPF program.
    *
@@ -60,6 +62,7 @@ class ProgramLifeCycle {
    * @brief Attach the BPF program.
    *
    */
+
   void attach();
   /**
    * @brief Link The BPF XDP program.
@@ -67,7 +70,9 @@ class ProgramLifeCycle {
    * See RedHat presentation.
    *
    */
+
   void link(std::string sectionName, std::string interface);
+
   /**
    * @brief Destroy the BPF program.
    *

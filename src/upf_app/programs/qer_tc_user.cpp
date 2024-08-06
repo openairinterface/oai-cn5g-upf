@@ -1,4 +1,4 @@
-#include "qer_ebpf_tc_prgrm_user.h"
+#include "qer_tc_user.h"
 #include <SessionManager.h>
 #include <bpf/bpf.h>     // bpf calls
 #include <bpf/libbpf.h>  // bpf wrappers
@@ -16,12 +16,17 @@
 #include <NetlinkManager.h>
 #include "standardized_5qi.h"
 #include "helpers/GetNicInformation.hpp"
+#include "helpers/CmdRunner.hpp"
 //#include "standardized_5qi_qos_mapping.h"
 //#include "qer_maps.h"
 
 #ifndef HTB_SCHEDULER
 #define HTB_SCHEDULER "htb"
 #endif  // HTB_SCHEDULER
+
+#ifndef DEFAULT_QFI
+#define DEFAULT_QFI 5
+#endif  // DEFAULT_QFI
 
 const u32 QI_1  = 1;
 const u32 QI_2  = 2;
@@ -93,8 +98,8 @@ const QosFlowParams FIVE_QI_86 = {DELAY_CRITICAL_GBR, 18, 5, 1e-4, 0, 0000};
 /*---------------------------------------------------------------------------------------------------------------*/
 QERProgram::QERProgram() : BPFProgram() {
   mpLifeCycle = std::make_shared<QERProgramLifeCycle>(
-      qer_ebpf_tc_prgrm_kernel_c__open, qer_ebpf_tc_prgrm_kernel_c__load,
-      qer_ebpf_tc_prgrm_kernel_c__attach, qer_ebpf_tc_prgrm_kernel_c__destroy);
+      qer_tc_kernel_c__open, qer_tc_kernel_c__load, qer_tc_kernel_c__attach,
+      qer_tc_kernel_c__destroy);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -122,26 +127,6 @@ void QERProgram::storeQosFlow(std::shared_ptr<pfcp::pfcp_qer> pQer) {
 
   getQoSFlowMap()->update(qer_id, fiveFlow, BPF_ANY);
 }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-/*
- *  Save the different QFI values for all QoS
- *  Flows belonging to the same PDU Session
- */
-// void QERProgram::setQosFlowsQfis(std::shared_ptr<pfcp::pfcp_qer> pQer) {
-//   struct s_fiveQosFlow* qosFlow;
-//     qosFlow->gate = qfis[i]->gate;
-
-//     qosFlow->mbr.dl_mbr = qfis[i]->mbr.dl_mbr;
-//     qosFlow->mbr.ul_mbr = qfis[i]->mbr.ul_mbr;
-
-//     qosFlow->gbr.dl_gbr = qfis[i]->gbr.dl_gbr;
-//     qosFlow->gbr.ul_gbr = qfis[i]->gbr.ul_gbr;
-
-//     qosFlow->qfi = qfis[i]->qfi;
-
-//     qosFlowsQfis.push_back(qosFlow);
-//   }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // Method definition to initialize class_params
@@ -177,7 +162,7 @@ void QERProgram::setQosFlowsClassesAttributes() {
     struct classParams* classAtt = new classParams();
 
     classAtt->scheduler = pduSessionClassAtt->scheduler;
-    if (qosFlowsQfis[i].qfi != 5) {
+    if (qosFlowsQfis[i].qfi != DEFAULT_QFI) {
       classAtt->rate     = qosFlowsQfis[i].gbr.dl_gbr;
       classAtt->ceil     = qosFlowsQfis[i].mbr.dl_mbr;
       classAtt->burst    = 0;
@@ -237,6 +222,20 @@ void QERProgram::setQosFlowsClassesPositions() {
         "HTB Class Position  %d:%d", classPos->childMaj, classPos->childMin);
   }
 }
+/*---------------------------------------------------------------------------------------------------------------*/
+
+bool no_htb_root_qdisc(std::string interface) {
+  std::string cmd = {};
+  uint32_t ret    = 0;
+
+  cmd = fmt::format(
+      "tc qdisc show dev {} | awk '/htb/ {found=1; print 1} END {if (!found) "
+      "print 0}'",
+      interface);
+  ret = std::stoi(CmdRunner::exec(cmd).c_str());
+
+  return ret ? true : false;
+}
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void QERProgram::setup(
@@ -248,6 +247,10 @@ void QERProgram::setup(
   mpLifeCycle->attach();
 
   savedQers = pQer;
+
+  std::string cmd = {};
+  int rc          = 0;
+  int if_index    = 0;
 
   auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
   auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
@@ -262,42 +265,43 @@ void QERProgram::setup(
   setPduSessionClassPosition(seid);
   setQosFlowsClassesPositions();
 
-  struct nl_sock* socket = nullptr;
-  struct rtnl_link* link = nullptr;
-
-  if (!(socket = NetlinkManager::getInstance(gtpInterface).getSocket())) {
-    Logger::upf_app().debug("Unable to retrieve existing socket");
-    exit(EXIT_FAILURE);
+  if (no_htb_root_qdisc(gtpInterface)) {
+    cmd = fmt::format(
+        "tc qdisc add dev {} root handle 1:0 htb default {}", gtpInterface,
+        DEFAULT_QFI);
+    rc = system((const char*) cmd.c_str());
   }
 
-  if (!(link = NetlinkManager::getInstance(gtpInterface).getLink())) {
-    Logger::upf_app().debug("Unable to retrieve existing link");
-    exit(EXIT_FAILURE);
-  }
-
-  if (!classPduSession) {
-    if (!(classPduSession = qdiscHelper.createClass(socket))) {
-      Logger::upf_app().debug("Unable to create a pduSession Qdisc Class");
-      exit(EXIT_FAILURE);
-    }
-
-    qdiscHelper.configureParentClass(
-        socket, link, classPduSession, pduSessionClassAtt, pduSessionClassPos);
-  }
+  cmd = fmt::format(
+      "tc class add dev {} parent 1:0 classid 1:{} htb rate {}", gtpInterface,
+      seid, pduSessionClassAtt->rate);
+  rc = system((const char*) cmd.c_str());
 
   for (int i = 0; i < qosFlowsClassesAtt.size(); i++) {
-    struct rtnl_class* qfiFlowClass;
-
-    if (!(qfiFlowClass = qdiscHelper.createClass(socket))) {
-      Logger::upf_app().debug("Unable to create a QFI_FLOW Qdisc Class");
-      // exit(EXIT_FAILURE);
-    }
-
-    classesQfiFlows.push_back(qfiFlowClass);
-    qdiscHelper.configureLeafClass(
-        socket, link, classesQfiFlows[i], qosFlowsClassesAtt[i],
-        pduSessionClassAtt, qosFlowsClassesPos[i]);
+    cmd = fmt::format(
+        "tc class add dev {} parent 1:{} classid {}:{} htb rate {} ceil {}",
+        gtpInterface, seid, seid, qosFlowsClassesPos[i]->childMin,
+        qosFlowsClassesAtt[i]->rate, qosFlowsClassesAtt[i]->ceil);
+    rc = system((const char*) cmd.c_str());
   }
+
+  cmd = fmt::format("tc qdisc add dev {} clsact", gtpInterface);
+  rc  = system((const char*) cmd.c_str());
+
+  cmd = fmt::format(
+      "tc filter add dev {} ingress parent 1:0 bpf obj "
+      "/sys/fs/bpf/qer_tc_kernel sec tc_classify ",
+      gtpInterface);
+  rc = system((const char*) cmd.c_str());
+
+  cmd = fmt::format("tc qdisc add dev {} clsact", udpInterface);
+  rc  = system((const char*) cmd.c_str());
+
+  cmd = fmt::format(
+      "tc filter add dev {} egress bpf obj /sys/fs/bpf/qer_tc_kernel sec "
+      "tc_forward",
+      udpInterface);
+  rc = system((const char*) cmd.c_str());
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -308,29 +312,6 @@ void QERProgram::setup() {
   mpLifeCycle->attach();
   insertValuesIntoMaps();
 }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-/*
- *  Save the Identifiers of the PDU Session:
- *  Seid,  teidUl,  teidDl
- */
-// void QERProgram::setPduSessionIds(uint64_t seid, struct gtpUTunnel*
-// gtpTunnel) {
-//   pduSession->seid   = seid;
-//   pduSession->teidUl = gtpTunnel->teidUl;
-//   pduSession->teidDl = gtpTunnel->teidDl;
-// }
-
-// void QERProgram::set_pduSession_ids(uint64_t seid) {
-//   pduSession->seid = seid;
-//   struct gtpUTunnel gtpTunnel={};
-
-//   if ((gtpTunnel = bpf_map_lookup_elem(&m_gtpUTunnel, &seid))){
-//     pduSession->teidUl = gtpTunnel->teidUl;
-//     pduSession->teidDl = gtpTunnel->teidDl;
-//   }
-
-// }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMaps> QERProgram::getMaps() {
@@ -378,7 +359,7 @@ void QERProgram::initializeMaps() {
   // mpFilterMap     = std::make_shared<BPFMap>(mpMaps->getMap("m_filter"));
   mp5GQoSFlowParamsMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_5g_qos_flow_parameters"));
-  mpQoSFlowMap = std::make_shared<BPFMap>(mpMaps->getMap("m_qos_flow"));
+  mpQoSFlowMap   = std::make_shared<BPFMap>(mpMaps->getMap("m_qos_flow"));
   mpSdfFilterMap = std::make_shared<BPFMap>(mpMaps->getMap("m_sdf_filter"));
 }
 

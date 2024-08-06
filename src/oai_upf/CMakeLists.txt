@@ -348,10 +348,10 @@ target_link_libraries (upf
   UDP
   GTPV1U
   PFCP
-  far_ebpf_xdp
-  pfcp_session_pdr_lookup_ebpf_xdp
-  pfcp_session_lookup_ebpf_xdp
-  qer_ebpf_tc
+  far_xdp
+  pfcp_session_pdr_lookup_xdp
+  pfcp_session_lookup_xdp
+  qer_tc
   UPF_XDP
   UPF_TC
   gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group
