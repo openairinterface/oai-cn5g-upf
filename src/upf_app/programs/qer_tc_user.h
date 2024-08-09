@@ -103,12 +103,8 @@ class QERProgram : public BPFProgram {
   std::shared_ptr<BPFMap> getQERMap() const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  /**
-   * @brief Get the Egress Interface Map object.
-   *
-   * @return std::shared_ptr<BPFMap> The egress interface map.
-   */
-  std::shared_ptr<BPFMap> getEgressInterfaceMap() const;
+
+  std::shared_ptr<BPFMap> getEgressIfindexMap() const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -135,6 +131,8 @@ class QERProgram : public BPFProgram {
   /*---------------------------------------------------------------------------------------------------------------*/
 
   std::shared_ptr<BPFMap> getQoSFlowMap() const;
+
+  std::shared_ptr<BPFMap> getEgressInterfaceMap() const;
   /*---------------------------------------------------------------------------------------------------------------*/
 
   /**
@@ -243,6 +241,7 @@ class QERProgram : public BPFProgram {
   // The GTP-U Tunnel map.
   std::shared_ptr<BPFMap> mpGtpUTunnelMap;
 
+  std::shared_ptr<BPFMap> mpEgressIfindexMap;
   /*---------------------------------------------------------------------------------------------------------------*/
 
   // The BPF lifecycle program.

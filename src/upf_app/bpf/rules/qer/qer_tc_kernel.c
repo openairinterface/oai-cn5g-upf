@@ -32,7 +32,7 @@
 
 #define MARK_VALUE 0x12345678  // Marker value to match
 #define OFFSET 0               // Example offset where marker is stored
-
+#define TARGET_INTF 644
 /*---------------------------------------------------------------------------------------------------------------*/
 /**
  * @brief Filter the Uplink traffic
@@ -217,7 +217,7 @@ sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
-SEC("tc_classify")
+SEC("classifier/cls_filter")
 int cls_filter(struct __sk_buff* skb) {
   bpf_debug("==========< QER Rules >==========\n");
 
@@ -254,12 +254,22 @@ int cls_filter(struct __sk_buff* skb) {
   return sdf_filter(skb, ethh);
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+// /*---------------------------------------------------------------------------------------------------------------*/
 
-SEC("tc_forward")
+SEC("classifier/tc_redirect")
 int tc_redirect(struct __sk_buff* skb) {
-  bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer");
-  return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+  int key = DOWNLINK, *ifindex;
+
+  // return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+
+  /* Lookup what ifindex to redirect packets to */
+  ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
+  if (ifindex) {
+    bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer");
+    return bpf_redirect(*ifindex, 0);
+  }
+  bpf_debug("TC Packets not redirected! Drop them");
+  return TC_ACT_SHOT;
 }
 
 char _license[] SEC("license") = "GPL";

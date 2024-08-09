@@ -223,11 +223,6 @@ int far_entry_point(struct xdp_md* ctx) {
       return XDP_DROP;
     }
 
-    if (!p_far) {
-      bpf_debug("Invalid FAR!");
-      return XDP_DROP;
-    }
-
     // Check if it is a forward action.
     u8 dest_interface =
         p_far->forwarding_parameters.destination_interface.interface_value;
@@ -280,9 +275,24 @@ int far_entry_point(struct xdp_md* ctx) {
 
     } else if (dest_interface == INTERFACE_VALUE_ACCESS) {
       create_outer_header_gtpu_ipv4(ctx, p_far);
-      //return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
-      bpf_debug("Packet is redirected to socket for transmission to AN ...");
-      return XDP_PASS;
+
+      uint32_t far_id_key = p_far->far_id.far_id;
+      uint32_t* enforcing_qos =
+          bpf_map_lookup_elem(&m_enforcing_qos, &far_id_key);
+      if (enforcing_qos) {
+        switch (*enforcing_qos) {
+          case 0: {
+            bpf_debug("The packet is redirected to N3 interface");
+            return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+          }
+          case 1: {
+            bpf_debug("The packet is passed to tc layer");
+            return XDP_PASS;
+          }
+          default: {
+          }
+        }
+      }
     }
   }
 

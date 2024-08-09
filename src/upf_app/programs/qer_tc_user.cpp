@@ -24,76 +24,31 @@
 #define HTB_SCHEDULER "htb"
 #endif  // HTB_SCHEDULER
 
+#ifndef UDP_INTERFACE
+#define UDP_INTERFACE UserPlaneComponent::getInstance().getUDPInterface()
+#endif  // UDP_INTERFACE
+
+#ifndef GTP_INTERFACE
+#define GTP_INTERFACE UserPlaneComponent::getInstance().getGTPInterface()
+#endif  // GTP_INTERFACE
+
+#ifndef DEFAULT_RATE
+#define DEFAULT_RATE NicInformationGetter::retrieveRate(GTP_INTERFACE)
+#ifndef MAX_RATE
+#define MAX_RATE DEFAULT_RATE
+#endif  // MAX_RATE
+#endif  // DEFAULT_RATE
+
+#ifndef DEFAULT_CEIL
+#define DEFAULT_CEIL NicInformationGetter::retrieveCeil(GTP_INTERFACE)
+#ifndef MAX_CEIL
+#define MAX_CEIL DEFAULT_CEIL
+#endif  // MAX_CEIL
+#endif  // DEFAULT_CEIL
+
 #ifndef DEFAULT_QFI
 #define DEFAULT_QFI 5
 #endif  // DEFAULT_QFI
-
-const u32 QI_1  = 1;
-const u32 QI_2  = 2;
-const u32 QI_3  = 3;
-const u32 QI_4  = 4;
-const u32 QI_5  = 5;
-const u32 QI_6  = 6;
-const u32 QI_7  = 7;
-const u32 QI_8  = 8;
-const u32 QI_9  = 9;
-const u32 QI_65 = 65;
-const u32 QI_66 = 66;
-const u32 QI_67 = 67;
-const u32 QI_69 = 69;
-const u32 QI_70 = 70;
-const u32 QI_71 = 71;
-const u32 QI_72 = 72;
-const u32 QI_73 = 73;
-const u32 QI_74 = 74;
-const u32 QI_75 = 75;
-const u32 QI_76 = 76;
-const u32 QI_79 = 79;
-const u32 QI_80 = 80;
-const u32 QI_82 = 82;
-const u32 QI_83 = 83;
-const u32 QI_84 = 84;
-const u32 QI_85 = 85;
-const u32 QI_86 = 86;
-// Define the global QosFlowParams instances
-/*
- * GBR
- */
-const QosFlowParams FIVE_QI_1  = {GBR, 20, 100, 1e-2, 0, 2000};
-const QosFlowParams FIVE_QI_2  = {GBR, 40, 150, 1e-3, 0, 2000};
-const QosFlowParams FIVE_QI_3  = {GBR, 30, 50, 1e-3, 0, 2000};
-const QosFlowParams FIVE_QI_4  = {GBR, 50, 300, 1e-6, 0, 2000};
-const QosFlowParams FIVE_QI_65 = {GBR, 7, 75, 1e-2, 0, 2000};
-const QosFlowParams FIVE_QI_66 = {GBR, 20, 100, 1e-2, 0, 2000};
-const QosFlowParams FIVE_QI_67 = {GBR, 15, 100, 1e-3, 0, 2000};
-const QosFlowParams FIVE_QI_71 = {GBR, 56, 150, 1e-6, 0, 2000};
-const QosFlowParams FIVE_QI_72 = {GBR, 56, 300, 1e-4, 0, 2000};
-const QosFlowParams FIVE_QI_73 = {GBR, 56, 300, 1e-8, 0, 2000};
-const QosFlowParams FIVE_QI_74 = {GBR, 56, 500, 1e-8, 0, 2000};
-const QosFlowParams FIVE_QI_75 = {GBR, 00, 000, 0000, 0, 0000};
-const QosFlowParams FIVE_QI_76 = {GBR, 56, 500, 1e-4, 0, 2000};
-
-/*
- * Non-GBR
- */
-const QosFlowParams FIVE_QI_5  = {NON_GBR, 10, 100, 1e-6, 0, 0};
-const QosFlowParams FIVE_QI_6  = {NON_GBR, 60, 300, 1e-6, 0, 0};
-const QosFlowParams FIVE_QI_7  = {NON_GBR, 70, 100, 1e-3, 0, 0};
-const QosFlowParams FIVE_QI_8  = {NON_GBR, 80, 300, 1e-6, 0, 0};
-const QosFlowParams FIVE_QI_9  = {NON_GBR, 90, 300, 1e-6, 0, 0};
-const QosFlowParams FIVE_QI_69 = {NON_GBR, 5, 60, 1e-6, 0, 0};
-const QosFlowParams FIVE_QI_70 = {NON_GBR, 55, 200, 1e-6, 0, 0};
-const QosFlowParams FIVE_QI_79 = {NON_GBR, 65, 50, 1e-2, 0, 0};
-const QosFlowParams FIVE_QI_80 = {NON_GBR, 68, 10, 1e-6, 0, 0};
-
-/*
- * Delay Critical GBR
- */
-const QosFlowParams FIVE_QI_82 = {DELAY_CRITICAL_GBR, 19, 10, 1e-4, 0, 0000};
-const QosFlowParams FIVE_QI_83 = {DELAY_CRITICAL_GBR, 22, 10, 1e-4, 0, 2000};
-const QosFlowParams FIVE_QI_84 = {DELAY_CRITICAL_GBR, 24, 30, 1e-5, 0, 2000};
-const QosFlowParams FIVE_QI_85 = {DELAY_CRITICAL_GBR, 21, 5, 1e-5, 0, 2000};
-const QosFlowParams FIVE_QI_86 = {DELAY_CRITICAL_GBR, 18, 5, 1e-4, 0, 0000};
 
 /*---------------------------------------------------------------------------------------------------------------*/
 QERProgram::QERProgram() : BPFProgram() {
@@ -129,99 +84,102 @@ void QERProgram::storeQosFlow(std::shared_ptr<pfcp::pfcp_qer> pQer) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+// // Method definition to initialize class_params
+// void QERProgram::setPduSessionClassAttributes(
+//     const char* qdiscScheduler, std::string interface) {
+//   NicInformationGetter nicConfiguration;
+//   // Initialize classAtt members
+//   pduSessionClassAtt            = new classParams();
+//   pduSessionClassAtt->scheduler = qdiscScheduler;
+//   pduSessionClassAtt->rate      =
+//   NicInformationGetter::retrieveRate(interface); pduSessionClassAtt->ceil =
+//   NicInformationGetter::retrieveCeil(interface); pduSessionClassAtt->burst =
+//   NicInformationGetter::retrieveBurst(interface); pduSessionClassAtt->cburst
+//   = NicInformationGetter::retrieveCBurst(interface);
+//   pduSessionClassAtt->priority  = -1;
+
+//   Logger::upf_app().debug(
+//       "QDISC Root Rate (GBR) : %d", pduSessionClassAtt->rate);
+//   Logger::upf_app().debug(
+//       "QDISC Root Ceil (MBR) : %d", pduSessionClassAtt->ceil);
+//   Logger::upf_app().debug(
+//       "QDISC Root Burst      : %d", pduSessionClassAtt->burst);
+//   Logger::upf_app().debug(
+//       "QDISC Root CBurst     : %d", pduSessionClassAtt->cburst);
+//   Logger::upf_app().debug(
+//       "QDISC Root Priority   : %d", pduSessionClassAtt->priority);
+// }
+
+/*---------------------------------------------------------------------------------------------------------------*/
 // Method definition to initialize class_params
-void QERProgram::setPduSessionClassAttributes(
-    const char* qdiscScheduler, std::string interface) {
-  NicInformationGetter nicConfiguration;
-  // Initialize classAtt members
-  pduSessionClassAtt            = new classParams();
-  pduSessionClassAtt->scheduler = qdiscScheduler;
-  pduSessionClassAtt->rate      = nicConfiguration.retrieveRate(interface);
-  pduSessionClassAtt->ceil      = nicConfiguration.retrieveCeil(interface);
-  pduSessionClassAtt->burst     = nicConfiguration.retrieveBurst(interface);
-  pduSessionClassAtt->cburst    = nicConfiguration.retrieveCBurst(interface);
-  pduSessionClassAtt->priority  = -1;
+// void QERProgram::setQosFlowsClassesAttributes() {
+//   for (int i = 0; i < savedQers.size() && i < qosFlowsQfis.size(); ++i) {
+//     const auto& qer              = savedQers[i];
+//     struct classParams* classAtt = new classParams();
 
-  Logger::upf_app().debug(
-      "QDISC Root Rate (GBR) : %d", pduSessionClassAtt->rate);
-  Logger::upf_app().debug(
-      "QDISC Root Ceil (MBR) : %d", pduSessionClassAtt->ceil);
-  Logger::upf_app().debug(
-      "QDISC Root Burst      : %d", pduSessionClassAtt->burst);
-  Logger::upf_app().debug(
-      "QDISC Root CBurst     : %d", pduSessionClassAtt->cburst);
-  Logger::upf_app().debug(
-      "QDISC Root Priority   : %d", pduSessionClassAtt->priority);
-}
+//     classAtt->scheduler = pduSessionClassAtt->scheduler;
+//     if (qosFlowsQfis[i].qfi != DEFAULT_QFI) {
+//       classAtt->rate     = qosFlowsQfis[i].gbr.dl_gbr;
+//       classAtt->ceil     = qosFlowsQfis[i].mbr.dl_mbr;
+//       classAtt->burst    = 0;
+//       classAtt->cburst   = 0;
+//       classAtt->priority = -1;
+//     } else {
+//       classAtt->rate     = 100;
+//       classAtt->ceil     = 200;
+//       classAtt->burst    = 0;
+//       classAtt->cburst   = 0;
+//       classAtt->priority = -1;
+//     }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-// Method definition to initialize class_params
-void QERProgram::setQosFlowsClassesAttributes() {
-  for (int i = 0; i < savedQers.size() && i < qosFlowsQfis.size(); ++i) {
-    const auto& qer              = savedQers[i];
-    struct classParams* classAtt = new classParams();
+//     qosFlowsClassesAtt.push_back(classAtt);
 
-    classAtt->scheduler = pduSessionClassAtt->scheduler;
-    if (qosFlowsQfis[i].qfi != DEFAULT_QFI) {
-      classAtt->rate     = qosFlowsQfis[i].gbr.dl_gbr;
-      classAtt->ceil     = qosFlowsQfis[i].mbr.dl_mbr;
-      classAtt->burst    = 0;
-      classAtt->cburst   = 0;
-      classAtt->priority = -1;
-    } else {
-      classAtt->rate     = 100;
-      classAtt->ceil     = 200;
-      classAtt->burst    = 0;
-      classAtt->cburst   = 0;
-      classAtt->priority = -1;
-    }
+//     Logger::upf_app().debug(
+//         "    HTB Class ID (QER) ........... %d",
+//         savedQers[i]->qer_id.second.qer_id);
+//     Logger::upf_app().debug("         Class QFI:      %d",
+//     qosFlowsQfis[i].qfi); Logger::upf_app().debug("         Class Rate:
+//     %dkbps", classAtt->rate); Logger::upf_app().debug("         Class Ceil:
+//     %dkbps", classAtt->ceil); Logger::upf_app().debug("         Class Burst:
+//     %d", classAtt->burst); Logger::upf_app().debug("         Class CBurst:
+//     %d", classAtt->cburst); Logger::upf_app().debug("         Class Priority:
+//     %d", classAtt->priority);
+//   }
+// }
 
-    qosFlowsClassesAtt.push_back(classAtt);
+// /*---------------------------------------------------------------------------------------------------------------*/
+// // Method definition to set pduSession class position
+// void QERProgram::setPduSessionClassPosition(uint64_t seid) {
+//   pduSessionClassPos            = new classPosition();
+//   pduSessionClassPos->parentMaj = 1;
+//   pduSessionClassPos->parentMin = 0;
+//   pduSessionClassPos->childMaj  = 1;
+//   pduSessionClassPos->childMin  = seid;
+// }
 
-    Logger::upf_app().debug(
-        "    HTB Class ID (QER) ........... %d",
-        savedQers[i]->qer_id.second.qer_id);
-    Logger::upf_app().debug("         Class QFI:      %d", qosFlowsQfis[i].qfi);
-    Logger::upf_app().debug("         Class Rate:     %dkbps", classAtt->rate);
-    Logger::upf_app().debug("         Class Ceil:     %dkbps", classAtt->ceil);
-    Logger::upf_app().debug("         Class Burst:    %d", classAtt->burst);
-    Logger::upf_app().debug("         Class CBurst:   %d", classAtt->cburst);
-    Logger::upf_app().debug("         Class Priority: %d", classAtt->priority);
-  }
-}
+// /*---------------------------------------------------------------------------------------------------------------*/
+// // Method definition to set pduSession class position
+// void QERProgram::setQosFlowsClassesPositions() {
+//   for (int i = 0; i < qosFlowsQfis.size(); i++) {
+//     struct classPosition* classPos = new classPosition();
 
-/*---------------------------------------------------------------------------------------------------------------*/
-// Method definition to set pduSession class position
-void QERProgram::setPduSessionClassPosition(uint64_t seid) {
-  pduSessionClassPos            = new classPosition();
-  pduSessionClassPos->parentMaj = 1;
-  pduSessionClassPos->parentMin = 0;
-  pduSessionClassPos->childMaj  = 1;
-  pduSessionClassPos->childMin  = seid;
-}
+//     classPos->parentMaj = pduSessionClassPos->parentMaj;
+//     classPos->parentMin = pduSessionClassPos->parentMin;
+//     classPos->childMaj  = pduSessionClassPos->childMin;
+//     classPos->childMin  = qosFlowsQfis[i].qfi;
 
-/*---------------------------------------------------------------------------------------------------------------*/
-// Method definition to set pduSession class position
-void QERProgram::setQosFlowsClassesPositions() {
-  for (int i = 0; i < qosFlowsQfis.size(); i++) {
-    struct classPosition* classPos = new classPosition();
+//     qosFlowsClassesPos.push_back(classPos);
 
-    classPos->parentMaj = pduSessionClassPos->parentMaj;
-    classPos->parentMin = pduSessionClassPos->parentMin;
-    classPos->childMaj  = pduSessionClassPos->childMin;
-    classPos->childMin  = qosFlowsQfis[i].qfi;
-
-    qosFlowsClassesPos.push_back(classPos);
-
-    Logger::upf_app().debug(
-        "QDISC Root Position: %d:%d", classPos->parentMaj, classPos->parentMin);
-    Logger::upf_app().debug(
-        "QDISC Root-Child Position: %d:%d", classPos->childMaj,
-        classPos->childMin);
-    Logger::upf_app().debug(
-        "HTB Class Position  %d:%d", classPos->childMaj, classPos->childMin);
-  }
-}
+//     Logger::upf_app().debug(
+//         "QDISC Root Position: %d:%d", classPos->parentMaj,
+//         classPos->parentMin);
+//     Logger::upf_app().debug(
+//         "QDISC Root-Child Position: %d:%d", classPos->childMaj,
+//         classPos->childMin);
+//     Logger::upf_app().debug(
+//         "HTB Class Position  %d:%d", classPos->childMaj, classPos->childMin);
+//   }
+// }
 /*---------------------------------------------------------------------------------------------------------------*/
 
 bool no_htb_root_qdisc(std::string interface) {
@@ -229,12 +187,11 @@ bool no_htb_root_qdisc(std::string interface) {
   uint32_t ret    = 0;
 
   cmd = fmt::format(
-      "tc qdisc show dev {} | awk '/htb/ {found=1; print 1} END {if (!found) "
-      "print 0}'",
+      "tc qdisc show dev {} | awk '/htb/ {{found=1; print 1}} END {{if "
+      "(!found) print 0}}'",
       interface);
   ret = std::stoi(CmdRunner::exec(cmd).c_str());
-
-  return ret ? true : false;
+  return ret ? false : true;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -246,62 +203,134 @@ void QERProgram::setup(
   mpLifeCycle->load();
   mpLifeCycle->attach();
 
-  savedQers = pQer;
+  // savedQers = pQer;
 
   std::string cmd = {};
   int rc          = 0;
   int if_index    = 0;
 
-  auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
-  auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
+  uint32_t udpInterfaceIndex = if_nametoindex(UDP_INTERFACE.c_str());
+  uint32_t gtpInterfaceIndex = if_nametoindex(GTP_INTERFACE.c_str());
+  uint32_t uplinkId          = static_cast<uint32_t>(FlowDirection::UPLINK);
+  uint32_t downlinkId        = static_cast<uint32_t>(FlowDirection::DOWNLINK);
+  mpEgressIfindexMap->update(uplinkId, udpInterfaceIndex, BPF_ANY);
+  mpEgressIfindexMap->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
 
-  for (const auto& qer : pQer) {
-    storeQosFlow(qer);
-  }
-
-  setPduSessionClassAttributes(HTB_SCHEDULER, gtpInterface);
-  setQosFlowsClassesAttributes();
-
-  setPduSessionClassPosition(seid);
-  setQosFlowsClassesPositions();
-
-  if (no_htb_root_qdisc(gtpInterface)) {
+  if (no_htb_root_qdisc(GTP_INTERFACE)) {
+    Logger::upf_app().info(
+        "Creating Root qdisc on interface %s", GTP_INTERFACE.c_str());
     cmd = fmt::format(
-        "tc qdisc add dev {} root handle 1:0 htb default {}", gtpInterface,
+        "tc qdisc add dev {} root handle 1:0 htb default {}", GTP_INTERFACE,
         DEFAULT_QFI);
     rc = system((const char*) cmd.c_str());
   }
 
+  Logger::upf_app().info("Create PDU Session Class 1:%d", seid);
   cmd = fmt::format(
-      "tc class add dev {} parent 1:0 classid 1:{} htb rate {}", gtpInterface,
-      seid, pduSessionClassAtt->rate);
+      "tc class add dev {} parent 1:0 classid 1:{} htb rate {}", GTP_INTERFACE,
+      seid, MAX_RATE);
   rc = system((const char*) cmd.c_str());
 
-  for (int i = 0; i < qosFlowsClassesAtt.size(); i++) {
+  Logger::upf_app().debug("QDISC Root Rate (GBR) : %dMbps", MAX_RATE);
+  Logger::upf_app().debug("QDISC Root Ceil (MBR) : %dMbps", MAX_CEIL);
+
+  for (const auto& qer : pQer) {
+    Logger::upf_app().error("======================================0");
+    if (qer == nullptr) {
+      Logger::upf_app().error(
+          "======================================1111111111111111111111");
+      continue;
+    }
+    uint8_t qfi = qer->qfi.second.qfi;
+    Logger::upf_app().error("======================================1");
+    uint64_t dl_rate = DEFAULT_RATE;
+    uint64_t dl_ceil = DEFAULT_CEIL;
+    uint64_t ul_rate = DEFAULT_RATE;
+    uint64_t ul_ceil = DEFAULT_CEIL;
+    Logger::upf_app().error("======================================2");
+    uint32_t qer_id = qer->qer_id.second.qer_id;
+    Logger::upf_app().error("======================================3");
+    uint8_t dl_gate = 0;
+    uint8_t ul_gate = 0;
+
+    if (qfi != DEFAULT_QFI) {
+      Logger::upf_app().error("======================================4");
+      dl_rate = qer->gbr.second.dl_gbr;
+      ul_rate = qer->gbr.second.ul_gbr;
+
+      dl_ceil = qer->mbr.second.dl_mbr;
+      ul_ceil = qer->mbr.second.ul_mbr;
+
+      dl_gate = qer->gate_status.second.dl_gate;
+      ul_gate = qer->gate_status.second.ul_gate;
+    }
+    Logger::upf_app().error("======================================5");
+    struct s_fiveQosFlow fiveFlow;
+    memset(&fiveFlow, 0, sizeof(struct s_fiveQosFlow));
+
+    fiveFlow.gate.dl_gate = dl_gate;
+    fiveFlow.gate.ul_gate = ul_gate;
+    fiveFlow.gbr.dl_gbr   = dl_rate;
+    fiveFlow.gbr.ul_gbr   = ul_rate;
+    fiveFlow.mbr.dl_mbr   = dl_ceil;
+    fiveFlow.mbr.ul_mbr   = ul_ceil;
+
+    fiveFlow.qfi = qfi;
+    Logger::upf_app().error("======================================6");
+    getQoSFlowMap()->update(qer_id, fiveFlow, BPF_ANY);
+
     cmd = fmt::format(
         "tc class add dev {} parent 1:{} classid {}:{} htb rate {} ceil {}",
-        gtpInterface, seid, seid, qosFlowsClassesPos[i]->childMin,
-        qosFlowsClassesAtt[i]->rate, qosFlowsClassesAtt[i]->ceil);
+        GTP_INTERFACE, seid, seid, qfi, dl_rate, dl_ceil);
     rc = system((const char*) cmd.c_str());
+
+    Logger::upf_app().debug("    HTB Class ID (QER) ........... %d", qer_id);
+    Logger::upf_app().debug("         Class QFI:      %d", qfi);
+    Logger::upf_app().debug("         Class Rate:     %dkbps", dl_rate);
+    Logger::upf_app().debug("         Class Ceil:     %dkbps", dl_ceil);
   }
 
-  cmd = fmt::format("tc qdisc add dev {} clsact", gtpInterface);
+  cmd = fmt::format("tc qdisc add dev {} clsact", GTP_INTERFACE);
   rc  = system((const char*) cmd.c_str());
 
   cmd = fmt::format(
       "tc filter add dev {} ingress parent 1:0 bpf obj "
-      "/sys/fs/bpf/qer_tc_kernel sec tc_classify ",
-      gtpInterface);
+      "/sys/fs/bpf/qer_tc_kernel sec classifier/cls_filter",
+      GTP_INTERFACE);
   rc = system((const char*) cmd.c_str());
 
-  cmd = fmt::format("tc qdisc add dev {} clsact", udpInterface);
+  cmd = fmt::format("tc qdisc add dev {} clsact", UDP_INTERFACE);
   rc  = system((const char*) cmd.c_str());
 
   cmd = fmt::format(
-      "tc filter add dev {} egress bpf obj /sys/fs/bpf/qer_tc_kernel sec "
-      "tc_forward",
-      udpInterface);
+      "tc filter add dev {} egress bpf obj /sys/fs/bpf/qer_udp_tc_kernel sec "
+      "classifier/tc_redirect",
+      UDP_INTERFACE);
   rc = system((const char*) cmd.c_str());
+
+  // for (int i = 0; i < qosFlowsClassesAtt.size(); i++) {
+  //   cmd = fmt::format(
+  //       "tc class add dev {} parent 1:{} classid {}:{} htb rate {} ceil {}",
+  //       gtpInterface, seid, seid, qosFlowsClassesPos[i]->childMin,
+  //       qosFlowsClassesAtt[i]->rate, qosFlowsClassesAtt[i]->ceil);
+  //   rc = system((const char*) cmd.c_str());
+  // }
+  // cmd = fmt::format("tc qdisc add dev {} clsact", gtpInterface);
+  // rc  = system((const char*) cmd.c_str());
+
+  // cmd = fmt::format(
+  //     "tc filter add dev {} ingress parent 1:0 bpf obj "
+  //     "/sys/fs/bpf/qer_tc_kernel sec classifier/cls_filter",
+  //     gtpInterface);
+  // rc = system((const char*) cmd.c_str());
+
+  // cmd = fmt::format("tc qdisc add dev {} clsact", udpInterface);
+  // rc  = system((const char*) cmd.c_str());
+
+  // cmd = fmt::format(
+  //     "tc filter add dev {} egress bpf obj /sys/fs/bpf/qer_udp_tc_kernel sec
+  //     " "classifier/tc_redirect", udpInterface);
+  // rc = system((const char*) cmd.c_str());
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -310,7 +339,7 @@ void QERProgram::setup() {
   initializeMaps();
   mpLifeCycle->load();
   mpLifeCycle->attach();
-  insertValuesIntoMaps();
+  // insertValuesIntoMaps();
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -346,6 +375,11 @@ std::shared_ptr<BPFMap> QERProgram::getQoSFlowMap() const {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<BPFMap> QERProgram::getEgressIfindexMap() const {
+  return mpEgressIfindexMap;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> QERProgram::getSdfFilterMap() const {
   return mpSdfFilterMap;
 }
@@ -361,35 +395,6 @@ void QERProgram::initializeMaps() {
       std::make_shared<BPFMap>(mpMaps->getMap("m_5g_qos_flow_parameters"));
   mpQoSFlowMap   = std::make_shared<BPFMap>(mpMaps->getMap("m_qos_flow"));
   mpSdfFilterMap = std::make_shared<BPFMap>(mpMaps->getMap("m_sdf_filter"));
-}
-
-/*---------------------------------------------------------------------------------------------------------------*/
-void QERProgram::insertValuesIntoMaps() {
-  get5GQoSFlowParamsMap()->update(QI_1, FIVE_QI_1, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_2, FIVE_QI_2, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_3, FIVE_QI_3, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_4, FIVE_QI_4, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_5, FIVE_QI_5, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_6, FIVE_QI_6, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_7, FIVE_QI_7, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_8, FIVE_QI_8, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_9, FIVE_QI_9, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_65, FIVE_QI_65, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_66, FIVE_QI_66, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_67, FIVE_QI_67, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_69, FIVE_QI_69, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_70, FIVE_QI_70, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_71, FIVE_QI_71, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_72, FIVE_QI_72, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_73, FIVE_QI_73, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_74, FIVE_QI_74, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_75, FIVE_QI_75, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_76, FIVE_QI_76, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_79, FIVE_QI_79, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_80, FIVE_QI_80, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_82, FIVE_QI_82, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_83, FIVE_QI_83, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_84, FIVE_QI_84, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_85, FIVE_QI_85, BPF_ANY);
-  get5GQoSFlowParamsMap()->update(QI_86, FIVE_QI_86, BPF_ANY);
+  mpEgressIfindexMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_egress_ifindex"));
 }

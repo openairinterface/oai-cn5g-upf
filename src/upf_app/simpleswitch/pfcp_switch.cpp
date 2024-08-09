@@ -737,8 +737,6 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             break;
           }
 
-          /*======================================================================*/
-
           /*
            *  Add create_qers
            */
@@ -759,8 +757,6 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
 
             session->create(cr_qer, cause, offending_ie.offending_ie);
           }
-
-          /*======================================================================*/
 
           if (not session->create(
                   cr_pdr, cause, offending_ie.offending_ie, allocated_fteid)) {

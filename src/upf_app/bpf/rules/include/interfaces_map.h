@@ -7,6 +7,15 @@
 #include "interfaces.h"
 
 #define INTERFACE_ENTRIES_MAX 12
+#define MAX_INTERFACES 10
+
+/*---------------------------------------------------------------------------------------------------------------*/
+struct bpf_map_def SEC("maps") m_redirect_interfaces = {
+    .type        = BPF_MAP_TYPE_DEVMAP,
+    .key_size    = sizeof(u32),     // id
+    .value_size  = sizeof(u32),     // tx port
+    .max_entries = MAX_INTERFACES,  // 10,
+};
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct bpf_map_def SEC("maps") m_upf_interfaces = {

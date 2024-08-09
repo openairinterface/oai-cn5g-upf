@@ -13,6 +13,7 @@
 #define QFI_MAX_ENTRIES 5000
 #define FIVE_QI_MAX_ENTRIES 100
 #define QOS_FLOWS_MAX_ENTRIES 100
+#define MAX_INTERFACES 10
 /*---------------------------------------------------------------------------------------------------------------*/
 struct bpf_map_def SEC("maps") m_gtp_u_tunnel = {
     .type        = BPF_MAP_TYPE_HASH,
@@ -26,7 +27,7 @@ struct bpf_map_def SEC("maps") m_sdf_filter = {
     .type = BPF_MAP_TYPE_HASH,
     .key_size =
         sizeof(struct filter_key),  // < src_ip, dst_ip, protocol, dst_port >
-    .value_size  = sizeof(u8),   // QFI
+    .value_size  = sizeof(u8),      // QFI
     .max_entries = QFI_MAX_ENTRIES,
 };
 
@@ -55,6 +56,14 @@ struct bpf_map_def SEC("maps") m_qos_flow = {
     .key_size    = sizeof(u32),  // qer_id
     .value_size  = sizeof(struct s_fiveQosFlow),
     .max_entries = QOS_FLOWS_MAX_ENTRIES,
+};
+
+/*---------------------------------------------------------------------------------------------------------------*/
+struct bpf_map_def SEC("maps") m_egress_ifindex = {
+    .type        = BPF_MAP_TYPE_DEVMAP,
+    .key_size    = sizeof(u32),     // id
+    .value_size  = sizeof(u32),     // tx port
+    .max_entries = MAX_INTERFACES,  // 10,
 };
 
 #endif  // __QER_MAPS_H__

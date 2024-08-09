@@ -46,10 +46,9 @@ class FARProgram : public BPFProgram {
   /*---------------------------------------------------------------------------------------------------------------*/
 
   /**
-   * @brief Setup the BPF program.
-   *
+   * @brief instantiate a FAR XDP program
    */
-  void setup();
+  void setup(uint32_t far_id, uint32_t enforcing_qos);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -115,6 +114,8 @@ class FARProgram : public BPFProgram {
    */
   std::shared_ptr<BPFMap> getIfaceMap() const;
 
+  std::shared_ptr<BPFMap> getEnforcingQoSMap() const;
+
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the File Descriptor.
@@ -160,6 +161,8 @@ class FARProgram : public BPFProgram {
   // The iface map.
   std::shared_ptr<BPFMap> mpUPFIfaceMap;
   /*---------------------------------------------------------------------------------------------------------------*/
+
+  std::shared_ptr<BPFMap> mpEnforcingQoSMap;
 };
 
 #endif  // __FAR_XDP_USER_H__
