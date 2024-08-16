@@ -206,7 +206,7 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
 }
 
 /*****************************************************************************************************************/
-SEC("xdp_far")
+SEC("xdp")
 int far_entry_point(struct xdp_md* ctx) {
   bpf_debug("================< FAR Sesction >================");
   void* data     = (void*) (long) ctx->data;

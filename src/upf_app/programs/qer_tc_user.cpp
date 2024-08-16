@@ -1,11 +1,13 @@
 #include "qer_tc_user.h"
 #include <SessionManager.h>
-#include <bpf/bpf.h>     // bpf calls
-#include <bpf/libbpf.h>  // bpf wrappers
-#include <iostream>      // cout
-#include <stdexcept>     // exception
+#include <bpf/bpf.h>  // bpf calls
+//#include "../include/bpf/libbpf.h"  // bpf wrappers
+#include <iostream>   // cout
+#include <stdexcept>  // exception
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
+#include <chrono>
+#include <iostream>
 #include "interfaces.h"
 #include "logger.hpp"
 #include <stdio.h>
@@ -19,6 +21,21 @@
 #include "helpers/CmdRunner.hpp"
 //#include "standardized_5qi_qos_mapping.h"
 //#include "qer_maps.h"
+
+#include <errno.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <time.h>
+#include <net/if.h>
+
+#include <getopt.h>
+#include <linux/in6.h>
+#include <arpa/inet.h>
+#include <linux/bpf.h>
+
+#include <bpf/libbpf.h>
+#include <bpf/bpf.h>
 
 #ifndef HTB_SCHEDULER
 #define HTB_SCHEDULER "htb"
@@ -50,6 +67,19 @@
 #define DEFAULT_QFI 5
 #endif  // DEFAULT_QFI
 
+#ifndef BUILD_DIRECTORY
+#define BUILD_DIRECTORY                                                        \
+  "build/upf/build/upf_app/bpf/CMakeFiles/qer_tc.dir/rules/qer"
+#endif  // BUILD_DIRECTORY
+
+static int verbose = 1;
+
+#define EGRESS_HANDLE 0x1
+#define EGRESS_PRIORITY 0xC02F
+
+#define INGRESS_HANDLE 0x1
+#define INGRESS_PRIORITY 0xC02F
+
 /*---------------------------------------------------------------------------------------------------------------*/
 QERProgram::QERProgram() : BPFProgram() {
   mpLifeCycle = std::make_shared<QERProgramLifeCycle>(
@@ -59,6 +89,340 @@ QERProgram::QERProgram() : BPFProgram() {
 
 /*---------------------------------------------------------------------------------------------------------------*/
 QERProgram::~QERProgram() {}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+
+struct qer_tc_kernel_c* QERProgram::get_bpf_skel_object() {
+  struct qer_tc_kernel_c* obj; /* Skeleton gave us this */
+  char buf[100];
+  int err;
+
+  /* Skeleton header file have BPF-object as inline code */
+  obj = qer_tc_kernel_c__open();
+  err = libbpf_get_error(obj);
+
+  if (err) {
+    libbpf_strerror(err, buf, sizeof(buf));
+    fprintf(stderr, "Couldn't open BPF skeleton:(%d) %s\n", err, buf);
+    return NULL;
+  }
+
+  /* Add code here that change BPF-obj config before loading */
+
+  /* Loading BPF-code into kernel, verifier will check, but not attach */
+  err = qer_tc_kernel_c__load(obj);
+
+  if (err) {
+    libbpf_strerror(err, buf, sizeof(buf));
+    fprintf(stderr, "Couldn't load BPF skeleton:(%d) %s\n", err, buf);
+    qer_tc_kernel_c__destroy(obj);
+    return NULL;
+  }
+
+  return obj;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+
+// int QERProgram::teardown_hook(int ifindex)
+// {
+// 	DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook,
+// 			    .attach_point = BPF_TC_EGRESS,
+// 			    .ifindex = ifindex);
+// 	int err;
+
+// 	/* When destroying the hook, any and ALL attached TC-BPF (filter)
+// 	 * programs are also detached.
+// 	 */
+// 	err = bpf_tc_hook_destroy(&hook);
+// 	if (err)
+// 		fprintf(stderr, "Couldn't remove clsact qdisc on %s\n", ifname);
+
+// 	if (verbose)
+// 		printf("Flushed all TC-BPF egress programs (via destroy
+// hook)\n");
+
+// 	return err;
+// }
+
+// /*---------------------------------------------------------------------------------------------------------------*/
+// int QERProgram::tc_detach_egress(int ifindex)
+// {
+// 	int err;
+// 	DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .ifindex = ifindex,
+// 			    .attach_point = BPF_TC_EGRESS);
+// 	DECLARE_LIBBPF_OPTS(bpf_tc_opts, opts_info);
+
+// 	opts_info.handle   = EGRESS_HANDLE;
+// 	opts_info.priority = EGRESS_PRIORITY;
+
+// 	/* Check what program we are removing */
+// 	err = bpf_tc_query(&hook, &opts_info);
+// 	if (err) {
+// 		fprintf(stderr, "No egress program to detach "
+// 			"for ifindex %d (err:%d)\n", ifindex, err);
+// 		return err;
+// 	}
+// 	if (verbose)
+// 		printf("Detaching TC-BPF prog id:%d\n", opts_info.prog_id);
+
+// 	/* Attempt to detach program */
+// 	opts_info.prog_fd = 0;
+// 	opts_info.prog_id = 0;
+// 	opts_info.flags = 0;
+// 	err = bpf_tc_detach(&hook, &opts_info);
+// 	if (err) {
+// 		fprintf(stderr, "Cannot detach TC-BPF program id:%d "
+// 			"for ifindex %d (err:%d)\n", opts_info.prog_id,
+// 			ifindex, err);
+// 	}
+
+// 	return teardown_hook(ifindex);
+// }
+
+/*---------------------------------------------------------------------------------------------------------------*/
+
+// int tc_attach_egress(int ifindex, struct qer_tc_kernel_c *obj)
+// {
+// 	int err = 0;
+// 	int fd;
+// 	DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .attach_point = BPF_TC_EGRESS);
+// 	DECLARE_LIBBPF_OPTS(bpf_tc_opts, attach_egress);
+
+// 	/* Selecting BPF-prog here: */
+// 	//fd = bpf_program__fd(obj->progs.queue_map_4);
+// 	fd = bpf_program__fd(obj->progs.not_txq_zero);
+// 	if (fd < 0) {
+// 		fprintf(stderr, "Couldn't find egress program\n");
+// 		err = -ENOENT;
+// 		goto out;
+// 	}
+// 	attach_egress.prog_fd = fd;
+
+// 	hook.ifindex = ifindex;
+
+// 	err = bpf_tc_hook_create(&hook);
+// 	if (err && err != -EEXIST) {
+// 		fprintf(stderr, "Couldn't create TC-BPF hook for "
+// 			"ifindex %d (err:%d)\n", ifindex, err);
+// 		goto out;
+// 	}
+// 	if (verbose && err == -EEXIST) {
+// 		printf("Success: TC-BPF hook already existed "
+// 		       "(Ignore: \"libbpf: Kernel error message\")\n");
+// 	}
+
+// 	hook.attach_point = BPF_TC_EGRESS;
+// 	attach_egress.flags    = BPF_TC_F_REPLACE;
+// 	attach_egress.handle   = EGRESS_HANDLE;
+// 	attach_egress.priority = EGRESS_PRIORITY;
+// 	err = bpf_tc_attach(&hook, &attach_egress);
+// 	if (err) {
+// 		fprintf(stderr, "Couldn't attach egress program to "
+// 			"ifindex %d (err:%d)\n", hook.ifindex, err);
+// 		goto out;
+// 	}
+
+// 	if (verbose) {
+// 		printf("Attached TC-BPF program id:%d\n",
+// 		       attach_egress.prog_id);
+// 	}
+// out:
+// 	return err;
+// }
+
+/*---------------------------------------------------------------------------------------------------------------*/
+
+struct bpf_program* find_program_by_title(
+    struct bpf_object* obj, const char* title) {
+  struct bpf_program* prog;
+  bpf_object__for_each_program(prog, obj) {
+    const char* prog_title = bpf_program__section_name(prog);
+    if (prog_title && !strcmp(prog_title, title)) {
+      return prog;
+    }
+  }
+  return NULL;
+}
+
+// struct bpf_program *
+// bpf_object__find_program_by_title(const struct bpf_object *obj,
+// 				  const char *title)
+// {
+// 	struct bpf_program *pos;
+
+// 	bpf_object__for_each_program(pos, obj) {
+// 		if (pos->sec_name && !strcmp(pos->sec_name, title))
+// 			return pos;
+// 	}
+// 	return errno = ENOENT, NULL;
+// }
+
+int QERProgram::tc_attach_egress(
+    int ifindex, struct qer_tc_kernel_c* bpf_obj, const char* section_name) {
+  int err = 0;
+  int fd;
+  struct bpf_program* prog = NULL;
+  DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .attach_point = BPF_TC_EGRESS);
+  DECLARE_LIBBPF_OPTS(bpf_tc_opts, attach_egress);
+
+  hook.ifindex = ifindex;
+
+  // Retrieve the BPF program based on the section name
+  // prog = bpf_object__find_program_by_title(bpf_obj->obj, section_name);
+  prog = find_program_by_title(bpf_obj->obj, section_name);
+  if (!prog) {
+    fprintf(
+        stderr, "Couldn't find program with section name: %s\n", section_name);
+    err = -ENOENT;
+    goto out;
+  }
+
+  fd = bpf_program__fd(prog);
+  if (fd < 0) {
+    fprintf(
+        stderr,
+        "Couldn't get file descriptor for program with section name: %s\n",
+        section_name);
+    err = -ENOENT;
+    goto out;
+  }
+  attach_egress.prog_fd = fd;
+
+  // Create TC-BPF hook
+  err = bpf_tc_hook_create(&hook);
+  if (err && err != -EEXIST) {
+    fprintf(
+        stderr, "Couldn't create TC-BPF hook for ifindex %d (err:%d)\n",
+        ifindex, err);
+    goto out;
+  }
+  if (verbose && err == -EEXIST) {
+    printf(
+        "Success: TC-BPF hook already existed (Ignore: \"libbpf: Kernel error "
+        "message\")\n");
+  }
+
+  // Attach the BPF program
+  hook.attach_point      = BPF_TC_EGRESS;
+  attach_egress.flags    = BPF_TC_F_REPLACE;
+  attach_egress.handle   = EGRESS_HANDLE;
+  attach_egress.priority = EGRESS_PRIORITY;
+  err                    = bpf_tc_attach(&hook, &attach_egress);
+  if (err) {
+    fprintf(
+        stderr, "Couldn't attach egress program to ifindex %d (err:%d)\n",
+        hook.ifindex, err);
+    goto out;
+  }
+
+  if (verbose) {
+    printf(
+        "Attached TC-BPF program id:%d with section name: %s\n",
+        attach_egress.prog_id, section_name);
+  }
+
+out:
+  return err;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+
+int QERProgram::tc_attach_ingress(
+    int ifindex, struct qer_tc_kernel_c* bpf_obj, const char* section_name) {
+  int err = 0;
+  int fd;
+  struct bpf_program* prog = NULL;
+  DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .attach_point = BPF_TC_INGRESS);
+  DECLARE_LIBBPF_OPTS(bpf_tc_opts, attach_ingress);
+
+  hook.ifindex = ifindex;
+
+  // Retrieve the BPF program based on the section name
+  // prog = bpf_object__find_program_by_title(bpf_obj->obj, section_name);
+  prog = find_program_by_title(bpf_obj->obj, section_name);
+
+  if (!prog) {
+    fprintf(
+        stderr, "Couldn't find program with section name: %s\n", section_name);
+    err = -ENOENT;
+    goto out;
+  }
+
+  fd = bpf_program__fd(prog);
+  if (fd < 0) {
+    fprintf(
+        stderr,
+        "Couldn't get file descriptor for program with section name: %s\n",
+        section_name);
+    err = -ENOENT;
+    goto out;
+  }
+  attach_ingress.prog_fd = fd;
+
+  // Create TC-BPF hook
+  err = bpf_tc_hook_create(&hook);
+  if (err && err != -EEXIST) {
+    fprintf(
+        stderr, "Couldn't create TC-BPF hook for ifindex %d (err:%d)\n",
+        ifindex, err);
+    goto out;
+  }
+  if (verbose && err == -EEXIST) {
+    printf(
+        "Success: TC-BPF hook already existed (Ignore: \"libbpf: Kernel error "
+        "message\")\n");
+  }
+
+  // Attach the BPF program
+  hook.attach_point       = BPF_TC_INGRESS;
+  attach_ingress.flags    = BPF_TC_F_REPLACE;
+  attach_ingress.handle   = INGRESS_HANDLE;
+  attach_ingress.priority = INGRESS_PRIORITY;
+  err                     = bpf_tc_attach(&hook, &attach_ingress);
+  if (err) {
+    fprintf(
+        stderr, "Couldn't attach ingress program to ifindex %d (err:%d)\n",
+        hook.ifindex, err);
+    goto out;
+  }
+
+  if (verbose) {
+    printf(
+        "Attached TC-BPF program id:%d with section name: %s\n",
+        attach_ingress.prog_id, section_name);
+  }
+
+out:
+  return err;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+
+// Function to add the clsact qdisc to an interface
+int QERProgram::add_clsact_qdisc(
+    int ifindex, enum bpf_tc_attach_point attach_point) {
+  int err = 0;
+  DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .attach_point = attach_point);
+
+  // Set the interface index in the hook options
+  hook.ifindex = ifindex;
+
+  // Create the clsact qdisc
+  err = bpf_tc_hook_create(&hook);
+  if (err && err != -EEXIST) {
+    fprintf(
+        stderr, "Failed to add clsact qdisc on interface %d (err:%d)\n",
+        ifindex, err);
+    return err;
+  }
+
+  if (verbose && err == -EEXIST) {
+    printf("clsact qdisc already exists on interface %d\n", ifindex);
+  }
+
+  return 0;
+}
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void QERProgram::storeQosFlow(std::shared_ptr<pfcp::pfcp_qer> pQer) {
@@ -180,9 +544,10 @@ void QERProgram::storeQosFlow(std::shared_ptr<pfcp::pfcp_qer> pQer) {
 //         "HTB Class Position  %d:%d", classPos->childMaj, classPos->childMin);
 //   }
 // }
+
 /*---------------------------------------------------------------------------------------------------------------*/
 
-bool no_htb_root_qdisc(std::string interface) {
+bool QERProgram::no_htb_root_qdisc(std::string interface) {
   std::string cmd = {};
   uint32_t ret    = 0;
 
@@ -202,6 +567,8 @@ void QERProgram::setup(
   initializeMaps();
   mpLifeCycle->load();
   mpLifeCycle->attach();
+
+  struct qer_tc_kernel_c* obj = NULL;
 
   // savedQers = pQer;
 
@@ -227,44 +594,40 @@ void QERProgram::setup(
 
   Logger::upf_app().info("Create PDU Session Class 1:%d", seid);
   cmd = fmt::format(
-      "tc class add dev {} parent 1:0 classid 1:{} htb rate {}", GTP_INTERFACE,
-      seid, MAX_RATE);
+      "tc class add dev {} parent 1:0 classid 1:{} htb rate {}kbit",
+      GTP_INTERFACE, seid, MAX_RATE);
   rc = system((const char*) cmd.c_str());
 
-  Logger::upf_app().debug("QDISC Root Rate (GBR) : %dMbps", MAX_RATE);
-  Logger::upf_app().debug("QDISC Root Ceil (MBR) : %dMbps", MAX_CEIL);
+  Logger::upf_app().debug("QDISC Root Rate (GBR) : %dkbps", MAX_RATE);
+  Logger::upf_app().debug("QDISC Root Ceil (MBR) : %dkbps", MAX_CEIL);
 
   for (const auto& qer : pQer) {
-    Logger::upf_app().error("======================================0");
     if (qer == nullptr) {
-      Logger::upf_app().error(
-          "======================================1111111111111111111111");
       continue;
     }
-    uint8_t qfi = qer->qfi.second.qfi;
-    Logger::upf_app().error("======================================1");
+
+    uint8_t qfi      = qer->qfi.second.qfi;
+    uint32_t qer_id  = qer->qer_id.second.qer_id;
     uint64_t dl_rate = DEFAULT_RATE;
     uint64_t dl_ceil = DEFAULT_CEIL;
     uint64_t ul_rate = DEFAULT_RATE;
     uint64_t ul_ceil = DEFAULT_CEIL;
-    Logger::upf_app().error("======================================2");
-    uint32_t qer_id = qer->qer_id.second.qer_id;
-    Logger::upf_app().error("======================================3");
-    uint8_t dl_gate = 0;
-    uint8_t ul_gate = 0;
+    uint8_t dl_gate  = 0;
+    uint8_t ul_gate  = 0;
 
     if (qfi != DEFAULT_QFI) {
-      Logger::upf_app().error("======================================4");
-      dl_rate = qer->gbr.second.dl_gbr;
-      ul_rate = qer->gbr.second.ul_gbr;
+      if (qer->gbr.second.dl_gbr != 0) dl_rate = qer->gbr.second.dl_gbr;
 
-      dl_ceil = qer->mbr.second.dl_mbr;
-      ul_ceil = qer->mbr.second.ul_mbr;
+      if (qer->gbr.second.ul_gbr != 0) ul_rate = qer->gbr.second.ul_gbr;
+
+      if (qer->mbr.second.dl_mbr != 0) dl_ceil = qer->mbr.second.dl_mbr;
+
+      if (qer->mbr.second.ul_mbr != 0) ul_ceil = qer->mbr.second.ul_mbr;
 
       dl_gate = qer->gate_status.second.dl_gate;
       ul_gate = qer->gate_status.second.ul_gate;
     }
-    Logger::upf_app().error("======================================5");
+
     struct s_fiveQosFlow fiveFlow;
     memset(&fiveFlow, 0, sizeof(struct s_fiveQosFlow));
 
@@ -276,12 +639,13 @@ void QERProgram::setup(
     fiveFlow.mbr.ul_mbr   = ul_ceil;
 
     fiveFlow.qfi = qfi;
-    Logger::upf_app().error("======================================6");
     getQoSFlowMap()->update(qer_id, fiveFlow, BPF_ANY);
 
-    cmd = fmt::format(
-        "tc class add dev {} parent 1:{} classid {}:{} htb rate {} ceil {}",
-        GTP_INTERFACE, seid, seid, qfi, dl_rate, dl_ceil);
+    uint16_t minor = (ntohs(seid) * 256) + (qfi * 251 % 256);
+    cmd            = fmt::format(
+        "tc class add dev {} parent 1:{} classid {}:{} htb rate {}kbit ceil "
+        "{}kbit",
+        GTP_INTERFACE, seid, seid, minor, dl_rate, dl_ceil);
     rc = system((const char*) cmd.c_str());
 
     Logger::upf_app().debug("    HTB Class ID (QER) ........... %d", qer_id);
@@ -290,24 +654,53 @@ void QERProgram::setup(
     Logger::upf_app().debug("         Class Ceil:     %dkbps", dl_ceil);
   }
 
+  Logger::upf_app().error(" =====================================0");
   cmd = fmt::format("tc qdisc add dev {} clsact", GTP_INTERFACE);
   rc  = system((const char*) cmd.c_str());
+  Logger::upf_app().error(" =====================================1");
 
-  cmd = fmt::format(
-      "tc filter add dev {} ingress parent 1:0 bpf obj "
-      "/sys/fs/bpf/qer_tc_kernel sec classifier/cls_filter",
-      GTP_INTERFACE);
-  rc = system((const char*) cmd.c_str());
+  Logger::upf_app().error("Attach Sesction tc_filter to gtp interface");
+  // obj = get_bpf_skel_object();
 
+  // if (obj == NULL)
+  // 		rc = EXIT_FAILURE;
+
+  // rc = tc_attach_egress(gtpInterfaceIndex, obj, "cls_filter");
+  // if (rc)
+  // 		rc = EXIT_FAILURE;
+
+  mpLifeCycle->tcAttachEgress("tc_filter", mGTPInterface.c_str());
+
+  Logger::upf_app().error(" =====================================00");
+  cmd = fmt::format("tc qdisc add dev {} clsact", UDP_INTERFACE);
+  rc  = system((const char*) cmd.c_str());
+  Logger::upf_app().error(" =====================================11");
+
+  // Logger::upf_app().error("Attach Sesction tc_redirect to udp interface");
+  // rc = tc_attach_ingress(udpInterfaceIndex, obj, "tc_redirect");
+  // if (rc)
+  // 		rc = EXIT_FAILURE;
+
+  mpLifeCycle->tcAttachIngress("tc_redirect", mUDPInterface.c_str());
+
+  // cmd = fmt::format(
+  //     "tc filter add dev {} egress bpf object-file "
+  //     "/sys/fs/bpf/qer_tc_kernel section classifier/cls_filter",
+  //     GTP_INTERFACE);
+  // rc = system((const char*) cmd.c_str());
+
+  Logger::upf_app().error(" =====================================2");
   cmd = fmt::format("tc qdisc add dev {} clsact", UDP_INTERFACE);
   rc  = system((const char*) cmd.c_str());
 
-  cmd = fmt::format(
-      "tc filter add dev {} egress bpf obj /sys/fs/bpf/qer_udp_tc_kernel sec "
-      "classifier/tc_redirect",
-      UDP_INTERFACE);
-  rc = system((const char*) cmd.c_str());
+  // Logger::upf_app().error(" =====================================3");
+  //   cmd = fmt::format(
+  //       "tc filter add dev {} ingress bpf object-file
+  //       /sys/fs/bpf/qer_tc_kernel section " "classifier/tc_redirect",
+  //       UDP_INTERFACE);
+  //   rc = system((const char*) cmd.c_str());
 
+  Logger::upf_app().error(" =====================================4");
   // for (int i = 0; i < qosFlowsClassesAtt.size(); i++) {
   //   cmd = fmt::format(
   //       "tc class add dev {} parent 1:{} classid {}:{} htb rate {} ceil {}",
@@ -332,6 +725,10 @@ void QERProgram::setup(
   //     " "classifier/tc_redirect", udpInterface);
   // rc = system((const char*) cmd.c_str());
 }
+
+// change:
+//  sudo tc class change dev br0 parent 1:1 classid 1:10 htb rate 1kbit ceil
+//  5kbit burst 16b
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void QERProgram::setup() {

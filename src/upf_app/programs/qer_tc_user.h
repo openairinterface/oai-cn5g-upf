@@ -218,6 +218,15 @@ class QERProgram : public BPFProgram {
    */
   void setQosFlowsClassesPositions();
 
+  struct qer_tc_kernel_c* get_bpf_skel_object();
+  int teardown_hook(int ifindex);
+  int tc_detach_egress(int ifindex);
+  int tc_attach_egress(
+      int ifindex, struct qer_tc_kernel_c* obj, const char* section_name);
+  int tc_attach_ingress(
+      int ifindex, struct qer_tc_kernel_c* obj, const char* section_name);
+  int add_clsact_qdisc(int ifindex, enum bpf_tc_attach_point attach_point);
+  bool no_htb_root_qdisc(std::string interface);
   /*---------------------------------------------------------------------------------------------------------------*/
  private:
   /**

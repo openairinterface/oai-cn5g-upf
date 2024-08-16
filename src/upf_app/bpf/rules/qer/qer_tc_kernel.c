@@ -18,9 +18,9 @@
 #include <utils/csum.h>
 #include <utils/logger.h>
 #include <utils/utils.h>
-#include <far_maps.h>
+//#include <far_maps.h>
 #include <interfaces.h>
-#include <pfcp_session_lookup_maps.h>
+//#include <pfcp_session_lookup_maps.h>
 #include <string.h>  //Needed for memcpy
 #include "bpf_endian.h"
 
@@ -109,11 +109,18 @@ static __always_inline u32 egress_sdf_filter(
     }
   }
 
-  u8* retrieved_qfi = bpf_map_lookup_elem(&m_sdf_filter, &key);
+  struct session_qfi* retrieved_value =
+      bpf_map_lookup_elem(&m_sdf_filter, &key);
 
-  if (retrieved_qfi) {
-    gtpu_ext_h->qfi = *retrieved_qfi;
-    skb->tc_classid = *retrieved_qfi;
+  if (retrieved_value) {
+    u8 qfi   = retrieved_value->qfi;
+    u64 seid = bpf_ntohs(retrieved_value->seid);
+
+    gtpu_ext_h->qfi = qfi;
+    u32 classid =
+        (seid << 16) |
+        ((seid * 256) + (qfi * 251 % 256));  // ( major << 16 ) | minor
+    skb->tc_classid = classid;
     return TC_ACT_OK;
   }
 
@@ -217,8 +224,8 @@ sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
-SEC("classifier/cls_filter")
-int cls_filter(struct __sk_buff* skb) {
+SEC("tc")
+int tc_filter(struct __sk_buff* skb) {
   bpf_debug("==========< QER Rules >==========\n");
 
   // void *data      = (void *)(long)skb->data;
@@ -256,7 +263,7 @@ int cls_filter(struct __sk_buff* skb) {
 
 // /*---------------------------------------------------------------------------------------------------------------*/
 
-SEC("classifier/tc_redirect")
+SEC("tc")
 int tc_redirect(struct __sk_buff* skb) {
   int key = DOWNLINK, *ifindex;
 

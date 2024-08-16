@@ -23,56 +23,102 @@
 /*---------------------------------------------------------------------------------------------------------------*/
 // Maps TEID to PFCP_Session_PDR_LookupProgram
 
-struct bpf_map_def SEC("maps") m_teid_session = {
-    .type =
-        BPF_MAP_TYPE_PROG_ARRAY,  //!< Must have the key and value with 4 bytes
-    .key_size   = sizeof(teid_t_),  //!< program identifier.
-    .value_size = sizeof(s32),      //!< program which represents the session.
-    // TODO: Check how the management works. The size should be equal
-    // to the maximum number of sessions.
-    .max_entries = MAX_LENGTH,  // 10000,  //!< TODO: Is it enought?
-};
+// struct bpf_map_def SEC("maps") m_teid_session = {
+//     .type =
+//         BPF_MAP_TYPE_PROG_ARRAY,  //!< Must have the key and value with 4
+//         bytes
+//     .key_size   = sizeof(teid_t_),  //!< program identifier.
+//     .value_size = sizeof(s32),      //!< program which represents the
+//     session.
+//     // TODO: Check how the management works. The size should be equal
+//     // to the maximum number of sessions.
+//     .max_entries = MAX_LENGTH,  // 10000,  //!< TODO: Is it enought?
+// };
+
+struct {
+  __uint(
+      type,
+      BPF_MAP_TYPE_PROG_ARRAY);  //!< Must have the key and value with 4 bytes
+  __type(key, teid_t_);          //!< program identifier.
+  __type(value, s32);            //!< program which represents the session.
+  // TODO: Check how the management works. The size should be equal
+  // to the maximum number of sessions.
+  __uint(max_entries, MAX_LENGTH);  // 10000,  //!< TODO: Is it enought?
+} m_teid_session SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // Maps UE IPv4 address to PFCP_Session_PDR_LookupProgram
 // FIXME: Select a primary key. We could use a hash value of the IP as a key.
 
-struct bpf_map_def SEC("maps") m_ueip_session = {
-    .type =
-        BPF_MAP_TYPE_PROG_ARRAY,  //!< Must have the key and value with 4 bytes
-    .key_size   = sizeof(u32),    //!< program identifier.
-    .value_size = sizeof(s32),    //!< program which represents the session.
-    // TODO Check how the management works. The size should be equal
-    // to the maximum number of sessions.
-    .max_entries = MAX_UEs,  //!< TODO: Is it enought?
-};
+// struct bpf_map_def SEC("maps") m_ueip_session = {
+//     .type =
+//         BPF_MAP_TYPE_PROG_ARRAY,  //!< Must have the key and value with 4
+//         bytes
+//     .key_size   = sizeof(u32),    //!< program identifier.
+//     .value_size = sizeof(s32),    //!< program which represents the session.
+//     // TODO Check how the management works. The size should be equal
+//     // to the maximum number of sessions.
+//     .max_entries = MAX_UEs,  //!< TODO: Is it enought?
+// };
+
+struct {
+  __uint(
+      type,
+      BPF_MAP_TYPE_PROG_ARRAY);  //!< Must have the key and value with 4 bytes
+  __type(key, u32);              //!< program identifier.
+  __type(value, s32);            //!< program which represents the session.
+  // TODO Check how the management works. The size should be equal
+  // to the maximum number of sessions.
+  __uint(max_entries, MAX_UEs);  //!< TODO: Is it enought?
+} m_ueip_session SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
-struct bpf_map_def SEC("maps") m_ue_ip_pdr = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(u32),  //!< UE IP
-    .value_size  = sizeof(u32),  //!< PDR
-    .max_entries = MAX_UEs,
-};
+// struct bpf_map_def SEC("maps") m_ue_ip_pdr = {
+//     .type        = BPF_MAP_TYPE_HASH,
+//     .key_size    = sizeof(u32),  //!< UE IP
+//     .value_size  = sizeof(u32),  //!< PDR
+//     .max_entries = MAX_UEs,
+// };
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, MAX_UEs);
+  __type(key, u32);    //!< UE IP
+  __type(value, u32);  //!< PDR
+} m_ue_ip_pdr SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
-struct bpf_map_def SEC("maps") m_next_rule_prog_index = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(struct next_rule_prog_index_key),
-    .value_size  = sizeof(u32),
-    .max_entries = MAX_LENGTH,  // 10,
-};
+// struct bpf_map_def SEC("maps") m_next_rule_prog_index = {
+//     .type        = BPF_MAP_TYPE_HASH,
+//     .key_size    = sizeof(struct next_rule_prog_index_key),
+//     .value_size  = sizeof(u32),
+//     .max_entries = MAX_LENGTH,  // 10,
+// };
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, MAX_LENGTH);  // 10,
+  __type(key, struct next_rule_prog_index_key);
+  __type(value, u32);
+} m_next_rule_prog_index SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
-struct bpf_map_def SEC("maps") m_upf_interfaces = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(e_reference_point),
-    .value_size  = sizeof(struct s_interface),
-    .max_entries = INTERFACE_ENTRIES_MAX,  // 6,
-};
+// struct bpf_map_def SEC("maps") m_upf_interfaces = {
+//     .type        = BPF_MAP_TYPE_HASH,
+//     .key_size    = sizeof(e_reference_point),
+//     .value_size  = sizeof(struct s_interface),
+//     .max_entries = INTERFACE_ENTRIES_MAX,  // 6,
+// };
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, INTERFACE_ENTRIES_MAX);  // 6,
+  __type(key, e_reference_point);
+  __type(value, struct s_interface);
+} m_upf_interfaces SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
@@ -83,12 +129,19 @@ struct bpf_map_def SEC("maps") m_upf_interfaces = {
 //     .max_entries = MAX_LENGTH,
 // };
 
-struct bpf_map_def SEC("maps") m_session_mapping = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(u32),                // ue_ip_address
-    .value_size  = sizeof(struct session_id),  // < teid_ul, teid_dl, seid >
-    .max_entries = MAX_LENGTH,
-};
+// struct bpf_map_def SEC("maps") m_session_mapping = {
+//     .type        = BPF_MAP_TYPE_HASH,
+//     .key_size    = sizeof(u32),                // ue_ip_address
+//     .value_size  = sizeof(struct session_id),  // < teid_ul, teid_dl, seid >
+//     .max_entries = MAX_LENGTH,
+// };
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, MAX_LENGTH);
+  __type(key, u32);                  // ue_ip_address
+  __type(value, struct session_id);  // < teid_ul, teid_dl, seid >
+} m_session_mapping SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
