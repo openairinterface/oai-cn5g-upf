@@ -51,92 +51,28 @@ enum ProgramState {
 template<class BPFSkeletonType>
 class ProgramLifeCycle {
  public:
-  /**
-   * @brief Construct a new Program Life Cycle object.
-   *
-   * @param openFunc
-   * @param loadFunc
-   * @param attachFunc
-   * @param destroyFunc
-   */
   ProgramLifeCycle(
       std::function<BPFSkeletonType*()> openFunc,
       std::function<int(BPFSkeletonType*)> loadFunc,
       std::function<int(BPFSkeletonType*)> attachFunc,
       std::function<void(BPFSkeletonType*)> destroyFunc);
 
-  //------------------------------------------------------------------------------------------------
-  /**
-   * @brief Destroy the Program Life Cycle object.
-   *
-   */
   virtual ~ProgramLifeCycle();
 
-  //------------------------------------------------------------------------------------------------
-  /**
-   * @brief Open the BPF program.
-   *
-   */
   BPFSkeletonType* open();
-
-  //------------------------------------------------------------------------------------------------
-  /**
-   * @brief Load the BPF program.
-   *
-   */
   void load();
-
-  //------------------------------------------------------------------------------------------------
-  /**
-   * @brief Attach the BPF program.
-   *
-   */
-
   void attach();
-
-  //------------------------------------------------------------------------------------------------
-  /**
-   * @brief Link The BPF XDP program.
-   * The BPF program must be only link to one interface.
-   * See RedHat presentation.
-   *
-   */
-
   void link(std::string sectionName, std::string interface);
-
   void tcAttachIngress(std::string sectionName, std::string interface);
   void tcAttachEgress(std::string sectionName, std::string interface);
-
-  //------------------------------------------------------------------------------------------------
-  /**
-   * @brief Destroy the BPF program.
-   *
-   */
   void destroy();
-
-  //------------------------------------------------------------------------------------------------
-  /**
-   * @brief Tear down all programs.
-   *
-   */
   void tearDown();
-  /**
-   * @brief Get BPF skeleton constructed.
-   *
-   * @return The skeleton reference. NULL if is not opened.
-   */
+
   BPFSkeletonType* getBPFSkeleton() const;
-  /**
-   * @brief Get the State object.
-   *
-   * @return The BPF program state.
-   */
   ProgramState getState() const;
 
  private:
-  // Mutex for tearDown (async).
   std::mutex sTearDownMutex;
-  // The program state.
   std::atomic<ProgramState> mState;
   std::map<std::string, std::vector<uint32_t>> mSectionLinkInterfacesMap;
   std::function<BPFSkeletonType*()> mOpenFunc;
@@ -146,6 +82,11 @@ class ProgramLifeCycle {
   BPFSkeletonType* mpSkeleton;
   uint32_t mFlags;
 };
+
+/**************************************************************************************************************/
+/**************************************************************************************************************/
+/**************************************************************************************************************/
+/**************************************************************************************************************/
 
 template<class BPFSkeletonType>
 ProgramLifeCycle<BPFSkeletonType>::ProgramLifeCycle(
@@ -164,6 +105,7 @@ ProgramLifeCycle<BPFSkeletonType>::ProgramLifeCycle(
                XDP_FLAGS_UPDATE_IF_NOEXIST;
 }
 
+//-------------------------------------------------------------------------------------------------------------
 template<class BPFSkeletonType>
 ProgramLifeCycle<BPFSkeletonType>::~ProgramLifeCycle() {
   // if(mpSkeleton != NULL) {
@@ -171,6 +113,7 @@ ProgramLifeCycle<BPFSkeletonType>::~ProgramLifeCycle() {
   // }
 }
 
+//-------------------------------------------------------------------------------------------------------------
 template<class BPFSkeletonType>
 BPFSkeletonType* ProgramLifeCycle<BPFSkeletonType>::open() {
   struct rlimit r = {RLIM_INFINITY, RLIM_INFINITY};
@@ -187,6 +130,7 @@ BPFSkeletonType* ProgramLifeCycle<BPFSkeletonType>::open() {
   return mpSkeleton;
 }
 
+//-------------------------------------------------------------------------------------------------------------
 template<class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::load() {
   // Load BPF programs identified in skeleton.
@@ -201,6 +145,7 @@ void ProgramLifeCycle<BPFSkeletonType>::load() {
   mState = LOADED;
 }
 
+//-------------------------------------------------------------------------------------------------------------
 template<class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::attach() {
   // Attach is not support by XDP programs.
@@ -214,6 +159,7 @@ void ProgramLifeCycle<BPFSkeletonType>::attach() {
   mState = ATTACHED;
 }
 
+//-------------------------------------------------------------------------------------------------------------
 template<class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::link(
     std::string sectionName, std::string interface) {
@@ -274,6 +220,7 @@ void ProgramLifeCycle<BPFSkeletonType>::link(
   throw std::runtime_error("Section not found");
 }
 
+//-------------------------------------------------------------------------------------------------------------
 /*******************************************************************************/
 /*******************************************************************************/
 /*******************************************************************************/
@@ -299,6 +246,9 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
   bpf_object__for_each_program(prog, mpSkeleton->obj) {
     // Get section name.
     prog_name = std::string(bpf_program__name(prog));
+    Logger::upf_app().error(
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: %s xxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        prog_name);
     if (prog_name == sectionName) {
       // Get programs FD from skeleton object.
       fd = bpf_program__fd(prog);
@@ -365,12 +315,13 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
           interface.c_str());
       return;
     }
-
-    Logger::upf_app().error("Section %s not found", sectionName.c_str());
-    throw std::runtime_error("Section not found");
   }
+
+  Logger::upf_app().error("Section %s not found", sectionName.c_str());
+  throw std::runtime_error("Section not found");
 }
 
+//-------------------------------------------------------------------------------------------------------------
 template<class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
     std::string sectionName, std::string interface) {
@@ -458,15 +409,16 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
           interface.c_str());
       return;
     }
-
-    Logger::upf_app().error("Section %s not found", sectionName.c_str());
-    throw std::runtime_error("Section not found");
   }
+
+  Logger::upf_app().error("Section %s not found", sectionName.c_str());
+  throw std::runtime_error("Section not found");
 }
 
 /*******************************************************************************/
 /*******************************************************************************/
 /*******************************************************************************/
+//-------------------------------------------------------------------------------------------------------------
 
 template<class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::tearDown() {
@@ -531,6 +483,7 @@ void ProgramLifeCycle<BPFSkeletonType>::tearDown() {
   }
 }
 
+//-------------------------------------------------------------------------------------------------------------
 template<class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::destroy() {
   // Destroy program.
@@ -541,11 +494,13 @@ void ProgramLifeCycle<BPFSkeletonType>::destroy() {
   mState = IDLE;
 }
 
+//-------------------------------------------------------------------------------------------------------------
 template<class BPFSkeletonType>
 BPFSkeletonType* ProgramLifeCycle<BPFSkeletonType>::getBPFSkeleton() const {
   return mpSkeleton;
 }
 
+//-------------------------------------------------------------------------------------------------------------
 template<class BPFSkeletonType>
 ProgramState ProgramLifeCycle<BPFSkeletonType>::getState() const {
   return mState;

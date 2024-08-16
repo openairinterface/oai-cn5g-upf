@@ -225,7 +225,7 @@ sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
 /*---------------------------------------------------------------------------------------------------------------*/
 
 SEC("tc")
-int tc_filter(struct __sk_buff* skb) {
+int tc_filter_traffic(struct __sk_buff* skb) {
   bpf_debug("==========< QER Rules >==========\n");
 
   // void *data      = (void *)(long)skb->data;
@@ -264,7 +264,7 @@ int tc_filter(struct __sk_buff* skb) {
 // /*---------------------------------------------------------------------------------------------------------------*/
 
 SEC("tc")
-int tc_redirect(struct __sk_buff* skb) {
+int tc_redirect_traffic(struct __sk_buff* skb) {
   int key = DOWNLINK, *ifindex;
 
   // return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
