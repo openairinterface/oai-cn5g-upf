@@ -306,8 +306,9 @@ struct pt_regs___arm64 {
 #define __PT_PARM5_SYSCALL_REG __PT_PARM5_REG
 #define __PT_PARM6_SYSCALL_REG __PT_PARM6_REG
 #if !defined(__arch64__)
-#define __PT_PARM7_SYSCALL_REG __PT_PARM7_REG /* only powerpc (not powerpc64)  \
-                                               */
+#define __PT_PARM7_SYSCALL_REG                                                 \
+  __PT_PARM7_REG /* only powerpc (not powerpc64)                               \
+                  */
 #endif
 
 #define __PT_RET_REG regs[31]
