@@ -44,7 +44,7 @@ class async_shell_cmd {
   std::thread thread;
 
  public:
-  explicit async_shell_cmd(util::thread_sched_params& sched_params);
+  explicit async_shell_cmd(oai::utils::thread_sched_params& sched_params);
   ~async_shell_cmd() {}
   async_shell_cmd(async_shell_cmd const&) = delete;
   void operator=(async_shell_cmd const&) = delete;

@@ -106,8 +106,9 @@ class pfcp_switch {
 
   // moodycamel::ConcurrentQueue<pfcp::pfcp_session*> create_session_q;
 
-  void pdn_worker(const int id, const util::thread_sched_params& sched_params);
-  void pdn_read_loop(int sock_r, util::thread_sched_params sched_params);
+  void pdn_worker(
+      const int id, const oai::utils::thread_sched_params& sched_params);
+  void pdn_read_loop(int sock_r, oai::utils::thread_sched_params sched_params);
   int create_pdn_socket(
       const char* const ifname, const bool promisc, int& if_index);
   int create_pdn_socket(const char* const ifname);

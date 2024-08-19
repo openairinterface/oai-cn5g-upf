@@ -64,7 +64,7 @@ extern pfcp_switch* pfcp_switch_inst;
 
 //------------------------------------------------------------------------------
 void pfcp_switch::pdn_worker(
-    const int id, const util::thread_sched_params& sched_params) {
+    const int id, const oai::utils::thread_sched_params& sched_params) {
   uint64_t count      = 0;
   iovec_q_item_t* iov = nullptr;
 
@@ -98,7 +98,7 @@ void pfcp_switch::pdn_worker(
 }
 //------------------------------------------------------------------------------
 void pfcp_switch::pdn_read_loop(
-    int sock_r, util::thread_sched_params sched_params) {
+    int sock_r, oai::utils::thread_sched_params sched_params) {
   uint64_t count      = 0;
   uint64_t errors     = 0;
   iovec_q_item_t* iov = nullptr;
