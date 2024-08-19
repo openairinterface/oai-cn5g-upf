@@ -293,7 +293,7 @@ add_definitions("-DPACKAGE_NAME=\"UPF\"")
 
 include_directories(${SRC_TOP_DIR}/oai_upf)
 include_directories(${SRC_TOP_DIR}/common)
-include_directories(${SRC_TOP_DIR}/itti)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/itti)
 include_directories(${SRC_TOP_DIR}/common/msg)
 include_directories(${SRC_TOP_DIR}/common/utils)
 include_directories(${SRC_TOP_DIR}/gtpv1u)
@@ -317,8 +317,8 @@ link_directories(${SRC_TOP_DIR}/../build/ext/libbpf/src)
 add_executable(upf
   ${SRC_TOP_DIR}/oai_upf/main.cpp
   ${SRC_TOP_DIR}/oai_upf/options.cpp
-  ${SRC_TOP_DIR}/itti/itti.cpp
-  ${SRC_TOP_DIR}/itti/itti_msg.cpp
+  ${SRC_TOP_DIR}/${MOUNTED_COMMON}/itti/itti.cpp
+  ${SRC_TOP_DIR}/${MOUNTED_COMMON}/itti/itti_msg.cpp
   )
 
 IF(STATIC_LINKING)
