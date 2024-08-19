@@ -246,9 +246,6 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
   bpf_object__for_each_program(prog, mpSkeleton->obj) {
     // Get section name.
     prog_name = std::string(bpf_program__name(prog));
-    Logger::upf_app().error(
-        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: %s xxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-        prog_name);
     if (prog_name == sectionName) {
       // Get programs FD from skeleton object.
       fd = bpf_program__fd(prog);
@@ -278,7 +275,7 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
       if (err == -EEXIST) {
         Logger::upf_app().info(
             "Success: TC-BPF hook already existed (Ignore: \"libbpf: Kernel "
-            "error message\")\n");
+            "error message: Exclusivity flag on, cannot modify\")\n");
       }
 
       // Attach the BPF program
@@ -372,7 +369,7 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
       if (err == -EEXIST) {
         Logger::upf_app().info(
             "Success: TC-BPF hook already existed (Ignore: \"libbpf: Kernel "
-            "error message\")\n");
+            "error message: Exclusivity flag on, cannot modify\")\n");
       }
 
       // Attach the BPF program

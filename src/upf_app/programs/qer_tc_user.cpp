@@ -146,9 +146,6 @@ void QERProgram::storeQosFlow(std::shared_ptr<pfcp::pfcp_qer> pQer) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-
-/*---------------------------------------------------------------------------------------------------------------*/
-
 bool QERProgram::no_htb_root_qdisc(std::string interface) {
   std::string cmd = {};
   uint32_t ret    = 0;
@@ -200,20 +197,30 @@ void QERProgram::setup(
       GTP_INTERFACE, seid, MAX_RATE);
   rc = system((const char*) cmd.c_str());
 
-  Logger::upf_app().debug("QDISC Root Rate (GBR) : %dkbps", MAX_RATE);
-  Logger::upf_app().debug("QDISC Root Ceil (MBR) : %dkbps", MAX_CEIL);
+  Logger::upf_app().debug("QDISC Root DL Rate (GBR) : %dkbps", MAX_RATE);
+  Logger::upf_app().debug("QDISC Root DL Ceil (MBR) : %dkbps", MAX_CEIL);
 
   for (const auto& qer : pQer) {
     if (qer == nullptr) {
       continue;
     }
 
-    uint8_t qfi      = qer->qfi.second.qfi;
-    uint32_t qer_id  = qer->qer_id.second.qer_id;
-    uint64_t dl_rate = DEFAULT_RATE;
-    uint64_t dl_ceil = DEFAULT_CEIL;
-    uint64_t ul_rate = DEFAULT_RATE;
-    uint64_t ul_ceil = DEFAULT_CEIL;
+    uint8_t qfi     = qer->qfi.second.qfi;
+    uint32_t qer_id = qer->qer_id.second.qer_id;
+
+    Logger::upf_app().warn(
+        "Set dl_rate and dl_ceil to 1kbit, for QER %d, as the minimum required "
+        "values to \n"
+        "create a tc class within the Linux kernel. These values are only used "
+        "if \n"
+        " dl_rate and dl_ceil are null within the PFCP Establishment request. "
+        "Of course, the \n "
+        "class rate and ceil are updated from the PFCP Modification request",
+        qer_id);
+    uint64_t dl_rate = 1;
+    uint64_t dl_ceil = 1;
+    uint64_t ul_rate = 1;
+    uint64_t ul_ceil = 1;
     uint8_t dl_gate  = 0;
     uint8_t ul_gate  = 0;
 
@@ -252,80 +259,17 @@ void QERProgram::setup(
 
     Logger::upf_app().debug("    HTB Class ID (QER) ........... %d", qer_id);
     Logger::upf_app().debug("         Class QFI:      %d", qfi);
-    Logger::upf_app().debug("         Class Rate:     %dkbps", dl_rate);
-    Logger::upf_app().debug("         Class Ceil:     %dkbps", dl_ceil);
+    Logger::upf_app().debug("         Class DL Rate:     %dkbps", dl_rate);
+    Logger::upf_app().debug("         Class DL Ceil:     %dkbps", dl_ceil);
   }
 
-  // Logger::upf_app().error(" =====================================0");
-  //   cmd = fmt::format("tc qdisc add dev {} clsact", GTP_INTERFACE);
-  //   rc  = system((const char*) cmd.c_str());
-  // Logger::upf_app().error(" =====================================1");
-
-  Logger::upf_app().error("Attach Sesction tc_filter to gtp interface");
-  // obj = get_bpf_skel_object();
-
-  // if (obj == NULL)
-  // 		rc = EXIT_FAILURE;
-
-  // rc = tc_attach_egress(gtpInterfaceIndex, obj, "cls_filter");
-  // if (rc)
-  // 		rc = EXIT_FAILURE;
-
+  Logger::upf_app().info("Attach Section tc_filter_traffic to gtp interface");
   mpLifeCycle->tcAttachEgress("tc_filter_traffic", GTP_INTERFACE.c_str());
 
-  // Logger::upf_app().error(" =====================================00");
-  //   cmd = fmt::format("tc qdisc add dev {} clsact", UDP_INTERFACE);
-  //   rc  = system((const char*) cmd.c_str());
-  // Logger::upf_app().error(" =====================================11");
-
-  // Logger::upf_app().error("Attach Sesction tc_redirect to udp interface");
-  // rc = tc_attach_ingress(udpInterfaceIndex, obj, "tc_redirect");
-  // if (rc)
-  // 		rc = EXIT_FAILURE;
-
+  Logger::upf_app().info("Attach Sesction tc_redirect to udp interface");
   mpLifeCycle->tcAttachIngress("tc_redirect_traffic", UDP_INTERFACE.c_str());
 
-  // cmd = fmt::format(
-  //     "tc filter add dev {} egress bpf object-file "
-  //     "/sys/fs/bpf/qer_tc_kernel section classifier/cls_filter",
-  //     GTP_INTERFACE);
-  // rc = system((const char*) cmd.c_str());
-
-  Logger::upf_app().error(" =====================================2");
-  cmd = fmt::format("tc qdisc add dev {} clsact", UDP_INTERFACE);
-  rc  = system((const char*) cmd.c_str());
-
-  // Logger::upf_app().error(" =====================================3");
-  //   cmd = fmt::format(
-  //       "tc filter add dev {} ingress bpf object-file
-  //       /sys/fs/bpf/qer_tc_kernel section " "classifier/tc_redirect",
-  //       UDP_INTERFACE);
-  //   rc = system((const char*) cmd.c_str());
-
-  Logger::upf_app().error(" =====================================4");
-  // for (int i = 0; i < qosFlowsClassesAtt.size(); i++) {
-  //   cmd = fmt::format(
-  //       "tc class add dev {} parent 1:{} classid {}:{} htb rate {} ceil {}",
-  //       gtpInterface, seid, seid, qosFlowsClassesPos[i]->childMin,
-  //       qosFlowsClassesAtt[i]->rate, qosFlowsClassesAtt[i]->ceil);
-  //   rc = system((const char*) cmd.c_str());
-  // }
-  // cmd = fmt::format("tc qdisc add dev {} clsact", gtpInterface);
-  // rc  = system((const char*) cmd.c_str());
-
-  // cmd = fmt::format(
-  //     "tc filter add dev {} ingress parent 1:0 bpf obj "
-  //     "/sys/fs/bpf/qer_tc_kernel sec classifier/cls_filter",
-  //     gtpInterface);
-  // rc = system((const char*) cmd.c_str());
-
-  // cmd = fmt::format("tc qdisc add dev {} clsact", udpInterface);
-  // rc  = system((const char*) cmd.c_str());
-
-  // cmd = fmt::format(
-  //     "tc filter add dev {} egress bpf obj /sys/fs/bpf/qer_udp_tc_kernel sec
-  //     " "classifier/tc_redirect", udpInterface);
-  // rc = system((const char*) cmd.c_str());
+  Logger::upf_app().error(".................................................");
 }
 
 // change:
