@@ -1181,9 +1181,9 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
               << std::endl;
     std::cout
         << "| PFCP switch Packet Detection Rule list ordered by established "
-           "sessions: "
+           "sessions:                                                          "
            "  "
-           " |"
+           "                                                              |"
         << std::endl;
     std::cout << "+----------------+----+--------+--------+------------+-------"
                  "--------"
@@ -1191,13 +1191,12 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
                  "---+----"
                  "---------------------------------------------------------+"
               << std::endl;
-    std::cout << "|  SEID          |pdr |  far   |predence|   action   | "
+    std::cout << "|  SEID          |pdr |  far   |predence|   action   |       "
                  " create "
-                 "outer hdr         tun id| rmv outer hdr  tun id|    UE IPv4
-                 " " |
-        " " |
-        "
-            << std::endl;
+                 "outer hdr         tun id| rmv outer hdr  tun id|    UE IPv4  "
+                 "   |    "
+                 "                                                         |"
+              << std::endl;
     std::cout << "+----------------+----+--------+--------+------------+-------"
                  "--------"
                  "------------------------+----------------------+-------------"
