@@ -1145,69 +1145,69 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 void pfcp_switch::handle_pfcp_session_deletion_request(
     std::shared_ptr<itti_n4_session_deletion_request> sreq,
     itti_n4_session_deletion_response* resp) {
-  Logger::pfcp_switch().error("Deleting datapath: code commented");
-  // itti_n4_session_deletion_request* req = sreq.get();
+  itti_n4_session_deletion_request* req = sreq.get();
 
-  // std::shared_ptr<pfcp::pfcp_session> s = {};
-  // pfcp::fseid_t fseid                   = {};
-  // pfcp::cause_t cause = {.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED};
-  // pfcp::offending_ie_t offending_ie = {};
-  // failed_rule_id_t failed_rule      = {};
+  std::shared_ptr<pfcp::pfcp_session> s = {};
+  pfcp::fseid_t fseid                   = {};
+  pfcp::cause_t cause = {.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED};
+  pfcp::offending_ie_t offending_ie = {};
+  failed_rule_id_t failed_rule      = {};
 
-  // if (not get_pfcp_session_by_up_seid(req->seid, s)) {
-  //   cause.cause_value = CAUSE_VALUE_SESSION_CONTEXT_NOT_FOUND;
-  // } else {
-  //   pfcp::pfcp_session* session = s.get();
-  //   resp->seid                  = s->cp_fseid.seid;
+  if (not get_pfcp_session_by_up_seid(req->seid, s)) {
+    cause.cause_value = CAUSE_VALUE_SESSION_CONTEXT_NOT_FOUND;
+  } else {
+    pfcp::pfcp_session* session = s.get();
+    resp->seid                  = s->cp_fseid.seid;
 
-  //   if (upf_cfg.enable_bpf_datapath) {
-  //     Logger::pfcp_switch().info(
-  //         "Deleting datapath: delete PDRs + delete FARs");
-  //     call_datapath(
-  //         NULL, NULL, req, session, spSessionManager,
-  //         &SessionManager::removeBPFSession);
-  //   }
+    if (upf_cfg.enable_bpf_datapath) {
+      Logger::pfcp_switch().info(
+          "Deleting datapath: delete PDRs + delete FARs");
+      call_datapath(
+          NULL, NULL, req, session, spSessionManager,
+          &SessionManager::removeBPFSession);
+    }
 
-  //   remove_pfcp_session(s);
-  // }
-  // pfcp_associations::get_instance().notify_del_session(fseid);
-  // resp->pfcp_ies.set(cause);
+    remove_pfcp_session(s);
+  }
+  pfcp_associations::get_instance().notify_del_session(fseid);
+  resp->pfcp_ies.set(cause);
 
-  // if (Logger::should_log(spdlog::level::debug)) {
-  //   std::cout <<
-  //   "\n+----------------------------------------------------------"
-  //                "--------"
-  //                "-------------------------------------------------------------"
-  //                "--------"
-  //                "-----------------------------------------------------------+"
-  //             << std::endl;
-  //   std::cout
-  //       << "| PFCP switch Packet Detection Rule list ordered by established "
-  //          "sessions: " "  " " |"
-  //       << std::endl;
-  //   std::cout <<
-  //   "+----------------+----+--------+--------+------------+-------"
-  //                "--------"
-  //                "------------------------+----------------------+-------------"
-  //                "---+----"
-  //                "---------------------------------------------------------+"
-  //             << std::endl;
-  //   std::cout << "|  SEID          |pdr |  far   |predence|   action   | "
-  //                " create "
-  //                "outer hdr         tun id| rmv outer hdr  tun id|    UE IPv4
-  //                " "   |    " " |"
-  //             << std::endl;
-  //   std::cout <<
-  //   "+----------------+----+--------+--------+------------+-------"
-  //                "--------"
-  //                "------------------------+----------------------+-------------"
-  //                "---+----"
-  //                "---------------------------------------------------------+"
-  //             << std::endl;
-  //   for (const auto& it : up_seid2pfcp_sessions) {
-  //     std::cout << it.second->to_string() << std::endl;
-  //   }
-  // }
+  if (Logger::should_log(spdlog::level::debug)) {
+    std::cout << "\n+----------------------------------------------------------"
+                 "--------"
+                 "-------------------------------------------------------------"
+                 "--------"
+                 "-----------------------------------------------------------+"
+              << std::endl;
+    std::cout
+        << "| PFCP switch Packet Detection Rule list ordered by established "
+           "sessions: "
+           "  "
+           " |"
+        << std::endl;
+    std::cout << "+----------------+----+--------+--------+------------+-------"
+                 "--------"
+                 "------------------------+----------------------+-------------"
+                 "---+----"
+                 "---------------------------------------------------------+"
+              << std::endl;
+    std::cout << "|  SEID          |pdr |  far   |predence|   action   | "
+                 " create "
+                 "outer hdr         tun id| rmv outer hdr  tun id|    UE IPv4
+                 " " |
+        " " |
+        "
+            << std::endl;
+    std::cout << "+----------------+----+--------+--------+------------+-------"
+                 "--------"
+                 "------------------------+----------------------+-------------"
+                 "---+----"
+                 "---------------------------------------------------------+"
+              << std::endl;
+    for (const auto& it : up_seid2pfcp_sessions) {
+      std::cout << it.second->to_string() << std::endl;
+    }
+  }
 }
 //------------------------------------------------------------------------------
 void pfcp_switch::pfcp_session_look_up_pack_in_access(
