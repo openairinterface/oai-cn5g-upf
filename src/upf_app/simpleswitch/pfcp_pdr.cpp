@@ -28,6 +28,7 @@
 #include "endian.h"
 #include "pfcp_pdr.hpp"
 #include "upf_n4.hpp"
+#include "logger.hpp"
 
 using namespace pfcp;
 using namespace oai::upf::app;
