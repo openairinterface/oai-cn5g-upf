@@ -28,7 +28,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include "3gpp_24.501.h"
 #include "3gpp_29.274.h"
 #include "3gpp_29.571.h"
 
@@ -182,27 +181,6 @@ enum class sm_context_status_e {
 
 static const std::vector<std::string> sm_context_status_e2str = {
     "ACTIVE", "RELEASED"};
-
-typedef struct qos_profile_gbr_s {
-  gfbr_t gfbr;  // Guaranteed Flow Bit Rate
-  mfbr_t mfbr;  // Maximum Flow Bit Rate
-  // Notification Control
-  // Maximum Packet Loss Rate (UL/DL)
-} qos_profile_gbr_t;
-
-enum class qos_profile_type_e { NON_GBR = 0, GBR = 1 };
-
-// See Section 5.7.2@3GPP TS 23.501
-typedef struct qos_profile_s {
-  uint8_t _5qi;
-  arp_5gc_t arp;
-  uint8_t priority_level;
-  qos_profile_type_e profile_type;
-  union {
-    reflective_qos_attribute_e rqa;     // Reflective QoS Attribute (RQA)
-    qos_profile_gbr_t qos_profile_gbr;  // Attributes for GBR
-  } parameter;
-} qos_profile_t;
 
 // NRF
 #define NNRF_NFM_BASE "/nnrf-nfm/"
