@@ -96,6 +96,7 @@ RUN rm -f /etc/rhsm-host && \
       net-tools \
       ethtool \
       iproute \
+      llvm-libs \
       iptables \
       initscripts \
       libicu \

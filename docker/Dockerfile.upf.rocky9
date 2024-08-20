@@ -78,6 +78,7 @@ RUN microdnf update -y && \
       ethtool \
       iproute \
       iptables \
+      llvm-libs \
       initscripts \
       libicu \
       boost \
