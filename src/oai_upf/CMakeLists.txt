@@ -277,7 +277,6 @@ else(STATIC_LINKING)
     SET(BUILD_SHARED_LIBS ON)
 endif(STATIC_LINKING)
 
-ADD_SUBDIRECTORY(${SRC_TOP_DIR}/common/utils ${CMAKE_CURRENT_BINARY_DIR}/utils)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/${MOUNTED_COMMON}/pfcp ${CMAKE_CURRENT_BINARY_DIR}/pfcp)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app ${CMAKE_CURRENT_BINARY_DIR}/upf_app)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/app ${CMAKE_CURRENT_BINARY_DIR}/app)
@@ -340,7 +339,7 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
 
 # folly glog dl double-conversion for FB folly library
 target_link_libraries (upf 
-  ${ASAN}  -Wl,--start-group CN_UTILS
+  ${ASAN}  -Wl,--start-group 
   ${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so 
   APP
   SIMPLE_SWITCH
