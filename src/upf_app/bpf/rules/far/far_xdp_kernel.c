@@ -206,7 +206,7 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
 }
 
 /*****************************************************************************************************************/
-SEC("xdp_far")
+SEC("xdp")
 int far_entry_point(struct xdp_md* ctx) {
   bpf_debug("================< FAR Sesction >================");
   void* data     = (void*) (long) ctx->data;
@@ -220,11 +220,6 @@ int far_entry_point(struct xdp_md* ctx) {
 
     if ((void*) (ethh + 1) > data_end) {
       bpf_debug("Invalid pointer");
-      return XDP_DROP;
-    }
-
-    if (!p_far) {
-      bpf_debug("Invalid FAR!");
       return XDP_DROP;
     }
 
@@ -280,7 +275,24 @@ int far_entry_point(struct xdp_md* ctx) {
 
     } else if (dest_interface == INTERFACE_VALUE_ACCESS) {
       create_outer_header_gtpu_ipv4(ctx, p_far);
-      return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+
+      uint32_t far_id_key = p_far->far_id.far_id;
+      uint32_t* enforcing_qos =
+          bpf_map_lookup_elem(&m_enforcing_qos, &far_id_key);
+      if (enforcing_qos) {
+        switch (*enforcing_qos) {
+          case 0: {
+            bpf_debug("The packet is redirected to N3 interface");
+            return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+          }
+          case 1: {
+            bpf_debug("The packet is passed to tc layer");
+            return XDP_PASS;
+          }
+          default: {
+          }
+        }
+      }
     }
   }
 

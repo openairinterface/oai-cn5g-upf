@@ -1,9 +1,9 @@
 #include "SessionProgramManager.h"
-#include <far_ebpf_xdp_prgrm_user.h>
-#include <qer_ebpf_tc_prgrm_user.h>
-#include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h>
+#include <far_xdp_user.h>
+#include <qer_tc_user.h>
+#include <pfcp_session_pdr_lookup_xdp_user.h>
 #include "SessionPrograms.h"
-#include <pfcp_session_lookup_ebpf_xdp_prgrm_user.h>
+#include <pfcp_session_lookup_xdp_user.h>
 #include <UserPlaneComponent.h>
 #include <net/if.h>  // if_nametoindex
 
@@ -180,29 +180,6 @@ void SessionProgramManager::storeSessionMappingMap(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-// // Helper function to store UE QFI
-// void SessionProgramManager::storeUeQfiTeidMap(
-//     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-//     uint32_t ue_ip_address, uint8_t qfi, uint32_t teid_ul) {
-//   s_ue_qfi key;
-
-//   __builtin_memset(&key, 0, sizeof(struct s_ue_qfi));
-
-//   if (is_little_endian()) {
-//     key.src_ip = htole32(ue_ip_address);
-//     teid_ul    = htobe32(teid_ul);
-//   } else {
-//     key.src_ip = ue_ip_address;
-//     teid_ul    = htole32(teid_ul);
-//   }
-
-//   key.qfi = qfi;
-
-//   pPFCP_Session_LookupProgram->getUeQfiTeidMap()->update(key, teid_ul,
-//   BPF_ANY);
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
 // Helper function to store the FAR in the FAR program
 void SessionProgramManager::storeFARInFARMap(
     std::shared_ptr<FARProgram> pFARProgram,
@@ -312,12 +289,27 @@ void SessionProgramManager::createPipeline(
     uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
     std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer, bool isModification,
     uint32_t teid2) {
+  uint32_t dnIP          = upf_cfg.remote_n6.s_addr;
+  uint32_t upfn3IP       = upf_cfg.n3.addr4.s_addr;
+  uint32_t upfn6IP       = upf_cfg.n6.addr4.s_addr;
+  uint32_t far_id        = pFar->far_id.far_id;
+  uint32_t enforcing_qos = 0;
+
   next_rule_prog_index_key key;
+
   initializeNextRuleProgIndexKey(key, teid1, ueIpAddress, sourceInterface);
+
+  if ((upf_cfg.enable_qos) && (!pQer.empty())) {
+    enforcing_qos = 1;
+    Logger::upf_app().debug("Instantiate a new QERProgram ");
+    std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
+    pQERProgram->setup(seid, pQer);
+  }
 
   Logger::upf_app().debug("Instantiate a new FARProgram");
   std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
-  pFARProgram->setup();
+
+  pFARProgram->setup(far_id, enforcing_qos);
 
   auto pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
@@ -328,35 +320,9 @@ void SessionProgramManager::createPipeline(
   Logger::upf_app().debug("Store FAR in the FAR program");
   storeFARInFARMap(pFARProgram, pFar);
 
-  uint32_t dnIP    = upf_cfg.remote_n6.s_addr;
-  uint32_t upfn3IP = upf_cfg.n3.addr4.s_addr;
-  uint32_t upfn6IP = upf_cfg.n6.addr4.s_addr;
-
   Logger::upf_app().warn(
       "TODO: Try to extract the updateARPTableForN6 for the if and else to "
       "run it only once");
-  // // Launch a separate thread to update ARP table map
-  //   std::thread arpUpdateThread2([this, pFARProgram, dnIP, upfn6IP]() {
-  //     updateARPTableForN6(pFARProgram, dnIP, upfn6IP);
-  //   });
-  // arpUpdateThread2.detach();
-
-  /******************************************************************************************/
-  /******************************************************************************************/
-  /*
-   * ================ Manage QoS ===================
-   */
-  // 2. call setup
-  Logger::upf_app().debug("Instantiate a new QERProgram");
-  std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
-  pQERProgram->setup(seid, pQer);
-
-  // const std::string& gtpInterface, const std::string& udpInterface,
-  // const char* qdiscScheduler, std::vector<struct qosFlow*> qfis,
-  // uint64_t seid, gtpUTunnel* gtpTunnel
-
-  /******************************************************************************************/
-  /******************************************************************************************/
 
   if (isModification) {
     storeSessionMappingMap(pPFCP_Session_LookupProgram, ueIpAddress, teid1);

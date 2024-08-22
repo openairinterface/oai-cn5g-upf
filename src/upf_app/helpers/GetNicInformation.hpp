@@ -13,15 +13,7 @@ class NicInformationGetter {
    * @brief Construct a new Nic Information Getter object
    *
    */
-  NicInformationGetter();
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  /**
-   * @brief Set the Scheduler object
-   *
-   * @return const char*
-   */
-  // const char *setScheduler(const char*);
+  // NicInformationGetter();
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -29,7 +21,7 @@ class NicInformationGetter {
    *
    * @return uint32_t rate
    */
-  uint64_t retrieveRate(std::string interface);
+  static uint64_t retrieveRate(std::string interface);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -37,7 +29,7 @@ class NicInformationGetter {
    *
    * @return uint32_t ceil
    */
-  uint64_t retrieveCeil(std::string interface);
+  static uint64_t retrieveCeil(std::string interface);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -45,7 +37,7 @@ class NicInformationGetter {
    *
    * @return uint32_t rate_buffer
    */
-  uint32_t retrieveBurst(std::string interface);
+  static uint32_t retrieveBurst(std::string interface);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -53,14 +45,12 @@ class NicInformationGetter {
    *
    * @return uint32_t ceil_buffer
    */
-  uint32_t retrieveCBurst(std::string interface);
+  static uint32_t retrieveCBurst(std::string interface);
 
   /*---------------------------------------------------------------------------------------------------------------*/
 
  private:
-  std::string executeCommand(const std::string& command);
-  const std::string INTERFACE_DIR = "/sys/class/net/";
-  // std::string executeCommand(const std::string& command);
+  // static const std::string INTERFACE_DIR = "/sys/class/net/";
 };
 
 #endif  //__GET_NIC_INFORMATION_HPP__

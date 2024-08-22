@@ -18,9 +18,9 @@
 #include <utils/csum.h>
 #include <utils/logger.h>
 #include <utils/utils.h>
-#include <far_maps.h>
+//#include <far_maps.h>
 #include <interfaces.h>
-#include <pfcp_session_lookup_maps.h>
+//#include <pfcp_session_lookup_maps.h>
 #include <string.h>  //Needed for memcpy
 #include "bpf_endian.h"
 
@@ -30,11 +30,9 @@
 #include <linux/netdevice.h>
 #include <linux/pkt_sched.h>
 
-
 #define MARK_VALUE 0x12345678  // Marker value to match
-#define OFFSET 0                // Example offset where marker is stored
-
-
+#define OFFSET 0               // Example offset where marker is stored
+#define TARGET_INTF 644
 /*---------------------------------------------------------------------------------------------------------------*/
 /**
  * @brief Filter the Uplink traffic
@@ -111,18 +109,24 @@ static __always_inline u32 egress_sdf_filter(
     }
   }
 
-  u8 *retrieved_qfi =  bpf_map_lookup_elem(&m_sdf_filter, &key);
+  struct session_qfi* retrieved_value =
+      bpf_map_lookup_elem(&m_sdf_filter, &key);
 
-  if (retrieved_qfi) {
-    gtpu_ext_h->qfi = *retrieved_qfi;
-    skb->tc_classid = *retrieved_qfi;
+  if (retrieved_value) {
+    u8 qfi   = retrieved_value->qfi;
+    u64 seid = bpf_ntohs(retrieved_value->seid);
+
+    gtpu_ext_h->qfi = qfi;
+    u32 classid =
+        (seid << 16) |
+        ((seid * 256) + (qfi * 251 % 256));  // ( major << 16 ) | minor
+    skb->tc_classid = classid;
     return TC_ACT_OK;
-  }  
+  }
 
- // default value qfi = 5 (NON-GBR QoS Flow)
+  // default value qfi = 5 (NON-GBR QoS Flow)
   skb->tc_classid = gtpu_ext_h->qfi;
   return TC_ACT_OK;
-    
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -166,7 +170,7 @@ ipv4_sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh, struct iphdr* iph) {
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct meta_info {
-	__u32 mark;
+  __u32 mark;
 } __attribute__((aligned(4)));
 
 /**
@@ -179,7 +183,7 @@ struct meta_info {
 static __always_inline u32
 sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
   void* data_end = (void*) (long) skb->data_end;
-  
+
   u16 eth_type = htons(ethh->h_proto);
   bpf_debug("Debug: eth_type:0x%x", eth_type);
 
@@ -220,35 +224,31 @@ sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
-SEC("classifier")
-int cls_filter(struct __sk_buff* skb) {
+SEC("tc")
+int tc_filter_traffic(struct __sk_buff* skb) {
   bpf_debug("==========< QER Rules >==========\n");
 
-  void *data      = (void *)(long)skb->data;
-	void *data_meta = (void *)(long)skb->data_meta;
-	struct meta_info *meta = data_meta;
+  // void *data      = (void *)(long)skb->data;
+  // void *data_meta = (void *)(long)skb->data_meta;
+  // struct meta_info *meta = data_meta;
 
+  // /* Check SKB gave us some data_meta */
+  // if ((void *)(meta + 1) > data) {
+  // 	skb->mark = 41;
+  // 	 bpf_debug("No Meta_data found! Drop the packet");
+  // 	return TC_ACT_SHOT;
+  // }
 
+  // /* Hint: See func tc_cls_act_is_valid_access() for BPF_WRITE access */
+  // skb->mark = meta->mark; /* Transfer XDP-mark to SKB-mark */
 
-
-  /* Check SKB gave us some data_meta */
-	if ((void *)(meta + 1) > data) {
-		skb->mark = 41;
-		 bpf_debug("No Meta_data found! Drop the packet");
-		return TC_ACT_SHOT;
-	}
-
-	/* Hint: See func tc_cls_act_is_valid_access() for BPF_WRITE access */
-	skb->mark = meta->mark; /* Transfer XDP-mark to SKB-mark */
-
-  
   bpf_debug("TC Retrieves a Marker metadata value: %d", skb->mark);
 
   // Check if the marker matches
-  if (skb->mark == htonl(MARK_VALUE)) {
-    bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer");
-    return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
-  }
+  // if (skb->mark == htonl(MARK_VALUE)) {
+  //   bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer");
+  //   return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+  // }
 
   // Extract Ethernet header
   struct ethhdr* ethh = (void*) (long) skb->data;
@@ -259,6 +259,24 @@ int cls_filter(struct __sk_buff* skb) {
   }
 
   return sdf_filter(skb, ethh);
+}
+
+// /*---------------------------------------------------------------------------------------------------------------*/
+
+SEC("tc")
+int tc_redirect_traffic(struct __sk_buff* skb) {
+  int key = DOWNLINK, *ifindex;
+
+  // return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+
+  /* Lookup what ifindex to redirect packets to */
+  ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
+  if (ifindex) {
+    bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer");
+    return bpf_redirect(*ifindex, 0);
+  }
+  bpf_debug("TC Packets not redirected! Drop them");
+  return TC_ACT_SHOT;
 }
 
 char _license[] SEC("license") = "GPL";

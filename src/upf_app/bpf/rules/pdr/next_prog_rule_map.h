@@ -18,12 +18,19 @@
  *   |                          |                           |
  *   +--------------------------+---------------------------+
  */
-struct bpf_map_def SEC("maps") m_next_rule_prog = {
-    .type        = BPF_MAP_TYPE_PROG_ARRAY,
-    .key_size    = sizeof(u32),
-    .value_size  = sizeof(s32),
-    .max_entries = MAX_LENGTH,  // 10,
-};
+// struct bpf_map_def SEC("maps") m_next_rule_prog = {
+//     .type        = BPF_MAP_TYPE_PROG_ARRAY,
+//     .key_size    = sizeof(u32),
+//     .value_size  = sizeof(s32),
+//     .max_entries = MAX_LENGTH,  // 10,
+// };
+
+struct {
+  __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
+  __uint(max_entries, MAX_LENGTH);  // 10,
+  __type(key, u32);
+  __type(value, s32);
+} m_next_rule_prog SEC(".maps");
 
 // BPF_ANNOTATE_KV_PAIR(m_next_rule_prog, u32, s32);
 

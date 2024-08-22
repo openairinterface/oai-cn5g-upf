@@ -11,4 +11,9 @@ struct filter_key {
   u32 tos;
 };
 
+struct session_qfi {
+  u64 seid;
+  u8 qfi;
+};
+
 #endif  // __FILTER_KEY_H__

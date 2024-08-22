@@ -1,4 +1,4 @@
-#include "far_ebpf_xdp_prgrm_user.h"
+#include "far_xdp_user.h"
 #include <SessionManager.h>
 #include <bpf/bpf.h>     // bpf calls
 #include <bpf/libbpf.h>  // bpf wrappers
@@ -15,9 +15,8 @@ extern upf_config upf_cfg;
 /*---------------------------------------------------------------------------------------------------------------*/
 FARProgram::FARProgram() : BPFProgram() {
   mpLifeCycle = std::make_shared<FARProgramLifeCycle>(
-      far_ebpf_xdp_prgrm_kernel_c__open, far_ebpf_xdp_prgrm_kernel_c__load,
-      far_ebpf_xdp_prgrm_kernel_c__attach,
-      far_ebpf_xdp_prgrm_kernel_c__destroy);
+      far_xdp_kernel_c__open, far_xdp_kernel_c__load, far_xdp_kernel_c__attach,
+      far_xdp_kernel_c__destroy);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -62,7 +61,7 @@ void FARProgram::create_upf_interface_map_entry(e_reference_point s) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void FARProgram::setup() {
+void FARProgram::setup(uint32_t far_id, uint32_t enforcing_qos) {
   spSkeleton = mpLifeCycle->open();
   initializeMaps();
   mpLifeCycle->load();
@@ -71,12 +70,15 @@ void FARProgram::setup() {
   Logger::upf_app().debug("Configure redirect interface");
   auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
   auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
+
   uint32_t udpInterfaceIndex = if_nametoindex(udpInterface.c_str());
   uint32_t gtpInterfaceIndex = if_nametoindex(gtpInterface.c_str());
   uint32_t uplinkId          = static_cast<uint32_t>(FlowDirection::UPLINK);
   uint32_t downlinkId        = static_cast<uint32_t>(FlowDirection::DOWNLINK);
+
   mpEgressInterfaceMap->update(uplinkId, udpInterfaceIndex, BPF_ANY);
   mpEgressInterfaceMap->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
+  mpEnforcingQoSMap->update(far_id, enforcing_qos, BPF_ANY);
 
   Logger::upf_app().debug("Adding Reference Points to m_upf_interface Map:");
   create_upf_interface_map_entry(N3_INTERFACE);
@@ -122,6 +124,10 @@ std::shared_ptr<BPFMap> FARProgram::getIfaceMap() const {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<BPFMap> FARProgram::getEnforcingQoSMap() const {
+  return mpEnforcingQoSMap;
+}
+/*---------------------------------------------------------------------------------------------------------------*/
 void FARProgram::initializeMaps() {
   // Store all maps available in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
@@ -132,5 +138,7 @@ void FARProgram::initializeMaps() {
   mpEgressInterfaceMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_redirect_interfaces"));
   mpUPFIfaceMap = std::make_shared<BPFMap>(mpMaps->getMap("m_upf_interfaces"));
+  mpEnforcingQoSMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_enforcing_qos"));
 }
 /*---------------------------------------------------------------------------------------------------------------*/

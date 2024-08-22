@@ -53,9 +53,9 @@ add_library(UPF_XDP STATIC
   SessionProgramManager.cpp
   SessionManager.cpp
   SessionPrograms.cpp
-  programs/pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.cpp
-  programs/pfcp_session_lookup_ebpf_xdp_prgrm_user.cpp
-  programs/far_ebpf_xdp_prgrm_user.cpp
+  programs/pfcp_session_pdr_lookup_xdp_user.cpp
+  programs/pfcp_session_lookup_xdp_user.cpp
+  programs/far_xdp_user.cpp
   programs/BPFProgram.cpp
   wrappers/BPFMaps.cpp
   wrappers/BPFMap.cpp
@@ -83,7 +83,7 @@ target_include_directories(UPF_XDP PUBLIC
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/programs>
 )
 
-add_dependencies(UPF_XDP upf_ebpf_xdp_all)
+add_dependencies(UPF_XDP upf_xdp_all)
 
 install(
     TARGETS UPF_XDP
@@ -112,7 +112,7 @@ install(
   SessionProgramManager.cpp
   SessionManager.cpp
   SessionPrograms.cpp
-  programs/qer_ebpf_tc_prgrm_user.cpp
+  programs/qer_tc_user.cpp
   programs/BPFProgram.cpp
   wrappers/BPFMaps.cpp
   wrappers/BPFMap.cpp
@@ -120,7 +120,7 @@ install(
 
   target_link_libraries(UPF_TC
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.a
-  ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.so
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.so.1
   # PUBLIC upfutils
   # PRIVATE spdlog
   PRIVATE elf
@@ -140,7 +140,7 @@ install(
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/programs>
   )
 
-  add_dependencies(UPF_TC upf_ebpf_tc_all)
+  add_dependencies(UPF_TC upf_tc_all)
 
   install(
       TARGETS UPF_TC

@@ -1,4 +1,4 @@
-#define KBUILD_MODNAME pfcp_session_lookup_ebpf_xdp_prgrm_kernel
+#define KBUILD_MODNAME pfcp_session_lookup_xdp_kernel
 
 // clang-format off
 #include <types.h>
@@ -225,8 +225,8 @@ static __always_inline u32 eth_handle(struct xdp_md* ctx, struct ethhdr* ethh) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-SEC("xdp_entry_point")
-int entry_point(struct xdp_md* ctx) {
+SEC("xdp")
+int xdp_entry_point(struct xdp_md* ctx) {
   bpf_debug("================< PFCP PDR Sesction >================");
   struct ethhdr* ethh = (void*) (long) ctx->data;
 

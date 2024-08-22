@@ -38,7 +38,7 @@ std::string readValueFromFile(const std::string& path) {
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
-NicInformationGetter::NicInformationGetter() {}
+// NicInformationGetter::NicInformationGetter() {}
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // const char *NicInformationGetter::setScheduler(const char*) {
@@ -48,7 +48,7 @@ NicInformationGetter::NicInformationGetter() {}
 /*---------------------------------------------------------------------------------------------------------------*/
 uint64_t NicInformationGetter::retrieveRate(std::string interface) {
   // Paths to files containing interface information speed rate
-  std::string speedPath = INTERFACE_DIR + interface + "/speed";
+  std::string speedPath = "/sys/class/net/" + interface + "/speed";
 
   // Read speed
   std::string speed = readValueFromFile(speedPath);
@@ -57,13 +57,13 @@ uint64_t NicInformationGetter::retrieveRate(std::string interface) {
   std::istringstream iss(speed);
   iss >> rate;
 
-  return rate;
+  return rate * 1000;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 uint64_t NicInformationGetter::retrieveCeil(std::string interface) {
   // Paths to files containing interface information speed rate
-  std::string speedPath = INTERFACE_DIR + interface + "/speed";
+  std::string speedPath = "/sys/class/net/" + interface + "/speed";
 
   // Read speed
   std::string speed = readValueFromFile(speedPath);
@@ -72,13 +72,8 @@ uint64_t NicInformationGetter::retrieveCeil(std::string interface) {
   std::istringstream iss(speed);
   iss >> ceil;
 
-  return ceil;
+  return ceil * 1000;
 }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-// uint32_t NicInformationGetter::retrieveCeil(std::string interface) {
-//   return NicInformationGetter::retrieveRate(interface);
-// }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 uint32_t NicInformationGetter::retrieveBurst(std::string interface) {
@@ -89,21 +84,3 @@ uint32_t NicInformationGetter::retrieveBurst(std::string interface) {
 uint32_t NicInformationGetter::retrieveCBurst(std::string interface) {
   return 0;
 }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-
-std::string NicInformationGetter::executeCommand(const std::string& command) {
-  char output[OUTPUT_MAX_LENGTH];
-  FILE* fp = popen(command.c_str(), "r");
-
-  if (fp == nullptr) {
-    Logger::upf_app().error("Failed to Run the Command: %s\n", command.c_str());
-    return "";
-  }
-
-  fgets(output, OUTPUT_MAX_LENGTH, fp);
-  pclose(fp);
-  return output;
-}
-
-/*---------------------------------------------------------------------------------------------------------------*/

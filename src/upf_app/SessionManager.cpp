@@ -1,7 +1,7 @@
 #include "SessionManager.h"
-#include <pfcp_session_pdr_lookup_ebpf_xdp_prgrm_user.h>
+#include <pfcp_session_pdr_lookup_xdp_user.h>
 #include <SessionProgramManager.h>
-#include <pfcp_session_lookup_ebpf_xdp_prgrm_user.h>
+#include <pfcp_session_lookup_xdp_user.h>
 #include <bits/stdc++.h>  //sort
 #include <interfaces/ForwardingActionRules.h>
 #include <interfaces/PacketDetectionRules.h>
@@ -255,20 +255,26 @@ void SessionManager::processPDRs(
       }
     }
 
-    if (qer == nullptr) {
+    if (!qer) {
       Logger::upf_n4().error(
           "QER not found for PDR: " + std::to_string(pdr->pdr_id.rule_id));
     }
 
     switch (sourceInterface.interface_value) {
-      case INTERFACE_VALUE_ACCESS:
+      case INTERFACE_VALUE_ACCESS: {
         pdrs_uplink.push_back(pdr);
-        qers_uplink.push_back(qer);
+        if (qer) {
+          qers_uplink.push_back(qer);
+        }
         break;
-      case INTERFACE_VALUE_CORE:
+      }
+      case INTERFACE_VALUE_CORE: {
         pdrs_downlink.push_back(pdr);
-        qers_downlink.push_back(qer);
+        if (qer) {
+          qers_downlink.push_back(qer);
+        }
         break;
+      }
       case INTERFACE_VALUE_SGI_LAN_N6_LAN:
       case INTERFACE_VALUE_CP_FUNCTION:
       case INTERFACE_VALUE_LI_FUNCTION:
@@ -390,8 +396,12 @@ void SessionManager::processPDRDetails(
         std::to_string(pdr_id));
   }
 
-  std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer =
-      (direction == "Uplink") ? pSession->qers_uplink : pSession->qers_downlink;
+  std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer;
+
+  if (upf_cfg.enable_qos) {
+    pQer = (direction == "Uplink") ? pSession->qers_uplink :
+                                     pSession->qers_downlink;
+  }
 
   SessionProgramManager::getInstance().createPipeline(
       pSession->get_up_seid(), fteid.teid, interfaceValue,

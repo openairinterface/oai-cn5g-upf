@@ -117,7 +117,7 @@ void my_app_signal_handler(int s) {
 }
 
 //------------------------------------------------------------------------------
-void setup_bpf(const char* qdisc_scheduler = nullptr) {
+void setup_bpf() {
   std::shared_ptr<RulesUtilities> mpRulesFactory;
   mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
 
@@ -126,13 +126,8 @@ void setup_bpf(const char* qdisc_scheduler = nullptr) {
   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
   Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
 
-  if (qdisc_scheduler) {
-    UserPlaneComponent::getInstance().setup(
-        mpRulesFactory, sGTPInterface, sUDPInterface, qdisc_scheduler);
-  } else {
-    UserPlaneComponent::getInstance().setup(
-        mpRulesFactory, sGTPInterface, sUDPInterface);
-  }
+  UserPlaneComponent::getInstance().setup(
+      mpRulesFactory, sGTPInterface, sUDPInterface);
 }
 
 //------------------------------------------------------------------------------
@@ -200,13 +195,7 @@ int main(int argc, char** argv) {
   fclose(fp);
 
   if (upf_cfg.enable_bpf_datapath) {
-    const char* qdisc_scheduler = nullptr;
-
-    if (upf_cfg.enable_qos) {
-      qdisc_scheduler = HTB_SCHEDULER;
-    }
-
-    setup_bpf(qdisc_scheduler);
+    setup_bpf();
   }
   // once all udp servers initialized
   io_service.run();
