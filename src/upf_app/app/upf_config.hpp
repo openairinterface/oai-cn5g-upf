@@ -51,6 +51,7 @@
 
 constexpr auto UPF_CONFIG_OPTION_YES_STR = "Yes";
 constexpr auto UPF_CONFIG_OPTION_NO_STR  = "No";
+
 const oai::model::common::Snssai DEFAULT_SNSSAI{1};
 const std::vector<oai::model::nrf::DnnUpfInfoItem> DEFAULT_DNN_LIST = {
     oai::model::nrf::DnnUpfInfoItem("default")};
@@ -126,6 +127,7 @@ class upf_config {
 
   bool enable_5g_features;
   bool enable_bpf_datapath;
+  bool enable_qos;
   bool register_nrf;
   struct in_addr remote_n6;
   upf_info_t upf_info;
@@ -170,6 +172,7 @@ class upf_config {
 
     enable_5g_features  = true;
     enable_bpf_datapath = false;
+    enable_qos          = false;
     register_nrf        = false;
     upf_info            = {};
 

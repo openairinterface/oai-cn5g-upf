@@ -217,7 +217,7 @@ class pfcp_switch {
       itti_n4_session_establishment_request*,
       itti_n4_session_modification_request*, itti_n4_session_deletion_request*>;
 
-  void start_datapath(
+  void call_datapath(
       itti_n4_session_establishment_request* establishment_req,
       itti_n4_session_modification_request* modification_request,
       itti_n4_session_deletion_request* deletion_req, pfcp::pfcp_session* s,

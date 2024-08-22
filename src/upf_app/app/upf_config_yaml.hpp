@@ -40,6 +40,9 @@ constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT       = "enable_snat";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR       = "enable_fr";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT_LABEL = "Enable SNAT";
 
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS       = "enable_qos";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS_LABEL = "Enable QoS";
+
 constexpr auto UPF_CONFIG_REMOTE_N6_GW       = "remote_n6_gw";
 constexpr auto UPF_CONFIG_REMOTE_N6_GW_LABEL = "Remote N6 Gateway";
 
@@ -53,16 +56,19 @@ namespace oai::config {
 class upf_support_features : public config_type {
  private:
   option_config_value m_enable_bpf_datapath{};
+  option_config_value m_enable_qos{};
   option_config_value m_enable_snat{};
   option_config_value m_enable_fr{};
 
  public:
-  explicit upf_support_features(bool enable_bpf_datapath, bool enable_snat,bool enable_fr);
+  explicit upf_support_features(
+      bool enable_bpf_datapath, bool enable_qos, bool enable_snat, bool enable_fr);
 
   void from_yaml(const YAML::Node& node) override;
 
   [[nodiscard]] std::string to_string(const std::string& indent) const override;
   [[nodiscard]] bool get_option_enable_bpf_datapath() const;
+  [[nodiscard]] bool get_option_enable_qos() const;
   [[nodiscard]] bool get_option_enable_snat() const;
   [[nodiscard]] bool get_option_enable_fr() const;
 };

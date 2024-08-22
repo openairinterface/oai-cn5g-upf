@@ -683,7 +683,7 @@ bool pfcp_switch::create_packet_in_access(
 }
 
 //------------------------------------------------------------------------------
-void pfcp_switch::start_datapath(
+void pfcp_switch::call_datapath(
     itti_n4_session_establishment_request* establishment_request,
     itti_n4_session_modification_request* modification_request,
     itti_n4_session_deletion_request* deletion_request, pfcp::pfcp_session* s,
@@ -705,15 +705,15 @@ void pfcp_switch::start_datapath(
     obj->sessions.push_back(pSession);
     (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
   } else {
-    auto& sessions = spSessionManager->sessions;
-    auto it        = std::find(sessions.begin(), sessions.end(), pSession);
+    uint64_t seid  = pSession->get_up_seid();
+    auto& sessions = obj->sessions;
 
-    if (it != sessions.end()) {
-      sessions.erase(it);  // Erase the element from the vector
-      (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
-    } else {
-      Logger::upf_app().warn("Session does not exist");
-    }
+    // for (auto it = sessions.begin(); it != sessions.end(); ++it) {
+    //   if ((it->get())->get_up_seid() == seid){
+    //     sessions.erase(it);
+    //   }
+    // }
+    (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
   }
 }
 
@@ -769,6 +769,27 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             break;
           }
 
+          /*
+           *  Add create_qers
+           */
+          pfcp::qer_id_t qer_id = {};
+          if (cr_pdr.get(qer_id)) {
+            pfcp::create_qer cr_qer = {};
+            if (not req->pfcp_ies.get(qer_id, cr_qer)) {
+              cause.cause_value         = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
+              offending_ie.offending_ie = PFCP_IE_CREATE_QER;
+            }
+
+            // if (not session->create(cr_qer, cause,
+            // offending_ie.offending_ie)) {
+            //   session->cleanup();
+            //   delete session;
+            //   break;
+            // }
+
+            session->create(cr_qer, cause, offending_ie.offending_ie);
+          }
+
           if (not session->create(
                   cr_pdr, cause, offending_ie.offending_ie, allocated_fteid)) {
             session->cleanup();
@@ -788,8 +809,9 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
 
       if (upf_cfg.enable_bpf_datapath) {
         Logger::pfcp_switch().info(
-            "Establishing datapath: create PDRs + create FARs");
-        start_datapath(
+            "Establishing datapath: create PDRs + create FARs + create QERs "
+            "(if any)");
+        call_datapath(
             req, NULL, NULL, session, spSessionManager,
             &SessionManager::createBPFSession);
       }
@@ -890,7 +912,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     for (auto it : req->pfcp_ies.remove_pdrs) {
       if (upf_cfg.enable_bpf_datapath) {
         Logger::pfcp_switch().info("Modifying datapath: remove PDRs");
-        start_datapath(
+        call_datapath(
             NULL, req, NULL, session, spSessionManager,
             &SessionManager::updateBPFSession);
       }
@@ -907,11 +929,12 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
     }
+
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.remove_fars) {
         if (upf_cfg.enable_bpf_datapath) {
           Logger::pfcp_switch().info("Modifying datapath: remove FARs");
-          start_datapath(
+          call_datapath(
               NULL, req, NULL, session, spSessionManager,
               &SessionManager::updateBPFSession);
         }
@@ -929,12 +952,41 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
     }
+    /*======================================================================*/
+
+    /*
+     *  Add remove_qers
+     */
+    if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+      for (auto it : req->pfcp_ies.remove_qers) {
+        if (upf_cfg.enable_bpf_datapath) {
+          Logger::pfcp_switch().info("Modifying datapath: remove QERs");
+          call_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::updateBPFSession);
+        }
+
+        remove_qer& qer = it;
+
+        if (not session->remove(qer, cause, offending_ie.offending_ie)) {
+          if (cause.cause_value ==
+              CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
+            failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_QER;
+            failed_rule.rule_id_value = qer.qer_id.second.qer_id;
+            resp->pfcp_ies.set(failed_rule);
+            break;
+          }
+        }
+      }
+    }
+
+    /*======================================================================*/
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.create_fars) {
         if (upf_cfg.enable_bpf_datapath) {
           Logger::pfcp_switch().info("Modifying datapath: create FARs");
-          start_datapath(
+          call_datapath(
               NULL, req, NULL, session, spSessionManager,
               &SessionManager::updateBPFSession);
         }
@@ -985,17 +1037,40 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       if (upf_cfg.enable_bpf_datapath) {
         Logger::pfcp_switch().info(
             "Modifying datapath: create PDRs + create FARs");
-        start_datapath(
+        call_datapath(
             NULL, req, NULL, session, spSessionManager,
             &SessionManager::updateBPFSession);
       }
     }
 
+    /*======================================================================*/
+
+    /*
+     *  Add create_qers
+     */
+
+    if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+      for (auto it : req->pfcp_ies.create_qers) {
+        if (upf_cfg.enable_bpf_datapath) {
+          Logger::pfcp_switch().info("Modifying datapath: create QERs");
+          call_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::updateBPFSession);
+        }
+        create_qer& cr_qer = it;
+        if (not session->create(cr_qer, cause, offending_ie.offending_ie)) {
+          break;
+        }
+      }
+    }
+
+    /*======================================================================*/
+
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.update_pdrs) {
         if (upf_cfg.enable_bpf_datapath) {
           Logger::pfcp_switch().info("Modifying datapath: update PDRs");
-          start_datapath(
+          call_datapath(
               NULL, req, NULL, session, spSessionManager,
               &SessionManager::updateBPFSession);
         }
@@ -1009,10 +1084,11 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           resp->pfcp_ies.set(failed_rule);
         }
       }
+
       for (auto it : req->pfcp_ies.update_fars) {
         if (upf_cfg.enable_bpf_datapath) {
           Logger::pfcp_switch().info("Modifying datapath: update FARs");
-          start_datapath(
+          call_datapath(
               NULL, req, NULL, session, spSessionManager,
               &SessionManager::updateBPFSession);
         }
@@ -1027,6 +1103,31 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           resp->pfcp_ies.set(failed_rule);
         }
       }
+
+      /*======================================================================*/
+
+      /*
+       *  Add update_qers
+       */
+      for (auto it : req->pfcp_ies.update_qers) {
+        if (upf_cfg.enable_bpf_datapath) {
+          Logger::pfcp_switch().info("Modifying datapath: update QERs");
+          call_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::updateBPFSession);
+        }
+
+        update_qer& qer     = it;
+        uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+        if (not session->update(qer, cause_value)) {
+          failed_rule_id_t failed_rule = {};
+          failed_rule.rule_id_type     = FAILED_RULE_ID_TYPE_QER;
+          failed_rule.rule_id_value    = qer.qer_id.second.qer_id;
+          resp->pfcp_ies.set(failed_rule);
+        }
+      }
+
+      /*======================================================================*/
     }
   }
   resp->pfcp_ies.set(cause);
@@ -1093,7 +1194,7 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
     if (upf_cfg.enable_bpf_datapath) {
       Logger::pfcp_switch().info(
           "Deleting datapath: delete PDRs + delete FARs");
-      start_datapath(
+      call_datapath(
           NULL, NULL, req, session, spSessionManager,
           &SessionManager::removeBPFSession);
     }
