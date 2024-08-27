@@ -370,9 +370,6 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
       }
 
       // Add a new entry if doesnt exist.
-      // Cc, push back the ney entry to the exist.
-      // auto it = mSectionLinkInterfacesMap.find(section);
-
       auto it = mSectionLinkInterfacesMap.find(prog_name);
       if (it == mSectionLinkInterfacesMap.end()) {
         std::vector<uint32_t> linkVector;

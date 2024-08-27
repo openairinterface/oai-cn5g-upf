@@ -1,7 +1,6 @@
 #include "qer_tc_user.h"
 #include <SessionManager.h>
 #include <bpf/bpf.h>  // bpf calls
-//#include "../include/bpf/libbpf.h"  // bpf wrappers
 #include <iostream>   // cout
 #include <stdexcept>  // exception
 #include <wrappers/BPFMap.hpp>
@@ -15,8 +14,6 @@
 #include <string.h>
 #include <netlink/route/link.h>
 #include <netlink/route/qdisc/htb.h>
-// #include <NetlinkManager.h>
-// #include "standardized_5qi.h"
 #include "helpers/GetNicInformation.hpp"
 #include "helpers/CmdRunner.hpp"
 
