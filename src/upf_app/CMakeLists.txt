@@ -43,7 +43,6 @@ set(UDP_INTERFACE $ENV{UDP_INTERFACE})
 set(SOCKET_BUFFER_ENABLED $ENV{SOCKET_BUFFER_ENABLED})
 
 add_library(UPF_XDP STATIC
-  NetlinkManager.cpp
   UserPlaneComponent.cpp
   Configuration.cpp
   SignalHandler.cpp
@@ -58,9 +57,6 @@ add_library(UPF_XDP STATIC
   programs/BPFProgram.cpp
   wrappers/BPFMaps.cpp
   wrappers/BPFMap.cpp
-  # utils/Logger.cpp
-  # utils/Util.cpp
-  # utils/NextProgRuleKey.cpp
 )
 
 link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src)
@@ -101,13 +97,13 @@ install(
   include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/qer)
   
   add_library(UPF_TC STATIC
-  NetlinkManager.cpp
+  #NetlinkManager.cpp
   UserPlaneComponent.cpp
   Configuration.cpp
   SignalHandler.cpp
   helpers/NextHopFinder.cpp
   helpers/GetNicInformation.cpp
-  helpers/QdiscHelpers.cpp
+  #helpers/QdiscHelpers.cpp
   SessionProgramManager.cpp
   SessionManager.cpp
   SessionPrograms.cpp

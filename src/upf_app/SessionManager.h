@@ -4,7 +4,7 @@
 #include <UserPlaneComponent.h>
 #include <ie/fseid.h>
 #include <ie/pdr_id.h>
-#include <interfaces/RulesUtilities.h>
+// #include <interfaces/RulesUtilities.h>
 #include <memory>
 #include <pfcp/pfcp_far.h>
 #include <pfcp/pfcp_pdr.h>
@@ -21,8 +21,8 @@
 #include "itti_msg_n4.hpp"
 
 class BPFMap;
-class ForwardingActionRules;
-class PacketDetectionRules;
+// class ForwardingActionRules;
+// class PacketDetectionRules;
 class SessionBpf;
 
 // FIXME: This class compose the UserPlaneComponent. When the program is
@@ -42,7 +42,7 @@ class SessionManager {
  public:
   // Set of PDRs.
 
-  using pdrs_t = std::vector<std::shared_ptr<PacketDetectionRules>>;
+  // using pdrs_t = std::vector<std::shared_ptr<PacketDetectionRules>>;
   /*---------------------------------------------------------------------------------------------------------------*/
 
   /**

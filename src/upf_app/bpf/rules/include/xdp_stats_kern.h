@@ -16,13 +16,6 @@
 #include "xdp_stats_kern_user.h"
 #endif
 
-/* Keeps stats per (enum) xdp_action */
-// struct bpf_map_def SEC("maps") mc_stats = {
-//     .type        = BPF_MAP_TYPE_PERCPU_ARRAY,
-//     .key_size    = sizeof(__u32),
-//     .value_size  = sizeof(struct datarec),
-//     .max_entries = XDP_ACTION_MAX,
-// };
 
 struct {
   __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);

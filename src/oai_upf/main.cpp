@@ -39,7 +39,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/split.hpp>
 
-#include <RulesUtilitiesImpl.h>
+//#include <RulesUtilitiesImpl.h>
 #include <SessionManager.h>
 #include <SessionProgramManager.h>
 #include <UserPlaneComponent.h>
@@ -118,16 +118,15 @@ void my_app_signal_handler(int s) {
 
 //------------------------------------------------------------------------------
 void setup_bpf() {
-  std::shared_ptr<RulesUtilities> mpRulesFactory;
-  mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
+  // std::shared_ptr<RulesUtilities> mpRulesFactory;
+  // mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
 
   std::string sGTPInterface = N3_IF_NAME;
   std::string sUDPInterface = N6_IF_NAME;
   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
   Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
 
-  UserPlaneComponent::getInstance().setup(
-      mpRulesFactory, sGTPInterface, sUDPInterface);
+  UserPlaneComponent::getInstance().setup(sGTPInterface, sUDPInterface);
 }
 
 //------------------------------------------------------------------------------

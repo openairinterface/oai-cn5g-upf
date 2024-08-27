@@ -12,9 +12,9 @@ include_directories(${SRC_TOP_DIR}/common/utils)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
 
 add_library(interfaces STATIC
-  ${CMAKE_CURRENT_SOURCE_DIR}/ForwardingActionRulesImpl.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/PacketDetectionRulesImpl.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/RulesUtilitiesImpl.cpp
+  # ${CMAKE_CURRENT_SOURCE_DIR}/ForwardingActionRulesImpl.cpp
+  # ${CMAKE_CURRENT_SOURCE_DIR}/PacketDetectionRulesImpl.cpp
+  # ${CMAKE_CURRENT_SOURCE_DIR}/RulesUtilitiesImpl.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/SessionBpfImpl.cpp
 )
 

@@ -42,8 +42,8 @@ static __always_inline bool retrieve_upf_iface_from_map(
 /*****************************************************************************************************************/
 static __always_inline bool update_dst_mac_address(
     u32 ip, struct ethhdr* p_eth) {
-  struct s_arp_mapping* map_entry;
-  memset(&map_entry, 0, sizeof(struct s_arp_mapping));
+  struct s_arp_mapping* map_entry = {0};
+  //memset(&map_entry, 0, sizeof(struct s_arp_mapping));
 
   map_entry = bpf_map_lookup_elem(&m_arp_table, &ip);
 
@@ -227,9 +227,9 @@ int far_entry_point(struct xdp_md* ctx) {
     u8 dest_interface =
         p_far->forwarding_parameters.destination_interface.interface_value;
 
-    u16 outer_header_creation =
-        p_far->forwarding_parameters.outer_header_creation
-            .outer_header_creation_description;
+    // u16 outer_header_creation =
+    //     p_far->forwarding_parameters.outer_header_creation
+    //         .outer_header_creation_description;
 
     // Check forwarding action
     if (!p_far->apply_action.forw) {
