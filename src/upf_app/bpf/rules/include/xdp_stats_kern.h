@@ -16,7 +16,6 @@
 #include "xdp_stats_kern_user.h"
 #endif
 
-
 struct {
   __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
   __uint(max_entries, XDP_ACTION_MAX);

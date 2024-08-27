@@ -43,7 +43,7 @@ static __always_inline bool retrieve_upf_iface_from_map(
 static __always_inline bool update_dst_mac_address(
     u32 ip, struct ethhdr* p_eth) {
   struct s_arp_mapping* map_entry = {0};
-  //memset(&map_entry, 0, sizeof(struct s_arp_mapping));
+  // memset(&map_entry, 0, sizeof(struct s_arp_mapping));
 
   map_entry = bpf_map_lookup_elem(&m_arp_table, &ip);
 
