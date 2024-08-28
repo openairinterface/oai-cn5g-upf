@@ -1,7 +1,6 @@
 #include "qer_tc_user.h"
 #include <SessionManager.h>
 #include <bpf/bpf.h>  // bpf calls
-//#include "../include/bpf/libbpf.h"  // bpf wrappers
 #include <iostream>   // cout
 #include <stdexcept>  // exception
 #include <wrappers/BPFMap.hpp>
@@ -15,12 +14,8 @@
 #include <string.h>
 #include <netlink/route/link.h>
 #include <netlink/route/qdisc/htb.h>
-#include <NetlinkManager.h>
-#include "standardized_5qi.h"
 #include "helpers/GetNicInformation.hpp"
 #include "helpers/CmdRunner.hpp"
-//#include "standardized_5qi_qos_mapping.h"
-//#include "qer_maps.h"
 
 #include <errno.h>
 #include <sys/stat.h>
@@ -91,38 +86,6 @@ QERProgram::QERProgram() : BPFProgram() {
 QERProgram::~QERProgram() {}
 
 /*---------------------------------------------------------------------------------------------------------------*/
-
-struct qer_tc_kernel_c* QERProgram::get_bpf_skel_object() {
-  struct qer_tc_kernel_c* obj; /* Skeleton gave us this */
-  char buf[100];
-  int err;
-
-  /* Skeleton header file have BPF-object as inline code */
-  obj = qer_tc_kernel_c__open();
-  err = libbpf_get_error(obj);
-
-  if (err) {
-    libbpf_strerror(err, buf, sizeof(buf));
-    fprintf(stderr, "Couldn't open BPF skeleton:(%d) %s\n", err, buf);
-    return NULL;
-  }
-
-  /* Add code here that change BPF-obj config before loading */
-
-  /* Loading BPF-code into kernel, verifier will check, but not attach */
-  err = qer_tc_kernel_c__load(obj);
-
-  if (err) {
-    libbpf_strerror(err, buf, sizeof(buf));
-    fprintf(stderr, "Couldn't load BPF skeleton:(%d) %s\n", err, buf);
-    qer_tc_kernel_c__destroy(obj);
-    return NULL;
-  }
-
-  return obj;
-}
-
-/*---------------------------------------------------------------------------------------------------------------*/
 void QERProgram::storeQosFlow(std::shared_ptr<pfcp::pfcp_qer> pQer) {
   struct s_fiveQosFlow fiveFlow;
   memset(&fiveFlow, 0, sizeof(struct s_fiveQosFlow));
@@ -161,15 +124,12 @@ bool QERProgram::no_htb_root_qdisc(std::string interface) {
 /*---------------------------------------------------------------------------------------------------------------*/
 void QERProgram::setup(
     uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer) {
-  QdiscHelper qdiscHelper;
   spSkeleton = mpLifeCycle->open();
   initializeMaps();
   mpLifeCycle->load();
   mpLifeCycle->attach();
 
   struct qer_tc_kernel_c* obj = NULL;
-
-  // savedQers = pQer;
 
   std::string cmd = {};
   int rc          = 0;
@@ -268,22 +228,11 @@ void QERProgram::setup(
 
   Logger::upf_app().info("Attach Sesction tc_redirect to udp interface");
   mpLifeCycle->tcAttachIngress("tc_redirect_traffic", UDP_INTERFACE.c_str());
-
-  Logger::upf_app().error(".................................................");
 }
 
 // change:
 //  sudo tc class change dev br0 parent 1:1 classid 1:10 htb rate 1kbit ceil
 //  5kbit burst 16b
-
-/*---------------------------------------------------------------------------------------------------------------*/
-void QERProgram::setup() {
-  spSkeleton = mpLifeCycle->open();
-  initializeMaps();
-  mpLifeCycle->load();
-  mpLifeCycle->attach();
-  // insertValuesIntoMaps();
-}
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMaps> QERProgram::getMaps() {
@@ -296,16 +245,6 @@ std::shared_ptr<BPFMaps> QERProgram::getMaps() {
 void QERProgram::tearDown() {
   mpLifeCycle->tearDown();
 }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> QERProgram::geGtpUTunnelMap() const {
-  return mpGtpUTunnelMap;
-}
-
-/*---------------------------------------------------------------------------------------------------------------*/
-// std::shared_ptr<BPFMap> QERProgram::getFilterMap() const {
-//   return mpFilterMap;
-// }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> QERProgram::get5GQoSFlowParamsMap() const {
@@ -332,489 +271,8 @@ void QERProgram::initializeMaps() {
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
 
   // Warning - The name of the map must be the same of the BPF program.
-  mpGtpUTunnelMap = std::make_shared<BPFMap>(mpMaps->getMap("m_gtp_u_tunnel"));
-  // mpFilterMap     = std::make_shared<BPFMap>(mpMaps->getMap("m_filter"));
-  mp5GQoSFlowParamsMap =
-      std::make_shared<BPFMap>(mpMaps->getMap("m_5g_qos_flow_parameters"));
   mpQoSFlowMap   = std::make_shared<BPFMap>(mpMaps->getMap("m_qos_flow"));
   mpSdfFilterMap = std::make_shared<BPFMap>(mpMaps->getMap("m_sdf_filter"));
   mpEgressIfindexMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_egress_ifindex"));
 }
-
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-//-----------------------------------------------------------------------------------------------------------------------
-
-// // Method definition to initialize class_params
-// void QERProgram::setPduSessionClassAttributes(
-//     const char* qdiscScheduler, std::string interface) {
-//   NicInformationGetter nicConfiguration;
-//   // Initialize classAtt members
-//   pduSessionClassAtt            = new classParams();
-//   pduSessionClassAtt->scheduler = qdiscScheduler;
-//   pduSessionClassAtt->rate      =
-//   NicInformationGetter::retrieveRate(interface); pduSessionClassAtt->ceil =
-//   NicInformationGetter::retrieveCeil(interface); pduSessionClassAtt->burst =
-//   NicInformationGetter::retrieveBurst(interface); pduSessionClassAtt->cburst
-//   = NicInformationGetter::retrieveCBurst(interface);
-//   pduSessionClassAtt->priority  = -1;
-
-//   Logger::upf_app().debug(
-//       "QDISC Root Rate (GBR) : %d", pduSessionClassAtt->rate);
-//   Logger::upf_app().debug(
-//       "QDISC Root Ceil (MBR) : %d", pduSessionClassAtt->ceil);
-//   Logger::upf_app().debug(
-//       "QDISC Root Burst      : %d", pduSessionClassAtt->burst);
-//   Logger::upf_app().debug(
-//       "QDISC Root CBurst     : %d", pduSessionClassAtt->cburst);
-//   Logger::upf_app().debug(
-//       "QDISC Root Priority   : %d", pduSessionClassAtt->priority);
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-// Method definition to initialize class_params
-// void QERProgram::setQosFlowsClassesAttributes() {
-//   for (int i = 0; i < savedQers.size() && i < qosFlowsQfis.size(); ++i) {
-//     const auto& qer              = savedQers[i];
-//     struct classParams* classAtt = new classParams();
-
-//     classAtt->scheduler = pduSessionClassAtt->scheduler;
-//     if (qosFlowsQfis[i].qfi != DEFAULT_QFI) {
-//       classAtt->rate     = qosFlowsQfis[i].gbr.dl_gbr;
-//       classAtt->ceil     = qosFlowsQfis[i].mbr.dl_mbr;
-//       classAtt->burst    = 0;
-//       classAtt->cburst   = 0;
-//       classAtt->priority = -1;
-//     } else {
-//       classAtt->rate     = 100;
-//       classAtt->ceil     = 200;
-//       classAtt->burst    = 0;
-//       classAtt->cburst   = 0;
-//       classAtt->priority = -1;
-//     }
-
-//     qosFlowsClassesAtt.push_back(classAtt);
-
-//     Logger::upf_app().debug(
-//         "    HTB Class ID (QER) ........... %d",
-//         savedQers[i]->qer_id.second.qer_id);
-//     Logger::upf_app().debug("         Class QFI:      %d",
-//     qosFlowsQfis[i].qfi); Logger::upf_app().debug("         Class Rate:
-//     %dkbps", classAtt->rate); Logger::upf_app().debug("         Class Ceil:
-//     %dkbps", classAtt->ceil); Logger::upf_app().debug("         Class Burst:
-//     %d", classAtt->burst); Logger::upf_app().debug("         Class CBurst:
-//     %d", classAtt->cburst); Logger::upf_app().debug("         Class Priority:
-//     %d", classAtt->priority);
-//   }
-// }
-
-// /*---------------------------------------------------------------------------------------------------------------*/
-// // Method definition to set pduSession class position
-// void QERProgram::setPduSessionClassPosition(uint64_t seid) {
-//   pduSessionClassPos            = new classPosition();
-//   pduSessionClassPos->parentMaj = 1;
-//   pduSessionClassPos->parentMin = 0;
-//   pduSessionClassPos->childMaj  = 1;
-//   pduSessionClassPos->childMin  = seid;
-// }
-
-// /*---------------------------------------------------------------------------------------------------------------*/
-// // Method definition to set pduSession class position
-// void QERProgram::setQosFlowsClassesPositions() {
-//   for (int i = 0; i < qosFlowsQfis.size(); i++) {
-//     struct classPosition* classPos = new classPosition();
-
-//     classPos->parentMaj = pduSessionClassPos->parentMaj;
-//     classPos->parentMin = pduSessionClassPos->parentMin;
-//     classPos->childMaj  = pduSessionClassPos->childMin;
-//     classPos->childMin  = qosFlowsQfis[i].qfi;
-
-//     qosFlowsClassesPos.push_back(classPos);
-
-//     Logger::upf_app().debug(
-//         "QDISC Root Position: %d:%d", classPos->parentMaj,
-//         classPos->parentMin);
-//     Logger::upf_app().debug(
-//         "QDISC Root-Child Position: %d:%d", classPos->childMaj,
-//         classPos->childMin);
-//     Logger::upf_app().debug(
-//         "HTB Class Position  %d:%d", classPos->childMaj, classPos->childMin);
-//   }
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-
-// int QERProgram::teardown_hook(int ifindex)
-// {
-// 	DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook,
-// 			    .attach_point = BPF_TC_EGRESS,
-// 			    .ifindex = ifindex);
-// 	int err;
-
-// 	/* When destroying the hook, any and ALL attached TC-BPF (filter)
-// 	 * programs are also detached.
-// 	 */
-// 	err = bpf_tc_hook_destroy(&hook);
-// 	if (err)
-// 		fprintf(stderr, "Couldn't remove clsact qdisc on %s\n", ifname);
-
-// 	if (verbose)
-// 		printf("Flushed all TC-BPF egress programs (via destroy
-// hook)\n");
-
-// 	return err;
-// }
-
-// /*---------------------------------------------------------------------------------------------------------------*/
-// int QERProgram::tc_detach_egress(int ifindex)
-// {
-// 	int err;
-// 	DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .ifindex = ifindex,
-// 			    .attach_point = BPF_TC_EGRESS);
-// 	DECLARE_LIBBPF_OPTS(bpf_tc_opts, opts_info);
-
-// 	opts_info.handle   = EGRESS_HANDLE;
-// 	opts_info.priority = EGRESS_PRIORITY;
-
-// 	/* Check what program we are removing */
-// 	err = bpf_tc_query(&hook, &opts_info);
-// 	if (err) {
-// 		fprintf(stderr, "No egress program to detach "
-// 			"for ifindex %d (err:%d)\n", ifindex, err);
-// 		return err;
-// 	}
-// 	if (verbose)
-// 		printf("Detaching TC-BPF prog id:%d\n", opts_info.prog_id);
-
-// 	/* Attempt to detach program */
-// 	opts_info.prog_fd = 0;
-// 	opts_info.prog_id = 0;
-// 	opts_info.flags = 0;
-// 	err = bpf_tc_detach(&hook, &opts_info);
-// 	if (err) {
-// 		fprintf(stderr, "Cannot detach TC-BPF program id:%d "
-// 			"for ifindex %d (err:%d)\n", opts_info.prog_id,
-// 			ifindex, err);
-// 	}
-
-// 	return teardown_hook(ifindex);
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-
-// int tc_attach_egress(int ifindex, struct qer_tc_kernel_c *obj)
-// {
-// 	int err = 0;
-// 	int fd;
-// 	DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .attach_point = BPF_TC_EGRESS);
-// 	DECLARE_LIBBPF_OPTS(bpf_tc_opts, attach_egress);
-
-// 	/* Selecting BPF-prog here: */
-// 	//fd = bpf_program__fd(obj->progs.queue_map_4);
-// 	fd = bpf_program__fd(obj->progs.not_txq_zero);
-// 	if (fd < 0) {
-// 		fprintf(stderr, "Couldn't find egress program\n");
-// 		err = -ENOENT;
-// 		goto out;
-// 	}
-// 	attach_egress.prog_fd = fd;
-
-// 	hook.ifindex = ifindex;
-
-// 	err = bpf_tc_hook_create(&hook);
-// 	if (err && err != -EEXIST) {
-// 		fprintf(stderr, "Couldn't create TC-BPF hook for "
-// 			"ifindex %d (err:%d)\n", ifindex, err);
-// 		goto out;
-// 	}
-// 	if (verbose && err == -EEXIST) {
-// 		printf("Success: TC-BPF hook already existed "
-// 		       "(Ignore: \"libbpf: Kernel error message\")\n");
-// 	}
-
-// 	hook.attach_point = BPF_TC_EGRESS;
-// 	attach_egress.flags    = BPF_TC_F_REPLACE;
-// 	attach_egress.handle   = EGRESS_HANDLE;
-// 	attach_egress.priority = EGRESS_PRIORITY;
-// 	err = bpf_tc_attach(&hook, &attach_egress);
-// 	if (err) {
-// 		fprintf(stderr, "Couldn't attach egress program to "
-// 			"ifindex %d (err:%d)\n", hook.ifindex, err);
-// 		goto out;
-// 	}
-
-// 	if (verbose) {
-// 		printf("Attached TC-BPF program id:%d\n",
-// 		       attach_egress.prog_id);
-// 	}
-// out:
-// 	return err;
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-
-// struct bpf_program *find_program_by_title(struct bpf_object *obj, const char
-// *title) {
-//     struct bpf_program *prog;
-//     bpf_object__for_each_program(prog, obj) {
-//         const char *prog_title = bpf_program__section_name(prog);
-//         if (prog_title && !strcmp(prog_title, title)) {
-//             return prog;
-//         }
-//     }
-//     return NULL;
-
-// }
-/*---------------------------------------------------------------------------------------------------------------*/
-
-// struct bpf_program *
-// bpf_object__find_program_by_title(const struct bpf_object *obj,
-// 				  const char *title)
-// {
-// 	struct bpf_program *pos;
-
-// 	bpf_object__for_each_program(pos, obj) {
-// 		if (pos->sec_name && !strcmp(pos->sec_name, title))
-// 			return pos;
-// 	}
-// 	return errno = ENOENT, NULL;
-// }
-
-//---------------------------------------------------------------------------------------------------------------
-// int QERProgram::tc_attach_egress(int ifindex, struct qer_tc_kernel_c
-// *bpf_obj, const char *section_name)
-// {
-//     int err = 0;
-//     int fd;
-//     struct bpf_program *prog = NULL;
-//     DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .attach_point = BPF_TC_EGRESS);
-//     DECLARE_LIBBPF_OPTS(bpf_tc_opts, attach_egress);
-
-//     hook.ifindex = ifindex;
-
-//     // Retrieve the BPF program based on the section name
-//     //prog = bpf_object__find_program_by_title(bpf_obj->obj, section_name);
-//     prog = find_program_by_title(bpf_obj->obj, section_name);
-//     if (!prog) {
-//         fprintf(stderr, "Couldn't find program with section name: %s\n",
-//         section_name); err = -ENOENT; goto out;
-//     }
-
-//     fd = bpf_program__fd(prog);
-//     if (fd < 0) {
-//         fprintf(stderr, "Couldn't get file descriptor for program with
-//         section name: %s\n", section_name); err = -ENOENT; goto out;
-//     }
-//     attach_egress.prog_fd = fd;
-
-//     // Create TC-BPF hook
-//     err = bpf_tc_hook_create(&hook);
-//     if (err && err != -EEXIST) {
-//         fprintf(stderr, "Couldn't create TC-BPF hook for ifindex %d
-//         (err:%d)\n", ifindex, err); goto out;
-//     }
-//     if (verbose && err == -EEXIST) {
-//         printf("Success: TC-BPF hook already existed (Ignore: \"libbpf:
-//         Kernel error message\")\n");
-//     }
-
-//     // Attach the BPF program
-//     hook.attach_point = BPF_TC_EGRESS;
-//     attach_egress.flags = BPF_TC_F_REPLACE;
-//     attach_egress.handle = EGRESS_HANDLE;
-//     attach_egress.priority = EGRESS_PRIORITY;
-//     err = bpf_tc_attach(&hook, &attach_egress);
-//     if (err) {
-//         fprintf(stderr, "Couldn't attach egress program to ifindex %d
-//         (err:%d)\n", hook.ifindex, err); goto out;
-//     }
-
-//     if (verbose) {
-//         printf("Attached TC-BPF program id:%d with section name: %s\n",
-//         attach_egress.prog_id, section_name);
-//     }
-
-// out:
-//     return err;
-// }
-
-// /*---------------------------------------------------------------------------------------------------------------*/
-
-// int QERProgram::tc_attach_ingress(int ifindex, struct qer_tc_kernel_c
-// *bpf_obj, const char *section_name)
-// {
-//     int err = 0;
-//     int fd;
-//     struct bpf_program *prog = NULL;
-//     DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .attach_point = BPF_TC_INGRESS);
-//     DECLARE_LIBBPF_OPTS(bpf_tc_opts, attach_ingress);
-
-//     hook.ifindex = ifindex;
-
-//     // Retrieve the BPF program based on the section name
-//     //prog = bpf_object__find_program_by_title(bpf_obj->obj, section_name);
-//     prog = find_program_by_title(bpf_obj->obj, section_name);
-
-//     if (!prog) {
-//         fprintf(stderr, "Couldn't find program with section name: %s\n",
-//         section_name); err = -ENOENT; goto out;
-//     }
-
-//     fd = bpf_program__fd(prog);
-//     if (fd < 0) {
-//         fprintf(stderr, "Couldn't get file descriptor for program with
-//         section name: %s\n", section_name); err = -ENOENT; goto out;
-//     }
-//     attach_ingress.prog_fd = fd;
-
-//     // Create TC-BPF hook
-//     err = bpf_tc_hook_create(&hook);
-//     if (err && err != -EEXIST) {
-//         fprintf(stderr, "Couldn't create TC-BPF hook for ifindex %d
-//         (err:%d)\n", ifindex, err); goto out;
-//     }
-//     if (verbose && err == -EEXIST) {
-//         printf("Success: TC-BPF hook already existed (Ignore: \"libbpf:
-//         Kernel error message\")\n");
-//     }
-
-//     // Attach the BPF program
-//     hook.attach_point = BPF_TC_INGRESS;
-//     attach_ingress.flags = BPF_TC_F_REPLACE;
-//     attach_ingress.handle = INGRESS_HANDLE;
-//     attach_ingress.priority = INGRESS_PRIORITY;
-//     err = bpf_tc_attach(&hook, &attach_ingress);
-//     if (err) {
-//         fprintf(stderr, "Couldn't attach ingress program to ifindex %d
-//         (err:%d)\n", hook.ifindex, err); goto out;
-//     }
-
-//     if (verbose) {
-//         printf("Attached TC-BPF program id:%d with section name: %s\n",
-//         attach_ingress.prog_id, section_name);
-//     }
-
-// out:
-//     return err;
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-
-// Function to add the clsact qdisc to an interface
-// int QERProgram::add_clsact_qdisc(int ifindex, enum bpf_tc_attach_point
-// attach_point) {
-//     int err = 0;
-//     DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .attach_point = attach_point);
-
-//     // Set the interface index in the hook options
-//     hook.ifindex = ifindex;
-
-//     // Create the clsact qdisc
-//     err = bpf_tc_hook_create(&hook);
-//     if (err && err != -EEXIST) {
-//         fprintf(stderr, "Failed to add clsact qdisc on interface %d
-//         (err:%d)\n", ifindex, err); return err;
-//     }
-
-//     if (verbose && err == -EEXIST) {
-//         printf("clsact qdisc already exists on interface %d\n", ifindex);
-//     }
-
-//     return 0;
-// }

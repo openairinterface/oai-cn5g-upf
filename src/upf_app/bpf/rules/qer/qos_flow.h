@@ -3,15 +3,6 @@
 #define __QOS_FLOW_H__
 
 #include <types.h>
-/*
-typedef enum { OPEN, CLOSE, FUTURE_USE } e_ul_gate_status;
-typedef enum { OPEN, CLOSE, FUTURE_USE } e_dl_gate_status;
-
-struct s_gate {
-  e_ul_gate_status ul_gate;
-  e_dl_gate_status dl_gate;
-};
-*/
 
 /* Use uint8_t*/
 struct s_gate {
