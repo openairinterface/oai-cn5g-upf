@@ -106,6 +106,23 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSessionMappingMap()
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getFramedRouteMappingMap()
+    const {
+  return mpFramedRouteMappingMap;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+void PFCP_Session_LookupProgram::updateFramedRouteMappingMap(uint32_t networkAddress, FramedRoutingKey key) {
+  __u32 hash_key = hash_framed_routing_key(&key);
+  mpFramedRouteMappingMap->update(hash_key, ue_ip, BPF_ANY);
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+void PFCP_Session_LookupProgram::removeFramedRoute(uint32_t key) {
+// TODO
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_LookupProgram::initializeMaps() {
   // Store all maps available in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
@@ -119,6 +136,8 @@ void PFCP_Session_LookupProgram::initializeMaps() {
       std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_prog_index"));
   mpSessionMappingMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_session_mapping"));
+  mpFramedRouteMappingMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_ueip_session"));
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

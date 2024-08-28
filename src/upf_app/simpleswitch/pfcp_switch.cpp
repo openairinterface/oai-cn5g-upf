@@ -630,8 +630,6 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
     ue_ipv4_hbo2pfcp_pdr.insert(entry);
     if (upf_cfg.enable_fr && pdr->pdi.second.framed_route.first) {
       Logger::pfcp_switch().info("fr_ue_ip %4x ", ue_ip);
-      Logger::pfcp_switch().info(
-          "framed routing ip: " +
           pdr->pdi.second.framed_route.second.at(0).framed_route);
       for (const auto& item : pdr->pdi.second.framed_route.second) {
         Logger::pfcp_switch().debug("framed routing ip: %s", item.framed_route);
@@ -1255,7 +1253,8 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
         // todo (kw) framed route ip
         isInAccess = (*it_pdr)->look_up_pack_in_access(
             iph, num_bytes, r_endpoint, tunnel_id);
-        if (upf_cfg.enable_fr && it_pdr->get()->pdi.second.framed_route.first) {
+        if (!isInAccess && upf_cfg.enable_fr && it_pdr->get()->pdi.second.framed_route.first) {
+          // todo (lr): fix tautology (fr:mapping pdi-fr to pdi-ip. We map pdi-fr to the pdi-ip and check if pdi-ip == pdi-ip)
           uint32_t fr_ue_ip = 0;
           for (const auto& item :
                it_pdr->get()->pdi.second.framed_route.second) {

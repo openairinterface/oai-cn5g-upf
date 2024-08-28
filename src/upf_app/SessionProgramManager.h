@@ -112,6 +112,9 @@ class SessionProgramManager {
   pfcp_far_t_ createFar(std::shared_ptr<pfcp::pfcp_far> pFar);
 
   /*---------------------------------------------------------------------------------------------------------------*/
+  void addFramedRoutes(uint32_t ueIpAddress, std::vector<pfcp::framed_route_t> framedRoutes);
+
+  /*---------------------------------------------------------------------------------------------------------------*/
   void createPipeline(
       uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
       uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,

@@ -31,6 +31,10 @@ class FramedRouting {
 
   void remove_entry(uint32_t ue_ip);
 
+  [[nodiscard]] static uint32_t framedIPToUeIP(const std::string& ip) const;
+
+  [[nodiscard]] static uint32_t frameSubnetToUInt(std::string& subnet) const;
+
   // todo(kw) create a facade for fr options.
 
  private:
@@ -39,10 +43,6 @@ class FramedRouting {
   // todo(kw) discuss size or use constant
   std::shared_ptr<LocalRouting> localRouting;
   std::unordered_map<FramedRoutingKey, uint32_t> KeyToIp{};
-
-  [[nodiscard]] uint32_t framedIPToUeIP(const std::string& ip) const;
-
-  [[nodiscard]] uint32_t frameSubnetToUInt(std::string& subnet) const;
 
   [[nodiscard]] std::pair<uint32_t, uint32_t> extractIPCidr(
       const std::string& fr_subnet) const;

@@ -398,6 +398,18 @@ void SessionManager::processPDRDetails(
 
   std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer;
 
+  if (upf_cfg.enable_fr && direction == "Downlink") { //TODO check
+    if (ueIpAddress.v4){
+      std::vector<pfcp::framed_route_t> framedRoutes;
+      if(pdi.get(framedRoutes)) {
+        SessionProgramManager::getInstance().addFramedRoutes(ueIpAddress.ipv4_address.s_addr, framedRoutes);
+      }
+    } else {
+      Logger::upf_app().warn(
+              "Framed Route is not yet supported for Ipv6");
+    }
+  }
+
   if (upf_cfg.enable_qos) {
     pQer = (direction == "Uplink") ? pSession->qers_uplink :
                                      pSession->qers_downlink;

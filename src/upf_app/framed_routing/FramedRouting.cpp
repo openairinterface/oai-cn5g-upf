@@ -88,7 +88,6 @@ uint32_t FramedRouting::framedIPToUeIP(const std::string& ip) const {
 }
 
 uint32_t FramedRouting::frameSubnetToUInt(std::string& subnet) const {
-  // todo be a method?
   std::string temp_subnet = "";
   if (subnet.length() > 2) {
     return 32;
@@ -108,13 +107,12 @@ std::pair<uint32_t, uint32_t> FramedRouting::extractIPCidr(
 
   const std::string ip_substring =
       ipSubnet.substr(0, ipSubnet.find(subnet_delimeter));
-  ip = this->framedIPToUeIP(ip_substring);
-  std::string ip_temp;
+  ip = framedIPToUeIP(ip_substring);
 
   std::reverse(ipSubnet.begin(), ipSubnet.end());
   std::string subnet_substring =
       ipSubnet.substr(0, ipSubnet.rfind(subnet_delimeter));
-  cidr = this->frameSubnetToUInt(subnet_substring);
+  cidr = frameSubnetToUInt(subnet_substring);
   return std::pair<uint32_t, uint32_t>{ip, cidr};
 }
 

@@ -206,6 +206,10 @@ class PFCP_Session_LookupProgram {
   // The UDP interface.
   std::string mUDPInterface;
   /*---------------------------------------------------------------------------------------------------------------*/
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  // Framed route ue_ip mapping map.
+  std::shared_ptr<BPFMap> mpFramedRouteMappingMap;
 };
 
 #endif  // __PFCP_SESSION_LOOKUP_XDP_USER_H__

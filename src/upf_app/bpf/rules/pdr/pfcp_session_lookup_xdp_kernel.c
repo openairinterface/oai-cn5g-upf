@@ -71,6 +71,23 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
         "TEID downlink: 0x%x was found for UE IP: 0x%x", ue_ip_address,
         *teid_dl);
     tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
+  } else {
+    #pragma clang loop unroll(full)
+    for (i = 32; i > 0; i--) {
+      struct FramedRoutingKeyBPF key = framed_routing_key_for_ip_cidr(ue_ip_address, i);
+
+      u32 fr_key = hash_framed_routing_key(key);
+      u32* fr_ue_ip = bpf_map_lookup_elem(&m_framed_route_mapping, &fr_key);
+      if(fr_ue_ip) {
+        bpf_debug(
+                "Framed Route detected for IP: 0x%x. UE IP: 0x%x", fr_ue_ip, ue_ip_address);
+        u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, &fr_ue_ip);
+        if (teid_dl) {
+          bpf_debug("TEID downlink: 0x%x was found for Framed Route IP: 0x%x", *teid_dl, ue_ip_address,);
+          tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, fr_ue_ip);
+        }
+      }
+    }
   }
 
   bpf_debug("BPF tail call was not executed!");
@@ -151,6 +168,11 @@ static __always_inline u32 ipv4_handle(struct xdp_md* ctx, struct iphdr* iph) {
   void* data_end = (void*) (long) ctx->data_end;
 
   u32 ip_dest = iph->daddr;
+  bpf_debug("UE IP: 0x%x", ip_dest);
+  if (ip_dest == 0x0301010c) {
+    ip_dest = ip_dest - 0x01000000;
+    bpf_debug("New UE IP: 0x%x", ip_dest);
+  }
   u8 protocol = iph->protocol;
 
   switch (protocol) {
@@ -165,11 +187,11 @@ static __always_inline u32 ipv4_handle(struct xdp_md* ctx, struct iphdr* iph) {
 
       if (bpf_htons(udph->dest) == GTP_UDP_PORT) {
         bpf_debug("This is a GTP traffic");
-        return handle_uplink_traffic(ctx, udph);
+        return handle_uplink_traffic(ctx, udph);  // TODO: Integrate Framed Routing
       }
     }
     default: {
-      return handle_downlink_traffic(ctx, ip_dest);
+      return handle_downlink_traffic(ctx, ip_dest);  // TODO: Integrate Framed Routing
     }
   }
 }
