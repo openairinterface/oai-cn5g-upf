@@ -272,7 +272,8 @@ void upf_n3::report_error_indication(
   error_ind->gtp_ies.set(tun_data);
 
   gtp_u_peer_address_t peer_address = {};
-  if (xgpp_conv::endpoint_to_gtp_u_peer_address(r_endpoint, peer_address)) {
+  if (oai::utils::xgpp_conv::endpoint_to_gtp_u_peer_address(
+          r_endpoint, peer_address)) {
     error_ind->gtp_ies.set(peer_address);
   } else {
     // mandatory ie
