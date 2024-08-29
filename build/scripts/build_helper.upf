@@ -161,7 +161,7 @@ install_bpftool_from_git() {
     git clone --branch v7.3.0 --recurse-submodules $GIT_URL
 
     if [[ $OS_DISTRO == "ubuntu" ]]; then
-      $SUDO $INSTALLER install -y wget
+      $SUDO $INSTALLER install -ym wget gcc-multilib
     elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
       $SUDO $INSTALLER install -y wget
     fi

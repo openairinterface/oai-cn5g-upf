@@ -223,6 +223,12 @@ function main()
     $SUDO ln -s /usr/include/aarch64-linux-gnu/gnu /usr/include/gnu
     $SUDO cp -s /usr/include/aarch64-linux-gnu/sys/* /usr/include/sys/.
   fi
+  if [ -d /usr/include/x86_64-linux-gnu ]; then
+    $SUDO ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm
+    $SUDO ln -s /usr/include/x86_64-linux-gnu/bits /usr/include/bits
+    $SUDO ln -s /usr/include/x86_64-linux-gnu/gnu /usr/include/gnu
+    $SUDO cp -s /usr/include/x86_64-linux-gnu/sys/* /usr/include/sys/.
+  fi
 
   cd $OPENAIRCN_DIR/build/upf
   if [ ! -d ./build ]; then
