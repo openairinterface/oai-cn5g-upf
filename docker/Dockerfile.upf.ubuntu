@@ -86,6 +86,9 @@ RUN apt-get update && \
       iproute2 \
       ethtool \
       arping \
+      libllvm14 \
+      libnl-3-200 \
+      libnl-route-3-200 \
       sudo \
       iptables \
       netbase \
@@ -125,7 +128,7 @@ COPY --from=oai-upf-builder \
 # Ubuntu 22 --> libbfd-2.38
     /usr/lib/x86_64-linux-gnu/libbfd-2.3?-system.so \
     /usr/lib/x86_64-linux-gnu/libopcodes-2.3?-system.so \
-    /openair-upf/build/ext/libbpf/src/libbpf.so.0 \
+    /openair-upf/build/ext/libbpf/src/libbpf.so.1 \
     # /openair-upf/build/upf/build/upf_app/utils/libupfutils.so \
     ./
 

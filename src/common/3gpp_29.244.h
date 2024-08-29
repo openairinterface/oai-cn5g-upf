@@ -1521,7 +1521,7 @@ typedef struct graceful_release_period_s {
 
 //-------------------------------------
 // 8.2.79 PDN Type
-enum pdu_session_type_value_e {
+enum pdn_type_value_e {
   /* Request / Initial message */
   IPV4     = 1,
   IPV6     = 2,
@@ -1530,10 +1530,10 @@ enum pdu_session_type_value_e {
   ETHERNET = 5
 };
 
-typedef struct pdu_session_type_s {
+typedef struct pdn_type_s {
   uint8_t spare : 5;
-  uint8_t pdu_session_type : 3;
-} pdu_session_type_t;
+  uint8_t pdn_type : 3;
+} pdn_type_t;
 
 //-------------------------------------
 // 8.2.80 Failed Rule ID

@@ -39,7 +39,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/split.hpp>
 
-#include <RulesUtilitiesImpl.h>
+//#include <RulesUtilitiesImpl.h>
 #include <SessionManager.h>
 #include <SessionProgramManager.h>
 #include <UserPlaneComponent.h>
@@ -58,11 +58,15 @@ bool single_teardown_call;
 
 #ifndef N3_IF_NAME
 #define N3_IF_NAME upf_cfg.n3.if_name
-#endif
+#endif  // N3_IF_NAME
 
 #ifndef N6_IF_NAME
 #define N6_IF_NAME upf_cfg.n6.if_name
-#endif
+#endif  // N6_IF_NAME
+
+#ifndef HTB_SCHEDULER
+#define HTB_SCHEDULER "htb"
+#endif  // HTB_SCHEDULER
 
 std::unique_ptr<upf_config_yaml> upf_cfg_yaml            = nullptr;
 std::shared_ptr<oai::http::http_client> http_client_inst = nullptr;
@@ -114,15 +118,15 @@ void my_app_signal_handler(int s) {
 
 //------------------------------------------------------------------------------
 void setup_bpf() {
-  std::shared_ptr<RulesUtilities> mpRulesFactory;
-  mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
+  // std::shared_ptr<RulesUtilities> mpRulesFactory;
+  // mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
 
   std::string sGTPInterface = N3_IF_NAME;
   std::string sUDPInterface = N6_IF_NAME;
   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
   Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
-  UserPlaneComponent::getInstance().setup(
-      mpRulesFactory, sGTPInterface, sUDPInterface);
+
+  UserPlaneComponent::getInstance().setup(sGTPInterface, sUDPInterface);
 }
 
 //------------------------------------------------------------------------------
@@ -189,7 +193,9 @@ int main(int argc, char** argv) {
   fflush(fp);
   fclose(fp);
 
-  if (upf_cfg.enable_bpf_datapath) setup_bpf();
+  if (upf_cfg.enable_bpf_datapath) {
+    setup_bpf();
+  }
   // once all udp servers initialized
   io_service.run();
 

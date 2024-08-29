@@ -1104,15 +1104,11 @@ class pfcp_ies_container {
         0, PFCP_IE_GRACEFUL_RELEASE_PERIOD, __FILE__, __LINE__);
   }
   //  PFCP_IE_PDN_TYPE
-  // virtual bool get(pfcp::pdn_type_t& v) const {throw
-  // pfcp_msg_illegal_ie_exception(0, PFCP_IE_PDN_TYPE, __FILE__, __LINE__);}
-  // virtual void set(const pfcp::pdn_type_t& v) {throw
-  // pfcp_msg_illegal_ie_exception(0, PFCP_IE_PDN_TYPE, __FILE__, __LINE__);}
-  virtual bool get(pfcp::pdu_session_type_t& v) const {
+  virtual bool get(pfcp::pdn_type_t& v) const {
     throw pfcp_msg_illegal_ie_exception(
         0, PFCP_IE_PDN_TYPE, __FILE__, __LINE__);
   }
-  virtual void set(const pfcp::pdu_session_type_t& v) {
+  virtual void set(const pfcp::pdn_type_t& v) {
     throw pfcp_msg_illegal_ie_exception(
         0, PFCP_IE_PDN_TYPE, __FILE__, __LINE__);
   }
@@ -1458,6 +1454,15 @@ class pfcp_ies_container {
     throw pfcp_msg_illegal_ie_exception(
         0, PFCP_IE_FRAMED_IPV6_ROUTE, __FILE__, __LINE__);
   }
+
+  //  PFCP_IE_APN_DNN
+  virtual bool get(pfcp::apn_dnn_t& v) const {
+    throw pfcp_msg_illegal_ie_exception(0, PFCP_IE_APN_DNN, __FILE__, __LINE__);
+  }
+  virtual void set(const pfcp::apn_dnn_t& v) {
+    throw pfcp_msg_illegal_ie_exception(0, PFCP_IE_APN_DNN, __FILE__, __LINE__);
+  }
+
   //  PFCP_IE_3GPP_INTERFACE_TYPE
   virtual bool get(pfcp::_3gpp_interface_type_t& v) const {
     throw pfcp_msg_illegal_ie_exception(
@@ -6385,8 +6390,8 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
   std::vector<pfcp::create_qer> create_qers;
   std::pair<bool, pfcp::create_bar> create_bar;
   std::pair<bool, pfcp::create_traffic_endpoint> create_traffic_endpoint;
-  // std::pair<bool, pfcp::pdn_type_t>   pdn_type;
-  std::pair<bool, pfcp::pdu_session_type_t> pdu_session_type;
+  std::pair<bool, pfcp::pdn_type_t> pdn_type;
+  std::pair<bool, pfcp::apn_dnn_t> apn_dnn;
   std::pair<bool, fq_csid_t> sgw_c_fq_csid;
   std::pair<bool, fq_csid_t> mme_fq_csid;
   std::pair<bool, fq_csid_t> pgw_c_fq_csid;
@@ -6406,7 +6411,8 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
         create_qers(),
         create_bar(),
         create_traffic_endpoint(),
-        pdu_session_type(),
+        pdn_type(),
+        apn_dnn(),
         sgw_c_fq_csid(),
         mme_fq_csid(),
         pgw_c_fq_csid(),
@@ -6426,7 +6432,8 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
     create_qers                 = i.create_qers;
     create_bar                  = i.create_bar;
     create_traffic_endpoint     = i.create_traffic_endpoint;
-    pdu_session_type            = i.pdu_session_type;
+    pdn_type                    = i.pdn_type;
+    apn_dnn                     = i.apn_dnn;
     sgw_c_fq_csid               = i.sgw_c_fq_csid;
     mme_fq_csid                 = i.mme_fq_csid;
     pgw_c_fq_csid               = i.pgw_c_fq_csid;
@@ -6510,6 +6517,23 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
     }
     return false;
   }
+
+  bool get(pfcp::pdn_type_t& v) const {
+    if (pdn_type.first) {
+      v = pdn_type.second;
+      return true;
+    }
+    return false;
+  }
+
+  bool get(pfcp::apn_dnn_t& v) const {
+    if (apn_dnn.first) {
+      v = apn_dnn.second;
+      return true;
+    }
+    return false;
+  }
+
   bool get(pfcp::trace_information_t& v) const {
     if (trace_information.first) {
       v = trace_information.second;
@@ -6522,6 +6546,17 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
       pfcp::far_id_t far_id = {};
       if ((it.get(far_id)) && (fid.far_id == far_id.far_id)) {
         create_far = it;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool get(const pfcp::qer_id_t& fid, pfcp::create_qer& create_qer) const {
+    for (auto it : create_qers) {
+      pfcp::qer_id_t qer_id = {};
+      if ((it.get(qer_id)) && (fid.qer_id == qer_id.qer_id)) {
+        create_qer = it;
         return true;
       }
     }
@@ -6575,6 +6610,15 @@ class pfcp_session_establishment_request : public pfcp_ies_container {
   void set(const pfcp::trace_information_t& v) {
     trace_information.first  = true;
     trace_information.second = v;
+  }
+  void set(const pfcp::pdn_type_t& v) {
+    pdn_type.first  = true;
+    pdn_type.second = v;
+  }
+
+  void set(const pfcp::apn_dnn_t& v) {
+    apn_dnn.first  = true;
+    apn_dnn.second = v;
   }
 };
 //------------------------------------------------------------------------------

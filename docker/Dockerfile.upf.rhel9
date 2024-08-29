@@ -96,11 +96,13 @@ RUN rm -f /etc/rhsm-host && \
       net-tools \
       ethtool \
       iproute \
+      llvm-libs \
       iptables \
       initscripts \
       libicu \
       boost \
       libevent \
+      libnl3 \
       #libasan \
       findutils \
       libconfig && \
@@ -128,7 +130,7 @@ COPY --from=oai-upf-builder \
     /usr/local/lib64/libyaml-cpp.so.0.* \
     /usr/local/lib64/libcpr.so.1 \   
 # libbpf seems to be in the executable now
-    /openair-upf/build/ext/libbpf/src/libbpf.so.0 \
+    /openair-upf/build/ext/libbpf/src/libbpf.so.1 \
     /lib64/
 RUN ldconfig && \
     echo "ldd /openair-upf/bin/oai_upf" && \

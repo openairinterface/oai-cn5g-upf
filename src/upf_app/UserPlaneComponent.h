@@ -7,7 +7,6 @@
 #include <observer/OnStateChangeSessionProgramObserver.h>
 
 class SessionManager;
-class RulesUtilities;
 class PFCP_Session_LookupProgram;
 class PFCP_Session_PDR_LookupProgram;
 
@@ -19,12 +18,12 @@ class PFCP_Session_PDR_LookupProgram;
 class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
  public:
   /**
-   * @brief Destroy the User Plane Component object.
+   * @brief Destroy the User Plane Component object
    *
    */
   virtual ~UserPlaneComponent();
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the Instance object.
    *
@@ -32,20 +31,27 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
    */
   static UserPlaneComponent& getInstance();
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Setup User Plane Component.
    * Used to setup all the program.
    *
-   * @param pRulesUtilities
    * @param gtpInterface
    * @param udpInterface
    */
-  void setup(
-      std::shared_ptr<RulesUtilities> pRulesUtilities,
+  void setup(const std::string& gtpInterface, const std::string& udpInterface);
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Set Members of the class UserPlaneComponent
+   *
+   * @param gtpInterface
+   * @param udpInterface
+   */
+  void setMembers(
       const std::string& gtpInterface, const std::string& udpInterface);
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Tear down User Plane Component.
    * Tear down all programs that were setup.
@@ -53,7 +59,7 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
    */
   void tearDown();
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the Session Manager object.
    *
@@ -61,15 +67,7 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
    */
   std::shared_ptr<SessionManager> getSessionManager() const;
 
-  /*****************************************************************************************************************/
-  /**
-   * @brief Get the Rules Factory object.
-   *
-   * @return std::shared_ptr<RulesFactory> The rules factory reference.
-   */
-  std::shared_ptr<RulesUtilities> getRulesUtilities() const;
-
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get PFCP_Session_LookupProgram object.
    *
@@ -79,38 +77,46 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
   std::shared_ptr<PFCP_Session_LookupProgram> getPFCP_Session_LookupProgram()
       const;
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
-   * @brief Get the GTP interface.
+   * @brief Getter
+   *        Get the GTP interface.
    *
    * @return std::string The GTP interface.
    */
   std::string getGTPInterface() const;
 
-  /*****************************************************************************************************************/
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
-   * @brief Get UDP interface.
+   * @brief Getter
+   *        Get UDP interface.
    *
    * @return std::string The UDP interface.
    */
   std::string getUDPInterface() const;
 
-  /*****************************************************************************************************************/
-  // From onNewSessionProgramObserver.
+  /*---------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief What to Do on New SessionProgram
+   *
+   * @param programId
+   * @param fileDescriptor
+   */
   void onNewSessionProgram(
       u_int32_t programId, u_int32_t fileDescriptor) override;
 
-  /*****************************************************************************************************************/
-  // From onNewSessionProgramObserver.
+  /*---------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief What to Do when Destroying SessionProgram
+   *
+   * @param programId
+   */
   void onDestroySessionProgram(u_int32_t programId) override;
-
-  // TODO: getSessionManger?
 
  private:
   /**
    * @brief Construct a new User Plane Component object.
    *
-   * @param pRulesUtilities the wrapper for rules (PDR, FAR).
    */
   UserPlaneComponent();
 
@@ -118,11 +124,10 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
   static int printLibbpfLog(
       enum libbpf_print_level lvl, const char* fmt, va_list args);
 
+  /*------------------------------------------------------------------------------------------------------------------*/
+
   // The session manager reference.
   std::shared_ptr<SessionManager> mpSessionManager;
-
-  // The rules factory reference.
-  std::shared_ptr<RulesUtilities> mpRulesUtilities;
 
   // The PFCP_Session_LookupProgram (BPF program entry point) reference.
   std::shared_ptr<PFCP_Session_LookupProgram> mpPFCP_Session_LookupProgram;
