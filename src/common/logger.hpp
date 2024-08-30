@@ -18,21 +18,18 @@
 
 #include "logger_base.hpp"
 
-static const std::string ASYNC_CMD   = "asc_cmd";
 static const std::string GTPV1_U     = "gtpv1_u";
 static const std::string UPF_APP     = "upf_app";
 static const std::string UPF_N3      = "upf_n3 ";
 static const std::string UPF_N4      = "upf_n4 ";
-static const std::string SYSTEM      = "system ";
 static const std::string PFCP_SWITCH = "pfcp_switch";
+static const std::string UDP         = "udp    ";
 
 class Logger : public oai::logger::logger_common {
  public:
   static void init(
       const std::string& name, const bool log_stdout, const bool log_rot_file) {
     oai::logger::logger_common(name, log_stdout, log_rot_file);
-    oai::logger::logger_registry::register_logger(
-        name, ASYNC_CMD, log_stdout, log_rot_file);
     oai::logger::logger_registry::register_logger(
         name, GTPV1_U, log_stdout, log_rot_file);
     oai::logger::logger_registry::register_logger(
@@ -42,9 +39,9 @@ class Logger : public oai::logger::logger_common {
     oai::logger::logger_registry::register_logger(
         name, UPF_N4, log_stdout, log_rot_file);
     oai::logger::logger_registry::register_logger(
-        name, SYSTEM, log_stdout, log_rot_file);
-    oai::logger::logger_registry::register_logger(
         name, PFCP_SWITCH, log_stdout, log_rot_file);
+    oai::logger::logger_registry::register_logger(
+        name, UDP, log_stdout, log_rot_file);
   }
   static void set_level(spdlog::level::level_enum level) {
     oai::logger::logger_registry::set_level(level);
@@ -53,9 +50,7 @@ class Logger : public oai::logger::logger_common {
   static bool should_log(spdlog::level::level_enum level) {
     return oai::logger::logger_registry::should_log(level);
   }
-  static const oai::logger::printf_logger& async_cmd() {
-    return oai::logger::logger_registry::get_logger(ASYNC_CMD);
-  }
+
   static const oai::logger::printf_logger& gtpv1_u() {
     return oai::logger::logger_registry::get_logger(GTPV1_U);
   }
@@ -68,10 +63,10 @@ class Logger : public oai::logger::logger_common {
   static const oai::logger::printf_logger& upf_n4() {
     return oai::logger::logger_registry::get_logger(UPF_N4);
   }
-  static const oai::logger::printf_logger& system() {
-    return oai::logger::logger_registry::get_logger(SYSTEM);
-  }
   static const oai::logger::printf_logger& pfcp_switch() {
     return oai::logger::logger_registry::get_logger(PFCP_SWITCH);
+  }
+  static const oai::logger::printf_logger& udp() {
+    return oai::logger::logger_registry::get_logger(UDP);
   }
 };
