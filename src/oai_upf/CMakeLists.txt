@@ -277,12 +277,12 @@ else(STATIC_LINKING)
     SET(BUILD_SHARED_LIBS ON)
 endif(STATIC_LINKING)
 
-ADD_SUBDIRECTORY(${SRC_TOP_DIR}/${MOUNTED_COMMON}/pfcp ${CMAKE_CURRENT_BINARY_DIR}/pfcp)
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/pfcp ${CMAKE_CURRENT_BINARY_DIR}/pfcp)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app ${CMAKE_CURRENT_BINARY_DIR}/upf_app)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/app ${CMAKE_CURRENT_BINARY_DIR}/app)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/simpleswitch ${CMAKE_CURRENT_BINARY_DIR}/simpleswitch)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/gtpv1u ${CMAKE_CURRENT_BINARY_DIR}/gtpv1u)
-ADD_SUBDIRECTORY(${SRC_TOP_DIR}/${MOUNTED_COMMON}/udp ${CMAKE_CURRENT_BINARY_DIR}/udp)
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/udp ${CMAKE_CURRENT_BINARY_DIR}/udp)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/interfaces ${CMAKE_CURRENT_BINARY_DIR}/interfaces)
 ################################################################################
 # Specific part for oai_upf folder
@@ -306,7 +306,7 @@ include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/itti)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/pfcp)
-include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/udp)
+include_directories(${SRC_TOP_DIR}/udp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/bstr)
 
