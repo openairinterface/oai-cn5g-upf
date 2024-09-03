@@ -46,7 +46,7 @@
 
 using namespace oai::upf::app;
 using namespace oai::config;
-using namespace util;
+using namespace oai::utils;
 
 itti_mw* itti_inst                    = nullptr;
 async_shell_cmd* async_shell_cmd_inst = nullptr;
