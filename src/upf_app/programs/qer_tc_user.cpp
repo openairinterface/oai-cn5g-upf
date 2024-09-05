@@ -32,10 +32,6 @@
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
 
-#ifndef HTB_SCHEDULER
-#define HTB_SCHEDULER "htb"
-#endif  // HTB_SCHEDULER
-
 #ifndef UDP_INTERFACE
 #define UDP_INTERFACE UserPlaneComponent::getInstance().getUDPInterface()
 #endif  // UDP_INTERFACE

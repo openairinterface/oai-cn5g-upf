@@ -224,7 +224,7 @@ sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
-SEC("tc")
+SEC("tc/egress")
 int tc_filter_traffic(struct __sk_buff* skb) {
   bpf_debug("==========< QER Rules >==========\n");
 
@@ -263,7 +263,7 @@ int tc_filter_traffic(struct __sk_buff* skb) {
 
 // /*---------------------------------------------------------------------------------------------------------------*/
 
-SEC("tc")
+SEC("tc/ingress")
 int tc_redirect_traffic(struct __sk_buff* skb) {
   int key = DOWNLINK, *ifindex;
 
