@@ -215,7 +215,6 @@ upf:
   support_features:
     enable_bpf_datapath: no   # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
     enable_qos: no  # Only supported for BPF datapath. If "on" we use qdiscs to manage the QoS
-    qdisc_scheduler: "htb" # This value is used only in case QoS is enabled 
     enable_snat: no           # If "on": Source natting is done for UE, DEFAULT= off
   remote_n6_gw: oai-ext-dn
   smfs:
