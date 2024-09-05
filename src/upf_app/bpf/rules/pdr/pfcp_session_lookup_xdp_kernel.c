@@ -70,6 +70,8 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
     bpf_debug(
         "TEID downlink: 0x%x was found for UE IP: 0x%x", ue_ip_address,
         *teid_dl);
+    int ifindex = 3;
+    return bpf_redirect(ifindex, 0);
     tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
   }
 
@@ -195,7 +197,6 @@ static __always_inline u32 eth_handle(struct xdp_md* ctx, struct ethhdr* ethh) {
   u64 offset     = sizeof(*ethh);
 
   bpf_debug("Debug: eth_type:0x%x", eth_type);
-
   switch (eth_type) {
     case ETH_P_IP: {
       struct iphdr* iph = (struct iphdr*) ((void*) ethh + offset);
@@ -226,8 +227,9 @@ static __always_inline u32 eth_handle(struct xdp_md* ctx, struct ethhdr* ethh) {
 
 /*---------------------------------------------------------------------------------------------------------------*/
 SEC("xdp")
-int xdp_entry_point(struct xdp_md* ctx) {
+int xdp_handle_uplink(struct xdp_md* ctx) {
   bpf_debug("================< PFCP PDR Sesction >================");
+
   struct ethhdr* ethh = (void*) (long) ctx->data;
 
   if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
@@ -236,6 +238,44 @@ int xdp_entry_point(struct xdp_md* ctx) {
   }
 
   return eth_handle(ctx, ethh);
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+SEC("xdp")
+int xdp_handle_downlink(struct xdp_md* ctx) {
+  bpf_debug("================< PFCP PDR Sesction >================");
+
+  void* data_end      = (void*) (long) ctx->data_end;
+  struct ethhdr* ethh = (void*) (long) ctx->data;
+  u16 eth_type        = bpf_htons(ethh->h_proto);
+  u64 offset          = sizeof(*ethh);
+
+  if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
+    bpf_debug("Invalid Ethernet header");
+    return XDP_DROP;
+  }
+
+  struct iphdr* iph = (struct iphdr*) ((void*) ethh + offset);
+
+  if ((void*) (iph + 1) > data_end) {
+    bpf_debug("Invalid IPv4 Packet");
+    return XDP_DROP;
+  }
+
+  u32 ip_dest  = iph->daddr;
+  u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, &ip_dest);
+
+  if (teid_dl) {
+    bpf_debug(
+        "TEID downlink: 0x%x was found for UE IP: 0x%x", ip_dest, *teid_dl);
+    int ifindex = 3;
+    return bpf_redirect(ifindex, 0);
+    tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, ip_dest);
+  }
+
+  bpf_debug("BPF tail call was not executed!");
+
+  return XDP_PASS;
 }
 
 char _license[] SEC("license") = "GPL";

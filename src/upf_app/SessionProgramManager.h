@@ -151,7 +151,7 @@ class SessionProgramManager {
   /*---------------------------------------------------------------------------------------------------------------*/
   void updateARPTableForN3(
       std::shared_ptr<FARProgram> pFARProgram, uint32_t gNodeBIP,
-      uint32_t upfn3IP, uint64_t seid);
+      uint32_t upfn3IP, uint32_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   uint32_t getGnodebIp(std::shared_ptr<pfcp::pfcp_far> pFar);

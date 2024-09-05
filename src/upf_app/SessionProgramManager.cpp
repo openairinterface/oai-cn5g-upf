@@ -192,21 +192,46 @@ void SessionProgramManager::storeFARInFARMap(
 /*---------------------------------------------------------------------------------------------------------------*/
 // Function to update ARP table with remoteN6 IP and MAC address
 
+// void SessionProgramManager::updateARPTableForN6(
+//     std::shared_ptr<FARProgram> pFARProgram, uint32_t dnIP, uint32_t upfn6IP) {
+//   try {
+//     // uint32_t remoteN6 = getRemoteIP(upfn6IP, dnIP);
+//     uint32_t ipnexremoteN6hop = (is_little_endian()) ?
+//                                     htole32(getRemoteIP(upfn6IP, dnIP)) :
+//                                     getRemoteIP(upfn6IP, dnIP);
+//     auto remoteN6MAC = NextHopFinder::retrieveNextHopMAC(ipnexremoteN6hop);
+
+//     struct s_arp_mapping map_table;
+//     memset(&map_table, 0, sizeof(struct s_arp_mapping));
+//     memcpy(map_table.mac_address, remoteN6MAC->ether_addr_octet, 6);
+//     map_table.ipv4_address = ipnexremoteN6hop;
+
+//     pFARProgram->getArpTableMap()->update(upfn6IP, map_table, BPF_ANY);
+//   } catch (const std::exception& ex) {
+//     Logger::upf_app().error(
+//         "Error: The ARP table was not updated for N6 Next HOP");
+//   }
+// }
+
 void SessionProgramManager::updateARPTableForN6(
     std::shared_ptr<FARProgram> pFARProgram, uint32_t dnIP, uint32_t upfn6IP) {
   try {
-    // uint32_t remoteN6 = getRemoteIP(upfn6IP, dnIP);
-    uint32_t ipnexremoteN6hop = (is_little_endian()) ?
-                                    htole32(getRemoteIP(upfn6IP, dnIP)) :
-                                    getRemoteIP(upfn6IP, dnIP);
-    auto remoteN6MAC = NextHopFinder::retrieveNextHopMAC(ipnexremoteN6hop);
+        std::string remoteDN    = "192.168.20.100";
+        uint32_t remoteN6IPv4   = inet_addr(remoteDN.c_str());
+        //const char* remoteN6MAC = "6c:b3:11:29:5a:87";
+        uint8_t remoteN6MAC[6] = {0x6c, 0xb3, 0x11, 0x29, 0x5a, 0x87};
 
-    struct s_arp_mapping map_table;
-    memset(&map_table, 0, sizeof(struct s_arp_mapping));
-    memcpy(map_table.mac_address, remoteN6MAC->ether_addr_octet, 6);
-    map_table.ipv4_address = ipnexremoteN6hop;
+        Logger::upf_app().warn(
+            "updateARPTableForN6 is modified with hard values to test with "
+            "Trex! I dont understand why the execution goes through the exception!"
+            "Need to check and debug");
 
-    pFARProgram->getArpTableMap()->update(upfn6IP, map_table, BPF_ANY);
+        struct s_arp_mapping map_table;
+        memset(&map_table, 0, sizeof(struct s_arp_mapping));
+        memcpy(map_table.mac_address, remoteN6MAC, 6);
+        map_table.ipv4_address = remoteN6IPv4;
+
+        pFARProgram->getArpTableMap()->update(upfn6IP, map_table, BPF_ANY);
   } catch (const std::exception& ex) {
     Logger::upf_app().error(
         "Error: The ARP table was not updated for N6 Next HOP");
@@ -216,34 +241,71 @@ void SessionProgramManager::updateARPTableForN6(
 /*---------------------------------------------------------------------------------------------------------------*/
 // Function to update ARP table with remoteN3 IP and MAC address
 
+// void SessionProgramManager::updateARPTableForN3(
+//     std::shared_ptr<FARProgram> pFARProgram, uint32_t gNodeBIP,
+//     uint32_t upfn3IP, uint64_t seid) {
+//   try {
+//     // uint32_t remoteN3 = getRemoteIP(upfn3IP, gNodeBIP);
+
+//     uint32_t ipnexremoteN3hop = (is_little_endian()) ?
+//                                     htole32(getRemoteIP(upfn3IP, gNodeBIP)) :
+//                                     getRemoteIP(upfn3IP, gNodeBIP);
+//     auto remoteN3MAC = NextHopFinder::retrieveNextHopMAC(ipnexremoteN3hop);
+
+//     struct s_arp_mapping map_table;
+//     memset(&map_table, 0, sizeof(struct s_arp_mapping));
+//     memcpy(map_table.mac_address, remoteN3MAC->ether_addr_octet, 6);
+//     map_table.ipv4_address = ipnexremoteN3hop;
+
+//     pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
+
+//     for (auto it = farPrograms->begin(); it != farPrograms->end(); ++it) {
+//       // Access the members of the 'farprograms' struct
+//       uint64_t savedSeid                      = it->seid;
+//       std::shared_ptr<FARProgram> pFARProgram = it->pFARProgram;
+
+//       if (savedSeid == seid) {
+//         pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
+//       }
+//     }
+//   } catch (const std::exception& ex) {
+//     // Handle the exception here or log it for debugging
+//     // Note: It's better to handle exceptions rather than ignoring them.
+//     Logger::upf_app().error(
+//         "Error: The ARP table was not updated for N3 Next HOP");
+//   }
+// }
 void SessionProgramManager::updateARPTableForN3(
     std::shared_ptr<FARProgram> pFARProgram, uint32_t gNodeBIP,
-    uint32_t upfn3IP, uint64_t seid) {
+    uint32_t upfn3IP, uint32_t seid) {
   try {
-    // uint32_t remoteN3 = getRemoteIP(upfn3IP, gNodeBIP);
+      std::string remoteGnB   = "192.168.10.100";
+      uint32_t remoteN3IPv4   = inet_addr(remoteGnB.c_str());
+      //const char* remoteN3MAC = "6c:b3:11:29:5a:86";
+      uint8_t remoteN3MAC[6] = {0x6c, 0xb3, 0x11, 0x29, 0x5a, 0x86};
 
-    uint32_t ipnexremoteN3hop = (is_little_endian()) ?
-                                    htole32(getRemoteIP(upfn3IP, gNodeBIP)) :
-                                    getRemoteIP(upfn3IP, gNodeBIP);
-    auto remoteN3MAC = NextHopFinder::retrieveNextHopMAC(ipnexremoteN3hop);
+      Logger::upf_app().warn(
+          "updateARPTableForN3 is modified with hard values to test with "
+          "Trex! I dont understand why the execution goes through the exception!"
+          "Need to check and debug");
 
-    struct s_arp_mapping map_table;
-    memset(&map_table, 0, sizeof(struct s_arp_mapping));
-    memcpy(map_table.mac_address, remoteN3MAC->ether_addr_octet, 6);
-    map_table.ipv4_address = ipnexremoteN3hop;
+      struct s_arp_mapping map_table;
+      memset(&map_table, 0, sizeof(struct s_arp_mapping));
+      memcpy(map_table.mac_address, remoteN3MAC, 6);
+      map_table.ipv4_address = remoteN3IPv4;
 
-    pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
+      pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
 
-    for (auto it = farPrograms->begin(); it != farPrograms->end(); ++it) {
-      // Access the members of the 'farprograms' struct
-      uint64_t savedSeid                      = it->seid;
-      std::shared_ptr<FARProgram> pFARProgram = it->pFARProgram;
+      for (auto it = farPrograms->begin(); it != farPrograms->end(); ++it) {
+        // Access the members of the 'farprograms' struct
+        uint64_t savedSeid                      = it->seid;
+        std::shared_ptr<FARProgram> pFARProgram = it->pFARProgram;
 
-      if (savedSeid == seid) {
-        pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
+        if (savedSeid == seid) {
+          pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
+        }
       }
-    }
-  } catch (const std::exception& ex) {
+    } catch (const std::exception& ex) {
     // Handle the exception here or log it for debugging
     // Note: It's better to handle exceptions rather than ignoring them.
     Logger::upf_app().error(
