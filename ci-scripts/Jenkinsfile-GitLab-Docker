@@ -156,9 +156,6 @@ pipeline {
                   }
                   if ("MERGE".equals(env.gitlabActionType)) {
                     dockerBuildOptions = ''
-                    // Copy pre-downloaded kernel tar ball
-                    sh "mkdir -p build/ext"
-                    sh "cp -f /opt/kernel-no-download/linux-5.7.tar.gz build/ext || true"
                   }
                   sh "docker buildx build ${dockerBuildOptions} --target oai-upf --tag oai-upf:${upf_tag} --file docker/Dockerfile.upf.ubuntu . > archives/upf_ubuntu_image_build.log 2>&1"
                   // Putting a place holder to try out on the flattening of image.
