@@ -3,6 +3,7 @@
 
 #include <ie/group_ie/create_pdr.h>
 #include <pfcp/pfcp_pdr.h>
+#include <pfcp/pfcp_far.h>
 #include <pfcp/pfcp_session.h>
 #include <linux/bpf.h>
 #include <stdint.h>
@@ -53,7 +54,7 @@ struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, MAX_LENGTH);  // 10,
   __type(key, struct next_rule_prog_index_key);
-  __type(value, u32);
+  __type(value, struct pfcp_far_t_);
 } m_next_rule_prog_index SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/

@@ -3,9 +3,6 @@
 #include <SessionProgramManager.h>
 #include <pfcp_session_lookup_xdp_user.h>
 #include <bits/stdc++.h>  //sort
-// #include <interfaces/ForwardingActionRules.h>
-// #include <interfaces/PacketDetectionRules.h>
-
 #include <interfaces/SessionBpf.h>
 #include <pfcp/pfcp_session.h>
 #include <wrappers/BPFMaps.h>
@@ -56,18 +53,6 @@ bool SessionManager::extractFar(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-// Helper function to extract QER
-// bool SessionManager::extractQer(
-//     std::shared_ptr<pfcp::pfcp_pdr> pdr,
-//     std::shared_ptr<pfcp::pfcp_session> session,
-//     std::vector<std::shared_ptr<pfcp::pfcp_qer>>& outQer) {
-//   //pfcp::qer_id_t qerId;
-//   for (const auto& qerId : session->qerIDsPerPDR.qers) {
-//   return (pdr->get(qerId) && session->get(qerId.qer_id, outQer));
-//   }
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
 // Helper function to extract Forwarding Parameters
 bool SessionManager::extractForwardingParams(
     std::shared_ptr<pfcp::pfcp_far> far,
@@ -107,88 +92,7 @@ void SessionManager::createSession(std::shared_ptr<SessionBpf> pSession) {
       "Session %d Has Been Created Successfully", pSession->getSeid());
 }
 
-/*****************************************************************************************************************/
-/*
- * Document: ETSI TS 129 244 V15.8.0 (2020-01)
- * PDI is a Mandatory IE within the Establishment request
- * Table 7.5.2.2-1: Create PDR IE within PFCP Session Establishment Request
- * Source Interface is the only Mandatory IE within PDI:
- * Table 7.5.2.2-2: PDI IE within PFCP Session Establishment Request
- */
-
-// void SessionManager::createBPFSession(
-//     std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
-//     itti_n4_session_establishment_request* est_req,
-//     itti_n4_session_modification_request* mod_req,
-//     itti_n4_session_deletion_request* del_req) {
-//   auto& logger = Logger::upf_app();
-
-//   uint64_t seid = pSession_establishment->get_up_seid();
-
-//   logger.debug("Session %d Received", seid);
-//   logger.debug("Preparing the Datapath ...");
-//   logger.debug("Find the PDR with Highest Precedence");
-
-//   auto& pdrs_uplink   = pSession_establishment->pdrs_uplink;
-//   auto& pdrs_downlink = pSession_establishment->pdrs_downlink;
-
-//   for (auto& pdr : pSession_establishment->pdrs) {
-//     pfcp::pdi pdi;
-//     pfcp::source_interface_t sourceInterface;
-//     if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
-//       throw std::runtime_error(
-//           "Missing Mandatory IE (PDI or Source Interface) within PDR: " +
-//           std::to_string(pdr->pdr_id.rule_id));
-//     }
-
-//     switch (sourceInterface.interface_value) {
-//       case INTERFACE_VALUE_ACCESS:
-//         pdrs_uplink.push_back(pdr);
-//         break;
-//       case INTERFACE_VALUE_CORE:
-//         pdrs_downlink.push_back(pdr);
-//         break;
-//       case INTERFACE_VALUE_SGI_LAN_N6_LAN:
-//       case INTERFACE_VALUE_CP_FUNCTION:
-//       case INTERFACE_VALUE_LI_FUNCTION:
-//         // TODO: if needed, handle these cases
-//         break;
-//       default:
-//         // Handle default case if needed
-//         break;
-//     }
-//   }
-
-//   if ((pdrs_uplink.empty()) && (pdrs_downlink.empty())) {
-//     logger.error("No PDR was found in session %d", seid);
-//     throw std::runtime_error("No PDR was found in session");
-//   }
-
-//   std::sort(pdrs_uplink.begin(), pdrs_uplink.end(), comparePDR);
-//   std::sort(pdrs_downlink.begin(), pdrs_downlink.end(), comparePDR);
-
-//   auto pPFCP_Session_LookupProgram =
-//       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
-
-//   if (!pdrs_uplink.empty()) {
-//     auto pdrHighPrecedenceUl = pdrs_uplink.front();
-//     logger.debug(
-//         "The Uplink PDR %d has the Highest Precedence",
-//         pdrHighPrecedenceUl->pdr_id.rule_id);
-//     createBPFSessionUL(pSession_establishment, pdrHighPrecedenceUl);
-//   }
-
-//   if (!pdrs_downlink.empty()) {
-//     auto pdrHighPrecedenceDl = pdrs_downlink.front();
-//     logger.debug(
-//         "The Downlink PDR %d has the Highest Precedence",
-//         pdrHighPrecedenceDl->pdr_id.rule_id);
-//     createBPFSessionDL(pSession_establishment, pdrHighPrecedenceDl);
-//   }
-
-//   mSeidToSession[seid] = pSession_establishment;
-// }
-
+/*---------------------------------------------------------------------------------------------------------------*/
 void SessionManager::createBPFSession(
     std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
     itti_n4_session_establishment_request* est_req,

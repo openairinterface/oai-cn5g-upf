@@ -24,9 +24,9 @@ class FARProgram;
  *
  */
 
-struct farprograms {
+struct pfcpprograms {
   uint64_t seid;
-  std::shared_ptr<FARProgram> pFARProgram;
+  std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram;
 };
 
 class SessionProgramManager {
@@ -98,11 +98,8 @@ class SessionProgramManager {
       uint64_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  void addFarProgram(uint64_t seid, std::shared_ptr<FARProgram> pFARProgram);
-
-  /*---------------------------------------------------------------------------------------------------------------*/
   void updateArpTableMap(
-      std::shared_ptr<FARProgram> pFARProgram, uint32_t upfIP,
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram, uint32_t upfIP,
       uint32_t remoteIP);
 
   /*---------------------------------------------------------------------------------------------------------------*/
@@ -125,7 +122,7 @@ class SessionProgramManager {
 
   /*---------------------------------------------------------------------------------------------------------------*/
   void storeFarProgramIndexInNextProgRuleIndexMap(
-      std::shared_ptr<FARProgram> pFARProgram,
+      std::shared_ptr<pfcp::pfcp_far> pFar,
       const next_rule_prog_index_key& key,
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
 
@@ -134,23 +131,18 @@ class SessionProgramManager {
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
       uint32_t ue_ip_address, uint32_t teid_dl);
 
-  /*---------------------------------------------------------------------------------------------------------------*/
-  void storeFARInFARMap(
-      std::shared_ptr<FARProgram> pFARProgram,
-      std::shared_ptr<pfcp::pfcp_far> pFar);
-
-  /*---------------------------------------------------------------------------------------------------------------*/
+ /*---------------------------------------------------------------------------------------------------------------*/
   void saveSeidWithinFARProgram(
-      uint64_t seid, std::shared_ptr<FARProgram> pFARProgram,
+      uint64_t seid, std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
       const next_rule_prog_index_key& key);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   void updateARPTableForN6(
-      std::shared_ptr<FARProgram> pFARProgram, uint32_t dnIP, uint32_t upfn6IP);
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram, uint32_t dnIP, uint32_t upfn6IP);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   void updateARPTableForN3(
-      std::shared_ptr<FARProgram> pFARProgram, uint32_t gNodeBIP,
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram, uint32_t gNodeBIP,
       uint32_t upfn3IP, uint32_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
@@ -161,23 +153,10 @@ class SessionProgramManager {
       uint64_t seid, uint32_t teid, uint32_t gNBIpAddress, bool isModification);
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  //   void storeUeQfiTeidMap(
-  //       std::shared_ptr<PFCP_Session_LookupProgram>
-  //       pPFCP_Session_LookupProgram, uint32_t ue_ip_address, uint8_t qfi,
-  //       uint32_t teid_ul);
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  // void updateMap(std::shared_ptr<PFCP_Session_LookupProgram>
-  // pPFCP_Session_LookupProgram,
-  //   uint64_t seid, uint32_t teid_ul, uint32_t src_ip, uint32_t teid_dl);
-
-  /*---------------------------------------------------------------------------------------------------------------*/
   void removePipeline(uint64_t seid);
   std::shared_ptr<SessionPrograms> findSessionPrograms(uint64_t seid);
 
-  // std::shared_ptr<vector><struct farprograms> farPrograms;
-
-  std::shared_ptr<std::vector<struct farprograms>> farPrograms;
+    std::shared_ptr<std::vector<struct pfcpprograms>> pfcpPrograms;
 
  private:
   /**
@@ -200,9 +179,6 @@ class SessionProgramManager {
   // The Maps to store the instance of the programs.
   std::map<uint32_t, std::shared_ptr<PFCP_Session_PDR_LookupProgram>>
       mSessionProgramMap;
-
-  // The Maps to store the instance of the FARs programs.
-  // std::map<uint32_t, std::shared_ptr<FARProgram>> mFARProgramMap;
 
   // The Maps to store the PFCP session deployed in datapath.
   std::map<uint32_t, std::shared_ptr<SessionPrograms>> mSessionProgramsMap;

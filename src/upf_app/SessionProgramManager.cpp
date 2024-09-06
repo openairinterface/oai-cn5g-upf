@@ -69,13 +69,12 @@ void SessionProgramManager::setTeidSessionMap(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void SessionProgramManager::addFarProgram(
-    uint64_t seid, std::shared_ptr<FARProgram> pFARProgram) {
-  // Create a new 'farprograms' object
-  farprograms farprogam = {};
-  //__builtin_memset(&farprogam, 0, sizeof(farprograms));
-  farprogam.seid        = seid;
-  farprogam.pFARProgram = pFARProgram;
+void SessionProgramManager::addPFCPProgram(
+    uint64_t seid, std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
+  
+  farprograms pfcpprogam = {};
+  pfcpprogam.seid        = seid;
+  pfcpprogam.pPFCP_Session_LookupProgram = pPFCP_Session_LookupProgram;
 
   farPrograms->push_back(farprogam);
 }
@@ -144,20 +143,14 @@ void SessionProgramManager::initializeNextRuleProgIndexKey(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-// Helper function to store the FARProgram index in the LookupProgram
-// std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram
 void SessionProgramManager::storeFarProgramIndexInNextProgRuleIndexMap(
-    std::shared_ptr<FARProgram> pFARProgram,
+    std::shared_ptr<pfcp::pfcp_far> pFar,
     const next_rule_prog_index_key& key,
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
-  // auto pPFCP_Session_LookupProgram =
-  //     UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
-  u32 id = pFARProgram->getId();
-  s32 fd = pFARProgram->getFd();
-
+  
   pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->update(
-      key, id, BPF_ANY);
-  pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
+      key, pFar, BPF_ANY);
+  // pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -179,42 +172,10 @@ void SessionProgramManager::storeSessionMappingMap(
       ue_ip_address, teid_dl, BPF_ANY);
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-// Helper function to store the FAR in the FAR program
-void SessionProgramManager::storeFARInFARMap(
-    std::shared_ptr<FARProgram> pFARProgram,
-    std::shared_ptr<pfcp::pfcp_far> pFar) {
-  uint8_t index   = 0;
-  pfcp_far_t_ far = createFar(pFar);
-  pFARProgram->getFARMap()->update(index, far, BPF_ANY);
-}
 
 /*---------------------------------------------------------------------------------------------------------------*/
-// Function to update ARP table with remoteN6 IP and MAC address
-
-// void SessionProgramManager::updateARPTableForN6(
-//     std::shared_ptr<FARProgram> pFARProgram, uint32_t dnIP, uint32_t upfn6IP) {
-//   try {
-//     // uint32_t remoteN6 = getRemoteIP(upfn6IP, dnIP);
-//     uint32_t ipnexremoteN6hop = (is_little_endian()) ?
-//                                     htole32(getRemoteIP(upfn6IP, dnIP)) :
-//                                     getRemoteIP(upfn6IP, dnIP);
-//     auto remoteN6MAC = NextHopFinder::retrieveNextHopMAC(ipnexremoteN6hop);
-
-//     struct s_arp_mapping map_table;
-//     memset(&map_table, 0, sizeof(struct s_arp_mapping));
-//     memcpy(map_table.mac_address, remoteN6MAC->ether_addr_octet, 6);
-//     map_table.ipv4_address = ipnexremoteN6hop;
-
-//     pFARProgram->getArpTableMap()->update(upfn6IP, map_table, BPF_ANY);
-//   } catch (const std::exception& ex) {
-//     Logger::upf_app().error(
-//         "Error: The ARP table was not updated for N6 Next HOP");
-//   }
-// }
-
 void SessionProgramManager::updateARPTableForN6(
-    std::shared_ptr<FARProgram> pFARProgram, uint32_t dnIP, uint32_t upfn6IP) {
+    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram, uint32_t dnIP, uint32_t upfn6IP) {
   try {
         std::string remoteDN    = "192.168.20.100";
         uint32_t remoteN6IPv4   = inet_addr(remoteDN.c_str());
@@ -231,7 +192,7 @@ void SessionProgramManager::updateARPTableForN6(
         memcpy(map_table.mac_address, remoteN6MAC, 6);
         map_table.ipv4_address = remoteN6IPv4;
 
-        pFARProgram->getArpTableMap()->update(upfn6IP, map_table, BPF_ANY);
+        pPFCP_Session_LookupProgram->getArpTableMap()->update(upfn6IP, map_table, BPF_ANY);
   } catch (const std::exception& ex) {
     Logger::upf_app().error(
         "Error: The ARP table was not updated for N6 Next HOP");
@@ -239,44 +200,8 @@ void SessionProgramManager::updateARPTableForN6(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-// Function to update ARP table with remoteN3 IP and MAC address
-
-// void SessionProgramManager::updateARPTableForN3(
-//     std::shared_ptr<FARProgram> pFARProgram, uint32_t gNodeBIP,
-//     uint32_t upfn3IP, uint64_t seid) {
-//   try {
-//     // uint32_t remoteN3 = getRemoteIP(upfn3IP, gNodeBIP);
-
-//     uint32_t ipnexremoteN3hop = (is_little_endian()) ?
-//                                     htole32(getRemoteIP(upfn3IP, gNodeBIP)) :
-//                                     getRemoteIP(upfn3IP, gNodeBIP);
-//     auto remoteN3MAC = NextHopFinder::retrieveNextHopMAC(ipnexremoteN3hop);
-
-//     struct s_arp_mapping map_table;
-//     memset(&map_table, 0, sizeof(struct s_arp_mapping));
-//     memcpy(map_table.mac_address, remoteN3MAC->ether_addr_octet, 6);
-//     map_table.ipv4_address = ipnexremoteN3hop;
-
-//     pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
-
-//     for (auto it = farPrograms->begin(); it != farPrograms->end(); ++it) {
-//       // Access the members of the 'farprograms' struct
-//       uint64_t savedSeid                      = it->seid;
-//       std::shared_ptr<FARProgram> pFARProgram = it->pFARProgram;
-
-//       if (savedSeid == seid) {
-//         pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
-//       }
-//     }
-//   } catch (const std::exception& ex) {
-//     // Handle the exception here or log it for debugging
-//     // Note: It's better to handle exceptions rather than ignoring them.
-//     Logger::upf_app().error(
-//         "Error: The ARP table was not updated for N3 Next HOP");
-//   }
-// }
 void SessionProgramManager::updateARPTableForN3(
-    std::shared_ptr<FARProgram> pFARProgram, uint32_t gNodeBIP,
+    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram, uint32_t gNodeBIP,
     uint32_t upfn3IP, uint32_t seid) {
   try {
       std::string remoteGnB   = "192.168.10.100";
@@ -294,15 +219,15 @@ void SessionProgramManager::updateARPTableForN3(
       memcpy(map_table.mac_address, remoteN3MAC, 6);
       map_table.ipv4_address = remoteN3IPv4;
 
-      pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
+      pPFCP_Session_LookupProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
 
       for (auto it = farPrograms->begin(); it != farPrograms->end(); ++it) {
         // Access the members of the 'farprograms' struct
         uint64_t savedSeid                      = it->seid;
-        std::shared_ptr<FARProgram> pFARProgram = it->pFARProgram;
+        std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram = it->pPFCP_Session_LookupProgram;
 
         if (savedSeid == seid) {
-          pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
+          pPFCP_Session_LookupProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
         }
       }
     } catch (const std::exception& ex) {
@@ -316,13 +241,13 @@ void SessionProgramManager::updateARPTableForN3(
 /*---------------------------------------------------------------------------------------------------------------*/
 // Helper function to save SEID with FAR program
 void SessionProgramManager::saveSeidWithinFARProgram(
-    uint64_t seid, std::shared_ptr<FARProgram> pFARProgram,
+    uint64_t seid, std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
     const next_rule_prog_index_key& key) {
   // Map the deployed pipeline to the seid.
   // The seid will be used to destroy the pipeline.
   mSessionProgramsMap[seid] =
-      std::make_shared<SessionPrograms>(key, pFARProgram);
-  addFarProgram(seid, pFARProgram);
+      std::make_shared<SessionPrograms>(key, pPFCP_Session_LookupProgram);
+  addFarProgram(seid, pPFCP_Session_LookupProgram);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -361,26 +286,11 @@ void SessionProgramManager::createPipeline(
 
   initializeNextRuleProgIndexKey(key, teid1, ueIpAddress, sourceInterface);
 
-  if ((upf_cfg.enable_qos) && (!pQer.empty())) {
-    enforcing_qos = 1;
-    Logger::upf_app().debug("Instantiate a new QERProgram ");
-    std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
-    pQERProgram->setup(seid, pQer);
-  }
-
-  Logger::upf_app().debug("Instantiate a new FARProgram");
-  std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
-
-  pFARProgram->setup(far_id, enforcing_qos);
-
   auto pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
   storeFarProgramIndexInNextProgRuleIndexMap(
-      pFARProgram, key, pPFCP_Session_LookupProgram);
-
-  Logger::upf_app().debug("Store FAR in the FAR program");
-  storeFARInFARMap(pFARProgram, pFar);
+      pFar, key, pPFCP_Session_LookupProgram);
 
   Logger::upf_app().warn(
       "TODO: Try to extract the updateARPTableForN6 for the if and else to "
@@ -391,21 +301,21 @@ void SessionProgramManager::createPipeline(
     uint32_t gNodeBIP = getGnodebIp(pFar);
 
     std::thread arpUpdateThread1(
-        [this, pFARProgram, seid, gNodeBIP, dnIP, upfn3IP, upfn6IP]() {
-          updateARPTableForN6(pFARProgram, dnIP, upfn6IP);
-          updateARPTableForN3(pFARProgram, gNodeBIP, upfn3IP, seid);
+        [this, pPFCP_Session_LookupProgram, seid, gNodeBIP, dnIP, upfn3IP, upfn6IP]() {
+          updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
+          updateARPTableForN3(pPFCP_Session_LookupProgram, gNodeBIP, upfn3IP, seid);
         });
 
     // Detach the thread since we don't need to join it
     arpUpdateThread1.detach();
   } else {
     // Launch a separate thread to update ARP table map
-    std::thread arpUpdateThread2([this, pFARProgram, dnIP, upfn6IP]() {
-      updateARPTableForN6(pFARProgram, dnIP, upfn6IP);
+    std::thread arpUpdateThread2([this, pPFCP_Session_LookupProgram, dnIP, upfn6IP]() {
+      updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
     });
 
     arpUpdateThread2.detach();
-    saveSeidWithinFARProgram(seid, pFARProgram, key);
+    saveSeidWithinFARProgram(seid, pPFCP_Session_LookupProgram, key);
   }
 }
 
