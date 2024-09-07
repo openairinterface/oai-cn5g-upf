@@ -39,7 +39,6 @@ function(xdp arg)
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_SOURCE_DIR}/../skel
     COMMAND bpftool gen skeleton $<TARGET_OBJECTS:${arg}_xdp> > ${CMAKE_CURRENT_SOURCE_DIR}/../skel/${arg}_xdp_kernel_skel.h
     COMMAND sed -i '9i\#define typeof\(x\) __typeof__\(x\)' ${CMAKE_CURRENT_SOURCE_DIR}/../skel/${arg}_xdp_kernel_skel.h
-    COMMAND sed -i '11i\#include <stdbool.h>' ${CMAKE_CURRENT_SOURCE_DIR}/../skel/${arg}_xdp_kernel_skel.h
     DEPENDS ${source_dir}/${arg}_xdp_kernel.c
   )
 endfunction()
