@@ -55,14 +55,14 @@ struct vlan_hdr {
   __be16 h_vlan_encapsulated_proto;
 };
 
-u32 upf_n3_ip = 0;
-u32 upf_n6_ip = 0;
+static u32 upf_n3_ip = 0;
+static u32 upf_n6_ip = 0;
 
-u8 next_hop_n3_mac_address[6] = {0};
-u8 next_hop_n6_mac_address[6] = {0};
+static u8 next_hop_n3_mac_address[6] = {0};
+static u8 next_hop_n6_mac_address[6] = {0};
 
-volatile bool cached_n3 = false;
-volatile bool cached_n6 = false;
+static bool cached_n3 = false;
+static bool cached_n6 = false;
 
 /*****************************************************************************************************************/
 static __always_inline bool update_dst_mac_address(
