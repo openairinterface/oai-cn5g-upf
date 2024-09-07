@@ -1,5 +1,4 @@
 #include "SessionProgramManager.h"
-#include <far_xdp_user.h>
 #include <qer_tc_user.h>
 #include <pfcp_session_pdr_lookup_xdp_user.h>
 #include "SessionPrograms.h"
@@ -48,7 +47,7 @@ SessionProgramManager::SessionProgramManager() {
   for (auto& item : mProgramArray) {
     item = EMPTY_SLOT;
   }
-  farPrograms = std::make_shared<std::vector<farprograms>>();
+  pfcpPrograms = std::make_shared<std::vector<pfcpprograms>>();
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -72,11 +71,11 @@ void SessionProgramManager::setTeidSessionMap(
 void SessionProgramManager::addPFCPProgram(
     uint64_t seid, std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
   
-  farprograms pfcpprogam = {};
+  pfcpprograms pfcpprogam = {};
   pfcpprogam.seid        = seid;
   pfcpprogam.pPFCP_Session_LookupProgram = pPFCP_Session_LookupProgram;
 
-  farPrograms->push_back(farprogam);
+  pfcpPrograms->push_back(pfcpprogam);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -221,7 +220,7 @@ void SessionProgramManager::updateARPTableForN3(
 
       pPFCP_Session_LookupProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
 
-      for (auto it = farPrograms->begin(); it != farPrograms->end(); ++it) {
+      for (auto it = pfcpPrograms->begin(); it != pfcpPrograms->end(); ++it) {
         // Access the members of the 'farprograms' struct
         uint64_t savedSeid                      = it->seid;
         std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram = it->pPFCP_Session_LookupProgram;
@@ -247,7 +246,7 @@ void SessionProgramManager::saveSeidWithinFARProgram(
   // The seid will be used to destroy the pipeline.
   mSessionProgramsMap[seid] =
       std::make_shared<SessionPrograms>(key, pPFCP_Session_LookupProgram);
-  addFarProgram(seid, pPFCP_Session_LookupProgram);
+  addPFCPProgram(seid, pPFCP_Session_LookupProgram);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

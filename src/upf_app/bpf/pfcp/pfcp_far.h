@@ -14,6 +14,5 @@ typedef struct pfcp_far_s {
   forwarding_parameters_t_ forwarding_parameters;
   duplicating_parameters_t_ duplicating_parameters;
   bar_id_t_ bar_id;
-
 } pfcp_far_t_;
 #endif  // __PFCP_FAR_H__

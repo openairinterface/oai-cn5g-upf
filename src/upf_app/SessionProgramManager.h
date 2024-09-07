@@ -120,6 +120,8 @@ class SessionProgramManager {
       next_rule_prog_index_key& key, uint32_t teid, uint32_t ueIpAddress,
       uint8_t sourceInterface);
 
+void addPFCPProgram(
+    uint64_t seid, std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
   /*---------------------------------------------------------------------------------------------------------------*/
   void storeFarProgramIndexInNextProgRuleIndexMap(
       std::shared_ptr<pfcp::pfcp_far> pFar,

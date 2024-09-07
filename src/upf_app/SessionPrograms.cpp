@@ -17,7 +17,7 @@ struct next_rule_prog_index_key SessionPrograms::getKey() const {
 }
 
 /**************************************************************************************************/
-std::shared_ptr<PFCP_Session_LookupProgram> SessionPrograms::getFARProgram() const {
+std::shared_ptr<PFCP_Session_LookupProgram> SessionPrograms::getPFCPProgram() const {
   return mpPFCP_Session_LookupProgram;
 }
 

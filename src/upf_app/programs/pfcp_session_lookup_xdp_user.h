@@ -9,7 +9,7 @@
 #include <signal.h>  // signals
 #include <pfcp_session_lookup_xdp_kernel_skel.h>
 #include <wrappers/BPFMap.hpp>
-// #include "qfi_flow_mapping_table.h"
+#include "interfaces.h"
 
 class BPFMaps;
 class BPFMap;

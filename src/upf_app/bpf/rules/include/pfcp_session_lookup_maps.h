@@ -9,13 +9,19 @@
 #include <stdint.h>
 #include <ie/teid.h>
 #include <next_prog_rule_map.h>
-#include <next_prog_rule_key.h>
+// #include <next_prog_rule_key.h>
 #include "interfaces.h"
 #include "session_id.h"
 
 #define MAX_LENGTH 5000  // 10
 #define INTERFACE_ENTRIES_MAX 12
 #define MAX_UEs 100000
+
+// struct next_rule_prog_index_key {
+//   teid_t_ teid;
+//   u8 source_value;
+//   u32 ipv4_address;
+// };
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
