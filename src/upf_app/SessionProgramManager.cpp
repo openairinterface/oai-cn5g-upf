@@ -220,7 +220,7 @@ void SessionProgramManager::updateARPTableForN6(
     NextHopFinder finder;
     // uint32_t remoteN6 = getRemoteIP(upfn6IP, dnIP);
     uint32_t ipnexremoteN6hop = (is_little_endian()) ?
-                                    htole32(getRemoteIP(upfn6IP, dnIP)) :
+                                    htobe32(getRemoteIP(htobe32(upfn6IP), htobe32(dnIP))) :
                                     getRemoteIP(upfn6IP, dnIP);
     auto remoteN6MAC          = finder.retrieveNextHopMAC(ipnexremoteN6hop);
 
@@ -246,8 +246,8 @@ void SessionProgramManager::updateARPTableForN3(
 
     // uint32_t remoteN3 = getRemoteIP(upfn3IP, gNodeBIP);
 
-    uint32_t ipnexremoteN3hop = (is_little_endian()) ?
-                                    htole32(getRemoteIP(upfn3IP, gNodeBIP)) :
+      uint32_t ipnexremoteN3hop = (is_little_endian()) ?
+                                    htobe32(getRemoteIP(htobe32(upfn3IP), htobe32(gNodeBIP))) :
                                     getRemoteIP(upfn3IP, gNodeBIP);
     auto remoteN3MAC          = finder.retrieveNextHopMAC(ipnexremoteN3hop);
 

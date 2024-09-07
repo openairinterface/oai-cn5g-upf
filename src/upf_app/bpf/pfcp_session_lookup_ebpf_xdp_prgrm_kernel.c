@@ -100,22 +100,22 @@
 //   void* p_data     = (void*) (long) p_ctx->data;
 //   void* p_data_end = (void*) (long) p_ctx->data_end;
 
-//   struct gtpuhdr* p_gtpuh = (struct gtpuhdr*) (udph + 1);
+//   struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
 
 //   // Check if the GTP header extends beyond the data end.
-//   if ((void*) p_gtpuh + sizeof(*p_gtpuh) > p_data_end) {
+//   if ((void*) gtpuh + sizeof(*gtpuh) > p_data_end) {
 //     bpf_debug("Invalid GTPU packet");
 //     return XDP_DROP;
 //   }
 
-//   struct ethhdr* p_new_eth = p_data + GTP_ENCAPSULATED_SIZE;
+//   struct ethhdr* new_ethh = p_data + GTP_ENCAPSULATED_SIZE;
 
-//   if ((void*) p_new_eth + sizeof(*p_new_eth) > p_data_end) {
+//   if ((void*) new_ethh + sizeof(*new_ethh) > p_data_end) {
 //     bpf_debug("Invalid Ethernet packet");
 //     return XDP_DROP;
 //   }
 
-//   struct iphdr* p_ip_inner = (void*) (p_new_eth + 1);
+//   struct iphdr* p_ip_inner = (void*) (new_ethh + 1);
 
 //   if ((void*) p_ip_inner + sizeof(*p_ip_inner) > p_data_end) {
 //     bpf_debug("Invalid Inner IP packet");
@@ -124,10 +124,10 @@
 
 //   u32 src_ip_in = p_ip_inner->saddr;
 
-//   if (p_gtpuh->message_type != GTPU_G_PDU) {
+//   if (gtpuh->message_type != GTPU_G_PDU) {
 //     // bpf_debug(
 //     //     "Message type 0x%x is not GTPU GPDU(0x%x)\n",
-//     p_gtpuh->message_type,
+//     gtpuh->message_type,
 //     //     GTPU_G_PDU);
 //     return XDP_PASS;
 //     // return XDP_DROP;
@@ -137,7 +137,7 @@
 //   // src_ip);
 
 //   // Check if the gtp extension header extends beyond the data end.
-//   // if ((void*) ((struct gtpu_extn_pdu_session_container*) (p_gtpuh + 1) +
+//   // if ((void*) ((struct gtpu_extn_pdu_session_container*) (gtpuh + 1) +
 //   1) >
 //   //     (void*) (long) p_ctx->data_end) {
 //   //  // bpf_debug("Invalid IPv4 Inner Header\n");
@@ -145,9 +145,9 @@
 //   // }
 
 //   // Jump to session context.
-//   tail_call_next_prog(p_ctx, p_gtpuh->teid, INTERFACE_VALUE_ACCESS,
+//   tail_call_next_prog(p_ctx, gtpuh->teid, INTERFACE_VALUE_ACCESS,
 //   src_ip_in);
-//   // bpf_debug("BPF tail call was not executed! teid %d\n", p_gtpuh->teid);
+//   // bpf_debug("BPF tail call was not executed! teid %d\n", gtpuh->teid);
 
 //   return XDP_PASS;
 // }
@@ -294,6 +294,8 @@ int entry_point(struct xdp_md* p_ctx) {
   struct next_rule_prog_index_key map_key;
   __builtin_memset(&map_key, 0, sizeof(struct next_rule_prog_index_key));
   u8 protocol = iph->protocol;
+  bpf_debug("iph->daddr : %d", iph->daddr);
+  bpf_debug("iph->saddr : %d", iph->saddr); 
 
   switch (protocol) {
     case IPPROTO_UDP: {
@@ -304,25 +306,31 @@ int entry_point(struct xdp_md* p_ctx) {
         bpf_debug("Invalid UDP packet");
         return XDP_DROP;
       }
+    
+      bpf_debug("udph->src : %d", udph->source);
+      bpf_debug("udphh->dest : %d", udph->dest); 
 
       if (htons(udph->dest) == GTP_UDP_PORT) {
         // bpf_debug("This is a GTP traffic");
         // return handle_uplink_traffic(p_ctx, udph);
         void* p_data = (void*) (long) p_ctx->data;
 
-        struct gtpuhdr* p_gtpuh = (struct gtpuhdr*) (udph + 1);
-        if ((void*) p_gtpuh + sizeof(*p_gtpuh) > p_data_end) {
+        struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
+        if ((void*) gtpuh + sizeof(*gtpuh) > p_data_end) {
           bpf_debug("Invalid GTPU packet");
           return XDP_DROP;
         }
 
-        struct ethhdr* p_new_eth = p_data + GTP_ENCAPSULATED_SIZE;
-        if ((void*) p_new_eth + sizeof(*p_new_eth) > p_data_end) {
+        
+        bpf_debug("gtpuh->teid : %d", gtpuh->teid); 
+
+        struct ethhdr* new_ethh = p_data + GTP_ENCAPSULATED_SIZE;
+        if ((void*) new_ethh + sizeof(*new_ethh) > p_data_end) {
           bpf_debug("Invalid Ethernet packet");
           return XDP_DROP;
         }
 
-        struct iphdr* p_ip_inner = (void*) (p_new_eth + 1);
+        struct iphdr* p_ip_inner = (void*) (new_ethh + 1);
         if ((void*) p_ip_inner + sizeof(*p_ip_inner) > p_data_end) {
           bpf_debug("Invalid Inner IP packet");
           return XDP_DROP;
@@ -330,15 +338,15 @@ int entry_point(struct xdp_md* p_ctx) {
 
         u32 src_ip_in = p_ip_inner->saddr;
 
-        if (p_gtpuh->message_type != GTPU_G_PDU) {
+        if (gtpuh->message_type != GTPU_G_PDU) {
           return XDP_PASS;
         }
 
-        // tail_call_next_prog(p_ctx, p_gtpuh->teid, INTERFACE_VALUE_ACCESS,
+        // tail_call_next_prog(p_ctx, gtpuh->teid, INTERFACE_VALUE_ACCESS,
         // src_ip_in);
 
-        map_key.teid = p_gtpuh->teid;
-        bpf_debug("p_gtpuh->teid = %d", p_gtpuh->teid);
+        map_key.teid = gtpuh->teid;
+        bpf_debug("gtpuh->teid = %d", gtpuh->teid);
         map_key.source_value = INTERFACE_VALUE_ACCESS;
         bpf_debug("INTERFACE_VALUE_ACCESS = %d", INTERFACE_VALUE_ACCESS);
         map_key.ipv4_address = src_ip_in;
@@ -359,7 +367,7 @@ int entry_point(struct xdp_md* p_ctx) {
 
         return XDP_DROP;
 
-        bpf_debug("BPF tail call was not executed! teid %d\n", p_gtpuh->teid);
+        bpf_debug("BPF tail call was not executed! teid %d\n", gtpuh->teid);
         return XDP_PASS;
       }
     }

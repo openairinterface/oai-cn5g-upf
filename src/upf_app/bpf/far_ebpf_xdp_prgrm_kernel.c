@@ -386,7 +386,7 @@ int far_entry_point(struct xdp_md* p_ctx) {
     if (dest_interface == INTERFACE_VALUE_CORE) {
       // Redirect to data network.
       // bpf_debug("Destination is to INTERFACE_VALUE_CORE");
-      // bpf_debug("GTP Header Removal ...");
+      bpf_debug("GTP Header Removal ...");
       struct ethhdr* p_new_eth = p_data + GTP_ENCAPSULATED_SIZE;
 
       if ((void*) (p_new_eth + 1) > p_data_end) {
