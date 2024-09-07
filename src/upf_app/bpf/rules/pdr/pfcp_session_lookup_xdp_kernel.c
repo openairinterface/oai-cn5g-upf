@@ -1,8 +1,6 @@
 #define KBUILD_MODNAME pfcp_session_lookup_xdp_kernel
 
-// clang-format off
 #include <types.h>
-// clang-format on
 #include <bpf_helpers.h>
 #include <bpf_endian.h>
 #include <endian.h>
@@ -38,7 +36,7 @@
 
 #include "bpf_endian.h"
 
-// #include <string.h>  //Needed for memcpy
+#include <string.h>  //Needed for memcpy
 
 #ifdef KERNEL_SPACE
 #include <linux/in.h>
@@ -50,7 +48,8 @@
 /* Defines xdp_stats_map */
 #include "xdp_stats_kern.h"
 #include "xdp_stats_kern_user.h"
-
+#include <linux/types.h>
+#include <stdbool.h>
 struct vlan_hdr {
   __be16 h_vlan_TCI;
   __be16 h_vlan_encapsulated_proto;
@@ -59,8 +58,8 @@ struct vlan_hdr {
 u32 upf_n3_ip = 0;
 u32 upf_n6_ip = 0;
 
-uint8_t next_hop_n3_mac_address[6] = {0};
-uint8_t next_hop_n6_mac_address[6] = {0};
+u8 next_hop_n3_mac_address[6] = {0};
+u8 next_hop_n6_mac_address[6] = {0};
 
 volatile bool cached_n3 = false;
 volatile bool cached_n6 = false;
@@ -481,7 +480,7 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
     bpf_debug(
         "TEID downlink: 0x%x was found for UE IP: 0x%x", ip_dest, *teid_dl);
     struct next_rule_prog_index_key map_key = {0};
-    map_key.teid                            = teid_dl;
+    map_key.teid                            = *teid_dl;
     map_key.source_value                    = INTERFACE_VALUE_CORE;
     map_key.ipv4_address                    = ip_dest;
 

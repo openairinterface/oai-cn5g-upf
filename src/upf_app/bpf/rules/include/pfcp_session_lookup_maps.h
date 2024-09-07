@@ -9,7 +9,7 @@
 #include <stdint.h>
 #include <ie/teid.h>
 #include <next_prog_rule_map.h>
-// #include <next_prog_rule_key.h>
+#include <next_prog_rule_key.h>
 #include "interfaces.h"
 #include "session_id.h"
 
@@ -60,7 +60,7 @@ struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, MAX_LENGTH);  // 10,
   __type(key, struct next_rule_prog_index_key);
-  __type(value, struct pfcp_far_t_);
+  __type(value, u32);  // struct pfcp_far_t_
 } m_next_rule_prog_index SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
