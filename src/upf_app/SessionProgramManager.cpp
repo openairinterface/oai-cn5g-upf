@@ -147,8 +147,9 @@ void SessionProgramManager::storeFarProgramIndexInNextProgRuleIndexMap(
     const next_rule_prog_index_key& key,
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
   
+  pfcp_far_t_ far = createFar(pFar);
   pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->update(
-      key, pFar, BPF_ANY);
+      key, far, BPF_ANY);
   // pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
 }
 

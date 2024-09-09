@@ -171,7 +171,7 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   iph->daddr =
       p_far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
 
-  // bpf_debug("IP SRC: 0x%x, IP DST: 0x%x", iph->saddr, iph->daddr);
+  bpf_debug("IP SRC: 0x%x, IP DST: 0x%x", iph->saddr, iph->daddr);
 
   /*
   |----------------------------------------------------------------|
@@ -198,6 +198,11 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   */
   // Update destination mac address
   memcpy(ethh->h_dest, next_hop_n3_mac_address, sizeof(ethh->h_dest));
+
+  bpf_debug(
+      "Destination MAC:%x:%x:%x:", ethh->h_dest[0], ethh->h_dest[1],
+      ethh->h_dest[2]);
+  bpf_debug("%x:%x:%x", ethh->h_dest[3], ethh->h_dest[4], ethh->h_dest[5]);
 
   struct gtpuhdr* p_gtpuh = (void*) (udph + 1);
   if ((void*) (p_gtpuh + 1) > data_end) {
@@ -264,7 +269,7 @@ static __always_inline u32 tail_call_next_prog(
 
   if (p_far) {
     bpf_debug(
-        "Value of the eBPF tail call, index_prog = %d", *p_far->far_id.far_id);
+        "Value of the eBPF tail call, index_prog = %d", p_far->far_id.far_id);
     // bpf_tail_call(ctx, &m_next_rule_prog, *index_prog);
   }
 
@@ -478,7 +483,7 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
 
   if (teid_dl) {
     bpf_debug(
-        "TEID downlink: 0x%x was found for UE IP: 0x%x", ip_dest, *teid_dl);
+        "TEID downlink: 0x%x was found for UE IP: 0x%x", *teid_dl, ip_dest);
     struct next_rule_prog_index_key map_key = {0};
     map_key.teid                            = *teid_dl;
     map_key.source_value                    = INTERFACE_VALUE_CORE;
@@ -488,10 +493,11 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
 
     if (p_far) {
       bpf_debug(
-          "Value of the eBPF tail call, index_prog = %d",
-          *p_far->far_id.far_id);
+          "Value of the eBPF tail call, index_prog = %d", p_far->far_id.far_id);
       create_outer_header_gtpu_ipv4(ctx, p_far);
+      bpf_debug("---------------------------------------------------------");
       return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+      bpf_debug("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
     }
   }
 
