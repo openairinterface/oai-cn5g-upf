@@ -64,10 +64,6 @@ bool single_teardown_call;
 #define N6_IF_NAME upf_cfg.n6.if_name
 #endif  // N6_IF_NAME
 
-#ifndef HTB_SCHEDULER
-#define HTB_SCHEDULER "htb"
-#endif  // HTB_SCHEDULER
-
 std::unique_ptr<upf_config_yaml> upf_cfg_yaml            = nullptr;
 std::shared_ptr<oai::http::http_client> http_client_inst = nullptr;
 //------------------------------------------------------------------------------
