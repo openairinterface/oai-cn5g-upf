@@ -18,17 +18,14 @@
 # For more information about the OpenAirInterface (OAI) Software Alliance:
 #      contact@openairinterface.org
 ################################################################################
-include_directories(${SRC_TOP_DIR}/common)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${SRC_TOP_DIR}/itti)
-include_directories(${SRC_TOP_DIR}/pfcp)
-include_directories(${SRC_TOP_DIR}/udp)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/common)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
-include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/pfcp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 
-add_library (UDP STATIC
-  udp.cpp
-  )
 
-  
+add_library(CN_UTILS STATIC
+    async_shell_cmd.cpp
+)

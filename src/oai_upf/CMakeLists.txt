@@ -277,6 +277,7 @@ else(STATIC_LINKING)
     SET(BUILD_SHARED_LIBS ON)
 endif(STATIC_LINKING)
 
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/common/utils ${CMAKE_CURRENT_BINARY_DIR}/utils)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/pfcp ${CMAKE_CURRENT_BINARY_DIR}/pfcp)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app ${CMAKE_CURRENT_BINARY_DIR}/upf_app)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/app ${CMAKE_CURRENT_BINARY_DIR}/app)
@@ -294,6 +295,9 @@ include_directories(${SRC_TOP_DIR}/common)
 include_directories(${SRC_TOP_DIR}/common/msg)
 include_directories(${SRC_TOP_DIR}/common/utils)
 include_directories(${SRC_TOP_DIR}/gtpv1u)
+include_directories(${SRC_TOP_DIR}/itti)
+include_directories(${SRC_TOP_DIR}/pfcp)
+include_directories(${SRC_TOP_DIR}/udp)
 include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/include)
@@ -302,11 +306,9 @@ include_directories(${SRC_TOP_DIR}/upf_app/interfaces)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/common)
-include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/itti)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/pfcp)
-include_directories(${SRC_TOP_DIR}/udp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/bstr)
 
@@ -316,8 +318,8 @@ link_directories(${SRC_TOP_DIR}/../build/ext/libbpf/src)
 add_executable(upf
   ${SRC_TOP_DIR}/oai_upf/main.cpp
   ${SRC_TOP_DIR}/oai_upf/options.cpp
-  ${SRC_TOP_DIR}/${MOUNTED_COMMON}/itti/itti.cpp
-  ${SRC_TOP_DIR}/${MOUNTED_COMMON}/itti/itti_msg.cpp
+  ${SRC_TOP_DIR}/itti/itti.cpp
+  ${SRC_TOP_DIR}/itti/itti_msg.cpp
   )
 
 IF(STATIC_LINKING)
@@ -339,7 +341,7 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
 
 # folly glog dl double-conversion for FB folly library
 target_link_libraries (upf 
-  ${ASAN}  -Wl,--start-group 
+  ${ASAN}  -Wl,--start-group CN_UTILS
   ${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so 
   APP
   SIMPLE_SWITCH
