@@ -69,6 +69,7 @@ function help()
   echo_error "  -j, --jobs                                Multiple jobs for compiling."
   echo_error "  -v, --verbose                             Build process verbose."
   echo_error "  -V, --Verbose                             CMake only build process verbose, display compilation warnings and errors."
+  echo_error "  -l, --lttng                               Build variant that will also include LTTNG" 
   echo_error " "
 }
 
@@ -98,6 +99,15 @@ function main()
       -c | --clean)
         clean=1
         echo "Clean the build generated files (build from scratch)"
+        shift;
+        ;;
+      -l | --lttng)
+        check_platform_for_lttng
+        output=$?
+        if [[ $output == 1 ]]; then
+          cmake_args="$cmake_args -DUSE_LTTNG=ON"
+          echo ${cmake_args}
+        fi
         shift;
         ;;
       -f | --force)

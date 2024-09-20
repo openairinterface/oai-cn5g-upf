@@ -509,3 +509,22 @@ check_install_upf_min_deps() {
 
   return 0
 }
+
+OS_DISTRO=$(grep "^ID=" /etc/os-release | sed "s/ID=//" | sed "s/\"//g")
+OS_RELEASE=$(grep "^VERSION_ID=" /etc/os-release | sed "s/VERSION_ID=//" | sed "s/\"//g")
+
+get_distribution_release() {
+    if [[ ! -z "$OS_DISTRO$OS_RELEASE" ]]; then
+        echo "$OS_DISTRO$OS_RELEASE"
+    else
+        echo Unknown
+    fi
+}
+
+check_platform_for_lttng() {
+  local distribution=$(get_distribution_release)
+  if [[ "$distribution" == "ubuntu18.04" || "$distribution" == "ubuntu20.04" || "$distribution" == "ubuntu22.04" ]]; then
+      return 1
+  fi
+  return 0
+}

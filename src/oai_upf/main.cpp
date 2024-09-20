@@ -53,6 +53,7 @@ async_shell_cmd* async_shell_cmd_inst = nullptr;
 pfcp_switch* pfcp_switch_inst         = nullptr;
 upf_app* upf_app_inst                 = nullptr;
 upf_config upf_cfg;
+std::unique_ptr<lttng_configuration> lttng_config_yaml;
 boost::asio::io_service io_service;
 bool single_teardown_call;
 
@@ -134,6 +135,27 @@ int main(int argc, char** argv) {
   }
 
   // Logger
+  // Config
+  std::string conf_file_name = Options::getlibconfigConfig();
+
+  std::cout << "Trying to read .yaml configuration file: " << conf_file_name
+            << "\n";
+  lttng_config_yaml = std::make_unique<lttng_configuration>(conf_file_name);
+  lttng_config_yaml->read_from_file();
+
+#ifdef LOGGER_CAN_USE_LTTNG
+  std::cout << "LTTNG Log Activation: " << lttng_config_yaml->is_lttng_active()
+            << "\n";
+  std::cout << "Log Level of LTTng: "
+            << lttng_config_yaml->get_lttng_log_level() << "\n";
+#else
+  std::cout << "LTTNG Tracing disabled at build-time!\n";
+  if (lttng_config_yaml->is_lttng_active())
+    std::cout << "Cannot use lttng log scheme on this build variant!\n";
+#endif
+
+  Logger::set_lttng(static_cast<bool>(lttng_config_yaml->is_lttng_active()));
+
   Logger::init("upf", Options::getlogStdout(), Options::getlogRotFilelog());
 
   Logger::upf_app().startup("Options parsed");
@@ -142,9 +164,6 @@ int main(int argc, char** argv) {
   std::signal(SIGINT, my_app_signal_handler);
   single_teardown_call = false;
 
-  // Config
-  std::string conf_file_name = Options::getlibconfigConfig();
-  Logger::upf_app().debug("Parsing the configuration file, file type YAML.");
   upf_cfg_yaml = std::make_unique<upf_config_yaml>(
       conf_file_name, Options::getlogStdout(), Options::getlogRotFilelog());
   if (!upf_cfg_yaml->init()) {
