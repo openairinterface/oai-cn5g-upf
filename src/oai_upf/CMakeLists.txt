@@ -359,3 +359,11 @@ target_link_libraries (upf
   pthread m rt config++ 
   event boost_system curl yaml-cpp cpr::cpr
 )
+
+
+add_boolean_option(USE_LTTNG  False "Activate the LTTNG tracer, a debugging/monitoring framework" ON)
+if (USE_LTTNG)
+    message("Using the lttng build variant")
+    add_definitions("-DLOGGER_CAN_USE_LTTNG")
+    target_link_libraries(upf -ldl lttng-ust)
+endif ()
