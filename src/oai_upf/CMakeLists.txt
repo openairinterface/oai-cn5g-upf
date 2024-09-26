@@ -349,7 +349,6 @@ target_link_libraries (upf
   GTPV1U
   PFCP
   far_xdp
-  pfcp_session_pdr_lookup_xdp
   pfcp_session_lookup_xdp
   qer_tc
   UPF_XDP
