@@ -12,7 +12,7 @@
 #include "interfaces.h"
 #include "session_id.h"
 
-#define MAX_LENGTH 5000  // 10
+#define MAX_LENGTH 10000
 #define INTERFACE_ENTRIES_MAX 12
 #define MAX_UEs 100000
 
@@ -59,7 +59,7 @@ struct {
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, INTERFACE_ENTRIES_MAX);  // 6,
+  __uint(max_entries, INTERFACE_ENTRIES_MAX);
   __type(key, e_reference_point);
   __type(value, struct s_interface);
 } m_upf_interfaces SEC(".maps");

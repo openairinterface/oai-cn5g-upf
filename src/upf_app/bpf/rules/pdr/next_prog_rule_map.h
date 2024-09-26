@@ -5,7 +5,7 @@
 #include <linux/bpf.h>
 #include <types.h>
 
-#define MAX_LENGTH 5000  // 10
+#define MAX_LENGTH 10000
 
 /*
  *   +------------------------------------------------------+
@@ -21,7 +21,7 @@
 
 struct {
   __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
-  __uint(max_entries, MAX_LENGTH);  // 10,
+  __uint(max_entries, MAX_LENGTH);
   __type(key, u32);
   __type(value, s32);
 } m_next_rule_prog SEC(".maps");
