@@ -63,11 +63,7 @@ class SessionProgramManager {
   void create(uint64_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  /**
-   * @brief Remove program session context.
-   *
-   * @param seid The session identifier.
-   */
+
   void remove(uint64_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
