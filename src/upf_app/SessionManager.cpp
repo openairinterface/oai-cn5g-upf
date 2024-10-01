@@ -583,8 +583,7 @@ void SessionManager::updateBPFSessionDL(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
         ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, teid_ul);
   } else {
-    // Logger::upf_app().error("Uplink TEID not found for session: 0x%x",
-    // seidul);
+    Logger::upf_app().info("Uplink TEID not used for session: 0x%x", seidul);
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
         ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, 0);

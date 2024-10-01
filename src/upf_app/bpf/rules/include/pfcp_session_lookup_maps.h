@@ -14,7 +14,7 @@
 
 #define MAX_LENGTH 10000
 #define INTERFACE_ENTRIES_MAX 12
-#define MAX_UEs 100000
+#define MAX_UEs 10000
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
