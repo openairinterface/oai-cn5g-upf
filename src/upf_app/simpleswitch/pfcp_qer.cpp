@@ -41,6 +41,7 @@ bool pfcp_qer::update(const pfcp::update_qer& update, uint8_t& cause_value) {
   if (update.get(gbr.second)) gbr.first = true;
   if (update.get(qfi.second)) qfi.first = true;
   if (update.get(rqi.second)) rqi.first = true;
+  // TODO: Packet Rate, DL Flow Level Marking
   // if (update.get(packet_rate.second)) packet_rate.first = true;
   // if (update.get(dl_flow_level_marking.second)) dl_flow_level_marking.first =
   // true;

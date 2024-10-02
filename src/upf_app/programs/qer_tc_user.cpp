@@ -1,7 +1,6 @@
 #include "qer_tc_user.h"
 #include <SessionManager.h>
 #include <bpf/bpf.h>  // bpf calls
-//#include "../include/bpf/libbpf.h"  // bpf wrappers
 #include <iostream>   // cout
 #include <stdexcept>  // exception
 #include <wrappers/BPFMap.hpp>
@@ -15,8 +14,6 @@
 #include <string.h>
 #include <netlink/route/link.h>
 #include <netlink/route/qdisc/htb.h>
-// #include <NetlinkManager.h>
-// #include "standardized_5qi.h"
 #include "helpers/GetNicInformation.hpp"
 #include "helpers/CmdRunner.hpp"
 
@@ -34,10 +31,6 @@
 
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
-
-#ifndef HTB_SCHEDULER
-#define HTB_SCHEDULER "htb"
-#endif  // HTB_SCHEDULER
 
 #ifndef UDP_INTERFACE
 #define UDP_INTERFACE UserPlaneComponent::getInstance().getUDPInterface()

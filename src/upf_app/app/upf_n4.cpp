@@ -53,8 +53,8 @@ void upf_n4_task(void*);
 void upf_n4_task(void* args_p) {
   const task_id_t task_id = TASK_UPF_N4;
 
-  const util::thread_sched_params* const sched_params =
-      (const util::thread_sched_params* const) args_p;
+  const oai::utils::thread_sched_params* const sched_params =
+      (const oai::utils::thread_sched_params* const) args_p;
   sched_params->apply(task_id, Logger::upf_n4());
 
   itti_inst->notify_task_ready(task_id);

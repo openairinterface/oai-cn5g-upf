@@ -36,7 +36,7 @@
 #include <string>
 #include <thread>
 
-namespace util {
+namespace oai::utils {
 
 class async_shell_cmd {
  private:
@@ -44,7 +44,7 @@ class async_shell_cmd {
   std::thread thread;
 
  public:
-  explicit async_shell_cmd(util::thread_sched_params& sched_params);
+  explicit async_shell_cmd(oai::utils::thread_sched_params& sched_params);
   ~async_shell_cmd() {}
   async_shell_cmd(async_shell_cmd const&) = delete;
   void operator=(async_shell_cmd const&) = delete;
@@ -54,5 +54,5 @@ class async_shell_cmd {
       const char* src_file, const int src_line, const std::string& cmd_str);
 };
 
-}  // namespace util
+}  // namespace oai::utils
 #endif /* FILE_ASYNC_SHELL_CMD_HPP_SEEN */

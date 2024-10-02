@@ -63,11 +63,7 @@ class SessionProgramManager {
   void create(uint64_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  /**
-   * @brief Remove program session context.
-   *
-   * @param seid The session identifier.
-   */
+
   void remove(uint64_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
@@ -135,6 +131,11 @@ class SessionProgramManager {
       uint32_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
+  void storeFARInFARMap(
+      std::shared_ptr<FARProgram> pFARProgram,
+      std::shared_ptr<pfcp::pfcp_far> pFar);
+
+  /*---------------------------------------------------------------------------------------------------------------*/
   void saveSeidWithinFARProgram(
       uint64_t seid,
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
@@ -171,10 +172,7 @@ class SessionProgramManager {
   SessionProgramManager();
   int32_t getEmptySlot();
 
-  // The program eBPF map.
   std::shared_ptr<BPFMap> mpTeidSessionMap;
-
-  // The program eBPF map.
   std::shared_ptr<BPFMap> mpUeIpSessionMap;
 
   // The observer which will be notified when a PFCP_Session_PDR_LookupProgram

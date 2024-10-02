@@ -22,6 +22,7 @@ SessionManager::SessionManager() {}
 SessionManager::~SessionManager() {}
 
 //---------------------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------
 // Helper function to extract PDI
 bool SessionManager::extractPdi(
     std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi) {
@@ -29,12 +30,14 @@ bool SessionManager::extractPdi(
 }
 
 //---------------------------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------------------------
 // Helper function to extract source interface
 bool SessionManager::extractSourceIface(
     pfcp::pdi& pdi, pfcp::source_interface_t& sourceInterface) {
   return (pdi.get(sourceInterface));
 }
 
+//---------------------------------------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------------------------------------
 // Helper function to extract source interface
 bool SessionManager::extractUeIpv4(
@@ -488,6 +491,7 @@ void SessionManager::updateBPFSessionDL(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
         ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, teid_ul);
   } else {
+    Logger::upf_app().info("Uplink TEID not used for session: 0x%x", seidul);
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
         ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, 0);

@@ -18,18 +18,12 @@
  * For more information about the OpenAirInterface (OAI) Software Alliance:
  *      contact@openairinterface.org
  */
-/*! \file itti.hpp
-   \brief
-   \author  Lionel GAUTHIER
-   \date 2018
-   \email: lionel.gauthier@eurecom.fr
-*/
+
 #ifndef SRC_OAI_ITTI_ITTI_HPP_INCLUDED_
 #define SRC_OAI_ITTI_ITTI_HPP_INCLUDED_
 
 #include <chrono>
 #include <condition_variable>
-//#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -76,8 +70,6 @@ class itti_timer {
         time_out(t.time_out),
         arg1_user(t.arg1_user),
         arg2_user(t.arg2_user) {}
-  // itti_timer(itti_timer&& t) noexcept : id(std::move(t.id)),
-  // task_id(std::move(t.task_id)) , time_out(std::move(t.time_out)) {}
 
   bool operator<(const itti_timer& t) const { return time_out < t.time_out; }
   ~itti_timer() {}
@@ -110,7 +102,6 @@ class itti_task_ctxt {
   /*
    * pthread associated with the thread
    */
-  // std::thread::id                      thread_id;
   std::thread thread;
   /*
    * State of the thread
@@ -148,7 +139,8 @@ class itti_mw {
 
   bool terminate;
 
-  static void timer_manager_task(const util::thread_sched_params& sched_params);
+  static void timer_manager_task(
+      const oai::utils::thread_sched_params& sched_params);
 
  public:
   itti_mw();
@@ -156,7 +148,7 @@ class itti_mw {
   void operator=(itti_mw const&) = delete;
   ~itti_mw();
 
-  void start(const util::thread_sched_params& sched_params);
+  void start(const oai::utils::thread_sched_params& sched_params);
 
   timer_id_t increment_timer_id();
   unsigned int increment_message_number();
@@ -202,17 +194,6 @@ class itti_mw {
    * @returns -1 on failure, 0 otherwise
    **/
   int notify_task_ready(const task_id_t task_id);
-
-  /** \brief Indicates to ITTI if newly created tasks should wait for all tasks
-   *to be ready \param wait_tasks non 0 to make new created tasks to wait, 0 to
-   *let created tasks to run
-   **/
-  // void wait_ready(int wait_tasks);
-
-  /** \brief Mark the task as in ready state
-   * \param task_id task to mark as ready
-   **/
-  // void mark_task_ready(task_id_t task_id);
 
   /** \brief handle signals and wait for all threads to join when the process
    *complete. This function should be called from the main thread after having

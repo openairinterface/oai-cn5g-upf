@@ -55,5 +55,4 @@ class itti_async_shell_cmd : public itti_msg {
   std::string src_file;
   int src_line;
 };
-
 #endif /* FILE_ITTI_ASYNC_SHELL_CMD_SEEN */

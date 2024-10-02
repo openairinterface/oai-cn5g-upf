@@ -1,5 +1,27 @@
 # RELEASE NOTES: #
 
+## v2.1.0 -- August 2024 ##
+
+* Features
+  - Add connection handling between UPF and NRF
+  - Use HTTP Request Timeout parameter from Conf file
+  - QoS initial support
+  - N4 interoperability improved
+  - Performance improvement: CPU usage is further reduced
+* Fixes
+  - Fixes: thread management especially at shutdown.
+  - Fix FDQN IPv4-only resolution
+  - Fix Using SD in string hex in UPF profile to send to NRF
+  - Fix to update TEID after a reconnection with FiveG_S_TMSI
+* Tech Debt
+  - Stopping support for RHEL8/Rocky8 in favor of RHEL9/Rocky9
+  - Remove NRF dependency from UPF
+  - HTTP client cpr library refactoring effort
+  - Bumping up libbpf and bpftool versions:
+    - libbpf to `master` (currently above `v1.4.5`)
+    - bpftool to `v7.3.0`
+    - This should allow to build on newer systems
+
 ## v2.0.0 -- December 2023 ##
 
 * Features
