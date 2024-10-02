@@ -1,5 +1,4 @@
 from trex_stl_lib.api import *
-from scapy.contrib.gtp import *
 import argparse
 
 
@@ -7,12 +6,16 @@ class STLS1(object):
 
     def create_stream(self, packet_len):
         # Create base packet and pad it to size
-        base_pkt = Ether()/IP(src="192.168.101.3",dst="192.168.101.2")/UDP(dport=2152)/GTP_U_Header(teid=1) /IP(src="16.0.0.2",dst="48.0.0.2",version=4)/UDP(dport=12,sport=1025)
+        base_pkt = Ether()/IP(src="16.0.0.1", dst="192.168.10.100")/UDP(dport=12,sport=1025)
+        #dport=1234
         pad = max(0, packet_len - len(base_pkt)) * 'x'
         vm = STLVM()
 
+        # create a tuple var
+        # vm.tuple_var(name="tuple", ip_min="16.0.0.1", ip_max="16.0.0.254",
+                    # port_min=1234, port_max=1234, limit_flows=1000)
         vm.tuple_var(name="tuple", ip_min="16.0.0.1", ip_max="16.0.0.254",
-                    port_min=1025, port_max=2048, limit_flows=10000)
+                    port_min=1025, port_max=2048, limit_flows=1000)
         
         # write fields
         vm.write(fv_name="tuple.ip", pkt_offset="IP.src")
@@ -26,7 +29,7 @@ class STLS1(object):
 
         for key, value in kwargs.items():
             print("{0} = {1}".format(key, value))
-        packet_len = 104
+        packet_len = 1400
 
         # create 1 stream
         return [self.create_stream(packet_len - 4)]

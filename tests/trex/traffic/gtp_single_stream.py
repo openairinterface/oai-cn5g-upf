@@ -1,5 +1,10 @@
 from trex_stl_lib.api import *
+
+import sys
+sys.path.insert(0, '/usr/local/bin/scapy')
 from scapy.contrib.gtp import GTP_U_Header, GTPPDUSessionContainer
+
+#from scapy.contrib.gtp import GTP_U_Header, GTPPDUSessionContainer
 
 class STLS1(object):
 
@@ -7,11 +12,11 @@ class STLS1(object):
         return STLStream(
             packet = STLPktBuilder(
                         pkt = Ether() /
-                        IP(src="192.168.101.3",dst="192.168.101.2") /
+                        IP(src="192.168.10.10",dst="192.168.10.100") /
                         UDP(dport=2152) /
-                        GTP_U_Header(teid=1) /
+                        GTP_U_Header(teid=0x0000001) /
                         GTPPDUSessionContainer(type=1, QFI=5) /
-                        IP(src="192.168.101.3",dst="192.168.102.3",version=4) /
+                        IP(src="192.168.10.100",dst="192.168.20.100",version=4) /
                         UDP() /
                         Raw('x' * 20)
                     ),
@@ -26,6 +31,7 @@ class STLS1(object):
 # dynamic load - used for trex console or simulator
 def register():
     return STLS1()
+
 
 
 

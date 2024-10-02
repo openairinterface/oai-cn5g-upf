@@ -19,13 +19,23 @@ from scapy.layers.inet import IP, UDP
 
 from scapy.all import sniff
 
-SMF_ID = "192.168.100.1"
-SEQ = 16770407
-FTEID_UL = 2596996162
-FTEID_DL = 2547891023
-UE_IP = "12.1.1.2"
-# gNB_IP = "192.168.72.1"
-gNB_IP = "192.168.101.3"
+
+SMF_IP = "192.168.199.110"
+UPF_IP_N3 = "192.168.10.10"
+UPF_IP_N4 = "192.168.199.227"
+UPF_IP_N6 = "192.168.20.10" 
+UE_IP = "192.168.10.100"
+#UE_IP = "12.1.1.3"
+gNB_IP = "192.168.10.100"
+GOOGLE_DNS_IP = "8.8.8.8" 
+
+SEQ = 16770408
+
+FTEID_UL = 0x00000001
+FTEID_DL = 0x00000002
+
+# UE_IP_UL = "12.1.1.2"
+
 
 
 def seid():
