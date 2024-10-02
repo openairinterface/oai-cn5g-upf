@@ -5,7 +5,7 @@
 #include <linux/bpf.h>
 #include <types.h>
 
-#define MAX_LENGTH 5000  // 10
+#define MAX_LENGTH 10000  // 10
 
 /*
  *   +------------------------------------------------------+

@@ -8,9 +8,9 @@
 #include <ie/fteid.h>
 #include <ie/fseid.h>
 
-#define MAX_LENGTH 5000            // 10
-#define PDR_ENTRIES_MAX_SIZE 5000  // 10
-#define FAR_ENTRIES_MAX_SIZE 5000  // 10
+#define MAX_LENGTH 10000            // 10
+#define PDR_ENTRIES_MAX_SIZE 10000  // 10
+#define FAR_ENTRIES_MAX_SIZE 10000  // 10
 #define ARP_ENTRIES_MAX_SIZE 12
 
 /*---------------------------------------------------------------------------------------------------------------*/

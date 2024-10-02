@@ -7,10 +7,10 @@
 #include <types.h>
 #include "arp_table_maps.h"
 
-#define ARP_ENTRIES_MAX_SIZE 12
-#define FAR_TAILS_MAX 1
+#define ARP_ENTRIES_MAX_SIZE 10000
+#define FAR_TAILS_MAX 20
 #define MAX_INTERFACES 10
-#define MAX_FAR_PROGRAMS 100
+#define MAX_FAR_PROGRAMS 10000
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
