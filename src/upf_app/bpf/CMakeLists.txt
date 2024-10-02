@@ -12,7 +12,7 @@ include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 add_definitions(-DKERNEL_SPACE)
 
 
-add_custom_target(upf_xdp_all DEPENDS pfcp_session_lookup_xdp far_xdp)
+add_custom_target(upf_xdp_all DEPENDS pfcp_session_lookup_xdp)
 add_custom_target(upf_tc_all DEPENDS qer_tc)
 
 
@@ -41,7 +41,7 @@ function(xdp arg)
 endfunction()
 
 xdp(pfcp_session_lookup)
-xdp(far)
+#xdp(far)
 
 
 

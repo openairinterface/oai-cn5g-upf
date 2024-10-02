@@ -349,7 +349,7 @@ target_link_libraries (upf
   UDP
   GTPV1U
   PFCP
-  far_xdp
+  #far_xdp
   pfcp_session_lookup_xdp
   qer_tc
   UPF_XDP

@@ -48,7 +48,7 @@ add_library(UPF_XDP STATIC
   SessionManager.cpp
   SessionPrograms.cpp
   programs/pfcp_session_lookup_xdp_user.cpp
-  programs/far_xdp_user.cpp
+  #programs/far_xdp_user.cpp
   programs/BPFProgram.cpp
   wrappers/BPFMaps.cpp
   wrappers/BPFMap.cpp
