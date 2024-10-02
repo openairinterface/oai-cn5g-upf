@@ -107,7 +107,7 @@ main() {
 
   source "${dirname}/../env.sh"
   
-  XDP_TOOLS="${WORKSPACE}/xdp-tools"
+  XDP_TOOLS="${UPF_WORKSPACE}/xdp-tools"
   XDP_DUMP="${XDP_TOOLS}/xdp-dump"
   XDP_MONITOR="${XDP_TOOLS}/xdp-monitor"
   SCRIPTS="${DUT_UPF_WORKSPACE_STANDALONE}/tests/scripts"

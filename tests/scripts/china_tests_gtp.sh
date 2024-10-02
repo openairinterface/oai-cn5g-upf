@@ -49,7 +49,8 @@ main() {
     for ((packet_size=PKT_SMALLEST_SIZE; packet_size<=PKT_BIGEST_SIZE; packet_size+=PKT_STEP)); do
         for queues_size in $(seq 1 $MAX_QUEUES); do
             QUEUE_SIZE=$queues_size
-            SOURCE_DIR="${WORKSPACE}/results-china/gtp/${packet_size}Bytes/tx_rx_queue_${QUEUE_SIZE}"
+            SOURCE_DIR="${TREX_WORKSPACE}/results-china/gtp/${packet_size}Bytes/tx_rx_queue_${QUEUE_SIZE}"
+            SOURCE_DIR2="${UPF_WORKSPACE}/results-china/udp/${packet_size}Bytes/tx_rx_queue_${QUEUE_SIZE}"
 
             echo "Set RX Queues to $QUEUE_SIZE"
             sudo ethtool -L enp5s0f0 combined "$QUEUE_SIZE"
@@ -65,7 +66,7 @@ main() {
                 sleep 2
 
                 # Run the test script in the background
-                "${SCRIPTS}/china_start_tests_gtp.sh" "$SOURCE_DIR" "$i" "$QUEUE_SIZE" "$TEST_DURATION" "$packet_size" > output.log 2>&1 &
+                "${SCRIPTS}/china_start_tests_gtp.sh" "$SOURCE_DIR" "$i" "$QUEUE_SIZE" "$TEST_DURATION" "$packet_size" "$SOURCE_DIR2" > output.log 2>&1 &
                 
                 sleep $((TEST_DURATION + 20))
 
