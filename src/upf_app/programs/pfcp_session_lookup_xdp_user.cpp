@@ -31,7 +31,8 @@ PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void PFCP_Session_LookupProgram::create_upf_interface_map_entry(e_reference_point s) {
+void PFCP_Session_LookupProgram::create_upf_interface_map_entry(
+    e_reference_point s) {
   struct s_interface iface;
   __builtin_memset(&iface, 0, sizeof(s_interface));
 
@@ -78,7 +79,6 @@ void PFCP_Session_LookupProgram::setup() {
   mpLifeCycle->load();
   mpLifeCycle->attach();
 
-
   Logger::upf_app().debug("Configure redirect interface");
   auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
   auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
@@ -90,12 +90,11 @@ void PFCP_Session_LookupProgram::setup() {
 
   mpEgressInterfaceMap->update(uplinkId, udpInterfaceIndex, BPF_ANY);
   mpEgressInterfaceMap->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
-  
+
   Logger::upf_app().debug("Adding Reference Points to m_upf_interface Map:");
   create_upf_interface_map_entry(N3_INTERFACE);
   create_upf_interface_map_entry(N6_INTERFACE);
   create_upf_interface_map_entry(N4_INTERFACE);
-
 
   // Entry point interface
   if (mUDPInterface.empty() || mGTPInterface.empty()) {
@@ -104,7 +103,7 @@ void PFCP_Session_LookupProgram::setup() {
   }
 
   Logger::upf_app().debug(
-      "Link UDP interface to interface %s", mUDPInterface.c_str());
+      "Link Non-GTP interface to interface %s", mUDPInterface.c_str());
   mpLifeCycle->link("xdp_handle_downlink", mUDPInterface.c_str());
 
   Logger::upf_app().debug(
@@ -166,7 +165,8 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSessionMappingMap()
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getEgressInterfaceMap() const {
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getEgressInterfaceMap()
+    const {
   return mpEgressInterfaceMap;
 }
 
