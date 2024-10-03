@@ -448,26 +448,13 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
 // }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-// SEC("xdp")
-// int xdp_handle_uplink(struct xdp_md* ctx) {
-//   bpf_debug("================< PFCP PDR Sesction >================");
-
-//   struct ethhdr* ethh = (void*) (long) ctx->data;
-
-//   if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
-//     bpf_debug("Invalid Ethernet header");
-//     return XDP_DROP;
-//   }
-
-//   return eth_handle(ctx, ethh);
-// }
-
 SEC("xdp")
 int xdp_handle_uplink(struct xdp_md* ctx) {
   bpf_debug("================< PFCP PDR Sesction >================");
   void* data          = (void*) (long) ctx->data;
   void* data_end      = (void*) (long) ctx->data_end;
   struct ethhdr* ethh = (void*) (long) ctx->data;
+  u16 eth_type        = bpf_htons(ethh->h_proto);
   u64 offset          = sizeof(*ethh);
 
   if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
@@ -475,117 +462,134 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
     return XDP_DROP;
   }
 
-  struct iphdr* iph = (struct iphdr*) ((void*) ethh + offset);
+  bpf_debug("Debug: eth_type:0x%x", eth_type);
+  switch (eth_type) {
+    case ETH_P_IP: {
+      struct iphdr* iph = (struct iphdr*) ((void*) ethh + offset);
 
-  if ((void*) (iph + 1) > data_end) {
-    bpf_debug("Invalid IPv4 Packet");
-    return XDP_DROP;
-  }
-
-  struct udphdr* udph = (struct udphdr*) (iph + 1);
-
-  if ((void*) (udph + 1) > data_end) {
-    bpf_debug("Invalid UDP packet");
-    return XDP_DROP;
-  }
-
-  if (bpf_htons(udph->dest) == GTP_UDP_PORT) {
-    bpf_debug("This is a GTP traffic");
-
-    struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
-
-    // Check if the GTP header extends beyond the data end.
-    if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
-      bpf_debug("Invalid GTPU packet");
-      return XDP_DROP;
-    }
-
-    struct ethhdr* ethh_new = data + GTP_ENCAPSULATED_SIZE;
-
-    if ((void*) ethh_new + sizeof(*ethh_new) > data_end) {
-      bpf_debug("Invalid Ethernet packet");
-      return XDP_DROP;
-    }
-
-    struct iphdr* iph_inner = (void*) (ethh_new + 1);
-
-    if ((void*) iph_inner + sizeof(*iph_inner) > data_end) {
-      bpf_debug("Invalid Inner IP packet");
-      return XDP_DROP;
-    }
-
-    u32 src_ip_in = iph_inner->saddr;
-
-    if (gtpuh->message_type != GTPU_G_PDU) {
-      bpf_debug(
-          "Message type 0x%x is not GTPU GPDU(0x%x)\n", gtpuh->message_type,
-          GTPU_G_PDU);
-      return XDP_PASS;
-    }
-
-    struct next_rule_prog_index_key map_key = {0};
-    map_key.teid                            = gtpuh->teid;
-    map_key.source_value                    = INTERFACE_VALUE_ACCESS;
-    map_key.ipv4_address                    = src_ip_in;
-
-    pfcp_far_t_* p_far = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
-
-    if (p_far) {
-      bpf_debug("FAR ID = %d", p_far->far_id.far_id);
-      u8 dest_interface =
-          p_far->forwarding_parameters.destination_interface.interface_value;
-
-      if (!p_far->apply_action.forw) {
-        bpf_debug("Forward Action Is NOT set");
-        return XDP_PASS;
-      }
-
-      bpf_debug("GTP Header Removal ...");
-
-      __builtin_memcpy(ethh_new, ethh, sizeof(*ethh));
-
-      // Retrieve the N6 Interface IP address:
-      e_reference_point n6_key = N6_INTERFACE;
-
-      if (!cached_n6) {
-        struct s_interface* map_element =
-            bpf_map_lookup_elem(&m_upf_interfaces, &n6_key);
-
-        if (!map_element) {
-          bpf_debug("N6 interface is missing in UPF map, Drop the packet");
-          return XDP_DROP;
-        }
-
-        upf_n6_ip = map_element->ipv4_address;
-
-        struct s_arp_mapping* map_entry = {0};
-        map_entry = bpf_map_lookup_elem(&m_arp_table, &upf_n6_ip);
-
-        if (!map_entry) {
-          bpf_debug("N6's Next Hop MAC address not found! Drop the packet");
-          return XDP_DROP;
-        }
-
-        memcpy(
-            next_hop_n6_mac_address, map_entry->mac_address,
-            sizeof(next_hop_n6_mac_address));
-
-        cached_n6 = true;
-      }
-
-      // Adjust head to the right.
-      if (bpf_xdp_adjust_head(ctx, GTP_ENCAPSULATED_SIZE)) {
+      if ((void*) (iph + 1) > data_end) {
+        bpf_debug("Invalid IPv4 Packet");
         return XDP_DROP;
       }
 
-      bpf_debug("The Packet is redirected for transmission to DN ...");
+      struct udphdr* udph = (struct udphdr*) (iph + 1);
 
-      return bpf_redirect_map(&m_redirect_interfaces, UPLINK, 0);
+      if ((void*) (udph + 1) > data_end) {
+        bpf_debug("Invalid UDP packet");
+        return XDP_DROP;
+      }
 
-      bpf_debug("OUTER_HEADER_CREATION_UDP_IPV4 REDIRECT FAILED");
+      if (bpf_htons(udph->dest) == GTP_UDP_PORT) {
+        bpf_debug("This is a GTP traffic");
+
+        struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
+
+        // Check if the GTP header extends beyond the data end.
+        if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
+          bpf_debug("Invalid GTPU packet");
+          return XDP_DROP;
+        }
+
+        struct ethhdr* ethh_new = data + GTP_ENCAPSULATED_SIZE;
+
+        if ((void*) ethh_new + sizeof(*ethh_new) > data_end) {
+          bpf_debug("Invalid Ethernet packet");
+          return XDP_DROP;
+        }
+
+        struct iphdr* iph_inner = (void*) (ethh_new + 1);
+
+        if ((void*) iph_inner + sizeof(*iph_inner) > data_end) {
+          bpf_debug("Invalid Inner IP packet");
+          return XDP_DROP;
+        }
+
+        u32 src_ip_in = bpf_htonl(iph_inner->saddr);
+
+        if (gtpuh->message_type != GTPU_G_PDU) {
+          bpf_debug(
+              "Message type 0x%x is not GTPU GPDU(0x%x)\n", gtpuh->message_type,
+              GTPU_G_PDU);
+          return XDP_PASS;
+        }
+
+        struct next_rule_prog_index_key map_key = {0};
+        map_key.teid                            = gtpuh->teid;
+        map_key.source_value                    = INTERFACE_VALUE_ACCESS;
+        map_key.ipv4_address                    = src_ip_in;
+
+        pfcp_far_t_* p_far =
+            bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
+
+        if (p_far) {
+          bpf_debug("FAR ID = %d", p_far->far_id.far_id);
+          u8 dest_interface = p_far->forwarding_parameters.destination_interface
+                                  .interface_value;
+
+          if (!p_far->apply_action.forw) {
+            bpf_debug("Forward Action Is NOT set");
+            return XDP_PASS;
+          }
+
+          bpf_debug("GTP Header Removal ...");
+
+          __builtin_memcpy(ethh_new, ethh, sizeof(*ethh));
+
+          // Retrieve the N6 Interface IP address:
+          e_reference_point n6_key = N6_INTERFACE;
+
+          if (!cached_n6) {
+            struct s_interface* map_element =
+                bpf_map_lookup_elem(&m_upf_interfaces, &n6_key);
+
+            if (!map_element) {
+              bpf_debug("N6 interface is missing in UPF map, Drop the packet");
+              return XDP_DROP;
+            }
+
+            upf_n6_ip = map_element->ipv4_address;
+
+            struct s_arp_mapping* map_entry = {0};
+            map_entry = bpf_map_lookup_elem(&m_arp_table, &upf_n6_ip);
+
+            if (!map_entry) {
+              bpf_debug("N6's Next Hop MAC address not found! Drop the packet");
+              return XDP_DROP;
+            }
+
+            memcpy(
+                next_hop_n6_mac_address, map_entry->mac_address,
+                sizeof(next_hop_n6_mac_address));
+
+            cached_n6 = true;
+          }
+
+          memcpy(
+              ethh_new->h_dest, next_hop_n6_mac_address,
+              sizeof(ethh_new->h_dest));
+          // Adjust head to the right.
+          if (bpf_xdp_adjust_head(ctx, GTP_ENCAPSULATED_SIZE)) {
+            return XDP_DROP;
+          }
+
+          // bpf_debug("Destination MAC  %x:%x:%x:", ethh_new->h_dest[0],
+          // ethh_new->h_dest[1], ethh_new->h_dest[2]); bpf_debug(" %x:%x:%x",
+          // ethh_new->h_dest[3], ethh_new->h_dest[4], ethh_new->h_dest[5]);
+
+          bpf_debug("The Packet is redirected for transmission to DN ...");
+
+          return bpf_redirect_map(&m_redirect_interfaces, UPLINK, 0);
+
+          bpf_debug("OUTER_HEADER_CREATION_UDP_IPV4 REDIRECT FAILED");
+        }
+
+        return XDP_PASS;
+      }
     }
-
-    return XDP_PASS;
+    default: {
+      bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x", offset, eth_type);
+      return XDP_PASS;
+    }
   }
 }
 
@@ -610,14 +614,17 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
     return XDP_DROP;
   }
 
-  u32 ip_dest  = iph->daddr;
-  u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, &ip_dest);
+  u32 ip_dest = bpf_htonl(iph->daddr);
+  struct session_id* session =
+      bpf_map_lookup_elem(&m_session_mapping, &ip_dest);
+  // u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, &ip_dest);
 
-  if (teid_dl) {
+  if (session) {
+    u32 teid_dl = session->teid_dl;
     bpf_debug(
-        "TEID downlink: 0x%x was found for UE IP: 0x%x", *teid_dl, ip_dest);
+        "TEID downlink: 0x%x was found for UE IP: 0x%x", teid_dl, ip_dest);
     struct next_rule_prog_index_key map_key = {0};
-    map_key.teid                            = *teid_dl;
+    map_key.teid                            = teid_dl;
     map_key.source_value                    = INTERFACE_VALUE_CORE;
     map_key.ipv4_address                    = ip_dest;
 

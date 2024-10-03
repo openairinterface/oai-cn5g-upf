@@ -205,12 +205,12 @@ smf:
 upf:
   upf_name: "OpenXG-UPF"
   support_features:
-    enable_bpf_datapath: yes    # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
-    enable_qos: yes
-    enable_snat: no           # If "on": Source natting is done for UE, DEFAULT= off
-  remote_n6_gw: remote_n6      # Dummy host since simple-switch does not use N6 GW
+    enable_bpf_datapath: yes  # If "yes": BPF is used as datapath else simpleswitch is used, DEFAULT= no
+    enable_qos: no            # Only supported for BPF datapath. If "yes" we use qdisc to manage the QoS
+    enable_snat: no           # If "no": Source natting is done for UE, DEFAULT= no
+  remote_n6_gw: remote_n6
   smfs:
-    - host: openxg-smf            # To be used for PFCP association in case of no-NRF
+    - host: oai-smf            # To be used for PFCP association in case of no-NRF
   upf_info:
     sNssaiUpfInfoList:
       - sNssai: *embb_slice1

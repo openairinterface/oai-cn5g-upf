@@ -121,12 +121,17 @@ install_libbpf_from_git() {
         python3"
     fi
     $SUDO $INSTALLER install -y $PACKAGE_LIST
-    cd libbpf 
-    #&& git checkout 051a4009f94d5633a8f734ca4235f0a78ee90469
+    cd libbpf
+    # we used to checkout to 051a4009f94d5633a8f734ca4235f0a78ee90469 (aka v0.3)
+    # that was restricting us to build on 5.1xx kernel hosts
+    # we are now back on the master branch (latest tag at time of writing is v1.4.5)
+    # displaying the last commit version
+    git log -n1
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
-    cd src && make -j $(nproc) 
+    cd src && make -j $(nproc)
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
     $SUDO make install
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
     popd
   fi
   echo "libbpf installation complete"
@@ -199,9 +204,6 @@ install_bpftool_from_git() {
 
   if [[ $prompt =~ [yY](es)* ]]
   then
-    #GIT_URL=https://github.com/libbpf/bpftool.git
-    #GIT_URL=https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/snapshot/linux-$KERNEL_VERSION.tar.gz
-    
     GIT_URL=https://github.com/libbpf/bpftool.git
     echo "Install bpftool from $GIT_URL"
     pushd $OPENAIRCN_DIR/build/ext
@@ -211,29 +213,21 @@ install_bpftool_from_git() {
       $SUDO rm -rf bpftool
     fi
 
+    # Checkout to tested version
     git clone --branch v7.3.0 --recurse-submodules $GIT_URL
 
     if [[ $OS_DISTRO == "ubuntu" ]]; then
-      $SUDO $INSTALLER install -y wget gcc-multilib
+      $SUDO $INSTALLER install -ym wget gcc-multilib
     elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
       $SUDO $INSTALLER install -y wget
     fi
-    
-    # trick for CI
-    #if [ ! -f $OPENAIRCN_DIR/build/ext/linux-$KERNEL_VERSION.tar.gz ]; then
-    #  wget -nv --tries=4 --retry-connrefused --wait=8 $GIT_URL
-    #  ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
-    #fi
-    #ls -lst linux-$KERNEL_VERSION.tar.gz && tar -xf linux-$KERNEL_VERSION.tar.gz && rm -rf linux-$KERNEL_VERSION.tar.gz
 
     cd bpftool
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
-    #cd linux-$KERNEL_VERSION/tools/bpf/bpftool && make -j $(nproc)
     cd src && CLANG=Nope make -j $(nproc)
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
     $SUDO make install
-    #ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
-    #$SUDO rm -rf linux-$KERNEL_VERSION
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
     popd
   fi
   echo "bpftool installation complete"
@@ -283,7 +277,6 @@ check_install_upf_deps() {
       automake \
       build-essential \
       $CMAKE \
-      gcc-multilib \
       git"
   elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
     PACKAGE_LIST="\
@@ -354,11 +347,11 @@ check_install_upf_deps() {
   ret=$?;[[ $ret -ne 0 ]] && return $ret
 
   echo_info "distro libs installation complete"
-  
+
   echo ""
   echo "Auto-detecting UPF features:"
   check_enable_bpf_datapath
-  if [ $? -eq 0 ]; then  
+  if [ $? -eq 0 ]; then
     check_enable_qos
     if [ $? -eq 0 ]; then
       echo -e "     BPF Datapath: [$GREEN on $NC  ]"
@@ -373,8 +366,8 @@ check_install_upf_deps() {
     echo -e "     BPF Datapath: [$RED off $NC ]"
     echo -e "      QoS Feature: [$RED off $NC ]"
     echo ""
-  fi  
-  
+  fi
+
   echo -e "$YELLOW WARNINGS: "
   echo -e "           1. Even when "BPF Datapath" and/or "QoS Feature" are/is disabled"
   echo -e "              we still build and install BPF and Netlinks libraries."
@@ -406,9 +399,9 @@ check_install_upf_deps() {
 
   install_nlohmann_from_git $1 $2
   ret=$?;[[ $ret -ne 0 ]] && return $ret
-  
+
   install_cpr_from_git $1 $2
-  ret=$?;[[ $ret -ne 0 ]] && return $ret 
+  ret=$?;[[ $ret -ne 0 ]] && return $ret
 
   # latest usage of yaml-cpp suggests that we should be using 0.7+ version
   # To be sure, let's install from source all the time for the moment
@@ -514,5 +507,24 @@ check_install_upf_min_deps() {
   $SUDO $INSTALLER install $OPTION $PACKAGE_LIST
   ret=$?;[[ $ret -ne 0 ]] && return $ret
 
+  return 0
+}
+
+OS_DISTRO=$(grep "^ID=" /etc/os-release | sed "s/ID=//" | sed "s/\"//g")
+OS_RELEASE=$(grep "^VERSION_ID=" /etc/os-release | sed "s/VERSION_ID=//" | sed "s/\"//g")
+
+get_distribution_release() {
+    if [[ ! -z "$OS_DISTRO$OS_RELEASE" ]]; then
+        echo "$OS_DISTRO$OS_RELEASE"
+    else
+        echo Unknown
+    fi
+}
+
+check_platform_for_lttng() {
+  local distribution=$(get_distribution_release)
+  if [[ "$distribution" == "ubuntu18.04" || "$distribution" == "ubuntu20.04" || "$distribution" == "ubuntu22.04" ]]; then
+      return 1
+  fi
   return 0
 }

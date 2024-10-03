@@ -19,29 +19,25 @@
  *      contact@openairinterface.org
  */
 
-/*! \file pfcp.cpp
-  \brief
-  \author Lionel Gauthier
-  \company Eurecom
-  \email: lionel.gauthier@eurecom.fr
-*/
-
 #include "pfcp.hpp"
 
 #include <cstdlib>
 
+#include "logger_base.hpp"
+
 using namespace pfcp;
 using namespace std;
+using namespace oai::logger;
 
 extern itti_mw* itti_inst;
 
 //------------------------------------------------------------------------------
 pfcp_l4_stack::pfcp_l4_stack(
     const string& ip_address, const unsigned short port_num,
-    const util::thread_sched_params& sched_params)
+    const oai::utils::thread_sched_params& sched_params)
     : udp_s_8805(ip_address.c_str(), port_num),
       udp_s_allocated(ip_address.c_str(), 0) {
-  Logger::pfcp().info(
+  logger_common::pfcp().info(
       "pfcp_l4_stack created listening to %s:%d", ip_address.c_str(), port_num);
   trxn_id2seq_num      = {};
   proc_cleanup_timers  = {};
@@ -69,7 +65,7 @@ uint32_t pfcp_l4_stack::get_next_seq_num() {
 void pfcp_l4_stack::handle_receive(
     char* recv_buffer, const std::size_t bytes_transferred,
     endpoint& remote_endpoint) {
-  Logger::pfcp().error("TODO implement in derived class");
+  logger_common::pfcp().error("TODO implement in derived class");
 }
 //------------------------------------------------------------------------------
 bool pfcp_l4_stack::check_request_type(const uint8_t initial) {
@@ -95,7 +91,8 @@ bool pfcp_l4_stack::check_request_type(const uint8_t initial) {
 //------------------------------------------------------------------------------
 bool pfcp_l4_stack::check_response_type(
     const uint8_t initial, const uint8_t triggered) {
-  // Logger::pfcp().info( "check_response_type PFCP msg type %d/%d",
+  //   logger_common::pfcp().info(
+  //   "check_response_type PFCP msg type %d/%d",
   // (int)initial, (int)triggered);
   switch (initial) {
     case PFCP_HEARTBEAT_REQUEST:
@@ -123,7 +120,8 @@ void pfcp_l4_stack::start_msg_retry_timer(
       time_out_milli_seconds / 1000, time_out_milli_seconds % 1000, task_id);
   msg_out_retry_timers.insert(
       std::pair<timer_id_t, uint32_t>(p.retry_timer_id, seq_num));
-  // Logger::pfcp().trace( "Started Msg retry timer %d, proc %" PRId64", seq
+  //   logger_common::pfcp().trace( "Started
+  //   Msg retry timer %d, proc %" PRId64", seq
   // %d",p.retry_timer_id, p.trxn_id, seq_num);
 }
 //------------------------------------------------------------------------------
@@ -131,7 +129,8 @@ void pfcp_l4_stack::stop_msg_retry_timer(pfcp_procedure& p) {
   if (p.retry_timer_id) {
     itti_inst->timer_remove(p.retry_timer_id);
     msg_out_retry_timers.erase(p.retry_timer_id);
-    // Logger::pfcp().trace( "Stopped Msg retry timer %d, proc %" PRId64", seq
+    //   logger_common::pfcp().trace( "Stopped
+    //   Msg retry timer %d, proc %" PRId64", seq
     // %d",p.retry_timer_id, p.trxn_id, p.retry_msg->get_sequence_number());
     p.retry_timer_id = 0;
   }
@@ -140,7 +139,8 @@ void pfcp_l4_stack::stop_msg_retry_timer(pfcp_procedure& p) {
 void pfcp_l4_stack::stop_msg_retry_timer(timer_id_t& t) {
   itti_inst->timer_remove(t);
   msg_out_retry_timers.erase(t);
-  // Logger::pfcp().trace( "Stopped Msg retry timer %d",t);
+  //   logger_common::pfcp().trace( "Stopped
+  //   Msg retry timer %d",t);
 }
 //------------------------------------------------------------------------------
 void pfcp_l4_stack::start_proc_cleanup_timer(
@@ -150,13 +150,15 @@ void pfcp_l4_stack::start_proc_cleanup_timer(
       time_out_milli_seconds / 1000, time_out_milli_seconds % 1000, task_id);
   proc_cleanup_timers.insert(
       std::pair<timer_id_t, uint32_t>(p.proc_cleanup_timer_id, seq_num));
-  // Logger::pfcp().trace( "Started proc cleanup timer %d, proc %" PRId64" t-out
+  //   logger_common::pfcp().trace( "Started
+  //   proc cleanup timer %d, proc %" PRId64" t-out
   // %" PRIu32" ms",p.proc_cleanup_timer_id,p.trxn_id, time_out_milli_seconds);
 }
 //------------------------------------------------------------------------------
 void pfcp_l4_stack::stop_proc_cleanup_timer(pfcp_procedure& p) {
   itti_inst->timer_remove(p.proc_cleanup_timer_id);
-  // Logger::pfcp().trace( "Stopped proc cleanup timer %d, proc %"
+  //   logger_common::pfcp().trace( "Stopped
+  //   proc cleanup timer %d, proc %"
   // PRId64"",p.proc_cleanup_timer_id, p.trxn_id);
   msg_out_retry_timers.erase(p.proc_cleanup_timer_id);
   p.proc_cleanup_timer_id = 0;
@@ -186,27 +188,37 @@ void pfcp_l4_stack::handle_receive_message_cb(
           proc.trxn_id, msg.get_sequence_number()));
       error   = false;
       trxn_id = proc.trxn_id;
-      // Logger::pfcp().info( "Received Initial PFCP msg type %d, seq %d, proc
+      //   logger_common::pfcp().info(
+      //   "Received Initial PFCP msg type %d, seq %d, proc
       // %" PRId64"", msg.get_message_type(), msg.get_sequence_number(),
       // proc.trxn_id);
     } else {
-      Logger::pfcp().info(
-          "Failed to check Initial message type, Silently discarding PFCP msg "
+      logger_common::pfcp().info(
+          "Failed to check Initial message type, Silently discarding PFCP "
+          "msg "
           "type %d, seq %d",
           msg.get_message_type(), msg.get_sequence_number());
       error = true;
     }
     return;
   } else {
-    //    Logger::pfcp().info( "pfcp_procedure retry_timer_id        %d",
-    //    it->second.retry_timer_id); Logger::pfcp().info( "pfcp_procedure
-    //    proc_cleanup_timer_id %d", it->second.proc_cleanup_timer_id);
-    //    Logger::pfcp().info( "pfcp_procedure trxn_id            %ld",
-    //    it->second.trxn_id); Logger::pfcp().info( "pfcp_procedure
-    //    initial_msg_type      %d", it->second.initial_msg_type);
-    //    Logger::pfcp().info( "pfcp_procedure triggered_msg_type    %d",
-    //    it->second.triggered_msg_type); Logger::pfcp().info( "pfcp_procedure
-    //    retry_count           %d", it->second.retry_count);
+    //      logger_common::pfcp().info(
+    //      "pfcp_procedure retry_timer_id        %d",
+    //    it->second.retry_timer_id);
+    //    logger_common::pfcp().info(
+    //    "pfcp_procedure proc_cleanup_timer_id %d",
+    //    it->second.proc_cleanup_timer_id);
+    //      logger_common::pfcp().info(
+    //      "pfcp_procedure trxn_id            %ld",
+    //    it->second.trxn_id);
+    //    logger_common::pfcp().info(
+    //    "pfcp_procedure initial_msg_type      %d",
+    //    it->second.initial_msg_type);
+    //      logger_common::pfcp().info(
+    //      "pfcp_procedure triggered_msg_type    %d",
+    //    it->second.triggered_msg_type);
+    //    logger_common::pfcp().info(
+    //    "pfcp_procedure retry_count           %d", it->second.retry_count);
 
     uint8_t check_initial_msg_type = it->second.triggered_msg_type;
     if (!it->second.triggered_msg_type) {
@@ -222,12 +234,14 @@ void pfcp_l4_stack::handle_receive_message_cb(
       if (it->second.retry_timer_id) {
         stop_msg_retry_timer(it->second);
       }
-      // Logger::pfcp().info( "Received Triggered PFCP msg type %d, seq %d, proc
+      //   logger_common::pfcp().info(
+      //   "Received Triggered PFCP msg type %d, seq %d, proc
       // %" PRId64"", msg.get_message_type(), msg.get_sequence_number(),
       // trxn_id);
     } else {
-      Logger::pfcp().info(
-          "Failed to check Triggered message type, Silently discarding PFCP "
+      logger_common::pfcp().info(
+          "Failed to check Triggered message type, Silently discarding "
+          "PFCP "
           "msg type %d, seq %d",
           msg.get_message_type(), msg.get_sequence_number());
       error = true;
@@ -248,7 +262,7 @@ uint32_t pfcp_l4_stack::send_request(
   // "msg seqnum 0x" << msg.get_sequence_number() << std::endl;
   std::string bstream = oss.str();
 
-  Logger::pfcp().trace(
+  logger_common::pfcp().trace(
       "Sending %s, seq %d", pfcp_ies.get_msg_name(), msg.get_sequence_number());
   pfcp_procedure proc   = {};
   proc.initial_msg_type = msg.get_message_type();
@@ -281,7 +295,7 @@ uint32_t pfcp_l4_stack::send_request(
   // "msg seqnum 0x" << msg.get_sequence_number() << std::endl;
   std::string bstream = oss.str();
 
-  Logger::pfcp().trace(
+  logger_common::pfcp().trace(
       "Sending %s, seq %d", pfcp_ies.get_msg_name(), msg.get_sequence_number());
   pfcp_procedure proc   = {};
   proc.initial_msg_type = msg.get_message_type();
@@ -314,7 +328,7 @@ uint32_t pfcp_l4_stack::send_request(
   // "msg seqnum 0x" << msg.get_sequence_number() << std::endl;
   std::string bstream = oss.str();
 
-  Logger::pfcp().trace(
+  logger_common::pfcp().trace(
       "Sending %s, seq %d", pfcp_ies.get_msg_name(), msg.get_sequence_number());
   pfcp_procedure proc   = {};
   proc.initial_msg_type = msg.get_message_type();
@@ -349,7 +363,8 @@ uint32_t pfcp_l4_stack::send_request(
 //  "msg seqnum 0x" << msg.get_sequence_number() << std::endl; std::string
 //  bstream = oss.str();
 //
-//  Logger::pfcp().trace( "Sending %s, seq %d", pfcp_ies.get_msg_name(),
+//    logger_common::pfcp().trace( "Sending
+//    %s, seq %d", pfcp_ies.get_msg_name(),
 //  msg.get_sequence_number()); pfcp_procedure proc = {}; proc.initial_msg_type
 //  = msg.get_message_type(); proc.trxn_id = trxn_id; proc.retry_msg =
 //  std::make_shared<pfcp_msg>(msg); proc.remote_endpoint = dest;
@@ -379,7 +394,8 @@ uint32_t pfcp_l4_stack::send_request(
 //  "msg seqnum 0x" << msg.get_sequence_number() << std::endl; std::string
 //  bstream = oss.str();
 //
-//  Logger::pfcp().trace( "Sending %s, seq %d", pfcp_ies.get_msg_name(),
+//    logger_common::pfcp().trace( "Sending
+//    %s, seq %d", pfcp_ies.get_msg_name(),
 //  msg.get_sequence_number()); pfcp_procedure proc = {}; proc.initial_msg_type
 //  = msg.get_message_type(); proc.trxn_id = trxn_id; proc.retry_msg =
 //  std::make_shared<pfcp_msg>(msg); proc.remote_endpoint = dest;
@@ -408,7 +424,7 @@ uint32_t pfcp_l4_stack::send_request(
   // "msg seqnum 0x" << msg.get_sequence_number() << std::endl;
   std::string bstream = oss.str();
 
-  Logger::pfcp().trace(
+  logger_common::pfcp().trace(
       "Sending %s, seq %d", pfcp_ies.get_msg_name(), msg.get_sequence_number());
   pfcp_procedure proc   = {};
   proc.initial_msg_type = msg.get_message_type();
@@ -443,7 +459,7 @@ uint32_t pfcp_l4_stack::send_request(
   // "msg seqnum 0x" << msg.get_sequence_number() << std::endl;
   std::string bstream = oss.str();
 
-  Logger::pfcp().trace(
+  logger_common::pfcp().trace(
       "Sending %s, seq %d seid " SEID_FMT " ", pfcp_ies.get_msg_name(),
       msg.get_sequence_number(), seid);
   pfcp_procedure proc   = {};
@@ -479,7 +495,7 @@ uint32_t pfcp_l4_stack::send_request(
   // "msg seqnum 0x" << msg.get_sequence_number() << std::endl;
   std::string bstream = oss.str();
 
-  Logger::pfcp().trace(
+  logger_common::pfcp().trace(
       "Sending %s, seq %d seid " SEID_FMT " ", pfcp_ies.get_msg_name(),
       msg.get_sequence_number(), seid);
   pfcp_procedure proc   = {};
@@ -515,7 +531,8 @@ uint32_t pfcp_l4_stack::send_request(
 //  "msg seqnum 0x" << msg.get_sequence_number() << std::endl; std::string
 //  bstream = oss.str();
 //
-//  Logger::pfcp().trace( "Sending %s, seq %d", pfcp_ies.get_msg_name(),
+//    logger_common::pfcp().trace( "Sending
+//    %s, seq %d", pfcp_ies.get_msg_name(),
 //  msg.get_sequence_number()); pfcp_procedure proc = {}; proc.initial_msg_type
 //  = msg.get_message_type(); proc.trxn_id = trxn_id; proc.retry_msg =
 //  std::make_shared<pfcp_msg>(msg); proc.remote_endpoint = dest;
@@ -545,7 +562,7 @@ uint32_t pfcp_l4_stack::send_request(
   // "msg seqnum 0x" << msg.get_sequence_number() << std::endl;
   std::string bstream = oss.str();
 
-  Logger::pfcp().trace(
+  logger_common::pfcp().trace(
       "Sending %s, seq %d seid " SEID_FMT " ", pfcp_ies.get_msg_name(),
       msg.get_sequence_number(), seid);
   pfcp_procedure proc   = {};
@@ -581,7 +598,7 @@ uint32_t pfcp_l4_stack::send_request(
   // "msg seqnum 0x" << msg.get_sequence_number() << std::endl;
   std::string bstream = oss.str();
 
-  Logger::pfcp().trace(
+  logger_common::pfcp().trace(
       "Sending %s, seq %d seid " SEID_FMT " ", pfcp_ies.get_msg_name(),
       msg.get_sequence_number(), seid);
   pfcp_procedure proc   = {};
@@ -614,7 +631,7 @@ void pfcp_l4_stack::send_response(
     msg.set_sequence_number(it->second);
     msg.dump_to(oss);
     std::string bstream = oss.str();
-    Logger::pfcp().trace(
+    logger_common::pfcp().trace(
         "Sending %s, seq %d", pfcp_ies.get_msg_name(),
         msg.get_sequence_number());
     udp_s_8805.async_send_to(
@@ -630,7 +647,7 @@ void pfcp_l4_stack::send_response(
       trxn_id2seq_num.erase(it);
     }
   } else {
-    Logger::pfcp().error(
+    logger_common::pfcp().error(
         "Sending %s, trxn_id %ld proc not found, discarded!",
         pfcp_ies.get_msg_name(), trxn_id);
   }
@@ -647,7 +664,7 @@ void pfcp_l4_stack::send_response(
     msg.set_sequence_number(it->second);
     msg.dump_to(oss);
     std::string bstream = oss.str();
-    Logger::pfcp().trace(
+    logger_common::pfcp().trace(
         "Sending %s, seq %d", pfcp_ies.get_msg_name(),
         msg.get_sequence_number());
     udp_s_8805.async_send_to(
@@ -663,7 +680,7 @@ void pfcp_l4_stack::send_response(
       trxn_id2seq_num.erase(it);
     }
   } else {
-    Logger::pfcp().error(
+    logger_common::pfcp().error(
         "Sending %s, trxn_id %ld proc not found, discarded!",
         pfcp_ies.get_msg_name(), trxn_id);
   }
@@ -681,7 +698,7 @@ void pfcp_l4_stack::send_response(
     msg.set_sequence_number(it->second);
     msg.dump_to(oss);
     std::string bstream = oss.str();
-    Logger::pfcp().trace(
+    logger_common::pfcp().trace(
         "Sending %s, seq %d", pfcp_ies.get_msg_name(),
         msg.get_sequence_number());
     udp_s_8805.async_send_to(
@@ -697,7 +714,7 @@ void pfcp_l4_stack::send_response(
       trxn_id2seq_num.erase(it);
     }
   } else {
-    Logger::pfcp().error(
+    logger_common::pfcp().error(
         "Sending %s, trxn_id %ld proc not found, discarded!",
         pfcp_ies.get_msg_name(), trxn_id);
   }
@@ -717,7 +734,7 @@ void pfcp_l4_stack::send_response(
     msg.set_sequence_number(it->second);
     msg.dump_to(oss);
     std::string bstream = oss.str();
-    Logger::pfcp().trace(
+    logger_common::pfcp().trace(
         "Sending %s, seq %d seid " SEID_FMT " ", pfcp_ies.get_msg_name(),
         msg.get_sequence_number(), seid);
     udp_s_8805.async_send_to(
@@ -733,7 +750,7 @@ void pfcp_l4_stack::send_response(
       trxn_id2seq_num.erase(it);
     }
   } else {
-    Logger::pfcp().error(
+    logger_common::pfcp().error(
         "Sending %s, trxn_id %ld proc not found, discarded!",
         pfcp_ies.get_msg_name(), trxn_id);
   }
@@ -752,7 +769,7 @@ void pfcp_l4_stack::send_response(
     msg.set_sequence_number(it->second);
     msg.dump_to(oss);
     std::string bstream = oss.str();
-    Logger::pfcp().trace(
+    logger_common::pfcp().trace(
         "Sending %s, seq %d seid " SEID_FMT " ", pfcp_ies.get_msg_name(),
         msg.get_sequence_number(), seid);
     udp_s_8805.async_send_to(
@@ -768,7 +785,7 @@ void pfcp_l4_stack::send_response(
       trxn_id2seq_num.erase(it);
     }
   } else {
-    Logger::pfcp().error(
+    logger_common::pfcp().error(
         "Sending %s, trxn_id %ld proc not found, discarded!",
         pfcp_ies.get_msg_name(), trxn_id);
   }
@@ -787,7 +804,7 @@ void pfcp_l4_stack::send_response(
     msg.set_sequence_number(it->second);
     msg.dump_to(oss);
     std::string bstream = oss.str();
-    Logger::pfcp().trace(
+    logger_common::pfcp().trace(
         "Sending %s, seq %d seid " SEID_FMT " ", pfcp_ies.get_msg_name(),
         msg.get_sequence_number(), seid);
     udp_s_8805.async_send_to(
@@ -803,7 +820,7 @@ void pfcp_l4_stack::send_response(
       trxn_id2seq_num.erase(it);
     }
   } else {
-    Logger::pfcp().error(
+    logger_common::pfcp().error(
         "Sending %s, trxn_id %ld proc not found, discarded!",
         pfcp_ies.get_msg_name(), trxn_id);
   }
@@ -822,7 +839,7 @@ void pfcp_l4_stack::send_response(
     msg.set_sequence_number(it->second);
     msg.dump_to(oss);
     std::string bstream = oss.str();
-    Logger::pfcp().trace(
+    logger_common::pfcp().trace(
         "Sending %s, seq %d seid " SEID_FMT " to %s", pfcp_ies.get_msg_name(),
         msg.get_sequence_number(), seid, dest.toString().c_str());
     udp_s_8805.async_send_to(
@@ -838,7 +855,7 @@ void pfcp_l4_stack::send_response(
       trxn_id2seq_num.erase(it);
     }
   } else {
-    Logger::pfcp().error(
+    logger_common::pfcp().error(
         "Sending %s, trxn_id %ld proc not found, discarded!",
         pfcp_ies.get_msg_name(), trxn_id);
   }
@@ -847,7 +864,7 @@ void pfcp_l4_stack::send_response(
 //------------------------------------------------------------------------------
 void pfcp_l4_stack::notify_ul_error(
     const pfcp_procedure& p, const ::cause_value_e cause) {
-  Logger::pfcp().trace(
+  logger_common::pfcp().trace(
       "notify_ul_error proc %" PRId64 " cause %d", p.trxn_id, cause);
 }
 //------------------------------------------------------------------------------
@@ -868,7 +885,7 @@ void pfcp_l4_stack::time_out_event(
             it_proc->second, PFCP_T1_RESPONSE_MS, task_id,
             it_proc->second.retry_msg->get_sequence_number());
         // send again message
-        Logger::pfcp().trace(
+        logger_common::pfcp().trace(
             "Retry %d Sending msg type %d, seq %d", it_proc->second.retry_count,
             it_proc->second.retry_msg->get_message_type(),
             it_proc->second.retry_msg->get_sequence_number());
@@ -893,7 +910,7 @@ void pfcp_l4_stack::time_out_event(
       handled = true;
       if (it_proc != pending_procedures.end()) {
         it_proc->second.proc_cleanup_timer_id = 0;
-        Logger::pfcp().trace(
+        logger_common::pfcp().trace(
             "Delete proc %" PRId64 " Retry %d seq %d timer id %u",
             it_proc->second.trxn_id, it_proc->second.retry_count,
             it_proc->first, timer_id);

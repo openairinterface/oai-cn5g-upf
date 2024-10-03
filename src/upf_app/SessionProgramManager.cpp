@@ -1,13 +1,12 @@
 #include "SessionProgramManager.h"
 #include <qer_tc_user.h>
-#include <pfcp_session_pdr_lookup_xdp_user.h>
+//#include <pfcp_session_pdr_lookup_xdp_user.h>
 #include "SessionPrograms.h"
 #include <pfcp_session_lookup_xdp_user.h>
 #include <UserPlaneComponent.h>
 #include <net/if.h>  // if_nametoindex
 
 #include <observer/OnStateChangeSessionProgramObserver.h>
-// #include <pfcp/pfcp_far.h>
 #include <spdlog/fmt/ostr.h>
 #include <types.h>
 #include <wrappers/BPFMap.hpp>
@@ -16,9 +15,7 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <arp_table_maps.h>
-// #include <qos_flow.h>
-// #include <gtp_u_tunnel_key.h>
-// #include <filter_key.h>
+#include <session_id.h>
 #include "upf_config.hpp"
 #include <thread>
 
@@ -27,14 +24,17 @@ extern upf_config upf_cfg;
 
 #define EMPTY_SLOT -1l
 
-/*---------------------------------------------------------------------------------------------------------------*/
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
+//---------------------------------------------------------------------------------------------------------------
 int is_little_endian() {
   u32 value = 1;
   u8* byte  = (u8*) &value;
   return (*byte == 1);
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 std::ostream& operator<<(
     std::ostream& Str, struct next_rule_prog_index_key const& v) {
   Str << "TEID: " << v.teid << " SOURCE INTERFACE: " << v.source_value
@@ -42,7 +42,7 @@ std::ostream& operator<<(
   return Str;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 SessionProgramManager::SessionProgramManager() {
   for (auto& item : mProgramArray) {
     item = EMPTY_SLOT;
@@ -50,35 +50,35 @@ SessionProgramManager::SessionProgramManager() {
   pfcpPrograms = std::make_shared<std::vector<pfcpprograms>>();
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 SessionProgramManager::~SessionProgramManager() {
   removeAll();
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 SessionProgramManager& SessionProgramManager::getInstance() {
   static SessionProgramManager sInstance;
   return sInstance;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 void SessionProgramManager::setTeidSessionMap(
     std::shared_ptr<BPFMap> pProgramsMaps) {
   mpTeidSessionMap = pProgramsMaps;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 void SessionProgramManager::addPFCPProgram(
-    uint64_t seid, std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
-  
-  pfcpprograms pfcpprogam = {};
-  pfcpprogam.seid        = seid;
+    uint64_t seid,
+    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
+  pfcpprograms pfcpprogam                = {};
+  pfcpprogam.seid                        = seid;
   pfcpprogam.pPFCP_Session_LookupProgram = pPFCP_Session_LookupProgram;
 
   pfcpPrograms->push_back(pfcpprogam);
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 uint32_t SessionProgramManager::getRemoteIP(uint32_t upfIP, uint32_t remoteIP) {
   uint32_t ipnexthop = 0;
   if (not NextHopFinder::sameSubnet(upfIP, remoteIP)) {
@@ -91,7 +91,7 @@ uint32_t SessionProgramManager::getRemoteIP(uint32_t upfIP, uint32_t remoteIP) {
   return ipnexthop;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 pfcp_far_t_ SessionProgramManager::createFar(
     std::shared_ptr<pfcp::pfcp_far> pFar) {
   pfcp_far_t_ far;
@@ -123,68 +123,89 @@ pfcp_far_t_ SessionProgramManager::createFar(
   return far;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 // Helper function to initialize the key for the FARProgram
 void SessionProgramManager::initializeNextRuleProgIndexKey(
     next_rule_prog_index_key& key, uint32_t teid, uint32_t ueIpAddress,
     uint8_t sourceInterface) {
   __builtin_memset(&key, 0, sizeof(struct next_rule_prog_index_key));
 
-  if (is_little_endian()) {
-    key.teid         = htobe32(teid);
-    key.ipv4_address = htole32(ueIpAddress);
+  if (likely(is_little_endian())) {
+    key.teid         = htonl(teid);
+    key.ipv4_address = htonl(ueIpAddress);
   } else {
-    key.teid         = htole32(teid);
+    key.teid         = teid;
     key.ipv4_address = ueIpAddress;
   }
 
   key.source_value = sourceInterface;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 void SessionProgramManager::storeFarProgramIndexInNextProgRuleIndexMap(
-    std::shared_ptr<pfcp::pfcp_far> pFar,
-    const next_rule_prog_index_key& key,
+    std::shared_ptr<pfcp::pfcp_far> pFar, const next_rule_prog_index_key& key,
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
-  
   pfcp_far_t_ far = createFar(pFar);
   pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->update(
       key, far, BPF_ANY);
   // pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 // Helper function to store Session mapping
 void SessionProgramManager::storeSessionMappingMap(
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-    uint32_t ue_ip_address, uint32_t teid_dl) {
-  uint32_t key;
-
-  if (is_little_endian()) {
-    key     = htole32(ue_ip_address);
-    teid_dl = htobe32(teid_dl);
-  } else {
-    key     = ue_ip_address;
-    teid_dl = htole32(teid_dl);
+    uint32_t ue_ip_addr, uint32_t teid_ul, uint32_t teid_dl, uint32_t seid) {
+  // Normalize TEIDs and SEID for little-endian systems
+  if (likely(is_little_endian())) {
+    ue_ip_addr = htonl(ue_ip_addr);
+    teid_ul    = htonl(teid_ul);
+    teid_dl    = htonl(teid_dl);
+    seid       = htonl(seid);
   }
 
+  struct session_id session = {0};
+  uint32_t key              = ue_ip_addr;
+
+  // Perform the lookup
+  int ret = pPFCP_Session_LookupProgram->getSessionMappingMap()->lookup(
+      key, &session);
+
+  // If the session exists, update the relevant fields
+  if (ret == 0) {
+    if ((session.teid_ul == 0) && (teid_ul != 0)) {
+      session.teid_ul = teid_ul;
+    }
+
+    if ((session.teid_dl == 0) && (teid_dl != 0)) {
+      session.teid_dl = teid_dl;
+    }
+  } else {
+    // If no session is found, initialize it with the provided values
+    session.teid_ul = teid_ul;
+    session.teid_dl = teid_dl;
+    session.seid    = seid;
+  }
+
+  // Update the map with the session data
   pPFCP_Session_LookupProgram->getSessionMappingMap()->update(
-      ue_ip_address, teid_dl, BPF_ANY);
+      key, session, BPF_ANY);
 }
 
-
-/*---------------------------------------------------------------------------------------------------------------*/
-void SessionProgramManager::updateARPTableForN6(
-    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram, uint32_t dnIP, uint32_t upfn6IP) {
-  try {
-        std::string remoteDN    = "192.168.20.100";
-        uint32_t remoteN6IPv4   = inet_addr(remoteDN.c_str());
-        //const char* remoteN6MAC = "6c:b3:11:29:5a:87";
+//---------------------------------------------------------------------------------------------------------------
+/* void SessionProgramManager::updateARPTableForN6(
+    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+    uint32_t dnIP, uint32_t upfn6IP) {
+      try {
+        std::string remoteDN  = "192.168.20.100";
+        uint32_t remoteN6IPv4 = inet_addr(remoteDN.c_str());
+        // const char* remoteN6MAC = "6c:b3:11:29:5a:87";
         uint8_t remoteN6MAC[6] = {0x6c, 0xb3, 0x11, 0x29, 0x5a, 0x87};
 
         Logger::upf_app().warn(
             "updateARPTableForN6 is modified with hard values to test with "
-            "Trex! I dont understand why the execution goes through the exception!"
+            "Trex! I dont understand why the execution goes through the "
+            "exception!"
             "Need to check and debug");
 
         struct s_arp_mapping map_table;
@@ -192,45 +213,112 @@ void SessionProgramManager::updateARPTableForN6(
         memcpy(map_table.mac_address, remoteN6MAC, 6);
         map_table.ipv4_address = remoteN6IPv4;
 
-        pPFCP_Session_LookupProgram->getArpTableMap()->update(upfn6IP, map_table, BPF_ANY);
+        pPFCP_Session_LookupProgram->getArpTableMap()->update(
+            upfn6IP, map_table, BPF_ANY);
+      } catch (const std::exception& ex) {
+        Logger::upf_app().error(
+            "Error: The ARP table was not updated for N6 Next HOP");
+      }
+    }
+*/
+void SessionProgramManager::updateARPTableForN6(
+    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+    uint32_t dnIP, uint32_t upfn6IP) {
+  try {
+    // uint32_t remoteN6 = getRemoteIP(upfn6IP, dnIP);
+    uint32_t ipnexremoteN6hop = (likely(is_little_endian())) ?
+                                    htole32(getRemoteIP(upfn6IP, dnIP)) :
+                                    getRemoteIP(upfn6IP, dnIP);
+    auto remoteN6MAC = NextHopFinder::retrieveNextHopMAC(ipnexremoteN6hop);
+
+    struct s_arp_mapping map_table;
+    memset(&map_table, 0, sizeof(struct s_arp_mapping));
+    memcpy(map_table.mac_address, remoteN6MAC, 6);
+    map_table.ipv4_address = ipnexremoteN6hop;
+
+    pPFCP_Session_LookupProgram->getArpTableMap()->update(
+        upfn6IP, map_table, BPF_ANY);
   } catch (const std::exception& ex) {
     Logger::upf_app().error(
         "Error: The ARP table was not updated for N6 Next HOP");
   }
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
+// void SessionProgramManager::updateARPTableForN3(
+//     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+//     uint32_t gNodeBIP, uint32_t upfn3IP, uint32_t seid) {
+//   try {
+//     std::string remoteGnB = "192.168.10.100";
+//     uint32_t remoteN3IPv4 = inet_addr(remoteGnB.c_str());
+//     // const char* remoteN3MAC = "6c:b3:11:29:5a:86";
+//     uint8_t remoteN3MAC[6] = {0x6c, 0xb3, 0x11, 0x29, 0x5a, 0x86};
+
+//     Logger::upf_app().warn(
+//         "updateARPTableForN3 is modified with hard values to test with "
+//         "Trex! I dont understand why the execution goes through the "
+//         "exception!"
+//         "Need to check and debug");
+
+//     struct s_arp_mapping map_table;
+//     memset(&map_table, 0, sizeof(struct s_arp_mapping));
+//     memcpy(map_table.mac_address, remoteN3MAC, 6);
+//     map_table.ipv4_address = remoteN3IPv4;
+
+//     pPFCP_Session_LookupProgram->getArpTableMap()->update(
+//         upfn3IP, map_table, BPF_ANY);
+
+//     for (auto it = pfcpPrograms->begin(); it != pfcpPrograms->end(); ++it) {
+//       // Access the members of the 'farprograms' struct
+//       uint64_t savedSeid = it->seid;
+//       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram
+//       =
+//           it->pPFCP_Session_LookupProgram;
+
+//       if (savedSeid == seid) {
+//         pPFCP_Session_LookupProgram->getArpTableMap()->update(
+//             upfn3IP, map_table, BPF_ANY);
+//       }
+//     }
+//   } catch (const std::exception& ex) {
+//     // Handle the exception here or log it for debugging
+//     // Note: It's better to handle exceptions rather than ignoring them.
+//     Logger::upf_app().error(
+//         "Error: The ARP table was not updated for N3 Next HOP");
+//   }
+//}
+
 void SessionProgramManager::updateARPTableForN3(
-    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram, uint32_t gNodeBIP,
-    uint32_t upfn3IP, uint32_t seid) {
+    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+    uint32_t gNodeBIP, uint32_t upfn3IP, uint32_t seid) {
   try {
-      std::string remoteGnB   = "192.168.10.100";
-      uint32_t remoteN3IPv4   = inet_addr(remoteGnB.c_str());
-      //const char* remoteN3MAC = "6c:b3:11:29:5a:86";
-      uint8_t remoteN3MAC[6] = {0x6c, 0xb3, 0x11, 0x29, 0x5a, 0x86};
+    // uint32_t remoteN3 = getRemoteIP(upfn3IP, gNodeBIP);
 
-      Logger::upf_app().warn(
-          "updateARPTableForN3 is modified with hard values to test with "
-          "Trex! I dont understand why the execution goes through the exception!"
-          "Need to check and debug");
+    uint32_t ipnexremoteN3hop = (likely(is_little_endian())) ?
+                                    htole32(getRemoteIP(upfn3IP, gNodeBIP)) :
+                                    getRemoteIP(upfn3IP, gNodeBIP);
+    auto remoteN3MAC = NextHopFinder::retrieveNextHopMAC(ipnexremoteN3hop);
 
-      struct s_arp_mapping map_table;
-      memset(&map_table, 0, sizeof(struct s_arp_mapping));
-      memcpy(map_table.mac_address, remoteN3MAC, 6);
-      map_table.ipv4_address = remoteN3IPv4;
+    struct s_arp_mapping map_table;
+    memset(&map_table, 0, sizeof(struct s_arp_mapping));
+    memcpy(map_table.mac_address, remoteN3MAC, 6);
+    map_table.ipv4_address = ipnexremoteN3hop;
 
-      pPFCP_Session_LookupProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
+    pPFCP_Session_LookupProgram->getArpTableMap()->update(
+        upfn3IP, map_table, BPF_ANY);
 
-      for (auto it = pfcpPrograms->begin(); it != pfcpPrograms->end(); ++it) {
-        // Access the members of the 'farprograms' struct
-        uint64_t savedSeid                      = it->seid;
-        std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram = it->pPFCP_Session_LookupProgram;
+    for (auto it = pfcpPrograms->begin(); it != pfcpPrograms->end(); ++it) {
+      // Access the members of the 'farprograms' struct
+      uint64_t savedSeid = it->seid;
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram =
+          it->pPFCP_Session_LookupProgram;
 
-        if (savedSeid == seid) {
-          pPFCP_Session_LookupProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
-        }
+      if (savedSeid == seid) {
+        pPFCP_Session_LookupProgram->getArpTableMap()->update(
+            upfn3IP, map_table, BPF_ANY);
       }
-    } catch (const std::exception& ex) {
+    }
+  } catch (const std::exception& ex) {
     // Handle the exception here or log it for debugging
     // Note: It's better to handle exceptions rather than ignoring them.
     Logger::upf_app().error(
@@ -238,10 +326,11 @@ void SessionProgramManager::updateARPTableForN3(
   }
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 // Helper function to save SEID with FAR program
 void SessionProgramManager::saveSeidWithinFARProgram(
-    uint64_t seid, std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+    uint64_t seid,
+    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
     const next_rule_prog_index_key& key) {
   // Map the deployed pipeline to the seid.
   // The seid will be used to destroy the pipeline.
@@ -250,7 +339,7 @@ void SessionProgramManager::saveSeidWithinFARProgram(
   addPFCPProgram(seid, pPFCP_Session_LookupProgram);
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 uint32_t SessionProgramManager::getGnodebIp(
     std::shared_ptr<pfcp::pfcp_far> pFar) {
   pfcp::forwarding_parameters foward_param;
@@ -269,7 +358,7 @@ uint32_t SessionProgramManager::getGnodebIp(
   return gNBIpAddress.ipv4_address.s_addr;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 // Function to create a pipeline for a given session and FAR
 void SessionProgramManager::createPipeline(
     uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
@@ -297,36 +386,42 @@ void SessionProgramManager::createPipeline(
       "run it only once");
 
   if (isModification) {
-    storeSessionMappingMap(pPFCP_Session_LookupProgram, ueIpAddress, teid1);
+    storeSessionMappingMap(
+        pPFCP_Session_LookupProgram, ueIpAddress, 0, teid1, seid);
+
     uint32_t gNodeBIP = getGnodebIp(pFar);
 
-    std::thread arpUpdateThread1(
-        [this, pPFCP_Session_LookupProgram, seid, gNodeBIP, dnIP, upfn3IP, upfn6IP]() {
-          updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
-          updateARPTableForN3(pPFCP_Session_LookupProgram, gNodeBIP, upfn3IP, seid);
-        });
+    std::thread arpUpdateThread1([this, pPFCP_Session_LookupProgram, seid,
+                                  gNodeBIP, dnIP, upfn3IP, upfn6IP]() {
+      updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
+      updateARPTableForN3(pPFCP_Session_LookupProgram, gNodeBIP, upfn3IP, seid);
+    });
 
     // Detach the thread since we don't need to join it
     arpUpdateThread1.detach();
   } else {
+    storeSessionMappingMap(
+        pPFCP_Session_LookupProgram, ueIpAddress, teid1, 0, seid);
     // Launch a separate thread to update ARP table map
-    std::thread arpUpdateThread2([this, pPFCP_Session_LookupProgram, dnIP, upfn6IP]() {
-      updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
-    });
+    std::thread arpUpdateThread2(
+        [this, pPFCP_Session_LookupProgram, dnIP, upfn6IP]() {
+          updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
+        });
 
     arpUpdateThread2.detach();
     saveSeidWithinFARProgram(seid, pPFCP_Session_LookupProgram, key);
   }
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 void SessionProgramManager::removePipeline(uint64_t seid) {
   Logger::upf_app().debug("Remove FARProgram index from UPFProgram map");
   auto it = mSessionProgramsMap.find(seid);
   if (it == mSessionProgramsMap.end()) {
     Logger::upf_app().error(
         "Session %d Does Not Exist. It Cannot be Removed", seid);
-    // throw std::runtime_error("Session does Not Exist. It Cannot be Removed");
+    // throw std::runtime_error("Session does Not Exist. It Cannot be
+    // Removed");
   }
 
   Logger::upf_app().debug(
@@ -342,93 +437,99 @@ void SessionProgramManager::removePipeline(uint64_t seid) {
   pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->remove(key);
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-void SessionProgramManager::create(uint64_t seid) {
-  // Check if there is a key with seid value.
-  // TODO: Check if can be abstract the programMap.
+//---------------------------------------------------------------------------------------------------------------
+// void SessionProgramManager::create(uint64_t seid) {
+//   // Check if there is a key with seid value.
+//   // TODO: Check if can be abstract the programMap.
 
-  if (mSessionProgramMap.find(seid) != mSessionProgramMap.end()) {
-    Logger::upf_app().error(
-        "PDU Session {} Already Exists. Cannot Create a New eBPF Program "
-        "with "
-        "the same "
-        "key",
-        seid);
-    throw std::runtime_error(
-        "Cannot Create a New eBPF program with Key (seid)");
-  }
+//   if (mSessionProgramMap.find(seid) != mSessionProgramMap.end()) {
+//     Logger::upf_app().error(
+//         "PDU Session {} Already Exists. Cannot Create a New eBPF Program
+//         " "with " "the same " "key", seid);
+//     throw std::runtime_error(
+//         "Cannot Create a New eBPF program with Key (seid)");
+//   }
 
-  // Instantiate a new PFCP_Session_PDR_LookupProgram
-  auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
-  auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
-  std::shared_ptr<PFCP_Session_PDR_LookupProgram>
-      pPFCP_Session_PDR_LookupProgram =
-          std::make_shared<PFCP_Session_PDR_LookupProgram>(
-              gtpInterface, udpInterface);
-  pPFCP_Session_PDR_LookupProgram->setup();
+//   // Instantiate a new PFCP_Session_PDR_LookupProgram
+//   auto udpInterface =
+//   UserPlaneComponent::getInstance().getUDPInterface(); auto gtpInterface
+//   = UserPlaneComponent::getInstance().getGTPInterface();
+//   std::shared_ptr<PFCP_Session_PDR_LookupProgram>
+//       pPFCP_Session_PDR_LookupProgram =
+//           std::make_shared<PFCP_Session_PDR_LookupProgram>(
+//               gtpInterface, udpInterface);
+//   // pPFCP_Session_PDR_LookupProgram->setup();
 
-  // Initialize key egress interface map.
-  uint32_t udpInterfaceIndex = if_nametoindex(udpInterface.c_str());
-  uint32_t gtpInterfaceIndex = if_nametoindex(gtpInterface.c_str());
+//   // Initialize key egress interface map.
+//   uint32_t udpInterfaceIndex = if_nametoindex(udpInterface.c_str());
+//   uint32_t gtpInterfaceIndex = if_nametoindex(gtpInterface.c_str());
 
-  uint32_t uplinkId   = static_cast<uint32_t>(FlowDirection::UPLINK);
-  uint32_t downlinkId = static_cast<uint32_t>(FlowDirection::DOWNLINK);
+//   uint32_t uplinkId   = static_cast<uint32_t>(FlowDirection::UPLINK);
+//   uint32_t downlinkId = static_cast<uint32_t>(FlowDirection::DOWNLINK);
 
-  pPFCP_Session_PDR_LookupProgram->getEgressInterfaceMap()->update(
-      uplinkId, udpInterfaceIndex, BPF_ANY);
-  pPFCP_Session_PDR_LookupProgram->getEgressInterfaceMap()->update(
-      downlinkId, gtpInterfaceIndex, BPF_ANY);
+//   pPFCP_Session_PDR_LookupProgram->getEgressInterfaceMap()->update(
+//       uplinkId, udpInterfaceIndex, BPF_ANY);
+//   pPFCP_Session_PDR_LookupProgram->getEgressInterfaceMap()->update(
+//       downlinkId, gtpInterfaceIndex, BPF_ANY);
 
-  // Update the PFCP_Session_PDR_LookupProgram map.
-  mSessionProgramMap.insert(
-      std::pair<uint32_t, std::shared_ptr<PFCP_Session_PDR_LookupProgram>>(
-          seid, pPFCP_Session_PDR_LookupProgram));
-}
+//   // Update the PFCP_Session_PDR_LookupProgram map.
+//   mSessionProgramMap.insert(
+//       std::pair<uint32_t,
+//       std::shared_ptr<PFCP_Session_PDR_LookupProgram>>(
+//           seid, pPFCP_Session_PDR_LookupProgram));
+// }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 void SessionProgramManager::remove(uint64_t seid) {
-  auto sessionProgram = findSessionProgram(seid);
-  if (!sessionProgram) {
-    Logger::upf_app().error(
-        "The PDU session %d does not exist. Cannot be removed", seid);
-    throw std::runtime_error("The session does not exist. Cannot be removed");
-  }
-  sessionProgram->tearDown();
-  mSessionProgramMap.erase(seid);
+  //   auto sessionProgram = findSessionProgram(seid);
+  //   if (!sessionProgram) {
+  //     Logger::upf_app().error(
+  //         "The PDU session %d does not exist. Cannot be removed", seid);
+  //     throw std::runtime_error("The session does not exist. Cannot be
+  //     removed");
+  //   }
+  //   sessionProgram->tearDown();
+  //   mSessionProgramMap.erase(seid);
+
+  // TODO: UPdate this code with keysight
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 void SessionProgramManager::removeAll() {
-  for (auto pair : mSessionProgramMap) {
-    pair.second->tearDown();
+  //   for (auto pair : mSessionProgramMap) {
+  //     pair.second->tearDown();
 
-    // Notify observer that a PFCP_Session_PDR_LookupProgram was removed.
-    mpOnNewSessionProgramObserver->onDestroySessionProgram(pair.first);
-  }
-  mSessionProgramMap.clear();
+  //     // Notify observer that a PFCP_Session_PDR_LookupProgram was
+  //     removed.
+  //     mpOnNewSessionProgramObserver->onDestroySessionProgram(pair.first);
+  //   }
+  //   mSessionProgramMap.clear();
+  /*
+   * TODO: CHECK WITH Keysight
+   */
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 void SessionProgramManager::setOnNewSessionObserver(
     OnStateChangeSessionProgramObserver* pObserver) {
   mpOnNewSessionProgramObserver = pObserver;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<PFCP_Session_PDR_LookupProgram>
-SessionProgramManager::findSessionProgram(uint64_t seid) {
-  std::shared_ptr<PFCP_Session_PDR_LookupProgram>
-      pPFCP_Session_PDR_LookupProgram;
+//---------------------------------------------------------------------------------------------------------------
+// std::shared_ptr<PFCP_Session_PDR_LookupProgram>
+// SessionProgramManager::findSessionProgram(uint64_t seid) {
+//   std::shared_ptr<PFCP_Session_PDR_LookupProgram>
+//       pPFCP_Session_PDR_LookupProgram;
 
-  auto it = mSessionProgramMap.find(seid);
-  if (it != mSessionProgramMap.end()) {
-    pPFCP_Session_PDR_LookupProgram = it->second;
-  }
+//   auto it = mSessionProgramMap.find(seid);
+//   if (it != mSessionProgramMap.end()) {
+//     pPFCP_Session_PDR_LookupProgram = it->second;
+//   }
 
-  return pPFCP_Session_PDR_LookupProgram;
-}
+//   return pPFCP_Session_PDR_LookupProgram;
+// }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 std::shared_ptr<SessionPrograms> SessionProgramManager::findSessionPrograms(
     uint64_t seid) {
   std::shared_ptr<SessionPrograms> pSessionPrograms;
@@ -441,7 +542,7 @@ std::shared_ptr<SessionPrograms> SessionProgramManager::findSessionPrograms(
   return pSessionPrograms;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 int32_t SessionProgramManager::getEmptySlot() {
   auto it = std::find(mProgramArray.begin(), mProgramArray.end(), EMPTY_SLOT);
   if (it != mProgramArray.end()) {

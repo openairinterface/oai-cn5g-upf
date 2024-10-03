@@ -40,12 +40,13 @@
 #include "itti.hpp"
 #include "async_shell_cmd.hpp"
 #include "itti_async_shell_cmd.hpp"
-#include "logger.hpp"
+#include "logger_base.hpp"
 #include "common_defs.h"
 
 #include <stdexcept>
 
-using namespace util;
+using namespace oai::utils;
+using namespace oai::logger;
 
 extern itti_mw* itti_inst;
 void async_cmd_task(void*);
@@ -54,9 +55,9 @@ void async_cmd_task(void*);
 void async_cmd_task(void* args_p) {
   const task_id_t task_id = TASK_ASYNC_SHELL_CMD;
 
-  const thread_sched_params* const sched_params =
-      (const util::thread_sched_params* const) args_p;
-  sched_params->apply(task_id, Logger::async_cmd());
+  const oai::utils::thread_sched_params* const sched_params =
+      (const oai::utils::thread_sched_params* const) args_p;
+  sched_params->apply(task_id, logger_common::async_cmd());
 
   itti_inst->notify_task_ready(task_id);
 
@@ -70,11 +71,11 @@ void async_cmd_task(void* args_p) {
           int rc = system((const char*) to->system_command.c_str());
 
           if (rc) {
-            Logger::async_cmd().error(
+            logger_common::async_cmd().error(
                 "Failed cmd from %d: %s ", to->origin,
                 (const char*) to->system_command.c_str());
             if (to->is_abort_on_error) {
-              Logger::async_cmd().error(
+              logger_common::async_cmd().error(
                   "Terminate cause failed cmd %s at %s:%d",
                   to->system_command.c_str(), to->src_file.c_str(),
                   to->src_line);
@@ -86,14 +87,15 @@ void async_cmd_task(void* args_p) {
 
       case TIME_OUT:
         if (itti_msg_timeout* to = dynamic_cast<itti_msg_timeout*>(msg)) {
-          Logger::async_cmd().info("TIME-OUT event timer id %d", to->timer_id);
+          logger_common::async_cmd().info(
+              "TIME-OUT event timer id %d", to->timer_id);
         }
         break;
 
       case TERMINATE:
         if (itti_msg_terminate* terminate =
                 dynamic_cast<itti_msg_terminate*>(msg)) {
-          Logger::async_cmd().info("Received terminate message");
+          logger_common::async_cmd().info("Received terminate message");
           return;
         }
         break;
@@ -102,22 +104,24 @@ void async_cmd_task(void* args_p) {
         break;
 
       default:
-        Logger::upf_app().info("no handler for msg type %d", msg->msg_type);
+        logger_common::async_cmd().info(
+            "no handler for msg type %d", msg->msg_type);
     }
 
   } while (true);
 }
 
 //------------------------------------------------------------------------------
-async_shell_cmd::async_shell_cmd(util::thread_sched_params& sched_params) {
-  Logger::async_cmd().startup("Starting...");
+async_shell_cmd::async_shell_cmd(
+    oai::utils::thread_sched_params& sched_params) {
+  logger_common::async_cmd().startup("Starting...");
 
   if (itti_inst->create_task(
           TASK_ASYNC_SHELL_CMD, async_cmd_task, &sched_params)) {
-    Logger::async_cmd().error("Cannot create task TASK_ASYNC_SHELL_CMD");
+    logger_common::async_cmd().error("Cannot create task TASK_ASYNC_SHELL_CMD");
     throw std::runtime_error("Cannot create task TASK_ASYNC_SHELL_CMD");
   }
-  Logger::async_cmd().startup("Started");
+  logger_common::async_cmd().startup("Started");
 }
 
 //------------------------------------------------------------------------------
@@ -131,7 +135,7 @@ int async_shell_cmd::run_command(
       std::make_shared<itti_async_shell_cmd>(cmd);
   int ret = itti_inst->send_msg(msg);
   if (RETURNok != ret) {
-    Logger::async_cmd().error(
+    logger_common::async_cmd().error(
         "Could not send ITTI message to task TASK_ASYNC_SHELL_CMD");
     return RETURNerror;
   }

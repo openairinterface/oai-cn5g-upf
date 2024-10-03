@@ -19,35 +19,32 @@
  *      contact@openairinterface.org
  */
 
-/*! \file udp.hpp
-  \brief
-  \author Lionel Gauthier
-  \company Eurecom
-  \email: lionel.gauthier@eurecom.fr
-*/
 #ifndef FILE_UDP_HPP_SEEN
 #define FILE_UDP_HPP_SEEN
 
-#include "conversions.hpp"
-#include "endpoint.hpp"
-#include "itti.hpp"
-#include "thread_sched.hpp"
-
-#include <folly/MPMCQueue.h>
 #include <arpa/inet.h>
+#include <folly/MPMCQueue.h>
 #include <inttypes.h>
+#include <pthread.h>
+#include <stdint.h>
 #include <sys/socket.h>
 
 #include <iostream>
 #include <map>
 #include <memory>
-#include <stdint.h>
 #include <string>
 #include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
-#include <pthread.h>
+
+#include "conversions.hpp"
+#include "endpoint.hpp"
+#include "itti.hpp"
+#include "logger.hpp"
+#include "thread_sched.hpp"
+
+using namespace oai::logger;
 
 class udp_application {
  public:
@@ -56,7 +53,7 @@ class udp_application {
       const endpoint& r_endpoint);
   virtual void start_receive(
       udp_application* gtp_stack,
-      const util::thread_sched_params& sched_params);
+      const oai::utils::thread_sched_params& sched_params);
 };
 class udp_server;
 
@@ -164,9 +161,10 @@ class udp_server {
     Logger::udp().info("Finished the udp_server destruction");
   }
 
-  void udp_read_loop(const util::thread_sched_params& thread_sched_params);
+  void udp_read_loop(
+      const oai::utils::thread_sched_params& thread_sched_params);
   void udp_worker_loop(
-      const int id, const util::thread_sched_params& sched_params);
+      const int id, const oai::utils::thread_sched_params& sched_params);
 
   void async_send_to(
       const char* send_buffer, const ssize_t num_bytes,
@@ -204,7 +202,7 @@ class udp_server {
 
   void start_receive(
       udp_application* gtp_stack,
-      const util::thread_sched_params& sched_params);
+      const oai::utils::thread_sched_params& sched_params);
   void stop(void);
 
  protected:

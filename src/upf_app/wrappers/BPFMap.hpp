@@ -5,13 +5,13 @@
 #include <bpf/libbpf.h>
 #include "logger.hpp"
 
-/**************************************************************************************************/
+//---------------------------------------------------------------------------------------------------------------
 /**
  * @brief This class abstracts the communication with a specific BPF map.
  */
 class BPFMap {
  public:
-  /**************************************************************************************************/
+  //---------------------------------------------------------------------------------------------------------------
   /**
    * @brief Construct a new BPFMap object.
    *
@@ -20,13 +20,13 @@ class BPFMap {
    */
   BPFMap(struct bpf_map* pBPFMap, std::string name);
 
-  /**************************************************************************************************/
+  //---------------------------------------------------------------------------------------------------------------
   /**
    * @brief Destroy the BPFMap object.
    */
   virtual ~BPFMap();
 
-  /**************************************************************************************************/
+  //---------------------------------------------------------------------------------------------------------------
   /**
    * @brief Lookup a element in a specific position.
    * Wrappers the bpf_map_lookup function.
@@ -38,7 +38,7 @@ class BPFMap {
   template<class KeyType>
   int lookup(KeyType& key, void* pValue);
 
-  /**************************************************************************************************/
+  //---------------------------------------------------------------------------------------------------------------
   /**
    * @brief Get the nex element in the map.
    * Wrappers the bpf_get_next_key function.
@@ -50,7 +50,7 @@ class BPFMap {
   template<class KeyType>
   int get_next_elem(KeyType& key, KeyType& next_key);
 
-  /**************************************************************************************************/
+  //---------------------------------------------------------------------------------------------------------------
   /**
    * @brief Update a element in a specific position.
    * Wrappers the bpf_map_update function.
@@ -63,7 +63,7 @@ class BPFMap {
   template<class KeyType, class ValueType>
   int update(KeyType& key, ValueType& value, int flags);
 
-  /**************************************************************************************************/
+  //---------------------------------------------------------------------------------------------------------------
   /**
    * @brief Remove a element in a specific position.
    * Wrappers the bpf_map_delete function.
@@ -74,7 +74,7 @@ class BPFMap {
   template<class KeyType>
   int remove(KeyType& key);
 
-  /**************************************************************************************************/
+  //---------------------------------------------------------------------------------------------------------------
   /**
    * @brief Get the Name of the BPF Map.
    *
@@ -82,7 +82,7 @@ class BPFMap {
    */
   std::string getName() const;
 
-  /**************************************************************************************************/
+  //---------------------------------------------------------------------------------------------------------------
  private:
   // TODO: Change to unique.
   // The bpf map.
@@ -92,23 +92,15 @@ class BPFMap {
   std::string mName;
 };
 
-/**************************************************************************************************/
+//---------------------------------------------------------------------------------------------------------------
 template<class KeyType>
 int BPFMap::lookup(KeyType& key, void* pValue) {
   // Do not put here.
-  int mapFd        = bpf_map__fd(mpBPFMap);
-  int lookupReturn = bpf_map_lookup_elem(mapFd, &key, pValue);
-
-  if (lookupReturn != 0) {
-    Logger::upf_app().warn(
-        "The key is not found in the map: %s", mName.c_str());
-  } else {
-    Logger::upf_app().debug("The key is found in the map: %s", mName.c_str());
-  }
-  return lookupReturn;
+  int mapFd = bpf_map__fd(mpBPFMap);
+  return bpf_map_lookup_elem(mapFd, &key, pValue);
 }
 
-/**************************************************************************************************/
+//---------------------------------------------------------------------------------------------------------------
 template<class KeyType, class ValueType>
 int BPFMap::update(KeyType& key, ValueType& value, int flags) {
   int mapFd        = bpf_map__fd(mpBPFMap);
@@ -124,7 +116,7 @@ int BPFMap::update(KeyType& key, ValueType& value, int flags) {
   return updateReturn;
 }
 
-/**************************************************************************************************/
+//---------------------------------------------------------------------------------------------------------------
 template<class KeyType>
 int BPFMap::remove(KeyType& key) {
   // Do not put here.
@@ -142,7 +134,7 @@ int BPFMap::remove(KeyType& key) {
   return deleteReturn;
 }
 
-/**************************************************************************************************/
+//---------------------------------------------------------------------------------------------------------------
 template<class KeyType>
 int BPFMap::get_next_elem(KeyType& key, KeyType& next_key) {
   int mapFd   = bpf_map__fd(mpBPFMap);
@@ -156,5 +148,5 @@ int BPFMap::get_next_elem(KeyType& key, KeyType& next_key) {
   return ret_val;
 }
 
-/**************************************************************************************************/
+//---------------------------------------------------------------------------------------------------------------
 #endif  // __BPFMAP_H__

@@ -73,13 +73,16 @@ class gtpu_l4_stack : public udp_application {
   static const uint8_t version = 1;
   gtpu_l4_stack(
       const struct in_addr& address, const uint16_t port_num,
-      const util::thread_sched_params& sched_params, const bool send_ext_hdr);
+      const oai::utils::thread_sched_params& sched_params,
+      const bool send_ext_hdr);
   gtpu_l4_stack(
       const struct in6_addr& address, const uint16_t port_num,
-      const util::thread_sched_params& sched_params, const bool send_ext_hdr);
+      const oai::utils::thread_sched_params& sched_params,
+      const bool send_ext_hdr);
   gtpu_l4_stack(
       char* ip_address, const uint16_t port_num,
-      const util::thread_sched_params& sched_params, const bool send_ext_hdr);
+      const oai::utils::thread_sched_params& sched_params,
+      const bool send_ext_hdr);
   virtual void handle_receive(
       char* recv_buffer, const std::size_t bytes_transferred,
       const endpoint& r_endpoint);

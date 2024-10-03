@@ -19,12 +19,6 @@
  *      contact@openairinterface.org
  */
 
-/*! \file itti_msg.cpp
-   \brief
-   \author  Lionel GAUTHIER
-   \date 2018
-   \email: lionel.gauthier@eurecom.fr
-*/
 #include "itti_msg.hpp"
 #include "itti.hpp"
 
