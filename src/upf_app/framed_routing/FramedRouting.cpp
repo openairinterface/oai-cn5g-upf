@@ -71,32 +71,6 @@ void FramedRouting::remove_entry(uint32_t ue_ip) {
   };
 }
 
-uint32_t FramedRouting::framedIPToUeIP(const std::string& ip) const {
-  const char delimeter = '.';
-  uint32_t result      = 0;
-  int shift_counter    = 24;
-  std::string ip_temp;
-  for (auto i = 0; i < ip.length(); ++i) {
-    ip_temp += ip.at(i);
-    if (ip.at(i) == delimeter || i == ip.length() - 1) {
-      result  = result | (std::stoi(ip_temp) << shift_counter);
-      ip_temp = "";
-      shift_counter -= 8;
-    }
-  }
-  return result;
-}
-
-uint32_t FramedRouting::frameSubnetToUInt(std::string& subnet) const {
-  std::string temp_subnet = "";
-  if (subnet.length() > 2) {
-    return 32;
-  }
-  for (auto i = subnet.length(); i > 0; i--) {
-    temp_subnet.push_back(subnet.at(i - 1));
-  }
-  return std::stoi(temp_subnet);
-}
 
 std::pair<uint32_t, uint32_t> FramedRouting::extractIPCidr(
     const std::string& fr_subnet) const {

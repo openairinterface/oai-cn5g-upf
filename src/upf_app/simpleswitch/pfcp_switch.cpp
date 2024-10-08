@@ -630,6 +630,8 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
     ue_ipv4_hbo2pfcp_pdr.insert(entry);
     if (upf_cfg.enable_fr && pdr->pdi.second.framed_route.first) {
       Logger::pfcp_switch().info("fr_ue_ip %4x ", ue_ip);
+      Logger::pfcp_switch().info(
+              "framed routing ip: " +
           pdr->pdi.second.framed_route.second.at(0).framed_route);
       for (const auto& item : pdr->pdi.second.framed_route.second) {
         Logger::pfcp_switch().debug("framed routing ip: %s", item.framed_route);

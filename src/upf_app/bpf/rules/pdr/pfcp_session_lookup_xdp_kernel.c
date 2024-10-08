@@ -73,18 +73,18 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
     tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
   } else {
     #pragma clang loop unroll(full)
-    for (i = 32; i > 0; i--) {
+    for (int i = 32; i > 0; i--) {
       struct FramedRoutingKeyBPF key = framed_routing_key_for_ip_cidr(ue_ip_address, i);
 
-      u32 fr_key = hash_framed_routing_key(key);
+      u32 fr_key = hash_framed_routing_key(&key);
       u32* fr_ue_ip = bpf_map_lookup_elem(&m_framed_route_mapping, &fr_key);
       if(fr_ue_ip) {
         bpf_debug(
                 "Framed Route detected for IP: 0x%x. UE IP: 0x%x", fr_ue_ip, ue_ip_address);
         u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, &fr_ue_ip);
         if (teid_dl) {
-          bpf_debug("TEID downlink: 0x%x was found for Framed Route IP: 0x%x", *teid_dl, ue_ip_address,);
-          tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, fr_ue_ip);
+          bpf_debug("TEID downlink: 0x%x was found for Framed Route IP: 0x%x", *teid_dl, ue_ip_address);
+          tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, *fr_ue_ip);
         }
       }
     }

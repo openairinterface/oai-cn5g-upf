@@ -287,27 +287,29 @@ void SessionProgramManager::addFramedRoutes(uint32_t ueIpAddress, std::vector<pf
           UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
   Logger::upf_app().debug("Store framed routes to ue_ip mapping (bpf)");
 
-  std::stringstream ss(framed_route_s.framed_route);
-  std::string ipsubnetmask;
-  while (std::getline(ss, ipsubnetmask, ' ')) {
-    const char subnet_delimeter = '/';
-    uint32_t ip                 = 0;
-    uint32_t cidr               = 0;
-    const std::string ip_substring =
-            ipSubnet.substr(0, ipsubnetmask.find(subnet_delimeter));
-    ip = FramedRouting::framedIPToUeIP(ip_substring);
+  for (const auto& framedRoute : framedRoutes) {
+    std::stringstream ss(framedRoute.framed_route);
+    std::string ipsubnetmask;
+    while (std::getline(ss, ipsubnetmask, ' ')) {
+      const char subnet_delimeter = '/';
+      uint32_t ip = 0;
+      uint32_t cidr = 0;
+      const std::string ip_substring =
+              ipSubnet.substr(0, ipsubnetmask.find(subnet_delimeter));
+      ip = FramedRouting::framedIPToUeIP(ip_substring);
 
-    std::reverse(ipSubnet.begin(), ipSubnet.end());
-    std::string subnet_substring =
-            ipSubnet.substr(0, ipSubnet.rfind(subnet_delimeter));
-    cidr = FramedRouting::frameSubnetToUInt(subnet_substring);
+      std::reverse(ipSubnet.begin(), ipSubnet.end());
+      std::string subnet_substring =
+              ipSubnet.substr(0, ipSubnet.rfind(subnet_delimeter));
+      cidr = FramedRouting::frameSubnetToUInt(subnet_substring);
 
-    auto key          = framed_routing_key_for_ip_cidr(ip, cidr);
-    //auto routing_info = createLocalRoutingInformation(ipCidr);
-    //auto snat_info    = createLocalSnatInformation(ipCidr);
-    pPFCP_Session_LookupProgram->updateFramedRouteMappingMap(ueIpAddress, key);
-    //localRouting->add_route(routing_info);
-    //localRouting->add_source_snat(snat_info);
+      auto key = framed_routing_key_for_ip_cidr(ip, cidr);
+      //auto routing_info = createLocalRoutingInformation(ipCidr);
+      //auto snat_info    = createLocalSnatInformation(ipCidr);
+      pPFCP_Session_LookupProgram->updateFramedRouteMappingMap(ueIpAddress, key);
+      //localRouting->add_route(routing_info);
+      //localRouting->add_source_snat(snat_info);
+    }
   }
   // TODO check update and create
   // TODO add teid framed_route mapping, to check in uplink direction if the ue_ip is in

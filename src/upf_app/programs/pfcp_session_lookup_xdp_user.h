@@ -8,6 +8,7 @@
 #include <mutex>
 #include <signal.h>  // signals
 #include <pfcp_session_lookup_xdp_kernel_skel.h>
+#include "pfcp_session_lookup_maps.h"
 #include <wrappers/BPFMap.hpp>
 // #include "qfi_flow_mapping_table.h"
 
@@ -140,6 +141,12 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> getQosFlowMap() const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
+
+  std::shared_ptr<BPFMap> getFramedRouteMappingMap();
+
+  void updateFramedRouteMappingMap(uint32_t networkAddress, FramedRoutingKey key);
+
+  void removeFramedRoute(uint32_t key);
 
  private:
   /**

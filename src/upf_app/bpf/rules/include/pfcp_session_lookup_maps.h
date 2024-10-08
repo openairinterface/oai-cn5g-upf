@@ -185,7 +185,7 @@ static __always_inline __u32 hash_framed_routing_key(struct FramedRoutingKeyBPF 
   return hash;
 }
 
-static __always_inline FramedRoutingKeyBPF framed_routing_key_for_ip_cidr(__u32 ip, __u32 cidr) {
+static __always_inline struct FramedRoutingKeyBPF framed_routing_key_for_ip_cidr(__u32 ip, __u32 cidr) {
   const __u32 ipv4Size = 32;
   // Calculate the subnet address
   __u32 subnet_mask = 0xffffffff << (ipv4Size - cidr);
