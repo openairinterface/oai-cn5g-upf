@@ -597,7 +597,8 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
 SEC("xdp")
 int xdp_handle_downlink(struct xdp_md* ctx) {
   // bpf_debug("================< PFCP PDR Sesction >================");
-
+  u32 ifindex = 3;
+  return bpf_redirect(ifindex, 0);
   void* data_end      = (void*) (long) ctx->data_end;
   struct ethhdr* ethh = (void*) (long) ctx->data;
   u64 offset          = sizeof(*ethh);
