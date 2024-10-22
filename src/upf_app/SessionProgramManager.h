@@ -111,6 +111,8 @@ class SessionProgramManager {
   /*---------------------------------------------------------------------------------------------------------------*/
   pfcp_far_t_ createFar(std::shared_ptr<pfcp::pfcp_far> pFar);
 
+  // TODO [ETH-PDU] support UE MAC on createPipeline, initializeNextRuleProgIndexKey, storeFarProgramIndexInNextProgRuleIndexMap, storeSessionMappingMap, saveSeidWithinFARProgram
+  // Generally override functions with uint32_t ueIpAddress and next_rule_prog_index_key
   /*---------------------------------------------------------------------------------------------------------------*/
   void createPipeline(
       uint64_t seid, uint32_t teid1, uint8_t sourceInterface,

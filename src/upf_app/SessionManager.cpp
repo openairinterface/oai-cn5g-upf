@@ -377,6 +377,7 @@ void SessionManager::processPDRDetails(
         "requests the UP function to assign a local F-TEID to the PDR.");
   }
 
+  // TODO [ETH-PDU] handle UE MAC address
   if (!pdi.get(ueIpAddress)) {
     ueIpAddress.ipv4_address.s_addr = 0;
     logger.debug("UE IP Address is missing");

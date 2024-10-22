@@ -120,6 +120,7 @@ pfcp_far_t_ SessionProgramManager::createFar(
       pFar->forwarding_parameters.second.outer_header_creation.second
           .ipv4_address.s_addr;
 
+  // TODO [ETH-PDU] support MAC 
   memcpy(&far.apply_action, &pFar->apply_action, sizeof(apply_action_t_));
 
   return far;
@@ -297,6 +298,7 @@ void SessionProgramManager::createPipeline(
 
   next_rule_prog_index_key key;
 
+  // TODO [ETH-PDU] initialise ket for MAC mappings
   initializeNextRuleProgIndexKey(key, teid1, ueIpAddress, sourceInterface);
 
   if ((upf_cfg.enable_qos) && (!pQer.empty())) {
@@ -325,6 +327,7 @@ void SessionProgramManager::createPipeline(
       "run it only once");
 
   if (isModification) {
+    // TODO [ETH-PDU] support ue MAC
     storeSessionMappingMap(pPFCP_Session_LookupProgram, ueIpAddress, teid1);
     uint32_t gNodeBIP = getGnodebIp(pFar);
 

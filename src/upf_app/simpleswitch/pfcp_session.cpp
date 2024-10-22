@@ -304,6 +304,11 @@ bool pfcp_session::create(
       pdr->pdi.second.set(allocated_fteid);
     }
 
+    // TODO [ETH-PDU] the UPF can act as a local switch with MAC - PDU session map
+    // We can create to a MAC - PDU session entry when a PDU session is established
+    // This will allow traffic from existing UE(a) to connect to a UE(b) that has just
+    // established a Eth PDU session
+    
     std::shared_ptr<pfcp_pdr> spdr = std::shared_ptr<pfcp_pdr>(pdr);
     if (pfcp_switch_inst->create_packet_in_access(
             spdr, allocated_fteid, cause.cause_value)) {
@@ -324,7 +329,8 @@ bool pfcp_session::create(
     if ((pdi.ue_ip_address.first) && (pdi.ue_ip_address.second.v4)) {
       pfcp_switch_inst->add_pfcp_dl_pdr_by_ue_ip(
           be32toh(pdi.ue_ip_address.second.ipv4_address.s_addr), spdr);
-    } else {
+    } // TODO [ETH-PDU] add downlink by UE MAC 
+    else {
       cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
       Logger::upf_n4().info(
           "Could not create_packet_in_access, cause accept only IPv4 UE IP "
@@ -671,6 +677,7 @@ std::string pfcp_session::to_string() const {
         ip.resize(INET_ADDRSTRLEN, ' ');
         s.append(ip);
         // TODO IPv6
+        // TODO [ETH-PDU] MAC address
       }
     } else {
       std::string ip = {};

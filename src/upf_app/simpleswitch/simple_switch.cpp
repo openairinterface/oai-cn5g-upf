@@ -144,7 +144,8 @@ void upf_n3::handle_receive(
       } else if (iph->version == 6) {
         pfcp_switch_inst->pfcp_session_look_up_pack_in_access(
             (struct ipv6hdr*) iph, gtp_payload_length, r_endpoint, tunnel_id);
-      } else {
+      } // TODO [ETH-PDU] handle ETH type look up 
+      else {
         Logger::upf_n3().trace("Unknown GTPU_G_PDU packet");
       }
     } else {
@@ -169,7 +170,8 @@ void upf_n3::handle_receive(
     } else if (iph->version == 6) {
       pfcp_switch_inst->pfcp_session_look_up_pack_in_access(
           (struct ipv6hdr*) iph, bytes_transferred, r_endpoint);
-    } else {
+    } // TODO [ETH-PDU] handle ETH type look up 
+    else {
       Logger::upf_n3().trace("Unknown IPX packet");
     }
   }

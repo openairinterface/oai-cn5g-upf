@@ -704,6 +704,7 @@ void pfcp_switch::call_datapath(
 void pfcp_switch::handle_pfcp_session_establishment_request(
     std::shared_ptr<itti_n4_session_establishment_request> sreq,
     itti_n4_session_establishment_response* resp) {
+  Logger::pfcp_switch().info("HANDLE_PFCP_SESSION_ESTABLISHMENT_REQUEST");
   itti_n4_session_establishment_request* req = sreq.get();
   pfcp::fseid_t fseid                        = {};
   pfcp::cause_t cause = {.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED};
@@ -830,6 +831,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
     resp->pfcp_ies.set(offending_ie);
   }
 
+  // TODO [ETH-PDU] update logs to print the MAC access
   if (Logger::should_log(spdlog::level::debug)) {
     std::cout << "\n+----------------------------------------------------------"
                  "--------"

@@ -115,6 +115,7 @@ class pfcp_far {
   void apply_forwarding_rules(
       struct iphdr* const iph, const std::size_t num_bytes, bool& nocp,
       bool& buff, uint8_t qfi);
+  // TODO [ETH-PDU] applying forwarding rules to eth-type headers
 };
 }  // namespace pfcp
 
