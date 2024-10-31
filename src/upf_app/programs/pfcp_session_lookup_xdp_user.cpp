@@ -8,6 +8,7 @@
 #include <wrappers/BPFMaps.h>
 #include "interfaces.h"
 #include "logger.hpp"
+#include <pfcp_session_lookup_maps.h>
 
 /*---------------------------------------------------------------------------------------------------------------*/
 int is_little_endian2() {
@@ -106,13 +107,12 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSessionMappingMap()
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getFramedRouteMappingMap()
-    const {
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getFramedRouteMappingMap() {
   return mpFramedRouteMappingMap;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void PFCP_Session_LookupProgram::updateFramedRouteMappingMap(uint32_t networkAddress, FramedRoutingKey key) {
+void PFCP_Session_LookupProgram::updateFramedRouteMappingMap(uint32_t ue_ip, FramedRoutingKey key) {
   __u32 hash_key = hash_framed_routing_key(&key);
   mpFramedRouteMappingMap->update(hash_key, ue_ip, BPF_ANY);
 }

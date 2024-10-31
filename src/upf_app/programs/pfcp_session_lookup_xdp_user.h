@@ -144,7 +144,7 @@ class PFCP_Session_LookupProgram {
 
   std::shared_ptr<BPFMap> getFramedRouteMappingMap();
 
-  void updateFramedRouteMappingMap(uint32_t networkAddress, FramedRoutingKey key);
+  void updateFramedRouteMappingMap(uint32_t ue_ip, FramedRoutingKey key);
 
   void removeFramedRoute(uint32_t key);
 

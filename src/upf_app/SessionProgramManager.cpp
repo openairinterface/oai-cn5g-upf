@@ -295,12 +295,12 @@ void SessionProgramManager::addFramedRoutes(uint32_t ueIpAddress, std::vector<pf
       uint32_t ip = 0;
       uint32_t cidr = 0;
       const std::string ip_substring =
-              ipSubnet.substr(0, ipsubnetmask.find(subnet_delimeter));
+              ipsubnetmask.substr(0, ipsubnetmask.find(subnet_delimeter));
       ip = FramedRouting::framedIPToUeIP(ip_substring);
 
-      std::reverse(ipSubnet.begin(), ipSubnet.end());
+      std::reverse(ipsubnetmask.begin(), ipsubnetmask.end());
       std::string subnet_substring =
-              ipSubnet.substr(0, ipSubnet.rfind(subnet_delimeter));
+              ipsubnetmask.substr(0, ipsubnetmask.rfind(subnet_delimeter));
       cidr = FramedRouting::frameSubnetToUInt(subnet_substring);
 
       auto key = framed_routing_key_for_ip_cidr(ip, cidr);
