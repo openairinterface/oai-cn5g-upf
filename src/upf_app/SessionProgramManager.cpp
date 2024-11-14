@@ -199,8 +199,8 @@ void SessionProgramManager::updateARPTableForN6(
       try {
         std::string remoteDN  = "192.168.20.100";
         uint32_t remoteN6IPv4 = inet_addr(remoteDN.c_str());
-        // const char* remoteN6MAC = "6c:b3:11:29:5a:87";
-        uint8_t remoteN6MAC[6] = {0x6c, 0xb3, 0x11, 0x29, 0x5a, 0x87};
+        // const char* remoteN6MAC = "6c:b3:11:83:00:f7";
+        uint8_t remoteN6MAC[6] = {0x6c, 0xb3, 0x11, 0x83, 0x00, 0xf7};
 
         Logger::upf_app().warn(
             "updateARPTableForN6 is modified with hard values to test with "
@@ -252,8 +252,8 @@ void SessionProgramManager::updateARPTableForN3(
   try {
     std::string remoteGnB = "192.168.10.100";
     uint32_t remoteN3IPv4 = inet_addr(remoteGnB.c_str());
-    // const char* remoteN3MAC = "6c:b3:11:29:5a:86";
-    uint8_t remoteN3MAC[6] = {0x6c, 0xb3, 0x11, 0x29, 0x5a, 0x86};
+    // const char* remoteN3MAC = "6c:b3:11:83:00:f6";
+    uint8_t remoteN3MAC[6] = {0x6c, 0xb3, 0x11, 0x83, 0x00, 0xf6};
 
     Logger::upf_app().warn(
         "updateARPTableForN3 is modified with hard values to test with "

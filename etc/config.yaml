@@ -46,12 +46,12 @@ nfs:
     sbi:
       port: 8003
       api_version: v1
-      interface_name: enp6s0
+      interface_name: eno1
     n3:
       interface_name: enp1s0f0np0
       port: 2152
     n4:
-      interface_name: enp6s0
+      interface_name: eno1
       port: 8805
     n6:
       interface_name: enp1s0f1np1
