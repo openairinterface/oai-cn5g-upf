@@ -19,6 +19,7 @@
 #include <utils/logger.h>
 #include <utils/utils.h>
 #include <next_prog_rule_key.h>
+#include <framed_routing_bpf.h>
 
 #ifdef KERNEL_SPACE
 #include <linux/in.h>
@@ -65,25 +66,27 @@ static __always_inline u32 tail_call_next_prog(
 static __always_inline u32
 handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
   u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, &ue_ip_address);
-
+  bpf_debug("Handle downlink traffic for UE IP: 0x%x, as u32: %u", ue_ip_address, ue_ip_address);
   if (teid_dl) {
     bpf_debug(
-        "TEID downlink: 0x%x was found for UE IP: 0x%x", ue_ip_address,
-        *teid_dl);
+        "TEID downlink: 0x%x was found for UE IP: 0x%x", *teid_dl,
+        ue_ip_address);
     tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
   } else {
+    uint32_t big_endian_ue_ip = __builtin_bswap32(ue_ip_address);
+    bpf_debug("No TEID found, try to find FramedRoute entry for big endian address %u", big_endian_ue_ip);
     #pragma clang loop unroll(full)
-    for (int i = 32; i > 0; i--) {
-      struct FramedRoutingKeyBPF key = framed_routing_key_for_ip_cidr(ue_ip_address, i);
-
-      u32 fr_key = hash_framed_routing_key(&key);
-      u32* fr_ue_ip = bpf_map_lookup_elem(&m_framed_route_mapping, &fr_key);
+    for (uint32_t i = 32; i > 0; i--) {
+      struct FramedRoutingKeyBPF key = framed_routing_key_for_ip_cidr(big_endian_ue_ip, i);
+      uint32_t fr_key = hash_framed_routing_key(&key);
+      bpf_debug("Check framed route table with key %u (for cidr %u)", fr_key, i);
+      uint32_t* fr_ue_ip = bpf_map_lookup_elem(&m_framed_route_mapping, &fr_key);
       if(fr_ue_ip) {
         bpf_debug(
-                "Framed Route detected for IP: 0x%x. UE IP: 0x%x", fr_ue_ip, ue_ip_address);
-        u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, &fr_ue_ip);
+                "Framed Route detected for IP: 0x%x. UE IP: 0x%x", fr_ue_ip, big_endian_ue_ip);
+        u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, fr_ue_ip);
         if (teid_dl) {
-          bpf_debug("TEID downlink: 0x%x was found for Framed Route IP: 0x%x", *teid_dl, ue_ip_address);
+          bpf_debug("TEID downlink: 0x%x was found for Framed Route IP: 0x%x", *teid_dl, big_endian_ue_ip);
           tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, *fr_ue_ip);
         }
       }
@@ -169,11 +172,8 @@ static __always_inline u32 ipv4_handle(struct xdp_md* ctx, struct iphdr* iph) {
 
   u32 ip_dest = iph->daddr;
   bpf_debug("UE IP: 0x%x", ip_dest);
-  if (ip_dest == 0x0301010c) {
-    ip_dest = ip_dest - 0x01000000;
-    bpf_debug("New UE IP: 0x%x", ip_dest);
-  }
   u8 protocol = iph->protocol;
+  bpf_debug("Protocol: 0x%x", protocol);
 
   switch (protocol) {
     case IPPROTO_UDP: {

@@ -6,6 +6,7 @@
 #include <pfcp_session_lookup_xdp_user.h>
 #include <UserPlaneComponent.h>
 #include <net/if.h>  // if_nametoindex
+#include <framed_routing_bpf.h>
 
 #include <observer/OnStateChangeSessionProgramObserver.h>
 // #include <pfcp/pfcp_far.h>
@@ -296,17 +297,19 @@ void SessionProgramManager::addFramedRoutes(uint32_t ueIpAddress, std::vector<pf
       uint32_t cidr = 0;
       const std::string ip_substring =
               ipsubnetmask.substr(0, ipsubnetmask.find(subnet_delimeter));
-      ip = FramedRouting::framedIPToUeIP(ip_substring);
+      ip = fr::FramedRouting::framedIPToUeIP(ip_substring);
 
       std::reverse(ipsubnetmask.begin(), ipsubnetmask.end());
       std::string subnet_substring =
               ipsubnetmask.substr(0, ipsubnetmask.rfind(subnet_delimeter));
-      cidr = FramedRouting::frameSubnetToUInt(subnet_substring);
+      cidr = fr::FramedRouting::frameSubnetToUInt(subnet_substring);
+      Logger::upf_app().debug("Framed Route Subnet: %s -> IP %u, cidr %u", framedRoute.framed_route, ip, cidr);
 
       auto key = framed_routing_key_for_ip_cidr(ip, cidr);
       //auto routing_info = createLocalRoutingInformation(ipCidr);
       //auto snat_info    = createLocalSnatInformation(ipCidr);
       pPFCP_Session_LookupProgram->updateFramedRouteMappingMap(ueIpAddress, key);
+      Logger::upf_app().debug("Framed Routing map is updated!");
       //localRouting->add_route(routing_info);
       //localRouting->add_source_snat(snat_info);
     }

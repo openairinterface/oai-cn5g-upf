@@ -306,7 +306,7 @@ void SessionManager::createSessionDirection(
   if (!pdrs.empty()) {
     auto pdrHighPrecedence = pdrs.front();
     logger.debug(
-        "The $s PDR %d has the Highest Precedence", direction,
+        "The %s PDR %u has the Highest Precedence", direction,
         pdrHighPrecedence->pdr_id.rule_id);
     if (direction == "Uplink") {
       createBPFSessionUL(pSession_establishment, pdrHighPrecedence);
@@ -398,6 +398,8 @@ void SessionManager::processPDRDetails(
 
   std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer;
 
+  logger.debug(
+          "upf_cfg.enable_fr: %s, %s PDR", upf_cfg.enable_fr ? "true" : "false", direction);
   if (upf_cfg.enable_fr && direction == "Downlink") { //TODO check
     if (ueIpAddress.v4){
       std::vector<pfcp::framed_route_t> framedRoutes;
@@ -467,7 +469,7 @@ void SessionManager::updateBPFSession(
 
       auto pdrHighPrecedenceDl = pSession->pdrs_downlink[0];
       Logger::upf_app().debug(
-          "The Downlink PDR %d has the Highest Precedence",
+          "The Downlink PDR %u has the Highest Precedence",
           pdrHighPrecedenceDl->pdr_id.rule_id);
 
       Logger::upf_app().debug(
@@ -484,7 +486,7 @@ void SessionManager::updateBPFSession(
 
       auto pdrHighPrecedenceUl = pSession->pdrs_uplink[0];
       Logger::upf_app().debug(
-          "The Uplink PDR %d has the Highest Precedence",
+          "The Uplink PDR %u has the Highest Precedence",
           pdrHighPrecedenceUl->pdr_id.rule_id);
 
       Logger::upf_app().debug(
@@ -586,6 +588,22 @@ void SessionManager::updateBPFSessionDL(
   // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer =
   // pSession->qerIDsPerPDR.qers;
   // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer = pSession->qers;
+
+  auto& logger = Logger::upf_app();
+  logger.debug(
+          "upf_cfg.enable_fr: %s, Downlink PDR", upf_cfg.enable_fr ? "true" : "false");
+  if (upf_cfg.enable_fr) {
+    if (ueIpAddress.v4){
+      std::vector<pfcp::framed_route_t> framedRoutes;
+      if(pdi.get(framedRoutes)) {
+        SessionProgramManager::getInstance().addFramedRoutes(ueIpAddress.ipv4_address.s_addr, framedRoutes);
+      }
+    } else {
+      Logger::upf_app().warn(
+              "Framed Route is not yet supported for Ipv6");
+    }
+  }
+
 
   if (teid_ul) {
     SessionProgramManager::getInstance().createPipeline(

@@ -628,7 +628,7 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
         uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>
         entry(ue_ip, pdrs);
     ue_ipv4_hbo2pfcp_pdr.insert(entry);
-    if (upf_cfg.enable_fr && pdr->pdi.second.framed_route.first) {
+    if (!upf_cfg.enable_bpf_datapath && upf_cfg.enable_fr && pdr->pdi.second.framed_route.first) {
       Logger::pfcp_switch().info("fr_ue_ip %4x ", ue_ip);
       Logger::pfcp_switch().info(
               "framed routing ip: " +

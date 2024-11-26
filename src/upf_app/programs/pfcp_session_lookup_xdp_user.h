@@ -8,8 +8,8 @@
 #include <mutex>
 #include <signal.h>  // signals
 #include <pfcp_session_lookup_xdp_kernel_skel.h>
-#include "pfcp_session_lookup_maps.h"
 #include <wrappers/BPFMap.hpp>
+#include <framed_routing_bpf.h>
 // #include "qfi_flow_mapping_table.h"
 
 class BPFMaps;
@@ -144,7 +144,7 @@ class PFCP_Session_LookupProgram {
 
   std::shared_ptr<BPFMap> getFramedRouteMappingMap();
 
-  void updateFramedRouteMappingMap(uint32_t ue_ip, FramedRoutingKey key);
+  void updateFramedRouteMappingMap(uint32_t ue_ip, FramedRoutingKeyBPF key);
 
   void removeFramedRoute(uint32_t key);
 
