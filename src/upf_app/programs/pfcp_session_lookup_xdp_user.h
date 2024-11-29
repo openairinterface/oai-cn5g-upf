@@ -110,6 +110,14 @@ class PFCP_Session_LookupProgram {
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
+   * @brief Get the NextProgRuleIndex Map object for ETH PDU sessions.
+   *
+   * @return std::shared_ptr<BPFMap> The pdi to index map.
+   */
+  std::shared_ptr<BPFMap> getNextProgEthRuleIndexMap() const;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  /**
    * @brief Get the Traffic Map object.
    *
    * @return std::shared_ptr<BPFMap> The TEID.
@@ -171,6 +179,10 @@ class PFCP_Session_LookupProgram {
   /*---------------------------------------------------------------------------------------------------------------*/
   // The pdi key to program index map.
   std::shared_ptr<BPFMap> mpNextProgRuleIndexMap;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  // The pdi key to program index map for ETH PDU session.
+  std::shared_ptr<BPFMap> mpNextProgEthRuleIndexMap;
 
   /*---------------------------------------------------------------------------------------------------------------*/
   // The next prog rule map.

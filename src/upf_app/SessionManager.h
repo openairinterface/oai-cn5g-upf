@@ -178,6 +178,12 @@ class SessionManager {
   /*****************************************************************************************************************/
   bool extractUeIpv4(pfcp::pdi& pdi, pfcp::ue_ip_address_t& ueIpAddress);
 
+  /*****************************************************************************************************************/
+  bool extractEthernetPduSessionInformation(pfcp::pdi& pdi, pfcp::ethernet_pdu_session_information_t& ethernetPduSessionInformation);
+
+  /*****************************************************************************************************************/
+  bool extractEthernetPacketFilter(pfcp::pdi& pdi, pfcp::ethernet_packet_filter& ethernetPacketFilter);
+
   /*---------------------------------------------------------------------------------------------------------------*/
   bool extractFar(
       std::shared_ptr<pfcp::pfcp_pdr> pdr,

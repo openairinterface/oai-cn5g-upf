@@ -47,7 +47,9 @@ static __always_inline u32 tail_call_next_prog(
   map_key.source_value = source_value;
   map_key.ipv4_address = ipv4_address;
 
-  u32* index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
+  // Key for ETH filters
+
+  u32* index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key); // IP for ETH will need another map and new key
 
   if (index_prog) {
     bpf_debug("Value of the eBPF tail call, index_prog = %d", *index_prog);
@@ -61,7 +63,45 @@ static __always_inline u32 tail_call_next_prog(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+// TODO [ETH-PDU] tail call for eth packet
+static __always_inline u32 tail_call_next_eth_prog(
+    struct xdp_md* ctx, teid_t_ teid, u8 source_value, struct ethhdr* eth) {
+  struct next_rule_eth_prog_index_key map_key;
 
+  // Check types of maps and the keys that have to be included
+  __builtin_memset(&map_key, 0, sizeof(struct next_rule_eth_prog_index_key));
+  map_key.teid         = teid;
+  map_key.source_value = source_value;
+  map_key.ethertype = bpf_ntohs(eth->h_proto);
+
+  // TODO [ETH-PDU] support other eth pkt filters
+
+  u32* index_prog = bpf_map_lookup_elem(&m_next_rule_eth_prog_index, &map_key);
+
+  if (index_prog) {
+    bpf_debug("Value of the eBPF tail call, index_prog = %d", *index_prog);
+    // TODO [ETH-PDU] pdu sess info learn mac
+    bpf_tail_call(ctx, &m_next_rule_prog, *index_prog);
+  }
+
+  bpf_debug("BPF tail call was not executed!");
+  // If downlink source value = INTERFACE_VALUE_CORE
+  // Call program that will send based on destination i.e., ETH PDU session info
+
+  bpf_debug("Check your key and its endianess");
+
+  return XDP_DROP;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+static __always_inline u32 handle_eth_downlink_traffic(
+    struct xdp_md* ctx, struct ethhdr* eth) {
+  
+  // TODO [ETH-PDU] implement routing based on learned MAC
+  return XDP_DROP;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline u32
 handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
   u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, &ue_ip_address);
@@ -110,6 +150,11 @@ handle_uplink_traffic(struct xdp_md* ctx, struct udphdr* udph) {
     bpf_debug("Invalid Ethernet packet");
     return XDP_DROP;
   }
+
+  // Only run 
+  // TODO [ETH-PDU] if eth pdu then there is no need to go down
+  // Implement a method to check session type first
+  // Check if IP else check ETH
 
   struct iphdr* iph_inner = (void*) (ethh_new + 1);
 

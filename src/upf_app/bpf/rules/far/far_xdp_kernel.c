@@ -206,6 +206,13 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
 }
 
 /*****************************************************************************************************************/
+// [PDR0] -> create FARProg -> insert m_next_rule_prog -> assoc maps m_far (which has FAR IE sorted by predene)
+// PD
+// PDU [PDR1] -> {FAR1, FAR2}
+// PDU [PDR2] -> {FAR3, FAR4}
+
+////
+// PDR -> FAR IEs
 SEC("xdp")
 int far_entry_point(struct xdp_md* ctx) {
   bpf_debug("================< FAR Sesction >================");

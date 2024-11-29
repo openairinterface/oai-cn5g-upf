@@ -120,7 +120,6 @@ pfcp_far_t_ SessionProgramManager::createFar(
       pFar->forwarding_parameters.second.outer_header_creation.second
           .ipv4_address.s_addr;
 
-  // TODO [ETH-PDU] support MAC 
   memcpy(&far.apply_action, &pFar->apply_action, sizeof(apply_action_t_));
 
   return far;
@@ -145,6 +144,19 @@ void SessionProgramManager::initializeNextRuleProgIndexKey(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+// Helper function to initialize the key for the FARProgram
+void SessionProgramManager::initializeNextRuleProgEthIndexKey(
+    next_rule_eth_prog_index_key& key, uint32_t teid, uint16_t ethertype,
+    uint8_t sourceInterface) {
+  __builtin_memset(&key, 0, sizeof(struct next_rule_prog_index_key));
+
+  key.teid         = htobe32(teid);
+  key.ethertype = ethertype;
+
+  key.source_value = sourceInterface;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 // Helper function to store the FARProgram index in the LookupProgram
 // std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram
 void SessionProgramManager::storeFarProgramIndexInNextProgRuleIndexMap(
@@ -157,6 +169,22 @@ void SessionProgramManager::storeFarProgramIndexInNextProgRuleIndexMap(
   s32 fd = pFARProgram->getFd();
 
   pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->update(
+      key, id, BPF_ANY);
+  pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+// Helper function to store the FARProgram index in the LookupProgram for ETH PDU session
+void SessionProgramManager::storeFarProgramIndexInNextProgEthRuleIndexMap(
+    std::shared_ptr<FARProgram> pFARProgram,
+    const next_rule_eth_prog_index_key& key,
+    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
+  // auto pPFCP_Session_LookupProgram =
+  //     UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+  u32 id = pFARProgram->getId();
+  s32 fd = pFARProgram->getFd();
+
+  pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->update(
       key, id, BPF_ANY);
   pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
 }
@@ -298,7 +326,6 @@ void SessionProgramManager::createPipeline(
 
   next_rule_prog_index_key key;
 
-  // TODO [ETH-PDU] initialise ket for MAC mappings
   initializeNextRuleProgIndexKey(key, teid1, ueIpAddress, sourceInterface);
 
   if ((upf_cfg.enable_qos) && (!pQer.empty())) {
@@ -327,7 +354,6 @@ void SessionProgramManager::createPipeline(
       "run it only once");
 
   if (isModification) {
-    // TODO [ETH-PDU] support ue MAC
     storeSessionMappingMap(pPFCP_Session_LookupProgram, ueIpAddress, teid1);
     uint32_t gNodeBIP = getGnodebIp(pFar);
 
@@ -347,6 +373,59 @@ void SessionProgramManager::createPipeline(
 
     arpUpdateThread2.detach();
     saveSeidWithinFARProgram(seid, pFARProgram, key);
+  }
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+// Function to create a pipeline for a given session and FAR
+void SessionProgramManager::createPipeline(
+    uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
+    uint16_t ethertype, std::shared_ptr<pfcp::pfcp_far> pFar, // TODO [ETH-PDU] include MAC Address
+    std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer, bool isModification,
+    uint32_t teid2) {
+  uint32_t dnIP          = upf_cfg.remote_n6.s_addr;
+  uint32_t upfn3IP       = upf_cfg.n3.addr4.s_addr;
+  uint32_t upfn6IP       = upf_cfg.n6.addr4.s_addr;
+  uint32_t far_id        = pFar->far_id.far_id;
+  uint32_t enforcing_qos = 0;
+
+  next_rule_eth_prog_index_key key;
+
+  initializeNextRuleProgEthIndexKey(key, teid1, ethertype, sourceInterface);
+
+  if ((upf_cfg.enable_qos) && (!pQer.empty())) {
+    enforcing_qos = 1;
+    Logger::upf_app().debug("ETH-PDU: Instantiate a new QERProgram ");
+    std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
+    pQERProgram->setup(seid, pQer);
+  }
+
+  Logger::upf_app().debug("ETH-PDU: Instantiate a new FARProgram");
+  std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
+
+  pFARProgram->setup(far_id, enforcing_qos);
+
+  auto pPFCP_Session_LookupProgram =
+      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+
+  storeFarProgramIndexInNextProgEthRuleIndexMap(
+      pFARProgram, key, pPFCP_Session_LookupProgram);
+
+  Logger::upf_app().debug("ETH-PDU: Store FAR in the FAR program");
+  storeFARInFARMap(pFARProgram, pFar);
+
+  Logger::upf_app().warn(
+      "TODO: Try to extract the updateARPTableForN6 for the if and else to "
+      "run it only once");
+
+  if (isModification) {
+    // TODO [ETH-PDU] store session mapping for ethernet packet filter. Right now DL will use the learned MAC table
+    // storeSessionMappingMap(pPFCP_Session_LookupProgram, ueIpAddress, teid1);
+    
+    // TODO [ETH-PDU] verify if we need to do anything
+  } else {
+    // TODO [ETH-PDU] verify if we need to do anything
+    // saveSeidWithinFARProgram(seid, pFARProgram, key);
   }
 }
 
@@ -371,6 +450,7 @@ void SessionProgramManager::removePipeline(uint64_t seid) {
   auto pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
   pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->remove(key);
+  pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->remove(key);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

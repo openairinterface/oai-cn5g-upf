@@ -10,6 +10,11 @@ struct next_rule_prog_index_key {
   u32 ipv4_address;
 };
 
-// TODO [ETH-PDU] support key for MAC mappings
+struct next_rule_eth_prog_index_key {
+  teid_t_ teid;
+  u8 source_value;
+  u16 ethertype;
+  // TODO [ETH-PDU] handle keys with MAC Address
+};
 
 #endif  // __NEXT_PROG_RULE_KEY_H__

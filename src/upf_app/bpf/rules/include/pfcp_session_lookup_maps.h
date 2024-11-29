@@ -17,6 +17,7 @@
 #define MAX_UEs 100000
 
 /*---------------------------------------------------------------------------------------------------------------*/
+// deprecated
 struct {
   __uint(
       type,
@@ -29,6 +30,7 @@ struct {
 } m_teid_session SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
+// deprecated
 struct {
   __uint(
       type,
@@ -41,6 +43,7 @@ struct {
 } m_ueip_session SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
+// deprecated
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, MAX_UEs);
@@ -55,6 +58,15 @@ struct {
   __type(key, struct next_rule_prog_index_key);
   __type(value, u32);
 } m_next_rule_prog_index SEC(".maps");
+
+/*---------------------------------------------------------------------------------------------------------------*/
+// TODO [ETH-PDU] eth filters and eth pdu session info
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, MAX_LENGTH);  // 10,
+  __type(key, struct next_rule_eth_prog_index_key);
+  __type(value, u32);
+} m_next_rule_eth_prog_index SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
