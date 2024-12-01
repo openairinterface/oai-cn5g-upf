@@ -106,6 +106,10 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getNextProgEthRuleIndexMap()
 }
 
 // TODO [ETH-PDU] ETH PDU session info
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getMacPduSessionMap()
+    const {
+  return mpMacPduSessionMap;
+}
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSessionMappingMap()
@@ -130,7 +134,9 @@ void PFCP_Session_LookupProgram::initializeMaps() {
   // TODO [ETH-PDU] ETH pkt filter
   mpNextProgEthRuleIndexMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_eth_prog_index"));
-  // TODO [ETH-PDU] ETH PDU session info
+  // TODO [ETH-PDU] ETH PDU session info m_mac_pdu_session
+  mpMacPduSessionMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_mac_pdu_session"));
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

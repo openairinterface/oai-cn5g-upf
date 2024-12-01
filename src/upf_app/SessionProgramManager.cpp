@@ -177,15 +177,18 @@ void SessionProgramManager::storeFarProgramIndexInNextProgRuleIndexMap(
 // Helper function to store the FARProgram index in the LookupProgram for ETH PDU session
 void SessionProgramManager::storeFarProgramIndexInNextProgEthRuleIndexMap(
     std::shared_ptr<FARProgram> pFARProgram,
-    const next_rule_eth_prog_index_key& key,
+    const next_rule_eth_prog_index_key& key, uint32_t teid_dl,
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
   // auto pPFCP_Session_LookupProgram =
   //     UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
   u32 id = pFARProgram->getId();
   s32 fd = pFARProgram->getFd();
+  next_rule_eth_prog_index_value value;
+  value.prog_id = id;
+  value.teid_dl = teid_dl;
 
   pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->update(
-      key, id, BPF_ANY);
+      key, value, BPF_ANY);
   pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
 }
 
@@ -388,6 +391,7 @@ void SessionProgramManager::createPipeline(
   uint32_t upfn6IP       = upf_cfg.n6.addr4.s_addr;
   uint32_t far_id        = pFar->far_id.far_id;
   uint32_t enforcing_qos = 0;
+  uint32_t teid_dl = pFar->forwarding_parameters.second.outer_header_creation.second.teid;
 
   next_rule_eth_prog_index_key key;
 
@@ -409,7 +413,7 @@ void SessionProgramManager::createPipeline(
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
   storeFarProgramIndexInNextProgEthRuleIndexMap(
-      pFARProgram, key, pPFCP_Session_LookupProgram);
+      pFARProgram, key, teid_dl, pPFCP_Session_LookupProgram);
 
   Logger::upf_app().debug("ETH-PDU: Store FAR in the FAR program");
   storeFARInFARMap(pFARProgram, pFar);

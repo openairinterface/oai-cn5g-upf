@@ -18,7 +18,9 @@
 #include <pfcp_session_lookup_maps.h>
 #include <utils/logger.h>
 #include <utils/utils.h>
+#include <utils/gtpu_parse.h>
 #include <next_prog_rule_key.h>
+#include <mac_pdu_session_key.h>
 
 #ifdef KERNEL_SPACE
 #include <linux/in.h>
@@ -66,6 +68,9 @@ static __always_inline u32 tail_call_next_prog(
 // TODO [ETH-PDU] tail call for eth packet
 static __always_inline u32 tail_call_next_eth_prog(
     struct xdp_md* ctx, teid_t_ teid, u8 source_value, struct ethhdr* eth) {
+  void* data     = (void*) (long) ctx->data;
+  void* data_end = (void*) (long) ctx->data_end;
+
   struct next_rule_eth_prog_index_key map_key;
 
   // Check types of maps and the keys that have to be included
@@ -76,12 +81,24 @@ static __always_inline u32 tail_call_next_eth_prog(
 
   // TODO [ETH-PDU] support other eth pkt filters
 
-  u32* index_prog = bpf_map_lookup_elem(&m_next_rule_eth_prog_index, &map_key);
+  struct next_rule_eth_prog_index_value* index_value = bpf_map_lookup_elem(&m_next_rule_eth_prog_index, &map_key);
 
-  if (index_prog) {
-    bpf_debug("Value of the eBPF tail call, index_prog = %d", *index_prog);
+  if (index_value) {
+    bpf_debug("Value of the eBPF tail call, index_prog = %d", index_value->prog_id);
     // TODO [ETH-PDU] pdu sess info learn mac
-    bpf_tail_call(ctx, &m_next_rule_prog, *index_prog);
+    struct iphdr* iph_outer = (void*) (data + sizeof(struct ethhdr));
+
+    if ((void*) iph_outer + sizeof(*iph_outer) > data_end) {
+      bpf_debug("Invalid Outer IP packet");
+      return XDP_DROP;
+    }
+
+    u32 src_ip_out = iph_outer->saddr;
+    struct mac_pdu_session_value pdu_session;
+    pdu_session.teid = index_value->teid_dl;
+    pdu_session.ipv4_address = src_ip_out;
+    bpf_map_update_elem(&m_mac_pdu_session, &eth->h_source, &pdu_session, BPF_NOEXIST);
+    bpf_tail_call(ctx, &m_next_rule_prog, index_value->prog_id);
   }
 
   bpf_debug("BPF tail call was not executed!");
@@ -95,17 +112,34 @@ static __always_inline u32 tail_call_next_eth_prog(
 
 /*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline u32 handle_eth_downlink_traffic(
-    struct xdp_md* ctx, struct ethhdr* eth) {
+    struct xdp_md* ctx) {
+  void* data     = (void*) (long) ctx->data;
+  void* data_end = (void*) (long) ctx->data_end;
+  
+  struct ethhdr* eth = data;
+  if ((void*) eth + sizeof(*eth) > data_end) {
+      bpf_debug("Invalid ETH packet");
+      return XDP_DROP;
+  }
+
+  struct mac_pdu_session_value* pdu_session = bpf_map_lookup_elem(&m_mac_pdu_session, eth->h_dest);
+  if (pdu_session) {
+     create_outer_header_gtpu_ipv4(ctx, pdu_session);
+     return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+  }
+
+  // Should rather have a single FAR program for ETH PDU sessions. Then call this program every time.
   
   // TODO [ETH-PDU] implement routing based on learned MAC
-  return XDP_DROP;
+
+  return XDP_PASS;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline u32
 handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
   u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, &ue_ip_address);
-
+  u32 ret = XDP_PASS;
   if (teid_dl) {
     bpf_debug(
         "TEID downlink: 0x%x was found for UE IP: 0x%x", ue_ip_address,
@@ -113,9 +147,14 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
     tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
   }
 
+  // NOTE: The IP of the ETH PDU session needs to be a different subnet from UE allocated IPs
+  // If teid_dl is not found, this can be ETH packet.
+  // TODO [ETH-PDU] support ETH PDU sessions DL using packet filters. Currently only using ETH PDU sess info for DL
+  ret = handle_eth_downlink_traffic(ctx);
+
   bpf_debug("BPF tail call was not executed!");
 
-  return XDP_PASS;
+  return ret;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -157,6 +196,18 @@ handle_uplink_traffic(struct xdp_md* ctx, struct udphdr* udph) {
   // Check if IP else check ETH
 
   struct iphdr* iph_inner = (void*) (ethh_new + 1);
+
+  if (!(iph_inner->version == 4 || iph_inner->version == 6)) { // Not IP packet
+    struct ethhdr* eth = (void*) (ethh_new + 1);
+    if (!(eth->h_proto == bpf_htons(ETH_P_IP))) {
+      bpf_debug("Expected ETH_P_IP");
+      return XDP_DROP;
+    }
+
+    tail_call_next_eth_prog(ctx, gtpuh->teid, INTERFACE_VALUE_ACCESS, eth);
+
+    return XDP_PASS;
+  }
 
   if ((void*) iph_inner + sizeof(*iph_inner) > data_end) {
     bpf_debug("Invalid Inner IP packet");

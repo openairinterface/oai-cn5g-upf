@@ -2,11 +2,16 @@
 #define PROTOCOLS_GTP_H
 
 #include <types.h>
+#include <linux/if_ether.h>
 #include <linux/bpf.h>
 #include <stdint.h>
 
 #define GTP_ENCAPSULATED_SIZE                                                  \
   (sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct gtpuhdr) +     \
+   sizeof(struct gtpu_extn_pdu_session_container))
+
+#define ETH_GTP_ENCAPSULATED_SIZE                                                  \
+  (sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct gtpuhdr) +     \
    sizeof(struct gtpu_extn_pdu_session_container))
 
 #define GTP_UDP_PORT 2152u  //!< TS 29 281

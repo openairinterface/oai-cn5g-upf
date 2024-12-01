@@ -9,6 +9,7 @@
 #include <array>
 #include <pfcp/pfcp_far.h>
 #include <next_prog_rule_key.h>
+#include <mac_pdu_session_key.h>
 #include <netinet/ether.h>
 
 class BPFMap;
@@ -143,7 +144,7 @@ class SessionProgramManager {
 
   void storeFarProgramIndexInNextProgEthRuleIndexMap(
     std::shared_ptr<FARProgram> pFARProgram,
-    const next_rule_eth_prog_index_key& key,
+    const next_rule_eth_prog_index_key& key, uint32_t teid_dl,
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
 
   /*---------------------------------------------------------------------------------------------------------------*/

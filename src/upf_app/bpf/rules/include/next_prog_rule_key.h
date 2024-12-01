@@ -17,4 +17,9 @@ struct next_rule_eth_prog_index_key {
   // TODO [ETH-PDU] handle keys with MAC Address
 };
 
+struct next_rule_eth_prog_index_value {
+  u32 prog_id;
+  u32 teid_dl;
+};
+
 #endif  // __NEXT_PROG_RULE_KEY_H__

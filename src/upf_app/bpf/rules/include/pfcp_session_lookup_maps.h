@@ -9,6 +9,7 @@
 #include <ie/teid.h>
 #include <next_prog_rule_map.h>
 #include <next_prog_rule_key.h>
+#include <mac_pdu_session_key.h>
 #include "interfaces.h"
 #include "session_id.h"
 
@@ -65,8 +66,16 @@ struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, MAX_LENGTH);  // 10,
   __type(key, struct next_rule_eth_prog_index_key);
-  __type(value, u32);
+  __type(value, struct next_rule_eth_prog_index_value); // <prog_id, teid_dl>
 } m_next_rule_eth_prog_index SEC(".maps");
+
+/*---------------------------------------------------------------------------------------------------------------*/
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, MAX_LENGTH);  // 10,
+  __type(key, u8[ETH_ALEN]);
+  __type(value, struct mac_pdu_session_value);
+} m_mac_pdu_session SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {

@@ -13,6 +13,7 @@
 #include "logger.hpp"
 
 #include <next_prog_rule_key.h>
+#include <mac_pdu_session_key.h>
 
 #include "upf_config.hpp"
 
