@@ -18,7 +18,6 @@
  * For more information about the OpenAirInterface (OAI) Software Alliance:
  *      contact@openairinterface.org
  */
-
 #include "upf_config_yaml.hpp"
 
 #include <boost/algorithm/string.hpp>
@@ -519,6 +518,7 @@ interface_cfg_t upf_interface_config::to_interface_config() const {
   // TODO this method is only temporary until we refactor the whole config
   interface_cfg_t cfg;
   cfg.addr4   = get_addr4();
+  cfg.addr4ov = get_addr4ov();
   cfg.addr6   = get_addr6();
   cfg.mtu     = get_mtu();
   cfg.port    = get_port();

@@ -403,8 +403,12 @@ pfcp::fteid_t pfcp_switch::generate_fteid_n3() {
   pfcp::fteid_t fteid = {};
   fteid.teid          = generate_teid_n3();
   if (upf_cfg.n3.addr4.s_addr) {
-    fteid.v4                  = 1;
-    fteid.ipv4_address.s_addr = upf_cfg.n3.addr4.s_addr;
+    fteid.v4 = 1;
+    if (upf_cfg.n3.addr4ov.s_addr) {
+      fteid.ipv4_address.s_addr = upf_cfg.n3.addr4ov.s_addr;
+    } else {
+      fteid.ipv4_address.s_addr = upf_cfg.n3.addr4.s_addr;
+    }
   } else {
     fteid.v6           = 1;
     fteid.ipv6_address = upf_cfg.n3.addr6;
