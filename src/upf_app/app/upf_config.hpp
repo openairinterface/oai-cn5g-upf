@@ -62,6 +62,7 @@ namespace oai::config {
 typedef struct interface_cfg_s {
   std::string if_name;
   struct in_addr addr4;
+  struct in_addr addr4ov;
   struct in_addr network4;
   struct in6_addr addr6;
   unsigned int mtu;
