@@ -197,6 +197,11 @@ handle_uplink_traffic(struct xdp_md* ctx, struct udphdr* udph) {
 
   struct iphdr* iph_inner = (void*) (ethh_new + 1);
 
+  if ((void*) iph_inner + sizeof(*iph_inner) > data_end) {
+    bpf_debug("Invalid Inner IP packet");
+    return XDP_DROP;
+  }
+  
   if (!(iph_inner->version == 4 || iph_inner->version == 6)) { // Not IP packet
     struct ethhdr* eth = (void*) (ethh_new + 1);
     if (!(eth->h_proto == bpf_htons(ETH_P_IP))) {
@@ -207,11 +212,6 @@ handle_uplink_traffic(struct xdp_md* ctx, struct udphdr* udph) {
     tail_call_next_eth_prog(ctx, gtpuh->teid, INTERFACE_VALUE_ACCESS, eth);
 
     return XDP_PASS;
-  }
-
-  if ((void*) iph_inner + sizeof(*iph_inner) > data_end) {
-    bpf_debug("Invalid Inner IP packet");
-    return XDP_DROP;
   }
 
   u32 src_ip_in = iph_inner->saddr;
