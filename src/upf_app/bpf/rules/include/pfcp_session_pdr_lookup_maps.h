@@ -8,9 +8,9 @@
 #include <ie/fteid.h>
 #include <ie/fseid.h>
 
-#define MAX_LENGTH 5000            // 10
-#define PDR_ENTRIES_MAX_SIZE 5000  // 10
-#define FAR_ENTRIES_MAX_SIZE 5000  // 10
+#define MAX_LENGTH 10000
+#define PDR_ENTRIES_MAX_SIZE 10000
+#define FAR_ENTRIES_MAX_SIZE 10000
 #define ARP_ENTRIES_MAX_SIZE 12
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -24,33 +24,33 @@ struct {
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
   __uint(type, BPF_MAP_TYPE_DEVMAP);
-  __uint(max_entries, MAX_LENGTH);  // 10,
-  __type(key, u32);                 // id
-  __type(value, u32);               // tx port
+  __uint(max_entries, MAX_LENGTH);
+  __type(key, u32);    // id
+  __type(value, u32);  // tx port
 } m_redirect_interfaces SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, PDR_ENTRIES_MAX_SIZE);  // 10,
-  __type(key, teid_t_);                       // teid
-  __type(value, pfcp_pdr_t_);                 // assuming only one PDR
+  __uint(max_entries, PDR_ENTRIES_MAX_SIZE);
+  __type(key, teid_t_);        // teid
+  __type(value, pfcp_pdr_t_);  // assuming only one PDR
 } m_teid_pdr SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, PDR_ENTRIES_MAX_SIZE);  // 10,
-  __type(key, u32);                           // UE IP address
-  __type(value, pfcp_pdr_t_);                 // assuming only one PDR
+  __uint(max_entries, PDR_ENTRIES_MAX_SIZE);
+  __type(key, u32);            // UE IP address
+  __type(value, pfcp_pdr_t_);  // assuming only one PDR
 } m_ueip_pdr SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, ARP_ENTRIES_MAX_SIZE);  // 2,
-  __type(key, u32);                           // IPv4 address
-  __type(value, unsigned char[8]);            // MAC address
+  __uint(max_entries, ARP_ENTRIES_MAX_SIZE);
+  __type(key, u32);                 // IPv4 address
+  __type(value, unsigned char[8]);  // MAC address
 } m_arp_table SEC(".maps");
 
 #endif  // __PFCP_SESSION_PDR_LOOKUP_MAPS_H__

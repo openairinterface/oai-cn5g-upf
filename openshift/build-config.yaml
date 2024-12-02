@@ -24,6 +24,8 @@ metadata:
   name: "upf-build-cfg"
 spec:
     runPolicy: "Serial"
+    nodeSelector:
+        node-role.kubernetes.io/worker: ""
     source:
         type: "Binary"
         secrets:

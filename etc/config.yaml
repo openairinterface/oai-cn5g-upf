@@ -213,9 +213,9 @@ smf:
 
 upf:
   support_features:
-    enable_bpf_datapath: no   # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
-    enable_qos: no  # Only supported for BPF datapath. If "on" we use qdiscs to manage the QoS
-    enable_snat: no           # If "on": Source natting is done for UE, DEFAULT= off
+    enable_bpf_datapath: yes  # If "yes": BPF is used as datapath else simpleswitch is used, DEFAULT= no
+    enable_qos: no            # Only supported for BPF datapath. If "yes" we use qdisc to manage the QoS
+    enable_snat: no           # If "no": Source natting is done for UE, DEFAULT= no
   remote_n6_gw: oai-ext-dn
   smfs:
     - host: oai-smf            # To be used for PFCP association in case of no-NRF

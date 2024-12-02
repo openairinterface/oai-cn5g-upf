@@ -24,21 +24,21 @@ SessionManager::SessionManager() {}
 /*---------------------------------------------------------------------------------------------------------------*/
 SessionManager::~SessionManager() {}
 
-/*****************************************************************************************************************/
+//---------------------------------------------------------------------------------------------------------------
 // Helper function to extract PDI
 bool SessionManager::extractPdi(
     std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi) {
   return (pdr->get(pdi));
 }
 
-/*****************************************************************************************************************/
+//---------------------------------------------------------------------------------------------------------------
 // Helper function to extract source interface
 bool SessionManager::extractSourceIface(
     pfcp::pdi& pdi, pfcp::source_interface_t& sourceInterface) {
   return (pdi.get(sourceInterface));
 }
 
-/*****************************************************************************************************************/
+//---------------------------------------------------------------------------------------------------------------
 // Helper function to extract source interface
 bool SessionManager::extractUeIpv4(
     pfcp::pdi& pdi, pfcp::ue_ip_address_t& ueIpAddress) {
@@ -107,7 +107,7 @@ void SessionManager::createSession(std::shared_ptr<SessionBpf> pSession) {
       "Session %d Has Been Created Successfully", pSession->getSeid());
 }
 
-/*****************************************************************************************************************/
+//---------------------------------------------------------------------------------------------------------------
 /*
  * Document: ETSI TS 129 244 V15.8.0 (2020-01)
  * PDI is a Mandatory IE within the Establishment request
@@ -197,6 +197,8 @@ void SessionManager::createBPFSession(
   auto& logger  = Logger::upf_n4();
   uint64_t seid = pSession_establishment->get_up_seid();
 
+  sessions.push_back(pSession_establishment);
+
   logger.debug("Session %d Received", seid);
   logger.debug("Preparing the Datapath ...");
   logger.debug("Find the PDR with Highest Precedence");
@@ -227,7 +229,7 @@ void SessionManager::createBPFSession(
   mSeidToSession[seid] = pSession_establishment;
 }
 
-/*****************************************************************************************************************/
+//---------------------------------------------------------------------------------------------------------------
 void SessionManager::processPDRs(
     std::shared_ptr<pfcp::pfcp_session> pSession_establishment) {
   auto& pdrs_uplink   = pSession_establishment->pdrs_uplink;
@@ -288,7 +290,7 @@ void SessionManager::processPDRs(
   }
 }
 
-/*****************************************************************************************************************/
+//---------------------------------------------------------------------------------------------------------------
 void SessionManager::sortPDRs(
     std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_uplink,
     std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs_downlink) {
@@ -297,7 +299,7 @@ void SessionManager::sortPDRs(
   std::sort(pdrs_downlink.begin(), pdrs_downlink.end(), comparePDR);
 }
 
-/*****************************************************************************************************************/
+//---------------------------------------------------------------------------------------------------------------
 void SessionManager::createSessionDirection(
     std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
     std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs,
@@ -307,7 +309,7 @@ void SessionManager::createSessionDirection(
   if (!pdrs.empty()) {
     auto pdrHighPrecedence = pdrs.front();
     logger.debug(
-        "The $s PDR %d has the Highest Precedence", direction,
+        "The PDR %d has the Highest Precedence", direction,
         pdrHighPrecedence->pdr_id.rule_id);
     if (direction == "Uplink") {
       createBPFSessionUL(pSession_establishment, pdrHighPrecedence);
@@ -317,7 +319,7 @@ void SessionManager::createSessionDirection(
   }
 }
 
-/*****************************************************************************************************************/
+//---------------------------------------------------------------------------------------------------------------
 void SessionManager::createBPFSessionUL(
     std::shared_ptr<pfcp::pfcp_session> pSession,
     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl) {
@@ -339,7 +341,7 @@ void SessionManager::createBPFSessionDL(
       pSession, pdrHighPrecedenceDl, INTERFACE_VALUE_CORE, "Downlink");
 }
 
-/*****************************************************************************************************************/
+//---------------------------------------------------------------------------------------------------------------
 void SessionManager::processPDRDetails(
     std::shared_ptr<pfcp::pfcp_session> pSession,
     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedence, int interfaceValue,
@@ -581,7 +583,7 @@ void SessionManager::updateBPFSessionDL(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
         ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, teid_ul);
   } else {
-    Logger::upf_app().error("Uplink TEID not found for session: 0x%x", seidul);
+    Logger::upf_app().info("Uplink TEID not used for session: 0x%x", seidul);
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
         ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, 0);
