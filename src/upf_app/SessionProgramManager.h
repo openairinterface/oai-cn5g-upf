@@ -112,6 +112,11 @@ class SessionProgramManager {
       bool isModification = false, uint32_t teid2 = 0);
 
   /*---------------------------------------------------------------------------------------------------------------*/
+  void createPipeline(
+      uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
+      uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
+      bool isModification = false, uint32_t teid2 = 0);
+  /*---------------------------------------------------------------------------------------------------------------*/
   void initializeNextRuleProgIndexKey(
       next_rule_prog_index_key& key, uint32_t teid, uint32_t ueIpAddress,
       uint8_t sourceInterface);

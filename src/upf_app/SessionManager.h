@@ -59,12 +59,12 @@ class SessionManager {
   virtual ~SessionManager();
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  /**
-   * @brief Create a Session object in BPF map.
-   *
-   * @param pSession The session object to be created.
-   */
-  void createSession(std::shared_ptr<SessionBpf> pSession);
+//   /**
+//    * @brief Create a Session object in BPF map.
+//    *
+//    * @param pSession The session object to be created.
+//    */
+//   void createSession(std::shared_ptr<SessionBpf> pSession);
   /*---------------------------------------------------------------------------------------------------------------*/
 
   /**
@@ -136,8 +136,7 @@ class SessionManager {
   /*****************************************************************************************************************/
   void processPDRDetails(
       std::shared_ptr<pfcp::pfcp_session> pSession,
-      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedence, int interfaceValue,
-      const std::string& direction);
+      std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedence);
 
   /*****************************************************************************************************************/
   /**
@@ -161,12 +160,10 @@ class SessionManager {
    * @brief Create BPF session for specific direction
    * @param std::shared_ptr<pfcp::pfcp_session> pSession_establishment
    * @param std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs
-   * @param const std::string& direction
    */
-  void createSessionDirection(
+  void prepareEbpfSession(
       std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
-      std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs,
-      const std::string& direction);
+      std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs);
 
   /*****************************************************************************************************************/
   bool extractPdi(std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi);

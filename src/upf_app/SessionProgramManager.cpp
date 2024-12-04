@@ -197,10 +197,10 @@ void SessionProgramManager::updateARPTableForN6(
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
     uint32_t dnIP, uint32_t upfn6IP) {
       try {
-        std::string remoteDN  = "192.168.20.100";
+        std::string remoteDN  = "192.168.24.160";
         uint32_t remoteN6IPv4 = inet_addr(remoteDN.c_str());
-        // const char* remoteN6MAC = "6c:b3:11:83:00:f7";
-        uint8_t remoteN6MAC[6] = {0x6c, 0xb3, 0x11, 0x83, 0x00, 0xf7};
+        // const char* remoteN6MAC = "0061BB000001";
+        uint8_t remoteN6MAC[6] = {0x00, 0x61, 0xbb, 0x00, 0x00, 0x01};
 
         Logger::upf_app().warn(
             "updateARPTableForN6 is modified with hard values to test with "
@@ -250,10 +250,10 @@ void SessionProgramManager::updateARPTableForN3(
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
     uint32_t gNodeBIP, uint32_t upfn3IP, uint32_t seid) {
   try {
-    std::string remoteGnB = "192.168.10.100";
+    std::string remoteGnB = "192.168.23.20";
     uint32_t remoteN3IPv4 = inet_addr(remoteGnB.c_str());
-    // const char* remoteN3MAC = "6c:b3:11:83:00:f6";
-    uint8_t remoteN3MAC[6] = {0x6c, 0xb3, 0x11, 0x83, 0x00, 0xf6};
+    // const char* remoteN3MAC = "0031BB000001";
+    uint8_t remoteN3MAC[6] = {0x00, 0x31, 0xbb, 0x00, 0x00, 0x01};
 
     Logger::upf_app().warn(
         "updateARPTableForN3 is modified with hard values to test with "
@@ -370,8 +370,7 @@ void SessionProgramManager::createPipeline(
   uint32_t upfn3IP       = upf_cfg.n3.addr4.s_addr;
   uint32_t upfn6IP       = upf_cfg.n6.addr4.s_addr;
   uint32_t far_id        = pFar->far_id.far_id;
-  uint32_t enforcing_qos = 0;
-
+  
   next_rule_prog_index_key key;
 
   initializeNextRuleProgIndexKey(key, teid1, ueIpAddress, sourceInterface);
@@ -381,10 +380,6 @@ void SessionProgramManager::createPipeline(
 
   storeFarProgramIndexInNextProgRuleIndexMap(
       pFar, key, pPFCP_Session_LookupProgram);
-
-  Logger::upf_app().warn(
-      "TODO: Try to extract the updateARPTableForN6 for the if and else to "
-      "run it only once");
 
   if (isModification) {
     storeSessionMappingMap(
@@ -403,6 +398,7 @@ void SessionProgramManager::createPipeline(
   } else {
     storeSessionMappingMap(
         pPFCP_Session_LookupProgram, ueIpAddress, teid1, 0, seid);
+
     // Launch a separate thread to update ARP table map
     std::thread arpUpdateThread2(
         [this, pPFCP_Session_LookupProgram, dnIP, upfn6IP]() {
@@ -418,6 +414,7 @@ void SessionProgramManager::createPipeline(
 void SessionProgramManager::removePipeline(uint64_t seid) {
   Logger::upf_app().debug("Remove FARProgram index from UPFProgram map");
   auto it = mSessionProgramsMap.find(seid);
+  
   if (it == mSessionProgramsMap.end()) {
     Logger::upf_app().error(
         "Session %d Does Not Exist. It Cannot be Removed", seid);
@@ -515,20 +512,6 @@ void SessionProgramManager::setOnNewSessionObserver(
     OnStateChangeSessionProgramObserver* pObserver) {
   mpOnNewSessionProgramObserver = pObserver;
 }
-
-//---------------------------------------------------------------------------------------------------------------
-// std::shared_ptr<PFCP_Session_PDR_LookupProgram>
-// SessionProgramManager::findSessionProgram(uint64_t seid) {
-//   std::shared_ptr<PFCP_Session_PDR_LookupProgram>
-//       pPFCP_Session_PDR_LookupProgram;
-
-//   auto it = mSessionProgramMap.find(seid);
-//   if (it != mSessionProgramMap.end()) {
-//     pPFCP_Session_PDR_LookupProgram = it->second;
-//   }
-
-//   return pPFCP_Session_PDR_LookupProgram;
-// }
 
 //---------------------------------------------------------------------------------------------------------------
 std::shared_ptr<SessionPrograms> SessionProgramManager::findSessionPrograms(

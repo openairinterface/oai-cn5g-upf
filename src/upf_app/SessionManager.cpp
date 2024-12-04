@@ -16,12 +16,14 @@ using namespace oai::config;
 extern upf_config upf_cfg;
 
 //---------------------------------------------------------------------------------------------------------------
+enum class Direction { Uplink, Downlink };
+
+//---------------------------------------------------------------------------------------------------------------
 SessionManager::SessionManager() {}
 
 //---------------------------------------------------------------------------------------------------------------
 SessionManager::~SessionManager() {}
 
-//---------------------------------------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------------------------------------
 // Helper function to extract PDI
 bool SessionManager::extractPdi(
@@ -30,14 +32,12 @@ bool SessionManager::extractPdi(
 }
 
 //---------------------------------------------------------------------------------------------------------------
-//---------------------------------------------------------------------------------------------------------------
 // Helper function to extract source interface
 bool SessionManager::extractSourceIface(
     pfcp::pdi& pdi, pfcp::source_interface_t& sourceInterface) {
   return (pdi.get(sourceInterface));
 }
 
-//---------------------------------------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------------------------------------
 // Helper function to extract source interface
 bool SessionManager::extractUeIpv4(
@@ -89,13 +89,6 @@ uint64_t SessionManager::findUplinkTeid(
 }
 
 //---------------------------------------------------------------------------------------------------------------
-// void SessionManager::createSession(std::shared_ptr<SessionBpf> pSession) {
-//   SessionProgramManager::getInstance().create(pSession->getSeid());
-//   Logger::upf_app().info(
-//       "Session %d Has Been Created Successfully", pSession->getSeid());
-// }
-
-//---------------------------------------------------------------------------------------------------------------
 void SessionManager::createBPFSession(
     std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
     itti_n4_session_establishment_request* est_req,
@@ -106,47 +99,64 @@ void SessionManager::createBPFSession(
 
   sessions.push_back(pSession_establishment);
 
-  logger.debug("Session %d Received", seid);
+  logger.debug("Session %%lu Received", seid);
   logger.debug("Preparing the Datapath ...");
   logger.debug("Find the PDR with Highest Precedence");
-
-  auto& pdrs_uplink   = pSession_establishment->pdrs_uplink;
-  auto& pdrs_downlink = pSession_establishment->pdrs_downlink;
-
-  auto& qers_uplink   = pSession_establishment->qers_uplink;
-  auto& qers_downlink = pSession_establishment->qers_downlink;
 
   // Process PDRs to populate uplink and downlink vectors
   processPDRs(pSession_establishment);
 
-  // Throw error if both uplink and downlink vectors are empty
+  auto& pdrs_uplink   = pSession_establishment->pdrs_uplink;
+  auto& pdrs_downlink = pSession_establishment->pdrs_downlink;
+
+  // Check if no PDRs were found for either direction
   if (pdrs_uplink.empty() && pdrs_downlink.empty()) {
-    logger.error("No PDRs were found in session: %d", seid);
-    throw std::runtime_error("No PDRs were found in session");
+    logger.error("No PDRs were found in session: %lu", seid);
+    throw std::runtime_error("Session creation failed: No PDRs found.");
   }
 
-  // Sort uplink and downlink vectors
+  // Sort uplink and downlink PDRs by precedence
   sortPDRs(pdrs_uplink, pdrs_downlink);
 
   // Create BPF sessions for uplink and downlink directions
-  createSessionDirection(pSession_establishment, pdrs_uplink, "Uplink");
-  createSessionDirection(pSession_establishment, pdrs_downlink, "Downlink");
+  if (!pdrs_uplink.empty()) {
+    prepareEbpfSession(pSession_establishment, pdrs_uplink);
+  }
+
+  if (!pdrs_downlink.empty()) {
+    prepareEbpfSession(pSession_establishment, pdrs_downlink);
+  }
 
   // Store the session in the session map
   mSeidToSession[seid] = pSession_establishment;
+
+  logger.debug("Session %lu successfully created and stored.", seid);
 }
 
 //---------------------------------------------------------------------------------------------------------------
 void SessionManager::processPDRs(
     std::shared_ptr<pfcp::pfcp_session> pSession_establishment) {
-  auto& pdrs_uplink   = pSession_establishment->pdrs_uplink;
-  auto& pdrs_downlink = pSession_establishment->pdrs_downlink;
+  // PDR-specific containers
+  std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs_uplink, pdrs_downlink;
 
-  auto& qers_uplink   = pSession_establishment->qers_uplink;
-  auto& qers_downlink = pSession_establishment->qers_downlink;
+  // QoS-specific containers
+  std::vector<std::shared_ptr<pfcp::pfcp_qer>> qers_uplink, qers_downlink;
+  const bool is_qos_enabled = upf_cfg.enable_bpf_datapath && upf_cfg.enable_qos;
 
-  // Iterate over PDRs and categorize them into uplink and downlink vectors
+  // Helper function to find QER by ID
+  auto find_qer_by_id = [&](uint64_t qer_id) -> std::shared_ptr<pfcp::pfcp_qer> {
+    for (auto& qer : pSession_establishment->qers) {
+      if (qer->qer_id.second.qer_id == qer_id) {
+        return qer;
+      }
+    }
+    Logger::upf_n4().debug("QER not found for ID: " + std::to_string(qer_id));
+    return nullptr;
+  };
+
+  // Process each PDR
   for (auto& pdr : pSession_establishment->pdrs) {
+    // Extract PDI and Source Interface
     pfcp::pdi pdi;
     pfcp::source_interface_t sourceInterface;
     if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
@@ -155,45 +165,47 @@ void SessionManager::processPDRs(
           std::to_string(pdr->pdr_id.rule_id));
     }
 
-    uint64_t qer_id                     = pdr->qer_id.second.qer_id;
+    // Handle QoS if enabled
     std::shared_ptr<pfcp::pfcp_qer> qer = nullptr;
-
-    for (auto& q : pSession_establishment->qers) {
-      if (q->qer_id.second.qer_id == qer_id) {
-        qer = q;
-        break;
-      }
+    if (is_qos_enabled && pdr->qer_id.second.qer_id) {
+      qer = find_qer_by_id(pdr->qer_id.second.qer_id);
     }
 
-    if (!qer) {
-      Logger::upf_n4().debug(
-          "QER not found for PDR: " + std::to_string(pdr->pdr_id.rule_id));
-    }
-
+    // Categorize PDRs based on the source interface
     switch (sourceInterface.interface_value) {
-      case INTERFACE_VALUE_ACCESS: {
+      case INTERFACE_VALUE_ACCESS:
         pdrs_uplink.push_back(pdr);
-        if (qer) {
-          qers_uplink.push_back(qer);
-        }
+        if (is_qos_enabled && qer) qers_uplink.push_back(qer);
         break;
-      }
-      case INTERFACE_VALUE_CORE: {
+
+      case INTERFACE_VALUE_CORE:
         pdrs_downlink.push_back(pdr);
-        if (qer) {
-          qers_downlink.push_back(qer);
-        }
+        if (is_qos_enabled && qer) qers_downlink.push_back(qer);
         break;
-      }
+
       case INTERFACE_VALUE_SGI_LAN_N6_LAN:
       case INTERFACE_VALUE_CP_FUNCTION:
       case INTERFACE_VALUE_LI_FUNCTION:
-        // TODO: if needed, handle these cases
+        Logger::upf_n4().info(
+            "Unhandled source interface for PDR: " +
+            std::to_string(pdr->pdr_id.rule_id));
         break;
+
       default:
-        // Handle default case if needed
+        Logger::upf_n4().warn(
+            "Unknown source interface value: " +
+            std::to_string(sourceInterface.interface_value));
         break;
     }
+  }
+
+  pSession_establishment->pdrs_uplink   = pdrs_uplink;
+  pSession_establishment->pdrs_downlink = pdrs_downlink;
+
+  // Save QoS results back if enabled
+  if (is_qos_enabled) {
+    pSession_establishment->qers_uplink   = qers_uplink;
+    pSession_establishment->qers_downlink = qers_downlink;
   }
 }
 
@@ -207,53 +219,41 @@ void SessionManager::sortPDRs(
 }
 
 //---------------------------------------------------------------------------------------------------------------
-void SessionManager::createSessionDirection(
+void SessionManager::prepareEbpfSession(
     std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
-    std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs,
-    const std::string& direction) {
+    std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs) {
   auto& logger = Logger::upf_app();
-  // Create BPF sessions for the specified direction
-  if (!pdrs.empty()) {
-    auto pdrHighPrecedence = pdrs.front();
-    logger.debug(
-        "The PDR %d has the Highest Precedence", direction,
-        pdrHighPrecedence->pdr_id.rule_id);
-    if (direction == "Uplink") {
-      createBPFSessionUL(pSession_establishment, pdrHighPrecedence);
-    } else {
-      createBPFSessionDL(pSession_establishment, pdrHighPrecedence);
-    }
+
+  // Exit early if no PDRs exist
+  if (pdrs.empty()) {
+    logger.warn("NO PDR is available to create a PDU Session");
+    return;
   }
-}
 
-//---------------------------------------------------------------------------------------------------------------
-void SessionManager::createBPFSessionUL(
-    std::shared_ptr<pfcp::pfcp_session> pSession,
-    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl) {
-  auto& logger = Logger::upf_app();
+  // Retrieve the highest precedence PDR
+  auto pdrHighPrecedence = pdrs.front();
 
-  // Common PDR processing
-  processPDRDetails(
-      pSession, pdrHighPrecedenceUl, INTERFACE_VALUE_ACCESS, "Uplink");
-}
+  pfcp::pdi pdi;
+  pfcp::source_interface_t sourceInterface;
+  if (!(pdrHighPrecedence->get(pdi) && pdi.get(sourceInterface))){
+    throw std::runtime_error(
+          "Missing Mandatory IE (PDI or Source Interface) within PDR: " +
+          std::to_string(pdrHighPrecedence->pdr_id.rule_id));
+  }
 
-//---------------------------------------------------------------------------------------------------------------
-void SessionManager::createBPFSessionDL(
-    std::shared_ptr<pfcp::pfcp_session> pSession,
-    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl) {
-  auto& logger = Logger::upf_app();
+  logger.debug(
+        "The PDR %d has the Highest Precedence",
+        pdrHighPrecedence->pdr_id.rule_id);
 
-  // Common PDR processing
-  processPDRDetails(
-      pSession, pdrHighPrecedenceDl, INTERFACE_VALUE_CORE, "Downlink");
-}
+  processPDRDetails(pSession_establishment,pdrHighPrecedence);
+  }
 
 //---------------------------------------------------------------------------------------------------------------
 void SessionManager::processPDRDetails(
     std::shared_ptr<pfcp::pfcp_session> pSession,
-    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedence, int interfaceValue,
-    const std::string& direction) {
+    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedence) {
   auto& logger = Logger::upf_app();
+  const bool is_qos_enabled = upf_cfg.enable_bpf_datapath && upf_cfg.enable_qos;
 
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
@@ -261,62 +261,91 @@ void SessionManager::processPDRDetails(
   pfcp::source_interface_t sourceInterface;
   uint16_t pdr_id = pdrHighPrecedence->pdr_id.rule_id;
 
-  logger.debug(
-      "Create the %s Direction Datapath for Session %d", direction,
-      pSession->get_up_seid());
-
   if (!(pdrHighPrecedence->get(pdi) && pdi.get(sourceInterface))) {
     throw std::runtime_error(
         "Missing Mandatory IE (PDI or Source Interface) within PDR: " +
         std::to_string(pdr_id));
   }
 
-  if (!pdi.get(fteid)) {
-    if (fteid.ch) {
+  Direction direction;
+  int interfaceValue = sourceInterface.interface_value;
+
+  switch (interfaceValue) {
+    case INTERFACE_VALUE_CORE:{
+      direction = Direction::Uplink;
+      logger.debug("Create the eBPF Uplink Datapath for Session %lu", pSession->get_up_seid());
+      break;
     }
+
+    case INTERFACE_VALUE_ACCESS:{
+      direction = Direction::Downlink;
+      logger.debug("Create the eBPF Downlink Datapath for Session %lu", pSession->get_up_seid());
+      break;
+    }
+
+    default:{
+      Logger::upf_app().warn("Unknown interface value: %d", interfaceValue);
+      break;
+    }
+  }
+  
+ // Check for missing FTEID
+  if (!pdi.get(fteid)) {
     fteid.teid = -1;
-    logger.debug("FTEID is missing");
+
     logger.warn(
-        "TODO: This IE shall not be present if Traffic Endpoint ID is present");
-    logger.warn(
-        "TODO: The CP function shall set the CHOOSE (CH) bit to 1 if the");
-    logger.warn(
-        "UP function supports the allocation of F-TEID and the CP function");
-    logger.warn(
-        "requests the UP function to assign a local F-TEID to the PDR.");
+        "FTEID is missing for the current PDR. "
+        "Note: This IE should not be present if the Traffic Endpoint ID is present. "
+        "If the CHOOSE (CH) bit is set to 1, the UP function is expected to assign "
+        "a local F-TEID to the PDR.");
+
+    if (fteid.ch) {
+        logger.debug("CHOOSE (CH) bit is set in FTEID.");
+    } else {
+        logger.debug("CHOOSE (CH) bit is not set in FTEID.");
+    }
   }
 
+  // Check for missing UE IP Address
   if (!pdi.get(ueIpAddress)) {
     ueIpAddress.ipv4_address.s_addr = 0;
-    logger.debug("UE IP Address is missing");
+
     logger.warn(
-        "TODO: This IE shall not be present if Traffic Endpoint ID is present");
+        "UE IP Address is missing for the current PDR. "
+        "Note: This IE should not be present if the Traffic Endpoint ID is present.");
   }
 
-  logger.debug("PDI extracted from %s PDR %d", direction, pdr_id);
+  // Log PDI extraction details
+  logger.debug("PDI successfully extracted from PDR ID: %d.", pdr_id);
   logger.debug(
-      "Extract %s FAR from the highest precedence %s PDR", direction,
-      direction);
-
+      "Extracting FAR from the highest precedence PDR ID: %d.", pdr_id);
+    
   std::shared_ptr<pfcp::pfcp_far> pFar;
 
   if (!extractFar(pdrHighPrecedence, pSession, pFar)) {
+    logger.error(
+        "Failed to extract FAR IE from the highest precedence PDR with ID: %d.",
+        pdr_id);
+
     throw std::runtime_error(
-        "Failed to extract %s FAR for PDR " + direction + " " +
-        std::to_string(pdr_id));
+        "Error during FAR extraction: Unable to retrieve FAR IE for PDR ID: " +
+        std::to_string(pdr_id) + ".");
   }
 
   std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer;
 
-  if (upf_cfg.enable_qos) {
-    pQer = (direction == "Uplink") ? pSession->qers_uplink :
+  if (is_qos_enabled) {
+    pQer = (direction == Direction::Uplink) ? pSession->qers_uplink :
                                      pSession->qers_downlink;
-  }
-
-  logger.error(".............. TEID UPLINK %d ............", fteid.teid);
-  SessionProgramManager::getInstance().createPipeline(
+                                     
+    SessionProgramManager::getInstance().createPipeline(
       pSession->get_up_seid(), fteid.teid, interfaceValue,
-      ueIpAddress.ipv4_address.s_addr, pFar, pQer, false, 0);
+      ueIpAddress.ipv4_address.s_addr, pFar, pQer, false, 0); 
+  } else{
+    SessionProgramManager::getInstance().createPipeline(
+        pSession->get_up_seid(), fteid.teid, interfaceValue,
+        ueIpAddress.ipv4_address.s_addr, pFar, false, 0);
+  }  
 }
 
 //---------------------------------------------------------------------------------------------------------------
