@@ -65,7 +65,8 @@ static u8 next_hop_n6_mac_address[6] = {0};
 static bool cached_n3 = false;
 static bool cached_n6 = false;
 
-/*****************************************************************************************************************/
+
+/*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline bool update_dst_mac_address(
     u32 ip, struct ethhdr* p_eth) {
   struct s_arp_mapping* map_entry = {0};
@@ -81,7 +82,8 @@ static __always_inline bool update_dst_mac_address(
   return false;
 }
 
-/*****************************************************************************************************************/
+/*---------------------------------------------------------------------------------------------------------------*/
+
 static __always_inline u32
 create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   // bpf_debug("Create Outer Header GTPU_IPv4");
@@ -108,6 +110,8 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
     }
 
     upf_n3_ip = map_element->ipv4_address;
+    cached_n3 = true;
+  }
 
     struct s_arp_mapping* map_entry = {0};
     map_entry = bpf_map_lookup_elem(&m_arp_table, &upf_n3_ip);
@@ -120,9 +124,6 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
     memcpy(
         next_hop_n3_mac_address, map_entry->mac_address,
         sizeof(next_hop_n3_mac_address));
-
-    cached_n3 = true;
-  }
 
   /*
   |----------------------------------------------------------------|
@@ -255,202 +256,10 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   return XDP_PASS;
 }
 
-/*****************************************************************************************************************/
-
-// static __always_inline u32 tail_call_next_prog(
-//     struct xdp_md* ctx, teid_t_ teid, u8 source_value, u32 ipv4_address) {
-//   struct next_rule_prog_index_key map_key;
-
-//   __builtin_memset(&map_key, 0, sizeof(struct next_rule_prog_index_key));
-//   map_key.teid         = teid;
-//   map_key.source_value = source_value;
-//   map_key.ipv4_address = ipv4_address;
-
-//   pfcp_far_t_* p_far = bpf_map_lookup_elem(&m_next_rule_prog_index,
-//   &map_key);
-
-//   if (p_far) {
-//     bpf_debug(
-//         "Value of the eBPF tail call, index_prog = %d",
-//         p_far->far_id.far_id);
-//     // bpf_tail_call(ctx, &m_next_rule_prog, *index_prog);
-//   }
-
-//   bpf_debug("BPF tail call was not executed!");
-//   bpf_debug("Check your key and its endianess");
-
-//   return XDP_DROP;
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-
-// static __always_inline u32
-// handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
-//   u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, &ue_ip_address);
-
-//   if (teid_dl) {
-//     bpf_debug(
-//         "TEID downlink: 0x%x was found for UE IP: 0x%x", ue_ip_address,
-//         *teid_dl);
-//     tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
-//   }
-
-//   bpf_debug("BPF tail call was not executed!");
-
-//   return XDP_PASS;
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-/**
- * Uplink SECTION.
- */
-
-/**
- * @brief Handle UDP header.
- *
- * @param ctx The user accessible metadata for xdp packet hook.
- * @param udph The UDP header.
- * @return u32 The XDP action.
- */
-
-// static __always_inline u32
-// handle_uplink_traffic(struct xdp_md* ctx, struct udphdr* udph) {
-//   void* data     = (void*) (long) ctx->data;
-//   void* data_end = (void*) (long) ctx->data_end;
-
-//   struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
-
-//   // Check if the GTP header extends beyond the data end.
-//   if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
-//     bpf_debug("Invalid GTPU packet");
-//     return XDP_DROP;
-//   }
-
-//   struct ethhdr* ethh_new = data + GTP_ENCAPSULATED_SIZE;
-
-//   if ((void*) ethh_new + sizeof(*ethh_new) > data_end) {
-//     bpf_debug("Invalid Ethernet packet");
-//     return XDP_DROP;
-//   }
-
-//   struct iphdr* iph_inner = (void*) (ethh_new + 1);
-
-//   if ((void*) iph_inner + sizeof(*iph_inner) > data_end) {
-//     bpf_debug("Invalid Inner IP packet");
-//     return XDP_DROP;
-//   }
-
-//   u32 src_ip_in = iph_inner->saddr;
-
-//   if (gtpuh->message_type != GTPU_G_PDU) {
-//     bpf_debug(
-//         "Message type 0x%x is not GTPU GPDU(0x%x)\n", gtpuh->message_type,
-//         GTPU_G_PDU);
-//     return XDP_PASS;
-//   }
-
-//   // Jump to session context.
-//   tail_call_next_prog(ctx, gtpuh->teid, INTERFACE_VALUE_ACCESS, src_ip_in);
-
-//   return XDP_PASS;
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-
-/**
- * IP SECTION.
- */
-
-/**
- * @brief Handle IPv4 header.
- *
- * @param ctx The user accessible metadata for xdp packet hook.
- * @param iph The IP header.
- * @return u32 The XDP action.
- */
-
-// static __always_inline u32 ipv4_handle(struct xdp_md* ctx, struct iphdr* iph)
-// {
-//   void* data_end = (void*) (long) ctx->data_end;
-
-//   u32 ip_dest = iph->daddr;
-//   u8 protocol = iph->protocol;
-
-//   switch (protocol) {
-//     case IPPROTO_UDP: {
-//       struct udphdr* udph = (struct udphdr*) (iph + 1);
-
-//       // Check if the UDP header extends beyond the data end.
-//       if ((void*) (udph + 1) > data_end) {
-//         bpf_debug("Invalid UDP packet");
-//         return XDP_DROP;
-//       }
-
-//       if (bpf_htons(udph->dest) == GTP_UDP_PORT) {
-//         bpf_debug("This is a GTP traffic");
-//         return handle_uplink_traffic(ctx, udph);
-//       }
-//     }
-//     default: {
-//       return handle_downlink_traffic(ctx, ip_dest);
-//     }
-//   }
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-/**
- * ETHERNET SECTION.
- */
-
-/**
- *
- * @brief Parse Ethernet layer 2, extract network layer 3 offset and protocol
- * Call next protocol handler (e.g. ipv4).
- *
- * @param ctx
- * @param ethh
- * @return u32 The XDP action.
- */
-
-// static __always_inline u32 eth_handle(struct xdp_md* ctx, struct ethhdr*
-// ethh) {
-//   void* data_end = (void*) (long) ctx->data_end;
-//   u16 eth_type   = bpf_htons(ethh->h_proto);
-//   u64 offset     = sizeof(*ethh);
-
-//   bpf_debug("Debug: eth_type:0x%x", eth_type);
-//   switch (eth_type) {
-//     case ETH_P_IP: {
-//       struct iphdr* iph = (struct iphdr*) ((void*) ethh + offset);
-
-//       if ((void*) (iph + 1) > data_end) {
-//         bpf_debug("Invalid IPv4 Packet");
-//         return XDP_DROP;
-//       }
-
-//       return ipv4_handle(ctx, iph);
-//     }
-//     case ETH_P_8021AD: {
-//       bpf_debug("VLAN!! Changing the offset");
-//       struct vlan_hdr* vlan_hdr = (struct vlan_hdr*) (ethh + 1);
-//       offset += sizeof(*vlan_hdr);
-//       if ((void*) (vlan_hdr + 1) <= data_end)
-//         eth_type = bpf_htons(vlan_hdr->h_vlan_encapsulated_proto);
-//     }
-//     case ETH_P_IPV6:
-//     case ETH_P_ARP:
-//     case ETH_P_8021Q:
-//     default: {
-//       bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x", offset, eth_type);
-//       return XDP_PASS;
-//     }
-//   }
-// }
-
 /*---------------------------------------------------------------------------------------------------------------*/
 SEC("xdp")
 int xdp_handle_uplink(struct xdp_md* ctx) {
-  bpf_debug("================< PFCP PDR Sesction >================");
+  bpf_debug("================< PFCP PDR Sesction: Handle Uplink >================");
   void* data          = (void*) (long) ctx->data;
   void* data_end      = (void*) (long) ctx->data_end;
   struct ethhdr* ethh = (void*) (long) ctx->data;
@@ -596,9 +405,7 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
 /*---------------------------------------------------------------------------------------------------------------*/
 SEC("xdp")
 int xdp_handle_downlink(struct xdp_md* ctx) {
-  // bpf_debug("================< PFCP PDR Sesction >================");
-  u32 ifindex = 3;
-  return bpf_redirect(ifindex, 0);
+  bpf_debug("================< PFCP PDR Sesction: Handle Downlink >================");
   void* data_end      = (void*) (long) ctx->data_end;
   struct ethhdr* ethh = (void*) (long) ctx->data;
   u64 offset          = sizeof(*ethh);
