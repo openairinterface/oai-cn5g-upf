@@ -1,12 +1,30 @@
-# Configuration File
-### This file can be used by all NFs
-### Some fields are specific to an NF and will be ignored by other NFs
+################################################################################
+# Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The OpenAirInterface Software Alliance licenses this file to You under
+# the OAI Public License, Version 1.1  (the "License"); you may not use this file
+# except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.openairinterface.org/?page_id=698
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#-------------------------------------------------------------------------------
+# For more information about the OpenAirInterface (OAI) Software Alliance:
+#      contact@openairinterface.org
+################################################################################
 
-## NOTE ON YAML ANCHORS ##
-# We use YAML anchors to ease the configuration and to avoid duplicating parts of the configuration.
-# This is especially true for the SNSSAIs, as we have to define them for multiple NFs.
-# Please note that the use of anchors is not mandatory, and you can define the SNSSAI in each NF yourself.
-# You can read more about anchors here: https://yaml.org/spec/1.2.2/#anchors-and-aliases
+# OAI CN Configuration File
+### This file can be used by all OAI NFs
+### Some fields are specific to an NF and will be ignored by other NFs
+### The {{ env['ENV_NAME'] }} syntax lets you define these values in a docker-compose file
+### If you intend to mount this file or use a bare-metal deployment, please refer to README.md
+### The README.md also defines default values and allowed values for each configuration parameter
 
 ############# Common configuration
 
@@ -16,80 +34,80 @@ log_level:
 
 # If you enable registration, the other NFs will use the NRF discovery mechanism
 register_nf:
-  general: yes
+  general: no
 
-http_version: 1
+http_version: 2
 
 ############## SBI Interfaces
 ### Each NF takes its local SBI interfaces and remote interfaces from here, unless it gets them using NRF discovery mechanisms
 nfs:
   amf:
-    host: openxg-amf
+    host: oai-amf
     sbi:
-      port: 8001
+      port: 8080
       api_version: v1
       interface_name: eth0
     n2:
       interface_name: eth0
       port: 38412
   smf:
-    host: openxg-smf
+    host: oai-smf
     sbi:
-      port: 8002
+      port: 8080
       api_version: v1
       interface_name: eth0
     n4:
       interface_name: eth0
       port: 8805
   upf:
-    host: openxg-upf
+    host: oai-upf
     sbi:
-      port: 8003
+      port: 8080
       api_version: v1
-      interface_name: eno1
+      interface_name: enp7s0
     n3:
-      interface_name: enp1s0f0np0
+      interface_name: enp8s0
       port: 2152
     n4:
-      interface_name: eno1
+      interface_name: enp10s0
       port: 8805
     n6:
-      interface_name: enp1s0f1np1
+      interface_name: enp9s0
     n9:
-      interface_name: enp1s0f1np1
+      interface_name: demo-oai
       port: 2152
   udm:
-    host: openxg-udm
+    host: oai-udm
     sbi:
-      port: 8004
+      port: 8080
       api_version: v1
       interface_name: eth0
   udr:
-    host: openxg-udr
+    host: oai-udr
     sbi:
-      port: 8005
+      port: 8080
       api_version: v1
       interface_name: eth0
   ausf:
-    host: openxg-ausf
+    host: oai-ausf
     sbi:
-      port: 8006
+      port: 8080
       api_version: v1
       interface_name: eth0
   nrf:
-    host: openxg-nrf
+    host: oai-nrf
     sbi:
-      port: 8007
+      port: 8080
       api_version: v1
       interface_name: eth0
 
 #### Common for UDR and AMF
 database:
-  host: 172.11.200.10
-  user: root
+  host: mysql
+  user: test
   type: mysql
-  password: 123456
-  database_name: OpenXG-DB
+  password: test
+  database_name: oai_db
   generate_random: true
   connection_timeout: 300 # seconds
 
@@ -101,139 +119,126 @@ snssais:
   - &embb_slice2
     sst: 1
     sd: 000001 # in hex
+  - &custom_slice
+    sst: 222
+    sd: 00007B # in hex
 
 ############## NF-specific configuration
-nrf:
-  nrf_name: "OpenXG-NRF"
-udr:
-  udr_name: "OpenXG-UDR"
-udm:
-  udm_name: "OpenXG-UDM"
-ausf:
-  ausf_name: "OpenXG-AUSF"
 amf:
-  amf_name: "OpenXG-AMF"
+  pid_directory: "/var/run"
+  amf_name: "OAI-AMF"
   # This really depends on if we want to keep the "mini" version or not
   support_features_options:
-    enable_simple_scenario: no # "no" by default with the normal deployment scenarios with AMF/SMF/UPF/AUSF/UDM/UDR/NRF.
-                               # set it to "yes" to use with the minimalist deployment scenario (including only AMF/SMF/UPF) by using the internal AUSF/UDM implemented inside AMF.
-                               # There's no NRF in this scenario, SMF info is taken from "nfs" section.
+    enable_simple_scenario: no
     enable_nssf: no
     enable_smf_selection: yes
+    use_external_udm: no
   relative_capacity: 30
-  statistics_timer_interval: 20  # in seconds
+  statistics_timer_interval: 20  #in seconds
   emergency_support: false
   served_guami_list:
-    - mcc: 466
-      mnc: 92
-      amf_region_id: 01
-      amf_set_id: 001
-      amf_pointer: 01
-    - mcc: 001
-      mnc: 01
-      amf_region_id: 01
-      amf_set_id: 001
-      amf_pointer: 01
+    - mcc: 208
+      mnc: 95
+      amf_region_id: 128
+      amf_set_id: 1
+      amf_pointer: 1
+    - mcc: 460
+      mnc: 11
+      amf_region_id: 10
+      amf_set_id: 1
+      amf_pointer: 1
   plmn_support_list:
-    - mcc: 466
-      mnc: 92
-      tac: 0x0064
+    - mcc: 208
+      mnc: 95
+      tac: 0xa000
       nssai:
-        - *embb_slice1
-        - *embb_slice2
+        - sst: 1
+        - sst: 1
+          sd: 000001
+        - sst: 222
+          sd: 00007B
   supported_integrity_algorithms:
-    - "NIA2"
-    - "NIA1"
     - "NIA0"
+    - "NIA1"
+    - "NIA2"
   supported_encryption_algorithms:
     - "NEA0"
     - "NEA1"
     - "NEA2"
 
 smf:
-  smf_name: "OpenXG-SMF"
   ue_mtu: 1500
   support_features:
     use_local_subscription_info: yes # Use infos from local_subscription_info or from UDM
     use_local_pcc_rules: yes # Use infos from local_pcc_rules or from PCF
   # we resolve from NRF, this is just to configure usage_reporting
   upfs:
-    - host: openxg-upf
+    # - host: oai-spgwu
+    - host: oai-upf
       config:
         enable_usage_reporting: no
   ue_dns:
-    primary_ipv4: "114.114.114.114"
+    primary_ipv4: "172.21.3.100"
     primary_ipv6: "2001:4860:4860::8888"
     secondary_ipv4: "8.8.8.8"
     secondary_ipv6: "2001:4860:4860::8888"
   ims:
     pcscf_ipv4: "127.0.0.1"
     pcscf_ipv6: "fe80::7915:f408:1787:db8b"
-  # the DNN you configure here should be configured in "dnns"
-  # follows the SmfInfo datatype from 3GPP TS 29.510
-  smf_info:
-    sNssaiSmfInfoList:
-      - sNssai: *embb_slice1
-        dnnSmfInfoList:
-          - dnn: "ctnet"
-      - sNssai: *embb_slice1
-        dnnSmfInfoList:
-          - dnn: "internet"
-      - sNssai: *embb_slice1
-        dnnSmfInfoList:
-          - dnn: "default"
+ # the DNN you configure here should be configured in "dnns"
   local_subscription_infos:
-    - single_nssai: *embb_slice1
-      dnn: "ctnet"
+    - single_nssai:
+        sst: 1
+      dnn: "oai"
       qos_profile:
         5qi: 9
-        session_ambr_ul: "100Gbps"
-        session_ambr_dl: "100Gbps"
-    - single_nssai: *embb_slice1
-      dnn: "internet"
+        session_ambr_ul: "200Mbps"
+        session_ambr_dl: "400Mbps"
+    - single_nssai:
+        sst: 1
+        sd: 1
+      dnn: "oai.ipv4"
       qos_profile:
         5qi: 9
-        session_ambr_ul: "100Gbps"
-        session_ambr_dl: "100Gbps"
-    - single_nssai: *embb_slice1
+        session_ambr_ul: "100Mbps"
+        session_ambr_dl: "200Mbps"
+    - single_nssai:
+        sst: 222
+        sd: 123
       dnn: "default"
       qos_profile:
         5qi: 9
-        session_ambr_ul: "100Gbps"
-        session_ambr_dl: "100Gbps"
+        session_ambr_ul: "50Mbps"
+        session_ambr_dl: "100Mbps"
 
 upf:
-  upf_name: "OpenXG-UPF"
   support_features:
-    enable_bpf_datapath: yes  # If "yes": BPF is used as datapath else simpleswitch is used, DEFAULT= no
-    enable_qos: no            # Only supported for BPF datapath. If "yes" we use qdisc to manage the QoS
-    enable_snat: no           # If "no": Source natting is done for UE, DEFAULT= no
-  remote_n6_gw: remote_n6
+    enable_bpf_datapath: yes   # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
+    enable_qos: no  # Only supported for BPF datapath. If "on" we use qdiscs to manage the QoS
+    qdisc_scheduler: "htb" # This value is used only in case QoS is enabled
+    enable_snat: no           # If "on": Source natting is done for UE, DEFAULT= off
+  remote_n6_gw: oai-ext-dn
+
   smfs:
     - host: oai-smf            # To be used for PFCP association in case of no-NRF
   upf_info:
     sNssaiUpfInfoList:
       - sNssai: *embb_slice1
         dnnUpfInfoList:
-          - dnn: "ctnet"
-      - sNssai: *embb_slice1
-        dnnUpfInfoList:
-          - dnn: "internet"
-      - sNssai: *embb_slice1
-        dnnUpfInfoList:
-          - dnn: "default"
+          - dnn: "oai"
+
 
 ## DNN configuration
 dnns:
-  - dnn: "ctnet"
-    pdu_session_type: "IPV4V6"
-    ipv4_subnet: "12.1.1.0/24"
-  - dnn: "internet"
+  - dnn: "oai"
     pdu_session_type: "IPV4"
-    ipv4_subnet: "12.1.1.0/24"
+    ipv4_subnet: "12.1.0.0/24"
+  - dnn: "oai.ipv4"
+    pdu_session_type: "IPV4"
+    ipv4_subnet: "12.1.2.0/24"
   - dnn: "default"
     pdu_session_type: "IPV4"
-    ipv4_subnet: "12.1.1.0/26"
+    ipv4_subnet: "12.1.3.0/24"
   - dnn: "ims"
     pdu_session_type: "IPV4V6"
     ipv4_subnet: "14.1.1.2/24"
