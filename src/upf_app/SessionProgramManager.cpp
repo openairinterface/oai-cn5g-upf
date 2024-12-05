@@ -375,6 +375,26 @@ void SessionProgramManager::createPipeline(
 
   initializeNextRuleProgIndexKey(key, teid1, ueIpAddress, sourceInterface);
 
+  bool enforcing_qos = !pQer.empty();
+  const bool is_qos_enabled = upf_cfg.enable_bpf_datapath && upf_cfg.enable_qos;
+
+  /*======================================================================================*/
+  if (is_qos_enabled && enforcing_qos) {
+    Logger::upf_app().debug("Instantiate a new QERProgram ");
+    std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
+    pQERProgram->setup(seid, pQer);
+  }
+
+  /*
+  * TODO: We don't still using pFARProgram, 
+  *       so check how to do it properly. 
+  */
+  Logger::upf_app().debug("Instantiate a new FARProgram");
+  std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
+
+  pFARProgram->setup(far_id, enforcing_qos);
+  /*======================================================================================*/
+
   auto pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
@@ -417,9 +437,7 @@ void SessionProgramManager::removePipeline(uint64_t seid) {
   
   if (it == mSessionProgramsMap.end()) {
     Logger::upf_app().error(
-        "Session %d Does Not Exist. It Cannot be Removed", seid);
-    // throw std::runtime_error("Session does Not Exist. It Cannot be
-    // Removed");
+        "Session %lu Does Not Exist", seid);
   }
 
   Logger::upf_app().debug(

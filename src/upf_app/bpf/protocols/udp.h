@@ -13,10 +13,10 @@
 // static u32 udp_handle(
 //     struct xdp_md* ctx, struct udphdr* udph, u32 dest_ip);
 
-static u32 udp_handle(
-    struct xdp_md* p_ctx, struct udphdr* udph, u32 src_ip, u32 dest_ip,
-    u8 dscp);
+// static u32 udp_handle(
+//     struct xdp_md* p_ctx, struct udphdr* udph, u32 src_ip, u32 dest_ip,
+//     u8 dscp);
 
-static u32 handle_uplink_traffic(struct xdp_md* p_ctx, struct udphdr* udph);
+// static u32 handle_uplink_traffic(struct xdp_md* p_ctx, struct udphdr* udph);
 
 #endif  // PROTOCOLS_UDP_H

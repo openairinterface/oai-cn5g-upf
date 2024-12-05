@@ -12,6 +12,13 @@
 
 using namespace oai::config;
 extern upf_config upf_cfg;
+
+
+class XDPSection {
+public:
+    static constexpr const char* Uplink = "xdp_handle_uplink";
+    static constexpr const char* Downlink = "xdp_handle_downlink";
+};
 /*---------------------------------------------------------------------------------------------------------------*/
 int is_little_endian2() {
   u32 value = 1;
@@ -91,7 +98,7 @@ void PFCP_Session_LookupProgram::setup() {
   mpEgressInterfaceMap->update(uplinkId, udpInterfaceIndex, BPF_ANY);
   mpEgressInterfaceMap->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
 
-  Logger::upf_app().debug("Adding Reference Points to m_upf_interface Map:");
+  Logger::upf_app().debug("Adding Reference Points to m_upf_interface Map");
   create_upf_interface_map_entry(N3_INTERFACE);
   create_upf_interface_map_entry(N6_INTERFACE);
   create_upf_interface_map_entry(N4_INTERFACE);
@@ -104,11 +111,11 @@ void PFCP_Session_LookupProgram::setup() {
 
   Logger::upf_app().debug(
       "Link Non-GTP interface to interface %s", mUDPInterface.c_str());
-  mpLifeCycle->link("xdp_handle_downlink", mUDPInterface.c_str());
+  mpLifeCycle->link(XDPSection::Downlink, mUDPInterface.c_str());
 
   Logger::upf_app().debug(
       "Link GTP interface to interface %s", mGTPInterface.c_str());
-  mpLifeCycle->link("xdp_handle_uplink", mGTPInterface.c_str());
+  mpLifeCycle->link(XDPSection::Uplink, mGTPInterface.c_str());
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

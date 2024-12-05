@@ -207,8 +207,12 @@ int main(int argc, char** argv) {
   fprintf(fp, "STARTED\n");
   fflush(fp);
   fclose(fp);
+  
+  QosConfigManager::getInstance().initialize(upf_cfg.enable_bpf_datapath, upf_cfg.enable_qos);
+  bool bpfDatapathEnabled = QosConfigManager::getInstance().isBpfDatapathEnabled();
 
-  if (upf_cfg.enable_bpf_datapath) {
+
+  if (bpfDatapathEnabled) {
     setup_bpf();
   }
   // once all udp servers initialized

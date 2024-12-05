@@ -337,15 +337,11 @@ void SessionManager::processPDRDetails(
   if (is_qos_enabled) {
     pQer = (direction == Direction::Uplink) ? pSession->qers_uplink :
                                      pSession->qers_downlink;
-                                     
-    SessionProgramManager::getInstance().createPipeline(
+  } 
+  
+  SessionProgramManager::getInstance().createPipeline(
       pSession->get_up_seid(), fteid.teid, interfaceValue,
-      ueIpAddress.ipv4_address.s_addr, pFar, pQer, false, 0); 
-  } else{
-    SessionProgramManager::getInstance().createPipeline(
-        pSession->get_up_seid(), fteid.teid, interfaceValue,
-        ueIpAddress.ipv4_address.s_addr, pFar, false, 0);
-  }  
+      ueIpAddress.ipv4_address.s_addr, pFar, pQer, false, 0);  
 }
 
 //---------------------------------------------------------------------------------------------------------------
