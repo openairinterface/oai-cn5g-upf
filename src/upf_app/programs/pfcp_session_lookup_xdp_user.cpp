@@ -7,7 +7,11 @@
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
 #include "interfaces.h"
+#include "upf_config.hpp"
 #include "logger.hpp"
+
+using namespace oai::config;
+extern upf_config upf_cfg;
 
 /*---------------------------------------------------------------------------------------------------------------*/
 int is_little_endian2() {
@@ -31,6 +35,44 @@ PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
 PFCP_Session_LookupProgram::~PFCP_Session_LookupProgram() {}
 
 /*---------------------------------------------------------------------------------------------------------------*/
+void PFCP_Session_LookupProgram::create_upf_interface_map_entry(e_reference_point s) {
+  struct s_interface iface;
+  __builtin_memset(&iface, 0, sizeof(s_interface));
+
+  switch (s) {
+    case N3_INTERFACE:
+      iface.ipv4_address = upf_cfg.n3.addr4.s_addr;
+      iface.port         = upf_cfg.n3.port;
+      iface.if_name      = (upf_cfg.n3.if_name).c_str();
+      getIfaceMap()->update(s, iface, BPF_ANY);
+      Logger::upf_app().info("Reference Point N3 Added to m_upf_interface Map");
+      break;
+    case N6_INTERFACE:
+      iface.ipv4_address = upf_cfg.n6.addr4.s_addr;
+      iface.port         = upf_cfg.n6.port;
+      iface.if_name      = (upf_cfg.n6.if_name).c_str();
+      getIfaceMap()->update(s, iface, BPF_ANY);
+      Logger::upf_app().info("Reference Point N6 Added to m_upf_interface Map");
+      break;
+    case N4_INTERFACE:
+      iface.ipv4_address = upf_cfg.n4.addr4.s_addr;
+      iface.port         = upf_cfg.n4.port;
+      iface.if_name      = (upf_cfg.n4.if_name).c_str();
+      getIfaceMap()->update(s, iface, BPF_ANY);
+      Logger::upf_app().info("Reference Point N4 Added to m_upf_interface Map");
+      break;
+    case N9_INTERFACE:
+      Logger::upf_app().error("Reference Point N9 Not Defined");
+      break;
+    case N19_INTERFACE:
+      Logger::upf_app().error("Reference Point N19 Not Defined");
+      break;
+    default:
+      Logger::upf_app().error("The Reference Point is Not Defined");
+  }
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_LookupProgram::setup() {
   spSkeleton = mpLifeCycle->open();
   initializeMaps();
@@ -42,6 +84,11 @@ void PFCP_Session_LookupProgram::setup() {
     Logger::upf_app().error("GTP or UDP interface not defined!");
     throw std::runtime_error("GTP or UDP interface not defined!");
   }
+
+  // ETH PDU DL uses map
+  create_upf_interface_map_entry(N3_INTERFACE);
+  create_upf_interface_map_entry(N6_INTERFACE);
+  create_upf_interface_map_entry(N4_INTERFACE);
 
   Logger::upf_app().debug(
       "Link UDP interface to interface %s", mUDPInterface.c_str());
@@ -118,6 +165,16 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSessionMappingMap()
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getArpTableMap() const {
+  return mpArpTableMap;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getIfaceMap() const {
+  return mpUPFIfaceMap;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_LookupProgram::initializeMaps() {
   // Store all maps available in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
@@ -137,6 +194,10 @@ void PFCP_Session_LookupProgram::initializeMaps() {
   // TODO [ETH-PDU] ETH PDU session info m_mac_pdu_session
   mpMacPduSessionMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_mac_pdu_session"));
+
+  // ETH PDU DL uses the maps below
+  mpUPFIfaceMap = std::make_shared<BPFMap>(mpMaps->getMap("m_upf_interfaces"));
+  mpArpTableMap = std::make_shared<BPFMap>(mpMaps->getMap("m_arp_table"));
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

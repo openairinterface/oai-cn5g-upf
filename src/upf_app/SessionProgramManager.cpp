@@ -224,8 +224,9 @@ void SessionProgramManager::storeFARInFARMap(
 /*---------------------------------------------------------------------------------------------------------------*/
 // Function to update ARP table with remoteN6 IP and MAC address
 
+template <typename T>
 void SessionProgramManager::updateARPTableForN6(
-    std::shared_ptr<FARProgram> pFARProgram, uint32_t dnIP, uint32_t upfn6IP) {
+    std::shared_ptr<T> pFARProgram, uint32_t dnIP, uint32_t upfn6IP) {
   try {
     // uint32_t remoteN6 = getRemoteIP(upfn6IP, dnIP);
     uint32_t ipnexremoteN6hop = (is_little_endian()) ?
@@ -247,9 +248,9 @@ void SessionProgramManager::updateARPTableForN6(
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // Function to update ARP table with remoteN3 IP and MAC address
-
+template <typename T>
 void SessionProgramManager::updateARPTableForN3(
-    std::shared_ptr<FARProgram> pFARProgram, uint32_t gNodeBIP,
+    std::shared_ptr<T> pFARProgram, uint32_t gNodeBIP,
     uint32_t upfn3IP, uint64_t seid) {
   try {
     // uint32_t remoteN3 = getRemoteIP(upfn3IP, gNodeBIP);
@@ -341,7 +342,7 @@ void SessionProgramManager::createPipeline(
   Logger::upf_app().debug("Instantiate a new FARProgram");
   std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
 
-  pFARProgram->setup(far_id, enforcing_qos);
+  pFARProgram->setup(far_id, enforcing_qos, 0);
 
   auto pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
@@ -407,9 +408,9 @@ void SessionProgramManager::createPipeline(
   Logger::upf_app().debug("ETH-PDU: Instantiate a new FARProgram");
   std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
 
-  pFARProgram->setup(far_id, enforcing_qos);
+  pFARProgram->setup(far_id, enforcing_qos, 1);
 
-  auto pPFCP_Session_LookupProgram =
+  std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
   storeFarProgramIndexInNextProgEthRuleIndexMap(
@@ -422,14 +423,28 @@ void SessionProgramManager::createPipeline(
       "TODO: Try to extract the updateARPTableForN6 for the if and else to "
       "run it only once");
 
+  uint32_t gNodeBIP = getGnodebIp(pFar);
+
   if (isModification) {
     // TODO [ETH-PDU] store session mapping for ethernet packet filter. Right now DL will use the learned MAC table
     // storeSessionMappingMap(pPFCP_Session_LookupProgram, ueIpAddress, teid1);
-    
+    std::thread arpUpdateThread1(
+        [this, pPFCP_Session_LookupProgram, seid, gNodeBIP, dnIP, upfn3IP, upfn6IP]() {
+          updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
+          updateARPTableForN3(pPFCP_Session_LookupProgram, gNodeBIP, upfn3IP, seid);
+        });
+    // Detach the thread since we don't need to join it
+    arpUpdateThread1.detach();
     // TODO [ETH-PDU] verify if we need to do anything
   } else {
     // TODO [ETH-PDU] verify if we need to do anything
     // saveSeidWithinFARProgram(seid, pFARProgram, key);
+    std::thread arpUpdateThread2(
+        [this, pPFCP_Session_LookupProgram, seid, gNodeBIP, dnIP, upfn3IP, upfn6IP]() {
+          updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
+          updateARPTableForN3(pPFCP_Session_LookupProgram, gNodeBIP, upfn3IP, seid);
+        });
+    arpUpdateThread2.detach();
   }
 }
 

@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <signal.h>  // signals
+#include <far_data.h>
 #include <far_xdp_kernel_skel.h>
 #include <wrappers/BPFMap.hpp>
 #include <BPFProgram.h>
@@ -48,7 +49,8 @@ class FARProgram : public BPFProgram {
   /**
    * @brief instantiate a FAR XDP program
    */
-  void setup(uint32_t far_id, uint32_t enforcing_qos);
+  void setup(uint32_t far_id, uint32_t enforcing_qos, uint32_t pdu_type);
+
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**

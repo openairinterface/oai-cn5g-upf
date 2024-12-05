@@ -414,12 +414,8 @@ void SessionManager::processPDRDetails(
   }
 
   // TODO [ETH-PDU] handle UE MAC address
-  if (!pdi.get(ueIpAddress)) {
-    ueIpAddress.ipv4_address.s_addr = 0;
-    logger.debug("UE IP Address is missing");
-    logger.warn(
-        "TODO: This IE shall not be present if Traffic Endpoint ID is present");
-  } else if (interfaceValue == INTERFACE_VALUE_ACCESS && pdi.get(ethernetPacketFilter)) { // UL only. For DL we will used the learned MAC
+  if (interfaceValue == INTERFACE_VALUE_ACCESS && pdi.get(ethernetPacketFilter)) { // UL only. For DL we will used the learned MAC
+    logger.debug("ETH-PDU: creating pipeline for ETH PDU session");
     pfcp::ethertype_t ethertype;
     if (!ethernetPacketFilter.get(ethertype)) {
       ethertype.ethertype = ETH_P_IP;
@@ -431,6 +427,15 @@ void SessionManager::processPDRDetails(
       ethertype.ethertype, pFar, pQer, false, 0);
       return;
   }
+
+  if (!pdi.get(ueIpAddress)) {
+    ueIpAddress.ipv4_address.s_addr = 0;
+    logger.debug("UE IP Address is missing");
+    logger.warn(
+        "TODO: This IE shall not be present if Traffic Endpoint ID is present");
+  }
+  
+  logger.info("Running IP PDU session");
 
   SessionProgramManager::getInstance().createPipeline(
       pSession->get_up_seid(), fteid.teid, interfaceValue,

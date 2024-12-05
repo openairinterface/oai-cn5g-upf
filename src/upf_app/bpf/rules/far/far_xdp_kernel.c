@@ -19,10 +19,13 @@
 #include <utils/logger.h>
 #include <utils/utils.h>
 #include <far_maps.h>
+#include <far_data.h>
 #include <interfaces.h>
 #include <pfcp_session_lookup_maps.h>
 #include <string.h>  //Needed for memcpy
 #include "bpf_endian.h"
+
+const volatile struct far_config config;
 
 /*****************************************************************************************************************/
 
@@ -247,30 +250,36 @@ int far_entry_point(struct xdp_md* ctx) {
     if (dest_interface == INTERFACE_VALUE_CORE) {
       // Redirect to data network.
       bpf_debug("GTP Header Removal ...");
+      int roomlen = GTP_ENCAPSULATED_SIZE;
+      if (config.pdu_type == 0) {
 
-      struct ethhdr* p_new_eth = data + GTP_ENCAPSULATED_SIZE;
+        struct ethhdr* p_new_eth = data + GTP_ENCAPSULATED_SIZE;
 
-      if ((void*) (p_new_eth + 1) > data_end) {
-        return XDP_DROP;
-      }
+        if ((void*) (p_new_eth + 1) > data_end) {
+          return XDP_DROP;
+        }
 
-      __builtin_memcpy(p_new_eth, ethh, sizeof(*ethh));
+        __builtin_memcpy(p_new_eth, ethh, sizeof(*ethh));
 
-      // Retrieve the N6 Interface IP address:
-      e_reference_point n6_key = N6_INTERFACE;
-      u32 n6_ip;
-      if (!retrieve_upf_iface_from_map(n6_key, &n6_ip)) {
-        bpf_debug("N6 interface is missing in UPF map, Drop the packet");
-        return XDP_DROP;
-      }
+        // Retrieve the N6 Interface IP address:
+        e_reference_point n6_key = N6_INTERFACE;
+        u32 n6_ip;
+        if (!retrieve_upf_iface_from_map(n6_key, &n6_ip)) {
+          bpf_debug("N6 interface is missing in UPF map, Drop the packet");
+          return XDP_DROP;
+        }
 
-      // Update destination mac address
-      if (!update_dst_mac_address(n6_ip, p_new_eth)) {
-        bpf_debug("N6's Next Hop MAC address not found! Drop the packet");
+        // Update destination mac address
+        if (!update_dst_mac_address(n6_ip, p_new_eth)) {
+          bpf_debug("N6's Next Hop MAC address not found! Drop the packet");
+        }
+      } else if (config.pdu_type == 1) { // ETH PDU session
+        bpf_debug("far_xdp: handling eth pdu session packet");
+        roomlen += sizeof(struct ethhdr);
       }
 
       // Adjust head to the right.
-      if (bpf_xdp_adjust_head(ctx, GTP_ENCAPSULATED_SIZE)) {
+      if (bpf_xdp_adjust_head(ctx, roomlen)) {
         return XDP_DROP;
       }
 

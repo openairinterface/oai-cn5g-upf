@@ -163,12 +163,14 @@ class SessionProgramManager {
       const next_rule_prog_index_key& key);
 
   /*---------------------------------------------------------------------------------------------------------------*/
+  template <typename T>
   void updateARPTableForN6(
-      std::shared_ptr<FARProgram> pFARProgram, uint32_t dnIP, uint32_t upfn6IP);
+      std::shared_ptr<T> pFARProgram, uint32_t dnIP, uint32_t upfn6IP);
 
   /*---------------------------------------------------------------------------------------------------------------*/
+  template <typename T>
   void updateARPTableForN3(
-      std::shared_ptr<FARProgram> pFARProgram, uint32_t gNodeBIP,
+      std::shared_ptr<T> pFARProgram, uint32_t gNodeBIP,
       uint32_t upfn3IP, uint64_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/

@@ -9,6 +9,7 @@
 #include <signal.h>  // signals
 #include <pfcp_session_lookup_xdp_kernel_skel.h>
 #include <wrappers/BPFMap.hpp>
+#include "interfaces.h"
 // #include "qfi_flow_mapping_table.h"
 
 class BPFMaps;
@@ -75,6 +76,14 @@ class PFCP_Session_LookupProgram {
    * @param key The key which will be remove in the program map.
    */
   void removeProgramMap(uint32_t key);
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Insert one UPF reference point interface into a map.
+   *
+   */
+
+  void create_upf_interface_map_entry(e_reference_point s);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -156,6 +165,22 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> getQosFlowMap() const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Get the Arp Table Map object.
+   *
+   * @return std::shared_ptr<BPFMap>  The arp table map.
+   */
+  std::shared_ptr<BPFMap> getArpTableMap() const;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Get the iface Map object.
+   *
+   * @return std::shared_ptr<BPFMap> The iface_name.
+   */
+  std::shared_ptr<BPFMap> getIfaceMap() const;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
 
  private:
   /**
@@ -229,6 +254,14 @@ class PFCP_Session_LookupProgram {
   // The UDP interface.
   std::string mUDPInterface;
   /*---------------------------------------------------------------------------------------------------------------*/
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  // The arp table map.
+  std::shared_ptr<BPFMap> mpArpTableMap;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  // The iface map.
+  std::shared_ptr<BPFMap> mpUPFIfaceMap;
 };
 
 #endif  // __PFCP_SESSION_LOOKUP_XDP_USER_H__
