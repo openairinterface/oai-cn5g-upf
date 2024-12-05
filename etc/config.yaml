@@ -213,10 +213,9 @@ smf:
 
 upf:
   support_features:
-    enable_bpf_datapath: yes   # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
-    enable_qos: no  # Only supported for BPF datapath. If "on" we use qdiscs to manage the QoS
-    qdisc_scheduler: "htb" # This value is used only in case QoS is enabled
-    enable_snat: no           # If "on": Source natting is done for UE, DEFAULT= off
+    enable_bpf_datapath: yes  # If "yes": BPF is used as datapath else simpleswitch is used, DEFAULT= no
+    enable_qos: no            # Only supported for BPF datapath. If "yes" we use qdiscs to manage the QoS
+    enable_snat: no           # If "on": Source natting is done for UE, DEFAULT= no
   remote_n6_gw: oai-ext-dn
 
   smfs:
@@ -226,13 +225,19 @@ upf:
       - sNssai: *embb_slice1
         dnnUpfInfoList:
           - dnn: "oai"
+      - sNssai: *embb_slice2
+        dnnUpfInfoList:
+          - dnn: "oai.ipv4"
+      - sNssai: *custom_slice
+        dnnUpfInfoList:
+          - dnn: "default"
 
 
 ## DNN configuration
 dnns:
   - dnn: "oai"
     pdu_session_type: "IPV4"
-    ipv4_subnet: "12.1.0.0/24"
+    ipv4_subnet: "12.1.1.0/24"
   - dnn: "oai.ipv4"
     pdu_session_type: "IPV4"
     ipv4_subnet: "12.1.2.0/24"
