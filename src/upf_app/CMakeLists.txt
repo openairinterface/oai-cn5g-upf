@@ -58,8 +58,6 @@ link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src)
 target_link_libraries(UPF_XDP
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.a
   ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.so
-  # PUBLIC upfutils
-  # PRIVATE spdlog
   PRIVATE elf
   PRIVATE z
 )
