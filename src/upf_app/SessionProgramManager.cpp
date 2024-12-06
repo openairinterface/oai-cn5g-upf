@@ -200,14 +200,14 @@ void SessionProgramManager::updateARPTableForN6(
     std::string remoteDN  = "192.168.24.160";
     uint32_t remoteN6IPv4 = inet_addr(remoteDN.c_str());
     // const char* remoteN6MAC = "0061BB000001";
-    uint8_t remoteN6MAC[6] = {0x00, 0x61, 0xbb, 0x00, 0x00, 0x01};
+    uint8_t remoteN6MAC[6] = {0x52, 0x54, 0x00, 0x71, 0xeb, 0x53};
 
-    Logger::upf_app().warn(
+   /*Logger::upf_app().warn(
         "updateARPTableForN6 is modified with hard values to test with "
         "Trex! I dont understand why the execution goes through the "
         "exception!"
         "Need to check and debug");
-
+*/
     struct s_arp_mapping map_table;
     memset(&map_table, 0, sizeof(struct s_arp_mapping));
     memcpy(map_table.mac_address, remoteN6MAC, 6);
@@ -253,14 +253,14 @@ void SessionProgramManager::updateARPTableForN3(
     std::string remoteGnB = "192.168.23.20";
     uint32_t remoteN3IPv4 = inet_addr(remoteGnB.c_str());
     // const char* remoteN3MAC = "0031BB000001";
-    uint8_t remoteN3MAC[6] = {0x00, 0x31, 0xbb, 0x00, 0x00, 0x01};
+    uint8_t remoteN3MAC[6] = {0x52, 0x54, 0x00, 0x8d, 0x18, 0x25};
 
-    Logger::upf_app().warn(
+    /*Logger::upf_app().warn(
         "updateARPTableForN3 is modified with hard values to test with "
         "Trex! I dont understand why the execution goes through the "
         "exception!"
         "Need to check and debug");
-
+*/
     struct s_arp_mapping map_table;
     memset(&map_table, 0, sizeof(struct s_arp_mapping));
     memcpy(map_table.mac_address, remoteN3MAC, 6);
