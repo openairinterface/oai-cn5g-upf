@@ -115,9 +115,6 @@ void my_app_signal_handler(int s) {
 
 //------------------------------------------------------------------------------
 void setup_bpf() {
-  // std::shared_ptr<RulesUtilities> mpRulesFactory;
-  // mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
-
   std::string sGTPInterface = N3_IF_NAME;
   std::string sUDPInterface = N6_IF_NAME;
   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
@@ -133,6 +130,8 @@ int main(int argc, char** argv) {
     std::cout << "Options::parse() failed" << std::endl;
     return 1;
   }
+
+  const bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
 
   // Logger
   // Config
@@ -208,7 +207,7 @@ int main(int argc, char** argv) {
   fflush(fp);
   fclose(fp);
 
-  if (upf_cfg.enable_bpf_datapath) {
+  if (isBpfAccelerationEnabled) {
     setup_bpf();
   }
   // once all udp servers initialized

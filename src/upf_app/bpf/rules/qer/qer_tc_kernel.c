@@ -226,7 +226,7 @@ sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
 
 SEC("tc/egress")
 int tc_filter_traffic(struct __sk_buff* skb) {
-  bpf_debug("==========< QER Rules >==========\n");
+  bpf_debug("==========< tc/egress: Filter Traffic >==========\n");
 
   // void *data      = (void *)(long)skb->data;
   // void *data_meta = (void *)(long)skb->data_meta;
@@ -265,6 +265,7 @@ int tc_filter_traffic(struct __sk_buff* skb) {
 
 SEC("tc/ingress")
 int tc_redirect_traffic(struct __sk_buff* skb) {
+  bpf_debug("==========< tc/ingress: Redirect Traffic >==========\n");
   int key = DOWNLINK, *ifindex;
 
   // return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);

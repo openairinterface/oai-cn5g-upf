@@ -196,30 +196,30 @@ void SessionProgramManager::storeSessionMappingMap(
 void SessionProgramManager::updateARPTableForN6(
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
     uint32_t dnIP, uint32_t upfn6IP) {
-      try {
-        std::string remoteDN  = "192.168.24.160";
-        uint32_t remoteN6IPv4 = inet_addr(remoteDN.c_str());
-        // const char* remoteN6MAC = "0061BB000001";
-        uint8_t remoteN6MAC[6] = {0x00, 0x61, 0xbb, 0x00, 0x00, 0x01};
+  try {
+    std::string remoteDN  = "192.168.24.160";
+    uint32_t remoteN6IPv4 = inet_addr(remoteDN.c_str());
+    // const char* remoteN6MAC = "0061BB000001";
+    uint8_t remoteN6MAC[6] = {0x00, 0x61, 0xbb, 0x00, 0x00, 0x01};
 
-        Logger::upf_app().warn(
-            "updateARPTableForN6 is modified with hard values to test with "
-            "Trex! I dont understand why the execution goes through the "
-            "exception!"
-            "Need to check and debug");
+    Logger::upf_app().warn(
+        "updateARPTableForN6 is modified with hard values to test with "
+        "Trex! I dont understand why the execution goes through the "
+        "exception!"
+        "Need to check and debug");
 
-        struct s_arp_mapping map_table;
-        memset(&map_table, 0, sizeof(struct s_arp_mapping));
-        memcpy(map_table.mac_address, remoteN6MAC, 6);
-        map_table.ipv4_address = remoteN6IPv4;
+    struct s_arp_mapping map_table;
+    memset(&map_table, 0, sizeof(struct s_arp_mapping));
+    memcpy(map_table.mac_address, remoteN6MAC, 6);
+    map_table.ipv4_address = remoteN6IPv4;
 
-        pPFCP_Session_LookupProgram->getArpTableMap()->update(
-            upfn6IP, map_table, BPF_ANY);
-      } catch (const std::exception& ex) {
-        Logger::upf_app().error(
-            "Error: The ARP table was not updated for N6 Next HOP");
-      }
-    }
+    pPFCP_Session_LookupProgram->getArpTableMap()->update(
+        upfn6IP, map_table, BPF_ANY);
+  } catch (const std::exception& ex) {
+    Logger::upf_app().error(
+        "Error: The ARP table was not updated for N6 Next HOP");
+  }
+}
 
 /*
 void SessionProgramManager::updateARPTableForN6(
@@ -272,8 +272,7 @@ void SessionProgramManager::updateARPTableForN3(
     for (auto it = pfcpPrograms->begin(); it != pfcpPrograms->end(); ++it) {
       // Access the members of the 'farprograms' struct
       uint64_t savedSeid = it->seid;
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram
-      =
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram =
           it->pPFCP_Session_LookupProgram;
 
       if (savedSeid == seid) {
@@ -311,7 +310,8 @@ void SessionProgramManager::updateARPTableForN3(
 //     for (auto it = pfcpPrograms->begin(); it != pfcpPrograms->end(); ++it) {
 //       // Access the members of the 'farprograms' struct
 //       uint64_t savedSeid = it->seid;
-//       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram =
+//       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram
+//       =
 //           it->pPFCP_Session_LookupProgram;
 
 //       if (savedSeid == seid) {
@@ -366,14 +366,26 @@ void SessionProgramManager::createPipeline(
     uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
     std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer, bool isModification,
     uint32_t teid2) {
-  uint32_t dnIP          = upf_cfg.remote_n6.s_addr;
-  uint32_t upfn3IP       = upf_cfg.n3.addr4.s_addr;
-  uint32_t upfn6IP       = upf_cfg.n6.addr4.s_addr;
-  uint32_t far_id        = pFar->far_id.far_id;
-  
+  uint32_t dnIP    = upf_cfg.remote_n6.s_addr;
+  uint32_t upfn3IP = upf_cfg.n3.addr4.s_addr;
+  uint32_t upfn6IP = upf_cfg.n6.addr4.s_addr;
+  uint32_t far_id  = pFar->far_id.far_id;
+
   next_rule_prog_index_key key;
 
   initializeNextRuleProgIndexKey(key, teid1, ueIpAddress, sourceInterface);
+
+  bool enforcing_qos                  = !pQer.empty();
+  const bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
+  const bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
+
+  /*======================================================================================*/
+  if (isQosEnabled && enforcing_qos) {
+    Logger::upf_app().debug("Instantiate a new QERProgram ");
+    std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
+    pQERProgram->setup(seid, pQer);
+  }
+  /*======================================================================================*/
 
   auto pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
@@ -414,12 +426,9 @@ void SessionProgramManager::createPipeline(
 void SessionProgramManager::removePipeline(uint64_t seid) {
   Logger::upf_app().debug("Remove FARProgram index from UPFProgram map");
   auto it = mSessionProgramsMap.find(seid);
-  
+
   if (it == mSessionProgramsMap.end()) {
-    Logger::upf_app().error(
-        "Session %d Does Not Exist. It Cannot be Removed", seid);
-    // throw std::runtime_error("Session does Not Exist. It Cannot be
-    // Removed");
+    Logger::upf_app().error("Session with SEID: %lu Does Not Exist", seid);
   }
 
   Logger::upf_app().debug(

@@ -12,6 +12,14 @@
 
 using namespace oai::config;
 extern upf_config upf_cfg;
+
+class XDPSection {
+ public:
+  static constexpr const char* Uplink   = "xdp_handle_uplink";
+  static constexpr const char* Downlink = "xdp_handle_downlink";
+  static constexpr const char* Shaping  = "xdp_handle_shaping";
+};
+
 /*---------------------------------------------------------------------------------------------------------------*/
 int is_little_endian2() {
   u32 value = 1;
@@ -73,7 +81,7 @@ void PFCP_Session_LookupProgram::create_upf_interface_map_entry(
 PFCP_Session_LookupProgram::~PFCP_Session_LookupProgram() {}
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void PFCP_Session_LookupProgram::setup() {
+void PFCP_Session_LookupProgram::setup(bool isQosEnabled) {
   spSkeleton = mpLifeCycle->open();
   initializeMaps();
   mpLifeCycle->load();
@@ -91,7 +99,7 @@ void PFCP_Session_LookupProgram::setup() {
   mpEgressInterfaceMap->update(uplinkId, udpInterfaceIndex, BPF_ANY);
   mpEgressInterfaceMap->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
 
-  Logger::upf_app().debug("Adding Reference Points to m_upf_interface Map:");
+  Logger::upf_app().debug("Adding Reference Points to m_upf_interface Map");
   create_upf_interface_map_entry(N3_INTERFACE);
   create_upf_interface_map_entry(N6_INTERFACE);
   create_upf_interface_map_entry(N4_INTERFACE);
@@ -103,12 +111,21 @@ void PFCP_Session_LookupProgram::setup() {
   }
 
   Logger::upf_app().debug(
-      "Link Non-GTP interface to interface %s", mUDPInterface.c_str());
-  mpLifeCycle->link("xdp_handle_downlink", mUDPInterface.c_str());
+      "Link GTP XDP Section to interface %s", mGTPInterface.c_str());
+  mpLifeCycle->link(XDPSection::Uplink, mGTPInterface.c_str());
 
   Logger::upf_app().debug(
-      "Link GTP interface to interface %s", mGTPInterface.c_str());
-  mpLifeCycle->link("xdp_handle_uplink", mGTPInterface.c_str());
+      "Link Non-GTP XDP Section to interface %s", mUDPInterface.c_str());
+  if (isQosEnabled) {
+    Logger::upf_app().debug(
+        "QoS enforcement is enabled in the configuration. A TC BPF section is "
+        "created ");
+    mpLifeCycle->link(XDPSection::Shaping, mUDPInterface.c_str());
+  } else {
+    Logger::upf_app().debug(
+        "QoS enforcement is disabled in the configuration.");
+    mpLifeCycle->link(XDPSection::Downlink, mUDPInterface.c_str());
+  }
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

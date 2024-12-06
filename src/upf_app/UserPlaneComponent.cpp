@@ -1,11 +1,14 @@
 #include "UserPlaneComponent.h"
 #include <SessionManager.h>
-//#include <pfcp_session_pdr_lookup_xdp_user.h>
 #include <SessionProgramManager.h>
 #include <SignalHandler.h>
 #include <pfcp_session_lookup_xdp_user.h>
 #include "logger.hpp"
 #include <helpers/GetNicInformation.hpp>
+
+#include "upf_config.hpp"
+using namespace oai::config;
+extern upf_config upf_cfg;
 
 //---------------------------------------------------------------------------------------------------------------
 UserPlaneComponent::UserPlaneComponent() {
@@ -82,9 +85,12 @@ void UserPlaneComponent::setMembers(
 //---------------------------------------------------------------------------------------------------------------
 void UserPlaneComponent::setup(
     const std::string& gtpInterface, const std::string& udpInterface) {
+  const bool isQosEnabled = upf_cfg.enable_qos;
+
   setMembers(gtpInterface, udpInterface);
   SignalHandler::getInstance().enable();
-  mpPFCP_Session_LookupProgram->setup();
+
+  mpPFCP_Session_LookupProgram->setup(isQosEnabled);
 
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();

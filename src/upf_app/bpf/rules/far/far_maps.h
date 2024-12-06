@@ -37,12 +37,12 @@ struct {
 } m_arp_table SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, MAX_FAR_PROGRAMS);
-  __type(key, u32);
-  __type(value, u32);
-} m_enforcing_qos SEC(".maps");
+// struct {
+//   __uint(type, BPF_MAP_TYPE_HASH);
+//   __uint(max_entries, MAX_FAR_PROGRAMS);
+//   __type(key, u32);
+//   __type(value, u32);
+// } m_enforcing_qos SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 

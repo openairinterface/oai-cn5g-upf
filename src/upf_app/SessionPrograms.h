@@ -7,8 +7,8 @@
 #include <next_prog_rule_key.h>
 
 /**
- * @brief This class represents the datapath path. It stores the program related
- * to a PFCP session. For each session, there might be a QERProgram. The
+ * @brief This class represents the Data-Path path. It stores the program
+ * related to a PFCP session. For each session, there might be a QERProgram. The
  * FARProgram is mandatory.
  *
  */

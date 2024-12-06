@@ -54,10 +54,6 @@
 #endif  // MAX_CEIL
 #endif  // DEFAULT_CEIL
 
-#ifndef DEFAULT_QFI
-#define DEFAULT_QFI 5
-#endif  // DEFAULT_QFI
-
 #ifndef BUILD_DIRECTORY
 #define BUILD_DIRECTORY                                                        \
   "build/upf/build/upf_app/bpf/CMakeFiles/qer_tc.dir/rules/qer"
@@ -86,16 +82,10 @@ void QERProgram::storeQosFlow(std::shared_ptr<pfcp::pfcp_qer> pQer) {
   struct s_fiveQosFlow fiveFlow;
   memset(&fiveFlow, 0, sizeof(struct s_fiveQosFlow));
 
-  fiveFlow.gate.dl_gate = pQer->gate_status.second.dl_gate;
-  fiveFlow.gate.ul_gate = pQer->gate_status.second.ul_gate;
-
-  fiveFlow.gbr.dl_gbr = pQer->gbr.second.dl_gbr;
-  fiveFlow.gbr.ul_gbr = pQer->gbr.second.ul_gbr;
-
-  fiveFlow.mbr.dl_mbr = pQer->mbr.second.dl_mbr;
-  fiveFlow.mbr.ul_mbr = pQer->mbr.second.ul_mbr;
-
-  fiveFlow.qfi = pQer->qfi.second.qfi;
+  fiveFlow.gate = pQer->gate_status.second.dl_gate;
+  fiveFlow.gbr  = pQer->gbr.second.dl_gbr;
+  fiveFlow.mbr  = pQer->mbr.second.dl_mbr;
+  fiveFlow.qfi  = pQer->qfi.second.qfi;
 
   qosFlowsQfis.push_back(fiveFlow);
 
@@ -118,6 +108,23 @@ bool QERProgram::no_htb_root_qdisc(std::string interface) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<pfcp::pfcp_qer>
+QERProgram::retrive_default_qer_with_default_qfi(
+    std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer) {
+  for (const auto& qer : pQer) {
+    if (!qer->gbr.first && !qer->mbr.first) {
+      Logger::upf_app().debug(
+          "Default QoS Flow: (QER ID, QFI): (%d, %d)",
+          qer->qer_id.second.qer_id, qer->qfi.second.qfi);
+      return qer;
+    }
+  }
+
+  // Return nullptr if no such QER is found
+  return nullptr;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 void QERProgram::setup(
     uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer) {
   spSkeleton = mpLifeCycle->open();
@@ -125,7 +132,7 @@ void QERProgram::setup(
   mpLifeCycle->load();
   mpLifeCycle->attach();
 
-  struct qer_tc_kernel_c* obj = NULL;
+  std::shared_ptr<pfcp::pfcp_qer> default_qer = nullptr;
 
   std::string cmd = {};
   int rc          = 0;
@@ -133,97 +140,106 @@ void QERProgram::setup(
 
   uint32_t udpInterfaceIndex = if_nametoindex(UDP_INTERFACE.c_str());
   uint32_t gtpInterfaceIndex = if_nametoindex(GTP_INTERFACE.c_str());
-  uint32_t uplinkId          = static_cast<uint32_t>(FlowDirection::UPLINK);
-  uint32_t downlinkId        = static_cast<uint32_t>(FlowDirection::DOWNLINK);
+
+  if (udpInterfaceIndex == 0 || gtpInterfaceIndex == 0) {
+    Logger::upf_app().error("Failed to retrieve interface indices");
+    throw std::runtime_error("Invalid network interface index");
+  }
+
+  uint32_t uplinkId   = static_cast<uint32_t>(FlowDirection::UPLINK);
+  uint32_t downlinkId = static_cast<uint32_t>(FlowDirection::DOWNLINK);
+
   mpEgressIfindexMap->update(uplinkId, udpInterfaceIndex, BPF_ANY);
   mpEgressIfindexMap->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
 
-  if (no_htb_root_qdisc(GTP_INTERFACE)) {
-    Logger::upf_app().info(
-        "Creating Root qdisc on interface %s", GTP_INTERFACE.c_str());
+  if (!pQer.empty()) {
+    default_qer = retrive_default_qer_with_default_qfi(pQer);
+
+    if (!default_qer) {
+      Logger::upf_app().error(
+          "QER with default QFI not found! select the first element as "
+          "default");
+      default_qer = pQer.front();
+    }
+
+    // Configure Root Qdisc if not already present
+    if (no_htb_root_qdisc(GTP_INTERFACE)) {
+      Logger::upf_app().info(
+          "Create Root qdisc on interface %s", GTP_INTERFACE.c_str());
+      cmd = fmt::format(
+          "tc qdisc add dev {} root handle 1:0 htb default {}", GTP_INTERFACE,
+          static_cast<uint8_t>(default_qer->qfi.second.qfi));
+      // rc = system((const char*) cmd.c_str());
+      if (system(cmd.c_str()) != 0) {
+        Logger::upf_app().error("Failed to create root Qdisc");
+      }
+    }
+
+    // Create PDU Session Class
+    Logger::upf_app().info("Create PDU Session Class 1:%d", seid);
     cmd = fmt::format(
-        "tc qdisc add dev {} root handle 1:0 htb default {}", GTP_INTERFACE,
-        DEFAULT_QFI);
-    rc = system((const char*) cmd.c_str());
-  }
+        "tc class add dev {} parent 1:0 classid 1:{} htb rate {}kbit",
+        GTP_INTERFACE, seid, MAX_RATE);
 
-  Logger::upf_app().info("Create PDU Session Class 1:%d", seid);
-  cmd = fmt::format(
-      "tc class add dev {} parent 1:0 classid 1:{} htb rate {}kbit",
-      GTP_INTERFACE, seid, MAX_RATE);
-  rc = system((const char*) cmd.c_str());
-
-  Logger::upf_app().debug("QDISC Root DL Rate (GBR) : %dkbps", MAX_RATE);
-  Logger::upf_app().debug("QDISC Root DL Ceil (MBR) : %dkbps", MAX_CEIL);
-
-  for (const auto& qer : pQer) {
-    if (qer == nullptr) {
-      continue;
+    if (system(cmd.c_str()) != 0) {
+      Logger::upf_app().error("Failed to create PDU Session class");
     }
 
-    uint8_t qfi     = qer->qfi.second.qfi;
-    uint32_t qer_id = qer->qer_id.second.qer_id;
+    Logger::upf_app().debug("QDISC Root DL Rate (GBR) : %dkbps", MAX_RATE);
+    Logger::upf_app().debug("QDISC Root DL Ceil (MBR) : %dkbps", MAX_CEIL);
 
-    Logger::upf_app().warn(
-        "Set dl_rate and dl_ceil to 1kbit, for QER %d, as the minimum required "
-        "values to \n"
-        "create a tc class within the Linux kernel. These values are only used "
-        "if \n"
-        " dl_rate and dl_ceil are null within the PFCP Establishment request. "
-        "Of course, the \n "
-        "class rate and ceil are updated from the PFCP Modification request",
-        qer_id);
-    uint64_t dl_rate = 1;
-    uint64_t dl_ceil = 1;
-    uint64_t ul_rate = 1;
-    uint64_t ul_ceil = 1;
-    uint8_t dl_gate  = 0;
-    uint8_t ul_gate  = 0;
+    // Process each QER
+    for (const auto& qer : pQer) {
+      if (qer == default_qer) {
+        continue;
+      }
 
-    if (qfi != DEFAULT_QFI) {
-      if (qer->gbr.second.dl_gbr != 0) dl_rate = qer->gbr.second.dl_gbr;
+      if ((qer->gbr.first) && (qer->mbr.first)) {
+        uint32_t qer_id  = qer->qer_id.second.qer_id;
+        uint8_t qfi      = qer->qfi.second.qfi;
+        uint64_t dl_rate = qer->gbr.second.dl_gbr ? qer->gbr.second.dl_gbr : 1;
+        uint64_t dl_ceil = qer->mbr.second.dl_mbr ? qer->mbr.second.dl_mbr : 1;
+        uint8_t dl_gate  = qer->gate_status.second.dl_gate;
 
-      if (qer->gbr.second.ul_gbr != 0) ul_rate = qer->gbr.second.ul_gbr;
+        Logger::upf_app().warn(
+            "Setting dl_rate and dl_ceil to minimum values (1 kbit) for QER %d "
+            "if GBR/MBR are null",
+            qer_id);
 
-      if (qer->mbr.second.dl_mbr != 0) dl_ceil = qer->mbr.second.dl_mbr;
+        // Update QoS flow map
+        struct s_fiveQosFlow fiveFlow = {};
+        fiveFlow.gate                 = dl_gate;
+        fiveFlow.gbr                  = dl_rate;
+        fiveFlow.mbr                  = dl_ceil;
 
-      if (qer->mbr.second.ul_mbr != 0) ul_ceil = qer->mbr.second.ul_mbr;
+        getQoSFlowMap()->update(qer_id, fiveFlow, BPF_ANY);
 
-      dl_gate = qer->gate_status.second.dl_gate;
-      ul_gate = qer->gate_status.second.ul_gate;
+        // Add tc class for QER
+        uint16_t minor = (ntohs(seid) * 256) + (qfi * 251 % 256);
+        cmd            = fmt::format(
+            "tc class add dev {} parent 1:{} classid {}:{} htb rate {}kbit "
+            "ceil "
+            "{}kbit",
+            GTP_INTERFACE, seid, seid, minor, dl_rate, dl_ceil);
+
+        if (system(cmd.c_str()) != 0) {
+          Logger::upf_app().error("Failed to add tc class for QER {}", qer_id);
+        }
+
+        Logger::upf_app().debug(
+            "    HTB Class ID (QER) ........... %d", qer_id);
+        Logger::upf_app().debug("         Class QFI:      %d", qfi);
+        Logger::upf_app().debug("         Class DL Rate:     %dkbps", dl_rate);
+        Logger::upf_app().debug("         Class DL Ceil:     %dkbps", dl_ceil);
+      }
     }
 
-    struct s_fiveQosFlow fiveFlow;
-    memset(&fiveFlow, 0, sizeof(struct s_fiveQosFlow));
+    Logger::upf_app().info("Attach Section tc_filter_traffic to gtp interface");
+    mpLifeCycle->tcAttachEgress("tc_filter_traffic", GTP_INTERFACE.c_str());
 
-    fiveFlow.gate.dl_gate = dl_gate;
-    fiveFlow.gate.ul_gate = ul_gate;
-    fiveFlow.gbr.dl_gbr   = dl_rate;
-    fiveFlow.gbr.ul_gbr   = ul_rate;
-    fiveFlow.mbr.dl_mbr   = dl_ceil;
-    fiveFlow.mbr.ul_mbr   = ul_ceil;
-
-    fiveFlow.qfi = qfi;
-    getQoSFlowMap()->update(qer_id, fiveFlow, BPF_ANY);
-
-    uint16_t minor = (ntohs(seid) * 256) + (qfi * 251 % 256);
-    cmd            = fmt::format(
-        "tc class add dev {} parent 1:{} classid {}:{} htb rate {}kbit ceil "
-        "{}kbit",
-        GTP_INTERFACE, seid, seid, minor, dl_rate, dl_ceil);
-    rc = system((const char*) cmd.c_str());
-
-    Logger::upf_app().debug("    HTB Class ID (QER) ........... %d", qer_id);
-    Logger::upf_app().debug("         Class QFI:      %d", qfi);
-    Logger::upf_app().debug("         Class DL Rate:     %dkbps", dl_rate);
-    Logger::upf_app().debug("         Class DL Ceil:     %dkbps", dl_ceil);
+    Logger::upf_app().info("Attach Sesction tc_redirect to udp interface");
+    mpLifeCycle->tcAttachIngress("tc_redirect_traffic", UDP_INTERFACE.c_str());
   }
-
-  Logger::upf_app().info("Attach Section tc_filter_traffic to gtp interface");
-  mpLifeCycle->tcAttachEgress("tc_filter_traffic", GTP_INTERFACE.c_str());
-
-  Logger::upf_app().info("Attach Sesction tc_redirect to udp interface");
-  mpLifeCycle->tcAttachIngress("tc_redirect_traffic", UDP_INTERFACE.c_str());
 }
 
 // change:

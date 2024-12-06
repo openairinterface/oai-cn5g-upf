@@ -42,7 +42,7 @@ class PFCP_Session_LookupProgram {
    * @brief Setup the BPF program.
    *
    */
-  void setup();
+  void setup(bool isQosEnabled);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**

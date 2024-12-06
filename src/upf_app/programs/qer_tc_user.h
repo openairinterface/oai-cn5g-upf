@@ -109,6 +109,10 @@ class QERProgram : public BPFProgram {
   //   int add_clsact_qdisc(int ifindex, enum bpf_tc_attach_point attach_point);
 
   bool no_htb_root_qdisc(std::string interface);
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  std::shared_ptr<pfcp::pfcp_qer> retrive_default_qer_with_default_qfi(
+      std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer);
   /*---------------------------------------------------------------------------------------------------------------*/
  private:
   /**
