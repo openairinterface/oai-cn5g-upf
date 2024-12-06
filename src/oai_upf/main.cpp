@@ -131,8 +131,6 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  const bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
-
   // Logger
   // Config
   std::string conf_file_name = Options::getlibconfigConfig();
@@ -206,6 +204,8 @@ int main(int argc, char** argv) {
   fprintf(fp, "STARTED\n");
   fflush(fp);
   fclose(fp);
+
+  const bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
 
   if (isBpfAccelerationEnabled) {
     setup_bpf();
