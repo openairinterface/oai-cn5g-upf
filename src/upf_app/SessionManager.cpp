@@ -99,7 +99,7 @@ void SessionManager::createBPFSession(
 
   sessions.push_back(pSession_establishment);
 
-  logger.debug("Session %%lu Received", seid);
+  logger.debug("Session %lu Received", seid);
   logger.debug("Preparing the Datapath ...");
   logger.debug("Find the PDR with Highest Precedence");
 
@@ -341,7 +341,7 @@ void SessionManager::processPDRDetails(
   }
 
   std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer;
-
+ 
   /*
   * TODO: implement the QoS Enforcement on the uplink side
 
@@ -359,6 +359,7 @@ void SessionManager::processPDRDetails(
                pSession->qers_downlink :
                std::vector<std::shared_ptr<pfcp::pfcp_qer>>{};
   }
+    
   SessionProgramManager::getInstance().createPipeline(
       pSession->get_up_seid(), fteid.teid, interfaceValue,
       ueIpAddress.ipv4_address.s_addr, pFar, pQer, false, 0);
@@ -550,6 +551,8 @@ void SessionManager::removeBPFSession(
     itti_n4_session_modification_request* mod_req,
     itti_n4_session_deletion_request* del_req) {
   uint64_t seid = pSession->get_up_seid();
+  Logger::upf_app().info(
+        "Session %lu will be deleted from Data-Path", seid);
 
   if (mSeidToSession.find(seid) == mSeidToSession.end()) {
     Logger::upf_app().error(
