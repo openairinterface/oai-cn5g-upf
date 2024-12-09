@@ -373,11 +373,11 @@ pfcp_ie* pfcp_ie::new_pfcp_ie_from_stream(std::istream& is) {
         //        return ie;
         //      }
         //      break;
-        //    case PFCP_IE_MEASUREMENT_METHOD: {
-        //        pfcp_measurement_method_ie *ie = new
-        //        pfcp_measurement_method_ie(tlv); ie->load_from(is); return ie;
-        //      }
-        //      break;
+     case PFCP_IE_MEASUREMENT_METHOD: {
+             pfcp_measurement_method_ie *ie = new
+             pfcp_measurement_method_ie(tlv); ie->load_from(is); return ie;
+           }
+           break;
       case PFCP_IE_USAGE_REPORT_TRIGGER: {
         pfcp_usage_report_trigger_ie* ie =
             new pfcp_usage_report_trigger_ie(tlv);
@@ -508,12 +508,12 @@ pfcp_ie* pfcp_ie::new_pfcp_ie_from_stream(std::istream& is) {
         ie->load_from(is);
         return ie;
       } break;
-        //    case PFCP_IE_CREATE_BAR: {
-        //        pfcp_create_bar_ie *ie = new pfcp_create_bar_ie(tlv);
-        //        ie->load_from(is);
-        //        return ie;
-        //      }
-        //      break;
+      case PFCP_IE_CREATE_BAR: {
+                pfcp_create_bar_ie *ie = new pfcp_create_bar_ie(tlv);
+                ie->load_from(is);
+                return ie;
+      }
+      break;
         //    case PFCP_IE_UPDATE_BAR_WITHIN_PFCP_SESSION_MODIFICATION_REQUEST:
         //    {
         //        pfcp_update_bar_within_session_modification_request_ie *ie =
@@ -929,6 +929,11 @@ pfcp_ie* pfcp_ie::new_pfcp_ie_from_stream(std::istream& is) {
         ie->load_from(is);
         return ie;
       } break;
+      case PFCP_IE_S_NSSAI: {
+        pfcp_nssai_ie* ie = new pfcp_nssai_ie(tlv);
+        ie->load_from(is);
+        return ie;
+      } break;
 
       default:
         Logger::pfcp().error(
@@ -1034,7 +1039,7 @@ pfcp_msg::pfcp_msg(const pfcp_association_setup_response& pfcp_ies)
   if (pfcp_ies.enterprise_specific.first) {
     std::shared_ptr<pfcp_enterprise_specific_ie> sie(
         new pfcp_enterprise_specific_ie(pfcp_ies.enterprise_specific.second));
-    add_ie(sie);
+    //add_ie(sie);
   }
 }
 //------------------------------------------------------------------------------

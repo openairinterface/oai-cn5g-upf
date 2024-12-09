@@ -1579,6 +1579,7 @@ class pfcp_volume_threshold_ie : public pfcp_ie {
       throw pfcp_tlv_bad_length_exception(
           tlv.type, tlv.get_length(), __FILE__, __LINE__);
     }
+    is.read(reinterpret_cast<char*>(&u1.b), sizeof(u1));
     if (u1.bf.tovol) {
       is.read(reinterpret_cast<char*>(&total_volume), sizeof(total_volume));
       total_volume = be64toh(total_volume);
@@ -1967,6 +1968,7 @@ class pfcp_reporting_triggers_ie : public pfcp_ie {
     uint8_t b;
   } u2;
 
+  uint8_t u3;
   //--------
   explicit pfcp_reporting_triggers_ie(const pfcp::reporting_triggers_t& b)
       : pfcp_ie(PFCP_IE_REPORTING_TRIGGERS) {
@@ -2023,12 +2025,14 @@ class pfcp_reporting_triggers_ie : public pfcp_ie {
   //--------
   void load_from(std::istream& is) {
     // tlv.load_from(is);
-    if (tlv.get_length() != 2) {
+    if (tlv.get_length() != 2 && tlv.get_length() != 3) {
       throw pfcp_tlv_bad_length_exception(
           tlv.type, tlv.get_length(), __FILE__, __LINE__);
     }
     is.read(reinterpret_cast<char*>(&u1.b), sizeof(u1.b));
     is.read(reinterpret_cast<char*>(&u2.b), sizeof(u2.b));
+    if (tlv.get_length() == 3)
+        is.read(reinterpret_cast<char*>(&u3), sizeof(u3));
   }
   //--------
   void to_core_type(pfcp_ies_container& s) {
@@ -2606,6 +2610,8 @@ class pfcp_apply_action_ie : public pfcp_ie {
     uint8_t b;
   } u1;
 
+  uint8_t u2;
+  
   //--------
   explicit pfcp_apply_action_ie(const pfcp::apply_action_t& b)
       : pfcp_ie(PFCP_IE_APPLY_ACTION) {
@@ -2640,11 +2646,13 @@ class pfcp_apply_action_ie : public pfcp_ie {
   //--------
   void load_from(std::istream& is) {
     // tlv.load_from(is);
-    if (tlv.get_length() != 1) {
+    if (tlv.get_length() != 1 && tlv.get_length() != 2) {
       throw pfcp_tlv_bad_length_exception(
           tlv.type, tlv.get_length(), __FILE__, __LINE__);
     }
     is.read(reinterpret_cast<char*>(&u1.b), sizeof(u1.b));
+    if (tlv.get_length() ==2)
+      is.read(reinterpret_cast<char*>(&u2), sizeof(u2));
   }
   //--------
   void to_core_type(pfcp_ies_container& s) {
@@ -5069,51 +5077,8 @@ class pfcp_outer_header_creation_ie : public pfcp_ie {
     s.set(outer_header_creation);
   }
 };
-////-------------------------------------
-//// IE CREATE_BAR
-// class pfcp_create_bar_ie : public pfcp_ie {
-// public:
-//  uint8_t todo;
-//
-//  //--------
-//  pfcp_create_bar_ie(const pfcp::create_bar& b) : pfcp_ie(PFCP_IE_CREATE_BAR){
-//    todo = 0;
-//    tlv.set_length(1);
-//  }
-//  //--------
-//  pfcp_create_bar_ie() : pfcp_ie(PFCP_IE_CREATE_BAR){
-//    todo = 0;
-//    tlv.set_length(1);
-//  }
-//  //--------
-//  pfcp_create_bar_ie(const pfcp_tlv& t) : pfcp_ie(t) {
-//    todo = 0;
-//  };
-//  //--------
-//  void to_core_type(pfcp::create_bar& b) {
-//    b.todo = todo;
-//  }
-//  //--------
-//  void dump_to(std::ostream& os) {
-//    tlv.dump_to(os);
-//    os.write(reinterpret_cast<const char*>(&todo), sizeof(todo));
-//  }
-//  //--------
-//  void load_from(std::istream& is) {
-//    //tlv.load_from(is);
-//    if (tlv.get_length() != 1) {
-//      throw pfcp_tlv_bad_length_exception(tlv.type, tlv.get_length(),
-//      __FILE__, __LINE__);
-//    }
-//    is.read(reinterpret_cast<char*>(&todo), sizeof(todo));
-//  }
-//  //--------
-//  void to_core_type(pfcp_ies_container& s) {
-//      pfcp::create_bar create_bar = {};
-//      to_core_type(create_bar);
-//      s.set(create_bar);
-//  }
-//};
+
+
 ////-------------------------------------
 //// IE UPDATE_BAR_WITHIN_SESSION_MODIFICATION_REQUEST
 // class pfcp_update_bar_within_session_modification_request_ie : public
@@ -5228,6 +5193,37 @@ class pfcp_bar_id_ie : public pfcp_ie {
     pfcp::bar_id_t v = {};
     to_core_type(v);
     s.set(v);
+  }
+};
+
+  ////-------------------------------------
+//// IE CREATE_BAR
+  class pfcp_create_bar_ie : public pfcp_grouped_ie {
+ public:
+  //--------
+  explicit pfcp_create_bar_ie(const pfcp::create_bar& b)
+    : pfcp_grouped_ie(PFCP_IE_CREATE_BAR) {
+    tlv.set_length(0);
+    if (b.bar_id.first) {
+      std::shared_ptr<pfcp_bar_id_ie> sie(new pfcp_bar_id_ie(b.bar_id.second));
+      add_ie(sie);
+    }
+  }
+  //--------
+  pfcp_create_bar_ie() : pfcp_grouped_ie(PFCP_IE_CREATE_BAR) {}
+  //--------
+  explicit pfcp_create_bar_ie(const pfcp_tlv& t) : pfcp_grouped_ie(t) {}
+  //--------
+  void to_core_type(pfcp::create_bar& c) {
+    for (auto sie : ies) {
+      sie.get()->to_core_type(c);
+    }
+  }
+  //--------
+  void to_core_type(pfcp_ies_container& s) {
+    pfcp::create_bar i = {};
+    to_core_type(i);
+    s.set(i);
   }
 };
 //-------------------------------------
@@ -5695,7 +5691,7 @@ class pfcp_packet_rate_ie : public pfcp_ie {
 class pfcp_outer_header_removal_ie : public pfcp_ie {
  public:
   uint8_t outer_header_removal_description;
-
+  uint8_t pdu_session_container_to_be_deleted;
   //--------
   explicit pfcp_outer_header_removal_ie(const pfcp::outer_header_removal_t& b)
       : pfcp_ie(PFCP_IE_OUTER_HEADER_REMOVAL) {
@@ -5710,6 +5706,7 @@ class pfcp_outer_header_removal_ie : public pfcp_ie {
   //--------
   explicit pfcp_outer_header_removal_ie(const pfcp_tlv& t) : pfcp_ie(t) {
     outer_header_removal_description = 0;
+    pdu_session_container_to_be_deleted=0;
   };
   //--------
   void to_core_type(pfcp::outer_header_removal_t& b) {
@@ -5727,12 +5724,16 @@ class pfcp_outer_header_removal_ie : public pfcp_ie {
   void load_from(std::istream& is) {
     // tlv.load_from(is);
     if (tlv.get_length() != sizeof(outer_header_removal_description)) {
-      throw pfcp_tlv_bad_length_exception(
-          tlv.type, tlv.get_length(), __FILE__, __LINE__);
+      //throw tlv.gpfcp_tlv_bad_length_exception(
+        //  tlv.type, tlv.get_length(), __FILE__, __LINE__);
     }
     is.read(
         reinterpret_cast<char*>(&outer_header_removal_description),
         sizeof(outer_header_removal_description));
+     if (tlv.get_length() == 2)
+       is.read(
+        reinterpret_cast<char*>(&pdu_session_container_to_be_deleted),
+        sizeof(pdu_session_container_to_be_deleted));
   }
   //--------
   void to_core_type(pfcp_ies_container& s) {
@@ -8396,10 +8397,10 @@ class pfcp_user_id_ie : public pfcp_ie {
   //--------
   void load_from(std::istream& is) {
     // tlv.load_from(is);
-    if (tlv.get_length() != 1) {
-      throw pfcp_tlv_bad_length_exception(
-          tlv.type, tlv.get_length(), __FILE__, __LINE__);
-    }
+    //if (tlv.get_length() != 1) {
+    //throw pfcp_tlv_bad_length_exception(
+    //   tlv.type, tlv.get_length(), __FILE__, __LINE__);
+    //}
     is.read(reinterpret_cast<char*>(&u1.b), sizeof(u1.b));
     if (u1.bf.imsif) {
       is.read(reinterpret_cast<char*>(&length_of_imsi), sizeof(length_of_imsi));
@@ -9134,6 +9135,47 @@ class pfcp_apn_dnn_ie : public pfcp_ie {
   }
 };
 
+  class pfcp_nssai_ie : public pfcp_ie {
+  public:
+    nssai_t nssai;
+    //--------
+    explicit pfcp_nssai_ie(const pfcp::nssai_t& b)
+      : pfcp_ie(PFCP_IE_S_NSSAI) {
+      nssai = b;
+      tlv.set_length(sizeof(nssai));
+    }
+    //--------
+    pfcp_nssai_ie() : pfcp_ie(PFCP_IE_S_NSSAI) {
+      nssai = {};
+      tlv.set_length(0);
+    }
+    //--------
+    explicit pfcp_nssai_ie(const pfcp_tlv& t) : pfcp_ie(t){};
+    //--------
+    void to_core_type(pfcp::nssai_t& b) { b = nssai; }
+    //--------
+    void dump_to(std::ostream& os) {
+      tlv.dump_to(os);
+      os << nssai.nssai;
+    }
+    //--------
+    void load_from(std::istream& is) {
+      // tlv.load_from(is);
+      uint16_t l = tlv.get_length();
+      char e[l];
+      is.read(e, l);
+      if(l>sizeof(nssai))
+	l=sizeof(nssai);
+      memcpy(&nssai,e,l);
+    }
+    //--------
+    void to_core_type(pfcp_ies_container& s) {
+      pfcp::nssai_t nssai = {};
+      //to_core_type(nssai.nssai);
+      //s.set(nssai.nssai);
+  }
+};
+
 // IE 3gpp_interface_type
 class pfcp_3gpp_interface_type_ie : public pfcp_ie {
  public:
@@ -9533,7 +9575,7 @@ class pfcp_create_urr_ie : public pfcp_grouped_ie {
   //--------
   void to_core_type(pfcp_ies_container& s) {
     pfcp::create_urr i = {};
-    to_core_type(i);
+    //to_core_type(i);
     s.set(i);
   }
 };

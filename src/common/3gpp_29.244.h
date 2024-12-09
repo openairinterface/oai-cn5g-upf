@@ -343,6 +343,7 @@ struct pfcp_ie_value_exception : public pfcp_ie_exception {
 #define PFCP_IE_UE_IP_ADDRESS_POOL_IDENTITY (177)
 #define PFCP_IE_ALTERNATIVE_SMF_IP_ADDRESS (178)
 #define PFCP_IE_SPARED (179)
+#define PFCP_IE_S_NSSAI (257)
 
 #define PFCP_MESSAGE_RESERVED (0)
 // PFCP_NODE_RELATED_MESSAGES
@@ -1870,6 +1871,10 @@ typedef struct paging_policy_indicator_s {
 typedef struct apn_dnn_s {
   std::string apn_dnn;
 } apn_dnn_t;
+
+  typedef struct nssai_s {
+    uint32_t nssai;
+  } nssai_t;
 
 //-------------------------------------
 // 8.2.118. 3GPP Interface Type
