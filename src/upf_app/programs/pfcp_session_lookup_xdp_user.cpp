@@ -85,6 +85,18 @@ void PFCP_Session_LookupProgram::setup() {
     throw std::runtime_error("GTP or UDP interface not defined!");
   }
 
+  Logger::upf_app().debug("Configure redirect interface");
+  auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
+  auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
+
+  uint32_t udpInterfaceIndex = if_nametoindex(udpInterface.c_str());
+  uint32_t gtpInterfaceIndex = if_nametoindex(gtpInterface.c_str());
+  uint32_t uplinkId          = static_cast<uint32_t>(FlowDirection::UPLINK);
+  uint32_t downlinkId        = static_cast<uint32_t>(FlowDirection::DOWNLINK);
+
+  mpEgressInterfaceMap->update(uplinkId, udpInterfaceIndex, BPF_ANY);
+  mpEgressInterfaceMap->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
+
   // ETH PDU DL uses map
   create_upf_interface_map_entry(N3_INTERFACE);
   create_upf_interface_map_entry(N6_INTERFACE);
@@ -175,6 +187,11 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getIfaceMap() const {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getEgressInterfaceMap() const {
+  return mpEgressInterfaceMap;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_LookupProgram::initializeMaps() {
   // Store all maps available in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
@@ -196,6 +213,8 @@ void PFCP_Session_LookupProgram::initializeMaps() {
       std::make_shared<BPFMap>(mpMaps->getMap("m_mac_pdu_session"));
 
   // ETH PDU DL uses the maps below
+  mpEgressInterfaceMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_redirect_interfaces"));
   mpUPFIfaceMap = std::make_shared<BPFMap>(mpMaps->getMap("m_upf_interfaces"));
   mpArpTableMap = std::make_shared<BPFMap>(mpMaps->getMap("m_arp_table"));
 }

@@ -10,9 +10,6 @@
   (sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct gtpuhdr) +     \
    sizeof(struct gtpu_extn_pdu_session_container))
 
-#define ETH_GTP_ENCAPSULATED_SIZE                                                  \
-  (sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct gtpuhdr) +     \
-   sizeof(struct gtpu_extn_pdu_session_container)) + 8
 
 #define GTP_UDP_PORT 2152u  //!< TS 29 281
 #define GTP_FLAGS 0x30      //!< Version: GTPv1, Protocol Type: GTP, Others: 0

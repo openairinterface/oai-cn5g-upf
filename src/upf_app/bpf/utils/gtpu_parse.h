@@ -73,12 +73,12 @@ static __always_inline bool update_dst_mac_address(
 
 /*****************************************************************************************************************/
 static __always_inline u32
-create_outer_header_gtpu_ipv4(struct xdp_md* ctx, struct mac_pdu_session_value* pdu_session) {
+create_outer_header_gtpu_ipv4_eth(struct xdp_md* ctx, struct mac_pdu_session_value* pdu_session) {
   // bpf_debug("Create Outer Header GTPU_IPv4");
   // bpf_debug("Original Packet: Data/UDP/IP/ETH");
 
   // Adjust space to the left.
-  if (bpf_xdp_adjust_head(ctx, (int32_t) -ETH_GTP_ENCAPSULATED_SIZE)) {
+  if (bpf_xdp_adjust_head(ctx, (int32_t) -(sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE))) {
     return XDP_DROP;
   }
 
@@ -105,7 +105,7 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, struct mac_pdu_session_value* 
     return XDP_DROP;
   }
 
-  struct ethhdr* ethh_orig = data + ETH_GTP_ENCAPSULATED_SIZE;
+  struct ethhdr* ethh_orig = data + (sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE);
 
   if ((void*) (ethh_orig + 1) > data_end) {
     bpf_debug("Invalid Pointer");
@@ -123,7 +123,7 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, struct mac_pdu_session_value* 
     return XDP_DROP;
   }
 
-  struct iphdr* p_inner_ip = (void*) iph + ETH_GTP_ENCAPSULATED_SIZE;
+  struct iphdr* p_inner_ip = (void*) iph + sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE;
   if ((void*) (p_inner_ip + 1) > data_end) {
     return XDP_DROP;
   }
@@ -132,7 +132,7 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, struct mac_pdu_session_value* 
   iph->ihl     = 5;  // No options
   iph->tos     = 0;
   iph->tot_len =
-      bpf_htons(bpf_ntohs(p_inner_ip->tot_len) + ETH_GTP_ENCAPSULATED_SIZE);
+      bpf_htons(bpf_ntohs(p_inner_ip->tot_len) + sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE);
   iph->id       = 0;       // No fragmentation
   iph->frag_off = 0x0040;  // Don't fragment; Fragment offset = 0
   iph->ttl      = 64;

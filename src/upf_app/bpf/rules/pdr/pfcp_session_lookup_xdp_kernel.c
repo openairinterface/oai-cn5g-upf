@@ -127,7 +127,7 @@ static __always_inline u32 handle_eth_downlink_traffic(
   struct mac_pdu_session_value* pdu_session = bpf_map_lookup_elem(&m_mac_pdu_session, eth->h_dest);
   if (pdu_session) {
     bpf_debug("Found the ETH PDU session");
-     create_outer_header_gtpu_ipv4(ctx, pdu_session);
+     create_outer_header_gtpu_ipv4_eth(ctx, pdu_session);
      return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
   }
   bpf_debug("Could not find the ETH PDU session");

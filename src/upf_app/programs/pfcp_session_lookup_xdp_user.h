@@ -181,6 +181,15 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> getIfaceMap() const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Get the Egress Interface Map object.
+   *
+   * @return std::shared_ptr<BPFMap> The egress interface map.
+   */
+  std::shared_ptr<BPFMap> getEgressInterfaceMap() const;
+  
+  /*---------------------------------------------------------------------------------------------------------------*/
+  
 
  private:
   /**
@@ -262,6 +271,10 @@ class PFCP_Session_LookupProgram {
   /*---------------------------------------------------------------------------------------------------------------*/
   // The iface map.
   std::shared_ptr<BPFMap> mpUPFIfaceMap;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  // The egress interface map.
+  std::shared_ptr<BPFMap> mpEgressInterfaceMap;
 };
 
 #endif  // __PFCP_SESSION_LOOKUP_XDP_USER_H__
