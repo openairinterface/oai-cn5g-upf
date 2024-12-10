@@ -33,8 +33,9 @@ namespace oai::config {
 
 //------------------------------------------------------------------------------
 upf_support_features::upf_support_features(
-    bool enable_bpf_datapath, bool enable_qos, bool enable_snat, bool enable_fr) {
-  m_config_name         = "Supported Features";
+    bool enable_bpf_datapath, bool enable_qos, bool enable_snat,
+    bool enable_fr) {
+  m_config_name = "Supported Features";
 
   m_enable_bpf_datapath = option_config_value(
       UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF_LABEL, enable_bpf_datapath);

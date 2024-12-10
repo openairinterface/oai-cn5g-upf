@@ -71,9 +71,8 @@ void FramedRouting::remove_entry(uint32_t ue_ip) {
   };
 }
 
-
 std::pair<uint32_t, uint32_t> FramedRouting::extractIPCidr(
-    const std::string& fr_subnet) const {
+    const std::string& fr_subnet) {
   const char subnet_delimeter = '/';
   std::string ipSubnet        = fr_subnet;
   uint32_t ip                 = 0;
@@ -98,7 +97,6 @@ FramedRoutingKey FramedRouting::createFramedRoutingKey(
   return FramedRoutingKey{networkAdress, subnet_adress};
 }
 
-// todo(phine.tech) replace with better method in local routing.
 RoutingInformation FramedRouting::createLocalRoutingInformation(
     const std::pair<uint32_t, uint32_t>& ipCidr) const {
   struct in_addr addr;
@@ -114,7 +112,6 @@ RoutingInformation FramedRouting::createLocalRoutingInformation(
   return fr::RoutingInformation{destination, netmask, device, gateway_address};
 }
 
-// todo(phine.tech) replace with better method in local routing.
 SourceNatInformation FramedRouting::createLocalSnatInformation(
     const std::pair<uint32_t, uint32_t>& ipCidr) const {
   struct in_addr addr;

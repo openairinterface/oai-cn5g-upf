@@ -6,6 +6,7 @@
 #include <pfcp_session_lookup_xdp_user.h>
 #include <UserPlaneComponent.h>
 #include <net/if.h>  // if_nametoindex
+#include <framed_routing/FramedRouting.hpp>
 #include <framed_routing_bpf.h>
 
 #include <observer/OnStateChangeSessionProgramObserver.h>
@@ -283,40 +284,45 @@ uint32_t SessionProgramManager::getGnodebIp(
   return gNBIpAddress.ipv4_address.s_addr;
 }
 
-void SessionProgramManager::addFramedRoutes(uint32_t ueIpAddress, std::vector<pfcp::framed_route_t> framedRoutes) {
+void SessionProgramManager::addFramedRoutes(
+    uint32_t ueIpAddress,
+    const std::vector<pfcp::framed_route_t>& framedRoutes) {
   auto pPFCP_Session_LookupProgram =
-          UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
-  Logger::upf_app().debug("Store framed routes to ue_ip mapping (bpf)");
+      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
   for (const auto& framedRoute : framedRoutes) {
+    Logger::upf_app().info(
+        "Add framed route to ue_ip mapping %s to UE IP 0x%x",
+        framedRoute.framed_route, ueIpAddress);
     std::stringstream ss(framedRoute.framed_route);
     std::string ipsubnetmask;
     while (std::getline(ss, ipsubnetmask, ' ')) {
-      const char subnet_delimeter = '/';
-      uint32_t ip = 0;
-      uint32_t cidr = 0;
-      const std::string ip_substring =
-              ipsubnetmask.substr(0, ipsubnetmask.find(subnet_delimeter));
-      ip = fr::FramedRouting::framedIPToUeIP(ip_substring);
-
-      std::reverse(ipsubnetmask.begin(), ipsubnetmask.end());
-      std::string subnet_substring =
-              ipsubnetmask.substr(0, ipsubnetmask.rfind(subnet_delimeter));
-      cidr = fr::FramedRouting::frameSubnetToUInt(subnet_substring);
-      Logger::upf_app().debug("Framed Route Subnet: %s -> IP %u, cidr %u", framedRoute.framed_route, ip, cidr);
-
-      auto key = framed_routing_key_for_ip_cidr(ip, cidr);
-      //auto routing_info = createLocalRoutingInformation(ipCidr);
-      //auto snat_info    = createLocalSnatInformation(ipCidr);
-      pPFCP_Session_LookupProgram->updateFramedRouteMappingMap(ueIpAddress, key);
-      Logger::upf_app().debug("Framed Routing map is updated!");
-      //localRouting->add_route(routing_info);
-      //localRouting->add_source_snat(snat_info);
+      std::pair<uint32_t, uint32_t> ipCidr =
+          fr::FramedRouting::extractIPCidr(ipsubnetmask);
+      auto key = framed_routing_key_for_ip_cidr(ipCidr.first, ipCidr.second);
+      pPFCP_Session_LookupProgram->updateFramedRouteMappingMap(
+          ueIpAddress, key);
     }
   }
-  // TODO check update and create
-  // TODO add teid framed_route mapping, to check in uplink direction if the ue_ip is in
-  // TODO remove routes
+}
+
+void SessionProgramManager::removeFramedRoutes(
+    const std::vector<pfcp::framed_route_t>& framedRoutes) {
+  auto pPFCP_Session_LookupProgram =
+      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+  for (const auto& framedRoute : framedRoutes) {
+    std::stringstream ss(framedRoute.framed_route);
+    std::string ipsubnetmask;
+    Logger::upf_app().info(
+        "Remove framed route to ue_ip mapping for %s",
+        framedRoute.framed_route);
+    while (std::getline(ss, ipsubnetmask, ' ')) {
+      std::pair<uint32_t, uint32_t> ipCidr =
+          fr::FramedRouting::extractIPCidr(ipsubnetmask);
+      auto key = framed_routing_key_for_ip_cidr(ipCidr.first, ipCidr.second);
+      pPFCP_Session_LookupProgram->removeFramedRoute(key);
+    }
+  }
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

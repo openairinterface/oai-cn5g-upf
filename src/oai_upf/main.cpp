@@ -26,6 +26,7 @@
 #include "upf_config.hpp"
 #include "upf_config_yaml.hpp"
 #include "sbi_helper.hpp"
+#include <pfcp_session_lookup_xdp_user.h>
 
 #include <boost/asio.hpp>
 #include <iostream>
@@ -128,6 +129,10 @@ void setup_bpf() {
 
   UserPlaneComponent::getInstance().setup(
       mpRulesFactory, sGTPInterface, sUDPInterface);
+
+  auto pPFCP_Session_LookupProgram =
+      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+  pPFCP_Session_LookupProgram->setFramedRouting(upf_cfg.enable_fr);
 }
 
 //------------------------------------------------------------------------------

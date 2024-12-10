@@ -55,6 +55,33 @@ static __always_inline u32 tail_call_next_prog(
     bpf_tail_call(ctx, &m_next_rule_prog, *index_prog);
   }
 
+  // Framed Routing
+  u8 key                     = 0;  // Key is 0 since we only have one flag
+  u8* framed_routing_enabled = bpf_map_lookup_elem(&framed_routing_flag, &key);
+  if (framed_routing_enabled && *framed_routing_enabled) {
+    // check if it is a framed route address, and if yes try again the lookup
+    // with the mapped address
+    uint32_t big_endian_ue_ip = __builtin_bswap32(ipv4_address);
+#pragma clang loop unroll(full)
+    for (uint32_t i = 32; i > 0; i--) {
+      struct FramedRoutingKeyBPF key =
+          framed_routing_key_for_ip_cidr(big_endian_ue_ip, i);
+      uint32_t fr_key = hash_framed_routing_key(&key);
+      uint32_t* fr_ue_ip =
+          bpf_map_lookup_elem(&m_framed_route_mapping, &fr_key);
+      if (fr_ue_ip) {
+        bpf_debug("Uplink: found ip  0x%x", fr_ue_ip);
+        map_key.ipv4_address = (u32) *fr_ue_ip;
+        index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
+        if (index_prog) {
+          bpf_debug(
+              "Value of the eBPF tail call, index_prog = %d", *index_prog);
+          bpf_tail_call(ctx, &m_next_rule_prog, *index_prog);
+        }
+      }
+    }
+  }
+
   bpf_debug("BPF tail call was not executed!");
   bpf_debug("Check your key and its endianess");
 
@@ -66,27 +93,34 @@ static __always_inline u32 tail_call_next_prog(
 static __always_inline u32
 handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
   u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, &ue_ip_address);
-  bpf_debug("Handle downlink traffic for UE IP: 0x%x, as u32: %u", ue_ip_address, ue_ip_address);
   if (teid_dl) {
     bpf_debug(
         "TEID downlink: 0x%x was found for UE IP: 0x%x", *teid_dl,
         ue_ip_address);
     tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
-  } else {
+  }
+
+  // Framed Routing
+  u8 key                     = 0;  // Key is 0 since we only have one flag
+  u8* framed_routing_enabled = bpf_map_lookup_elem(&framed_routing_flag, &key);
+  if (framed_routing_enabled && *framed_routing_enabled) {
+    // check if it is a framed route address, and if yes try again the lookup
+    // with the mapped address
     uint32_t big_endian_ue_ip = __builtin_bswap32(ue_ip_address);
-    bpf_debug("No TEID found, try to find FramedRoute entry for big endian address %u", big_endian_ue_ip);
-    #pragma clang loop unroll(full)
+#pragma clang loop unroll(full)
     for (uint32_t i = 32; i > 0; i--) {
-      struct FramedRoutingKeyBPF key = framed_routing_key_for_ip_cidr(big_endian_ue_ip, i);
+      struct FramedRoutingKeyBPF key =
+          framed_routing_key_for_ip_cidr(big_endian_ue_ip, i);
       uint32_t fr_key = hash_framed_routing_key(&key);
-      bpf_debug("Check framed route table with key %u (for cidr %u)", fr_key, i);
-      uint32_t* fr_ue_ip = bpf_map_lookup_elem(&m_framed_route_mapping, &fr_key);
-      if(fr_ue_ip) {
-        bpf_debug(
-                "Framed Route detected for IP: 0x%x. UE IP: 0x%x", fr_ue_ip, big_endian_ue_ip);
+      uint32_t* fr_ue_ip =
+          bpf_map_lookup_elem(&m_framed_route_mapping, &fr_key);
+      if (fr_ue_ip) {
+        bpf_debug("TEID downlink: found ip  0x%x", fr_ue_ip);
         u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, fr_ue_ip);
         if (teid_dl) {
-          bpf_debug("TEID downlink: 0x%x was found for Framed Route IP: 0x%x", *teid_dl, big_endian_ue_ip);
+          bpf_debug(
+              "TEID downlink: 0x%x was found for Framed Route IP: 0x%x",
+              *teid_dl, big_endian_ue_ip);
           tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, *fr_ue_ip);
         }
       }
@@ -171,9 +205,7 @@ static __always_inline u32 ipv4_handle(struct xdp_md* ctx, struct iphdr* iph) {
   void* data_end = (void*) (long) ctx->data_end;
 
   u32 ip_dest = iph->daddr;
-  bpf_debug("UE IP: 0x%x", ip_dest);
   u8 protocol = iph->protocol;
-  bpf_debug("Protocol: 0x%x", protocol);
 
   switch (protocol) {
     case IPPROTO_UDP: {
@@ -187,11 +219,11 @@ static __always_inline u32 ipv4_handle(struct xdp_md* ctx, struct iphdr* iph) {
 
       if (bpf_htons(udph->dest) == GTP_UDP_PORT) {
         bpf_debug("This is a GTP traffic");
-        return handle_uplink_traffic(ctx, udph);  // TODO: Integrate Framed Routing
+        return handle_uplink_traffic(ctx, udph);
       }
     }
     default: {
-      return handle_downlink_traffic(ctx, ip_dest);  // TODO: Integrate Framed Routing
+      return handle_downlink_traffic(ctx, ip_dest);
     }
   }
 }

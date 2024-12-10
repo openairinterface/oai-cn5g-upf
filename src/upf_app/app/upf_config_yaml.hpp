@@ -37,7 +37,7 @@ constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF = "enable_bpf_datapath";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF_LABEL =
     "Enable BPF Datapath";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT       = "enable_snat";
-constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR       = "enable_fr";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR         = "enable_fr";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT_LABEL = "Enable SNAT";
 
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS       = "enable_qos";
@@ -62,7 +62,8 @@ class upf_support_features : public config_type {
 
  public:
   explicit upf_support_features(
-      bool enable_bpf_datapath, bool enable_qos, bool enable_snat, bool enable_fr);
+      bool enable_bpf_datapath, bool enable_qos, bool enable_snat,
+      bool enable_fr);
 
   void from_yaml(const YAML::Node& node) override;
 

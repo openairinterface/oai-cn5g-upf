@@ -10,7 +10,6 @@
 #include <pfcp_session_lookup_xdp_kernel_skel.h>
 #include <wrappers/BPFMap.hpp>
 #include <framed_routing_bpf.h>
-// #include "qfi_flow_mapping_table.h"
 
 class BPFMaps;
 class BPFMap;
@@ -146,7 +145,9 @@ class PFCP_Session_LookupProgram {
 
   void updateFramedRouteMappingMap(uint32_t ue_ip, FramedRoutingKeyBPF key);
 
-  void removeFramedRoute(uint32_t key);
+  void removeFramedRoute(FramedRoutingKeyBPF key);
+
+  void setFramedRouting(bool enable);
 
  private:
   /**
@@ -217,6 +218,7 @@ class PFCP_Session_LookupProgram {
   /*---------------------------------------------------------------------------------------------------------------*/
   // Framed route ue_ip mapping map.
   std::shared_ptr<BPFMap> mpFramedRouteMappingMap;
+  std::shared_ptr<BPFMap> mpFramedRouteFlagMap;
 };
 
 #endif  // __PFCP_SESSION_LOOKUP_XDP_USER_H__

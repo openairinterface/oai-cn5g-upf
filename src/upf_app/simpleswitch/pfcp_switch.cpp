@@ -34,6 +34,7 @@
 #include "upf_config.hpp"
 #include "upf_pfcp_association.hpp"
 #include "simple_switch.hpp"
+#include "../bpf/rules/pdr/framed_routing_bpf.h"
 
 #include <algorithm>
 #include <fstream>  // std::ifstream
@@ -47,7 +48,6 @@
 #include <linux/if_packet.h>
 #include <linux/if_tun.h>
 #include <stdexcept>
-#include <net/ethernet.h>
 
 static std::shared_ptr<SessionManager> spSessionManager;
 
@@ -628,11 +628,8 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
         uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>
         entry(ue_ip, pdrs);
     ue_ipv4_hbo2pfcp_pdr.insert(entry);
-    if (!upf_cfg.enable_bpf_datapath && upf_cfg.enable_fr && pdr->pdi.second.framed_route.first) {
-      Logger::pfcp_switch().info("fr_ue_ip %4x ", ue_ip);
-      Logger::pfcp_switch().info(
-              "framed routing ip: " +
-          pdr->pdi.second.framed_route.second.at(0).framed_route);
+    if (!upf_cfg.enable_bpf_datapath && upf_cfg.enable_fr &&
+        pdr->pdi.second.framed_route.first) {
       for (const auto& item : pdr->pdi.second.framed_route.second) {
         Logger::pfcp_switch().debug("framed routing ip: %s", item.framed_route);
         fr->addFramedRoute(ue_ip, item);
@@ -658,8 +655,7 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
 //------------------------------------------------------------------------------
 void pfcp_switch::remove_pfcp_dl_pdrs_by_ue_ip(const uint32_t ue_ip) {
   ue_ipv4_hbo2pfcp_pdr.erase(ue_ip);
-  if (upf_cfg.enable_fr) {
-    std::cout << "remove fr entry" << std::endl;
+  if (!upf_cfg.enable_bpf_datapath && upf_cfg.enable_fr) {
     this->fr->remove_entry(ue_ip);
   }
 }
@@ -1252,27 +1248,14 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
       bool nocp = false;
       bool buff = false;
       for (auto it_pdr = pdrs->begin(); it_pdr < pdrs->end(); ++it_pdr) {
-        // todo (kw) framed route ip
         isInAccess = (*it_pdr)->look_up_pack_in_access(
             iph, num_bytes, r_endpoint, tunnel_id);
-        if (!isInAccess && upf_cfg.enable_fr && it_pdr->get()->pdi.second.framed_route.first) {
-          // todo (lr): fix tautology (fr:mapping pdi-fr to pdi-ip. We map pdi-fr to the pdi-ip and check if pdi-ip == pdi-ip)
-          uint32_t fr_ue_ip = 0;
-          for (const auto& item :
-               it_pdr->get()->pdi.second.framed_route.second) {
-            Logger::pfcp_switch().debug(
-                "Framed Routing string: %s", item.framed_route);
-            fr_ue_ip = fr->retrieveUEIp(item);
-            if (fr_ue_ip > 0) {
-              Logger::pfcp_switch().debug("break");
-              break;
-            }
-          }
-          isInAccess =
-              fr_ue_ip ==
-              be32toh(
-                  it_pdr->get()
-                      ->pdi.second.ue_ip_address.second.ipv4_address.s_addr);
+        if (!isInAccess && upf_cfg.enable_fr &&
+            it_pdr->get()->pdi.second.framed_route.first) {
+          auto fr_ue_ip   = (struct iphdr*) malloc(sizeof(struct iphdr));
+          fr_ue_ip->saddr = be32toh(fr->retrieveUEIp(be32toh(iph->saddr)));
+          isInAccess      = (*it_pdr)->look_up_pack_in_access(
+              fr_ue_ip, num_bytes, r_endpoint, tunnel_id);
         }
         if (isInAccess) {
           Logger::pfcp_switch().info(
