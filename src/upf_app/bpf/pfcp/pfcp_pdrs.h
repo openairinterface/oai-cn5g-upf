@@ -4,7 +4,7 @@
 #include <types.h>
 #include <pfcp/pfcp_pdr.h>
 
-#define PDRS_MAX_SIZE 10
+#define PDRS_MAX_SIZE 10000
 
 typedef struct pfcp_pdrs_s {
   u32 pdrs_counter;

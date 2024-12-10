@@ -92,12 +92,15 @@ static __always_inline u32 tail_call_next_prog(
 
 static __always_inline u32
 handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
-  u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, &ue_ip_address);
-  if (teid_dl) {
+  struct session_id* session =
+      bpf_map_lookup_elem(&m_session_mapping, &ue_ip_address);
+
+  if (session) {
+    u32 teid_dl = session->teid_dl;
     bpf_debug(
-        "TEID downlink: 0x%x was found for UE IP: 0x%x", *teid_dl,
+        "TEID downlink: 0x%x was found for UE IP: 0x%x", teid_dl,
         ue_ip_address);
-    tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
+    tail_call_next_prog(ctx, teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
   }
 
   // Framed Routing
