@@ -110,7 +110,7 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
     // check if it is a framed route address, and if yes try again the lookup
     // with the mapped address
     uint32_t big_endian_ue_ip = __builtin_bswap32(ue_ip_address);
-#pragma clang loop unroll(full)
+    #pragma clang loop unroll(full)
     for (uint32_t i = 32; i > 0; i--) {
       struct FramedRoutingKeyBPF key =
           framed_routing_key_for_ip_cidr(big_endian_ue_ip, i);
@@ -118,12 +118,14 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
       uint32_t* fr_ue_ip =
           bpf_map_lookup_elem(&m_framed_route_mapping, &fr_key);
       if (fr_ue_ip) {
-        u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, fr_ue_ip);
-        if (teid_dl) {
+        session =
+            bpf_map_lookup_elem(&m_session_mapping, fr_ue_ip);
+        if (session) {
+          u32 teid_dl = session->teid_dl;
           bpf_debug(
               "TEID downlink: 0x%x was found for Framed Route IP: 0x%x",
-              *teid_dl, big_endian_ue_ip);
-          tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, *fr_ue_ip);
+              teid_dl, big_endian_ue_ip);
+          tail_call_next_prog(ctx, teid_dl, INTERFACE_VALUE_CORE, *fr_ue_ip);
         }
       }
     }
