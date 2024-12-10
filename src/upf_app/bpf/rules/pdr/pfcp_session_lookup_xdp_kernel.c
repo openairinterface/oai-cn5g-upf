@@ -115,7 +115,6 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
       uint32_t* fr_ue_ip =
           bpf_map_lookup_elem(&m_framed_route_mapping, &fr_key);
       if (fr_ue_ip) {
-        bpf_debug("TEID downlink: found ip  0x%x", fr_ue_ip);
         u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, fr_ue_ip);
         if (teid_dl) {
           bpf_debug(
