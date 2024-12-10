@@ -19,16 +19,13 @@
  *      contact@openairinterface.org
  */
 
-/*! \file udp.cpp
-  \brief
-  \author Lionel Gauthier
-  \company Eurecom
-  \email: lionel.gauthier@eurecom.fr
-*/
-
 #include "udp.hpp"
 
 #include <cstdlib>
+
+#include "logger.hpp"
+
+using namespace oai::logger;
 
 //------------------------------------------------------------------------------
 void udp_application::handle_receive(
@@ -39,7 +36,8 @@ void udp_application::handle_receive(
 
 //------------------------------------------------------------------------------
 void udp_application::start_receive(
-    udp_application* gtp_stack, const util::thread_sched_params& sched_params) {
+    udp_application* gtp_stack,
+    const oai::utils::thread_sched_params& sched_params) {
   Logger::udp().warn("Missing implementation of interface udp_application");
 }
 
@@ -59,7 +57,7 @@ static std::string string_to_hex(const std::string& input) {
 }
 //------------------------------------------------------------------------------
 void udp_server::udp_worker_loop(
-    const int id, const util::thread_sched_params& sched_params) {
+    const int id, const oai::utils::thread_sched_params& sched_params) {
   uint64_t count              = 0;
   udp_packet_q_item_t* worker = nullptr;
 
@@ -101,7 +99,8 @@ void udp_server::udp_worker_loop(
 }
 
 //------------------------------------------------------------------------------
-void udp_server::udp_read_loop(const util::thread_sched_params& sched_params) {
+void udp_server::udp_read_loop(
+    const oai::utils::thread_sched_params& sched_params) {
   uint64_t count              = 0;
   udp_packet_q_item_t* worker = nullptr;
 
@@ -249,7 +248,7 @@ int udp_server::create_socket(const char* address, const uint16_t port_num) {
 }
 //------------------------------------------------------------------------------
 void udp_server::start_receive(
-    udp_application* app, const util::thread_sched_params& sched_params) {
+    udp_application* app, const oai::utils::thread_sched_params& sched_params) {
   num_threads_   = sched_params.thread_pool_size;
   int num_blocks = num_threads_ * 16;
   app_           = app;

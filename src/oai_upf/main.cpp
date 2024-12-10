@@ -40,20 +40,21 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/split.hpp>
 
-#include <RulesUtilitiesImpl.h>
+//#include <RulesUtilitiesImpl.h>
 #include <SessionManager.h>
 #include <SessionProgramManager.h>
 #include <UserPlaneComponent.h>
 
 using namespace oai::upf::app;
 using namespace oai::config;
-using namespace util;
+using namespace oai::utils;
 
 itti_mw* itti_inst                    = nullptr;
 async_shell_cmd* async_shell_cmd_inst = nullptr;
 pfcp_switch* pfcp_switch_inst         = nullptr;
 upf_app* upf_app_inst                 = nullptr;
 upf_config upf_cfg;
+std::unique_ptr<lttng_configuration> lttng_config_yaml;
 boost::asio::io_service io_service;
 bool single_teardown_call;
 
@@ -64,10 +65,6 @@ bool single_teardown_call;
 #ifndef N6_IF_NAME
 #define N6_IF_NAME upf_cfg.n6.if_name
 #endif  // N6_IF_NAME
-
-#ifndef HTB_SCHEDULER
-#define HTB_SCHEDULER "htb"
-#endif  // HTB_SCHEDULER
 
 std::unique_ptr<upf_config_yaml> upf_cfg_yaml            = nullptr;
 std::shared_ptr<oai::http::http_client> http_client_inst = nullptr;
@@ -119,16 +116,15 @@ void my_app_signal_handler(int s) {
 
 //------------------------------------------------------------------------------
 void setup_bpf() {
-  std::shared_ptr<RulesUtilities> mpRulesFactory;
-  mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
+  // std::shared_ptr<RulesUtilities> mpRulesFactory;
+  // mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
 
   std::string sGTPInterface = N3_IF_NAME;
   std::string sUDPInterface = N6_IF_NAME;
   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
   Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
 
-  UserPlaneComponent::getInstance().setup(
-      mpRulesFactory, sGTPInterface, sUDPInterface);
+  UserPlaneComponent::getInstance().setup(sGTPInterface, sUDPInterface);
 
   auto pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
@@ -144,6 +140,27 @@ int main(int argc, char** argv) {
   }
 
   // Logger
+  // Config
+  std::string conf_file_name = Options::getlibconfigConfig();
+
+  std::cout << "Trying to read .yaml configuration file: " << conf_file_name
+            << "\n";
+  lttng_config_yaml = std::make_unique<lttng_configuration>(conf_file_name);
+  lttng_config_yaml->read_from_file();
+
+#ifdef LOGGER_CAN_USE_LTTNG
+  std::cout << "LTTNG Log Activation: " << lttng_config_yaml->is_lttng_active()
+            << "\n";
+  std::cout << "Log Level of LTTng: "
+            << lttng_config_yaml->get_lttng_log_level() << "\n";
+#else
+  std::cout << "LTTNG Tracing disabled at build-time!\n";
+  if (lttng_config_yaml->is_lttng_active())
+    std::cout << "Cannot use lttng log scheme on this build variant!\n";
+#endif
+
+  Logger::set_lttng(static_cast<bool>(lttng_config_yaml->is_lttng_active()));
+
   Logger::init("upf", Options::getlogStdout(), Options::getlogRotFilelog());
 
   Logger::upf_app().startup("Options parsed");
@@ -152,9 +169,6 @@ int main(int argc, char** argv) {
   std::signal(SIGINT, my_app_signal_handler);
   single_teardown_call = false;
 
-  // Config
-  std::string conf_file_name = Options::getlibconfigConfig();
-  Logger::upf_app().debug("Parsing the configuration file, file type YAML.");
   upf_cfg_yaml = std::make_unique<upf_config_yaml>(
       conf_file_name, Options::getlogStdout(), Options::getlogRotFilelog());
   if (!upf_cfg_yaml->init()) {

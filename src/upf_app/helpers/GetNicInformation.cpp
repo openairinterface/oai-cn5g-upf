@@ -37,15 +37,6 @@ std::string readValueFromFile(const std::string& path) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-
-// NicInformationGetter::NicInformationGetter() {}
-
-/*---------------------------------------------------------------------------------------------------------------*/
-// const char *NicInformationGetter::setScheduler(const char*) {
-
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
 uint64_t NicInformationGetter::retrieveRate(std::string interface) {
   // Paths to files containing interface information speed rate
   std::string speedPath = "/sys/class/net/" + interface + "/speed";

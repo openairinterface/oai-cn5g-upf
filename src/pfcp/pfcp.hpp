@@ -19,20 +19,8 @@
  *      contact@openairinterface.org
  */
 
-/*! \file pfcp.hpp
-  \brief
-  \author Lionel Gauthier
-  \company Eurecom
-  \email: lionel.gauthier@eurecom.fr
-*/
 #ifndef FILE_PFCP_HPP_SEEN
 #define FILE_PFCP_HPP_SEEN
-
-#include "3gpp_29.274.h"
-#include "3gpp_29.244.hpp"
-#include "itti.hpp"
-#include "udp.hpp"
-#include "uint_generator.hpp"
 
 #include <iostream>
 #include <map>
@@ -40,7 +28,13 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "3gpp_29.244.hpp"
+#include "3gpp_29.274.h"
+#include "itti.hpp"
 #include "msg_pfcp.hpp"
+#include "udp.hpp"
+#include "uint_generator.hpp"
 
 namespace pfcp {
 
@@ -126,7 +120,7 @@ class pfcp_l4_stack : public udp_application {
   static const uint8_t version = 2;
   pfcp_l4_stack(
       const std::string& ip_address, const unsigned short port_num,
-      const util::thread_sched_params& sched_params);
+      const oai::utils::thread_sched_params& sched_params);
   virtual void handle_receive(
       char* recv_buffer, const std::size_t bytes_transferred,
       endpoint& remote_endpoint);

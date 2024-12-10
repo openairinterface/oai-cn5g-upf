@@ -64,7 +64,7 @@ extern pfcp_switch* pfcp_switch_inst;
 
 //------------------------------------------------------------------------------
 void pfcp_switch::pdn_worker(
-    const int id, const util::thread_sched_params& sched_params) {
+    const int id, const oai::utils::thread_sched_params& sched_params) {
   uint64_t count      = 0;
   iovec_q_item_t* iov = nullptr;
 
@@ -99,7 +99,7 @@ void pfcp_switch::pdn_worker(
 
 //------------------------------------------------------------------------------
 void pfcp_switch::pdn_read_loop(
-    int sock_r, util::thread_sched_params sched_params) {
+    int sock_r, oai::utils::thread_sched_params sched_params) {
   uint64_t count      = 0;
   uint64_t errors     = 0;
   iovec_q_item_t* iov = nullptr;
@@ -619,6 +619,7 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
   folly::AtomicHashMap<
       uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>::
       const_iterator pit = ue_ipv4_hbo2pfcp_pdr.find(ue_ip);
+
   if (pit == ue_ipv4_hbo2pfcp_pdr.end()) {
     std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs =
         std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>(
@@ -637,18 +638,32 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
     }
     // Logger::pfcp_switch().info( "add_pfcp_dl_pdr_by_ue_ip UE IP %8x", ue_ip);
   } else {
-    // sort by precedence
-    // const std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>&
-    // spdrs = pit->second;
-    std::vector<std::shared_ptr<pfcp::pfcp_pdr>>* pdrs = pit->second.get();
-    for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it =
-             pdrs->begin();
-         it < pdrs->end(); ++it) {
-      if (*(it->get()) < *(pdr.get())) {
-        pit->second->insert(it, pdr);
-        return;
-      }
-    }
+    // TODO: Dirty fix
+    ue_ipv4_hbo2pfcp_pdr.erase(ue_ip);
+    std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs =
+        std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>(
+            new std::vector<std::shared_ptr<pfcp::pfcp_pdr>>());
+    pdrs->push_back(pdr);
+    std::pair<
+        uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>
+        entry(ue_ip, pdrs);
+    ue_ipv4_hbo2pfcp_pdr.insert(entry);
+
+    /*
+// sort by precedence
+// const std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>&
+// spdrs = pit->second;
+std::vector<std::shared_ptr<pfcp::pfcp_pdr>>* pdrs = pit->second.get();
+for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it =
+       pdrs->begin();
+   it < pdrs->end(); ++it) {
+if (*(it->get()) < *(pdr.get())) {
+  pit->second->insert(it, pdr);
+  return;
+}
+}
+
+*/
   }
 }
 

@@ -68,6 +68,7 @@ pipeline {
     // Minimal checks
     gitlabBuilds(builds: [
       "Build Ubuntu UPF Image",
+      "Build Ubuntu UPF Image with LTTNG",
       "Build RHEL UPF Image",
       "Static Code Analysis",
       "Code Formatting Checker"
@@ -156,9 +157,7 @@ pipeline {
                   }
                   if ("MERGE".equals(env.gitlabActionType)) {
                     dockerBuildOptions = ''
-                    // Copy pre-downloaded kernel tar ball
-                    sh "mkdir -p build/ext"
-                    sh "cp -f /opt/kernel-no-download/linux-5.7.tar.gz build/ext || true"
+                    sh "date --rfc-email > src/common-src/date.txt"
                   }
                   sh "docker buildx build ${dockerBuildOptions} --target oai-upf --tag oai-upf:${upf_tag} --file docker/Dockerfile.upf.ubuntu . > archives/upf_ubuntu_image_build.log 2>&1"
                   // Putting a place holder to try out on the flattening of image.
@@ -183,6 +182,33 @@ pipeline {
             }
             unsuccessful {
               sh "echo 'OAI-UPF UBUNTU IMAGE BUILD: KO' >> archives/upf_ubuntu_image_build.log"
+            }
+          }
+        }
+        stage ('Build Ubuntu UPF Image with LTTNG') {
+          steps {
+            // I want the previous stage to run always before to profit from the cache
+            // This stage only exists to make sure we don't have a regression in LTTNG build
+            // Generated image is not used
+            sleep 30
+            lock(ubuntuBuildResource) {
+              script {
+                gitlabCommitStatus(name: "Build Ubuntu UPF Image with LTTNG") {
+                  sh "docker image rm oai-upf:lttng-build || true"
+                  sh "docker image prune --force"
+                  sh "docker buildx build --target oai-upf --tag oai-upf:lttng-build --file docker/Dockerfile.upf.ubuntu --build-arg ENABLE_LTTNG=true . > archives/upf_ubuntu_lttng_image_build.log 2>&1"
+                  sh "docker image prune --force"
+                  sh "docker image rm oai-upf:lttng-build || true"
+                }
+              }
+            }
+          }
+          post {
+            success {
+              sh "echo 'OAI-UPF UBUNTU IMAGE BUILD: OK' >> archives/upf_ubuntu_lttng_image_build.log"
+            }
+            unsuccessful {
+              sh "echo 'OAI-UPF UBUNTU IMAGE BUILD: KO' >> archives/upf_ubuntu_lttng_image_build.log"
             }
           }
         }
@@ -249,6 +275,7 @@ pipeline {
                 gitlabCommitStatus(name: "Static Code Analysis") {
                   // It's a different agent from main one.
                   prepareWorkspaceMergeCase()
+                  sh "date --rfc-email > src/common-src/date.txt"
                   // Moving to focal and cppcheck 1.90 and a dockerfile approach
                   sh 'sed -i -e "s@nfName@upf@" ci-scripts/common/docker/Dockerfile.ci.cppcheck'
                   sh 'docker build --target upf-cppcheck --tag upf-cppcheck:test --file ci-scripts/common/docker/Dockerfile.ci.cppcheck . > archives/cppcheck_install.log 2>&1'
@@ -287,6 +314,7 @@ pipeline {
                 gitlabCommitStatus(name: "Code Formatting Checker") {
                   // It's a different agent from main one.
                   prepareWorkspaceMergeCase()
+                  sh "date --rfc-email > src/common-src/date.txt"
                   sh 'sed -i -e "s@nfName@upf@" ci-scripts/common/docker/Dockerfile.ci.clang-format'
                   if ("MERGE".equals(env.gitlabActionType)) {
                     sh 'docker build --target upf-clang-format-check --tag upf-clang-format-check:test --file ci-scripts/common/docker/Dockerfile.ci.clang-format --build-arg MERGE_REQUEST_CHECK=True --build-arg SOURCE_BRANCH=' + env.gitlabSourceBranch + ' --build-arg TARGET_BRANCH=' + env.gitlabTargetBranch + ' . > archives/clang_format_install.log 2>&1'
@@ -523,12 +551,6 @@ pipeline {
     }
     cleanup {
       script {
-        // Zipping all archived log files
-        sh "zip -r -qq docker_logs.zip archives"
-        if (fileExists('docker_logs.zip')) {
-          archiveArtifacts artifacts: 'docker_logs.zip'
-        }
-
         // Generating the HTML report(s)
         if ("MERGE".equals(env.gitlabActionType)) {
           sh "./ci-scripts/generateHtmlReport.py --job-name ${JOB_NAME} --build-id ${BUILD_ID} --build-url ${BUILD_URL} --git-url ${GIT_URL} --git-src-branch ${env.gitlabSourceBranch} --git-src-commit ${env.gitlabMergeRequestLastCommit} --git-merge-request --git-dst-branch ${env.gitlabTargetBranch} --git-dst-commit ${GIT_COMMIT}"
@@ -544,6 +566,12 @@ pipeline {
           }
           sh "sed -i -e 's#TEMPLATE_TIME#${JOB_TIMESTAMP}#' ${htmlFile}"
           archiveArtifacts artifacts: htmlFile
+        }
+
+        // Zipping all archived log files
+        sh "zip -r -qq docker_logs.zip archives"
+        if (fileExists('docker_logs.zip')) {
+          archiveArtifacts artifacts: 'docker_logs.zip'
         }
 
         // Sending email to commiter

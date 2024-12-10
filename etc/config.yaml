@@ -66,13 +66,13 @@ nfs:
       api_version: v1
       interface_name: demo-oai
     n3:
-      interface_name: demo-oai
+      interface_name: demo-n3
       port: 2152
     n4:
       interface_name: demo-oai
       port: 8805
     n6:
-      interface_name: demo-oai
+      interface_name: demo-n6
     n9:
       interface_name: demo-oai
       port: 2152
@@ -95,7 +95,7 @@ nfs:
       api_version: v1
       interface_name: eth0
   nrf:
-    host: 192.168.70.130
+    host: oai-nrf
     sbi:
       port: 8080
       api_version: v1
@@ -213,12 +213,10 @@ smf:
 
 upf:
   support_features:
-    enable_bpf_datapath: yes   # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
-    enable_qos: yes  # Only supported for BPF datapath. If "on" we use qdiscs to manage the QoS
-    #qdisc_scheduler: "htb" # This value is used only in case QoS is enabled
+    enable_bpf_datapath: no   # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
+    enable_qos: no  # Only supported for BPF datapath. If "on" we use qdiscs to manage the QoS
     enable_snat: no           # If "on": Source natting is done for UE, DEFAULT= off
-    enable_fr: on           # If "on": Framed Routing is done for UE, DEFAULT= off
-  remote_n6_gw: 192.168.70.131
+  remote_n6_gw: oai-ext-dn
   smfs:
     - host: oai-smf            # To be used for PFCP association in case of no-NRF
   upf_info:

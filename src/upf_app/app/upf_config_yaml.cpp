@@ -24,7 +24,6 @@
 #include <boost/algorithm/string.hpp>
 #include <regex>
 
-#include "conv.hpp"
 #include "conversions.hpp"
 #include "fqdn.hpp"
 #include "logger.hpp"
@@ -156,8 +155,8 @@ void upf::from_yaml(const YAML::Node& node) {
     }
 
     if (key == UPF_CONFIG_UPF_INFO) {
-      nlohmann::json j = oai::utils::conversions::yaml_to_json(
-          node[UPF_CONFIG_UPF_INFO], false);
+      nlohmann::json j =
+          oai::utils::conv::yaml_to_json(node[UPF_CONFIG_UPF_INFO], false);
       nlohmann::from_json(j, m_upf_info);
     }
   }
@@ -336,7 +335,7 @@ in_addr upf_config_yaml::resolve_nf(const std::string& host) {
     // we ignore the port for now
     uint32_t port;
     uint8_t addr_type;
-    fqdn::resolve(host, ip_address, port, addr_type);
+    oai::utils::fqdn::resolve(host, ip_address, port, addr_type);
     if (addr_type != 0) {
       // TODO:
       throw std::invalid_argument(fmt::format(
@@ -360,7 +359,8 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   std::string remote_n6_addr;
   uint8_t addr_type = {};
   unsigned int port = 0;
-  fqdn::resolve(upf_local->get_remote_n6(), remote_n6_addr, port, addr_type);
+  oai::utils::fqdn::resolve(
+      upf_local->get_remote_n6(), remote_n6_addr, port, addr_type);
   if (addr_type != 0) {  // IPv6: TODO
     throw("DO NOT SUPPORT IPV6 ADDR FOR NRF!");
   } else {  // IPv4
@@ -377,7 +377,8 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
       pfcp::node_id_t n = {};
       unsigned int port = 0;
       n.node_id_type    = pfcp::NODE_ID_TYPE_IPV4_ADDRESS;  // actually
-      fqdn::resolve(smf_host.get_value(), smf_addr, port, addr_type);
+      oai::utils::fqdn::resolve(
+          smf_host.get_value(), smf_addr, port, addr_type);
       if (addr_type != 0) {  // IPv6: TODO
         throw("DO NOT SUPPORT IPV6 ADDR FOR SMF!");
       } else {  // IPv4

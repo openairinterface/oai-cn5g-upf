@@ -19,22 +19,13 @@
 #      contact@openairinterface.org
 ################################################################################
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${SRC_TOP_DIR}/common)
-include_directories(${SRC_TOP_DIR}/common/msg)
-include_directories(${SRC_TOP_DIR}/common/utils)
 include_directories(${SRC_TOP_DIR}/itti)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/common)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
-include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 
-set(CN_UTILS_SRC STATIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/3gpp_conversions.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/async_shell_cmd.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/thread_sched.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/fqdn.cpp
-    )
 
-add_library(CN_UTILS ${CN_UTILS_SRC})
-
-
+add_library(CN_UTILS STATIC
+    async_shell_cmd.cpp
+)
