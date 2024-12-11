@@ -627,18 +627,18 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
     ue_ipv4_hbo2pfcp_pdr.insert(entry);
 
     /*
-// sort by precedence
-// const std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>&
-// spdrs = pit->second;
-std::vector<std::shared_ptr<pfcp::pfcp_pdr>>* pdrs = pit->second.get();
-for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it =
-       pdrs->begin();
-   it < pdrs->end(); ++it) {
-if (*(it->get()) < *(pdr.get())) {
-  pit->second->insert(it, pdr);
-  return;
-}
-}
+    // sort by precedence
+    // const std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>&
+    // spdrs = pit->second;
+    std::vector<std::shared_ptr<pfcp::pfcp_pdr>>* pdrs = pit->second.get();
+    for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it =
+             pdrs->begin();
+         it < pdrs->end(); ++it) {
+      if (*(it->get()) < *(pdr.get())) {
+        pit->second->insert(it, pdr);
+        return;
+      }
+    }
 
 */
   }
@@ -783,10 +783,12 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             resp->pfcp_ies.set(cause);
             break;
           }
-          pfcp::created_pdr created_pdr = {};
-          created_pdr.set(cr_pdr.pdr_id.second);
-          created_pdr.set(allocated_fteid);
-          resp->pfcp_ies.set(created_pdr);
+          if (allocated_fteid.v4 || allocated_fteid.v6) {
+            pfcp::created_pdr created_pdr = {};
+            created_pdr.set(cr_pdr.pdr_id.second);
+            created_pdr.set(allocated_fteid);
+            resp->pfcp_ies.set(created_pdr);
+          }
         }
       }
 
