@@ -252,11 +252,21 @@ int tc_filter_traffic(struct __sk_buff* skb) {
 
   // Extract Ethernet header
   struct ethhdr* ethh = (void*) (long) skb->data;
+  bpf_debug("tc_filter_traffic: MAC SRC: %pM, MAC DST: %pM", ethh->h_source, ethh->h_dest);
 
   if ((void*) (ethh + 1) > (void*) (long) skb->data_end) {
     bpf_debug("Invalid Ethernet header");
     return TC_ACT_SHOT;
   }
+
+  struct iphdr* iph = (struct iphdr*) (ethh + 1);
+
+  if ((void*) (iph + 1) > (void*) (long) skb->data_end) {
+    bpf_debug("Invalid IPv4 header");
+    return TC_ACT_SHOT;
+  }
+
+  bpf_debug("tc_filter_traffic: IP SRC: %pI4, IP DST: %pI4", iph->saddr, iph->daddr);
 
   return sdf_filter(skb, ethh);
 }
@@ -268,11 +278,27 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
   int key = DOWNLINK, *ifindex;
 
   // return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+  struct ethhdr* ethh = (void*) (long) skb->data;
+  bpf_debug("tc_redirect_traffic: MAC SRC: %pM, MAC DST: %pM", ethh->h_source, ethh->h_dest);
+
+  if ((void*) (ethh + 1) > (void*) (long) skb->data_end) {
+    bpf_debug("Invalid Ethernet header");
+    return TC_ACT_SHOT;
+  }
+
+  struct iphdr* iph = (struct iphdr*) (ethh + 1);
+
+  if ((void*) (iph + 1) > (void*) (long) skb->data_end) {
+    bpf_debug("Invalid IPv4 header");
+    return TC_ACT_SHOT;
+  }
+
+  bpf_debug("tc_redirect_traffic: IP SRC: %pI4, IP DST: %pI4", iph->saddr, iph->daddr);
 
   /* Lookup what ifindex to redirect packets to */
   ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
   if (ifindex) {
-    bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer");
+    bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer: ifindex -> %d", *ifindex);
     return bpf_redirect(*ifindex, 0);
   }
   bpf_debug("TC Packets not redirected! Drop them");
