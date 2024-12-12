@@ -163,7 +163,7 @@ ipv4_sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh, struct iphdr* iph) {
       }
     }
     default: {
-      return XDP_DROP;
+      return TC_ACT_SHOT;// XDP_DROP;
     }
   }
 }
