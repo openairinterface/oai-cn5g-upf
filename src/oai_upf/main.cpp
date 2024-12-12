@@ -118,7 +118,7 @@ void setup_bpf() {
   std::string sGTPInterface = N3_IF_NAME;
   std::string sUDPInterface = N6_IF_NAME;
   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
-  Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
+  Logger::upf_app().info("Non-GTP interface: %s", sUDPInterface.c_str());
 
   UserPlaneComponent::getInstance().setup(sGTPInterface, sUDPInterface);
 }
