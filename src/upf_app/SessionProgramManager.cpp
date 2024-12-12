@@ -386,10 +386,8 @@ void SessionProgramManager::createPipeline(
     pQERProgram->setup(seid, pQer);
   }
   /*======================================================================================*/
-
   auto pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
-
   storeFarProgramIndexInNextProgRuleIndexMap(
       pFar, key, pPFCP_Session_LookupProgram);
 
@@ -410,13 +408,11 @@ void SessionProgramManager::createPipeline(
   } else {
     storeSessionMappingMap(
         pPFCP_Session_LookupProgram, ueIpAddress, teid1, 0, seid);
-
     // Launch a separate thread to update ARP table map
     std::thread arpUpdateThread2(
         [this, pPFCP_Session_LookupProgram, dnIP, upfn6IP]() {
           updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
         });
-
     arpUpdateThread2.detach();
     saveSeidWithinFARProgram(seid, pPFCP_Session_LookupProgram, key);
   }
@@ -424,7 +420,7 @@ void SessionProgramManager::createPipeline(
 
 //---------------------------------------------------------------------------------------------------------------
 void SessionProgramManager::removePipeline(uint64_t seid) {
-  Logger::upf_app().debug("Remove FARProgram index from UPFProgram map");
+  Logger::upf_app().debug("Clean the different eBPF maps");
   auto it = mSessionProgramsMap.find(seid);
 
   if (it == mSessionProgramsMap.end()) {
@@ -433,15 +429,17 @@ void SessionProgramManager::removePipeline(uint64_t seid) {
 
   Logger::upf_app().debug(
       "Delete the SessionPrograms object. It will release the pipeline");
-  // The key represent the pointer to the pipeline related to the session.
+
   auto key = it->second->getKey();
-  it->second.reset();
-  mSessionProgramsMap.erase(seid);
+
+ // it->second.reset();
+
+ // mSessionProgramsMap.erase(seid);
 
   Logger::upf_app().debug("Clean PDU Session from the entry program's map");
-  auto pPFCP_Session_LookupProgram =
-      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
-  pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->remove(key);
+  // auto pPFCP_Session_LookupProgram =
+  //     UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+  // pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->remove(key);
 }
 
 //---------------------------------------------------------------------------------------------------------------
