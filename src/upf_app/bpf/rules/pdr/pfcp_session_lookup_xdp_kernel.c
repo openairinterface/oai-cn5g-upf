@@ -64,7 +64,6 @@ static u8 next_hop_n6_mac_address[6] = {0};
 static bool cached_n3 = false;
 static bool cached_n6 = false;
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline bool update_dst_mac_address(
     u32 ip, struct ethhdr* p_eth) {
@@ -112,17 +111,17 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
     cached_n3 = true;
   }
 
-    struct s_arp_mapping* map_entry = {0};
-    map_entry = bpf_map_lookup_elem(&m_arp_table, &upf_n3_ip);
+  struct s_arp_mapping* map_entry = {0};
+  map_entry = bpf_map_lookup_elem(&m_arp_table, &upf_n3_ip);
 
-    if (!map_entry) {
-      bpf_debug("N3's Next Hop MAC address not found! Drop the packet");
-      return XDP_DROP;
-    }
+  if (!map_entry) {
+    bpf_debug("N3's Next Hop MAC address not found! Drop the packet");
+    return XDP_DROP;
+  }
 
-    memcpy(
-        next_hop_n3_mac_address, map_entry->mac_address,
-        sizeof(next_hop_n3_mac_address));
+  memcpy(
+      next_hop_n3_mac_address, map_entry->mac_address,
+      sizeof(next_hop_n3_mac_address));
 
   /*
   |----------------------------------------------------------------|
@@ -255,7 +254,8 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   return XDP_PASS;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//--------------------------------------------------------------------------------------
+
 SEC("xdp")
 int xdp_handle_uplink(struct xdp_md* ctx) {
   bpf_debug("================< XDP: Handle Uplink >================");
@@ -263,15 +263,15 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
   void* data          = (void*) (long) ctx->data;
   void* data_end      = (void*) (long) ctx->data_end;
   struct ethhdr* ethh = (void*) (long) ctx->data;
-  
+
   if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
     bpf_debug("Error: Invalid Ethernet header");
     return XDP_DROP;
   }
 
-  u16 eth_type        = bpf_htons(ethh->h_proto);
+  u16 eth_type = bpf_htons(ethh->h_proto);
   bpf_debug("Debug: eth_type:0x%x", eth_type);
-    
+
   switch (eth_type) {
     case ETH_P_IP: {
       struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
@@ -331,7 +331,8 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
 
         if (p_far) {
           bpf_debug("FAR ID = %d", p_far->far_id.far_id);
-          // u8 dest_interface = p_far->forwarding_parameters.destination_interface.interface_value;
+          // u8 dest_interface =
+          // p_far->forwarding_parameters.destination_interface.interface_value;
 
           if (!p_far->apply_action.forw) {
             bpf_debug("Forward Action Is NOT set");
@@ -344,44 +345,52 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
 
           e_reference_point n6_key = N6_INTERFACE;
 
-          if (!cached_n6) {
-            struct s_interface* map_element =
-                bpf_map_lookup_elem(&m_upf_interfaces, &n6_key);
+          // if (!cached_n6) {
+          struct s_interface* map_element =
+              bpf_map_lookup_elem(&m_upf_interfaces, &n6_key);
 
-            if (!map_element) {
-              bpf_debug("N6 interface is missing in UPF map, Drop the packet");
-              return XDP_DROP;
-            }
-
-            upf_n6_ip = map_element->ipv4_address;
-
-            struct s_arp_mapping* map_entry = {0};
-            map_entry = bpf_map_lookup_elem(&m_arp_table, &upf_n6_ip);
-
-            if (!map_entry) {
-              bpf_debug("N6's Next Hop MAC address not found! Drop the packet");
-              return XDP_DROP;
-            }
-
-            memcpy(
-                next_hop_n6_mac_address, map_entry->mac_address,
-                sizeof(next_hop_n6_mac_address));
-
-            cached_n6 = true;
-          }
-
-          memcpy(
-              ethh_new->h_dest, next_hop_n6_mac_address,
-              sizeof(ethh_new->h_dest));
-          // Adjust head to the right.
-          if (bpf_xdp_adjust_head(ctx, GTP_ENCAPSULATED_SIZE)) {
-            bpf_debug("Error: Adjusting packet head failed");  
+          if (!map_element) {
+            bpf_debug("N6 interface is missing in UPF map, Drop the packet");
             return XDP_DROP;
           }
 
-          // bpf_debug("Destination MAC  %x:%x:%x:", ethh_new->h_dest[0],
-          // ethh_new->h_dest[1], ethh_new->h_dest[2]); bpf_debug(" %x:%x:%x",
-          // ethh_new->h_dest[3], ethh_new->h_dest[4], ethh_new->h_dest[5]);
+          upf_n6_ip = map_element->ipv4_address;
+
+          struct s_arp_mapping* map_entry = {0};
+          map_entry = bpf_map_lookup_elem(&m_arp_table, &upf_n6_ip);
+
+          if (!map_entry) {
+            bpf_debug("N6's Next Hop MAC address not found! Drop the packet");
+            return XDP_DROP;
+          }
+
+          //   memcpy(
+          //       next_hop_n6_mac_address, map_entry->mac_address,
+          //       sizeof(next_hop_n6_mac_address));
+
+          //   cached_n6 = true;
+          // }
+
+          // memcpy(
+          //     ethh_new->h_dest, next_hop_n6_mac_address,
+          //     sizeof(ethh_new->h_dest));
+
+          memcpy(
+              ethh_new->h_dest, map_entry->mac_address,
+              sizeof(ethh_new->h_dest));
+
+          bpf_debug(
+              "Destination MAC  %x:%x:%x:", ethh_new->h_dest[0],
+              ethh_new->h_dest[1], ethh_new->h_dest[2]);
+          bpf_debug(
+              " %x:%x:%x", ethh_new->h_dest[3], ethh_new->h_dest[4],
+              ethh_new->h_dest[5]);
+
+          // Adjust head to the right.
+          if (bpf_xdp_adjust_head(ctx, GTP_ENCAPSULATED_SIZE)) {
+            bpf_debug("Error: Adjusting packet head failed");
+            return XDP_DROP;
+          }
 
           bpf_debug("Redirecting Packet to DN");
 
@@ -404,10 +413,10 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
 SEC("xdp")
 int xdp_handle_downlink(struct xdp_md* ctx) {
   bpf_debug("================< XDP: Handle Downlink >================");
-  
+
   void* data_end      = (void*) (long) ctx->data_end;
   struct ethhdr* ethh = (void*) (long) ctx->data;
-  
+
   if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
     bpf_debug("Error: Invalid Ethernet header");
     return XDP_DROP;
@@ -423,11 +432,10 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
   u32 ip_dest = bpf_htonl(iph->daddr);
   struct session_id* session =
       bpf_map_lookup_elem(&m_session_mapping, &ip_dest);
-  
+
   if (session) {
     u32 teid_dl = session->teid_dl;
-    bpf_debug(
-        "TEID for downlink: 0x%x, UE IP: 0x%x", teid_dl, ip_dest);
+    bpf_debug("TEID for downlink: 0x%x, UE IP: 0x%x", teid_dl, ip_dest);
 
     struct next_rule_prog_index_key map_key = {0};
     map_key.teid                            = teid_dl;
@@ -444,11 +452,10 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
     }
   }
 
-  bpf_debug("Session not found for Downlink, tail call failed");
+  bpf_debug("Session not found for Downlink");
 
   return XDP_PASS;
 }
-
 
 /*---------------------------------------------------------------------------------------------------------------*/
 SEC("xdp")
@@ -457,7 +464,7 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
 
   void* data_end      = (void*) (long) ctx->data_end;
   struct ethhdr* ethh = (void*) (long) ctx->data;
-  
+
   if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
     bpf_debug("Error: Invalid Ethernet header");
     return XDP_DROP;
@@ -473,7 +480,7 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
   u32 ip_dest = bpf_htonl(iph->daddr);
   struct session_id* session =
       bpf_map_lookup_elem(&m_session_mapping, &ip_dest);
-  
+
   if (session) {
     u32 teid_dl = session->teid_dl;
     bpf_debug(
