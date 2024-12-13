@@ -193,35 +193,34 @@ void SessionProgramManager::storeSessionMappingMap(
 }
 
 //---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::updateARPTableForN6(
-    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-    uint32_t dnIP, uint32_t upfn6IP) {
-  try {
-    std::string remoteDN  = "192.168.24.160";
-    uint32_t remoteN6IPv4 = inet_addr(remoteDN.c_str());
-    // const char* remoteN6MAC = "0061BB000001";
-    uint8_t remoteN6MAC[6] = {0x52, 0x54, 0x00, 0x71, 0xeb, 0x53};
+// void SessionProgramManager::updateARPTableForN6(
+//     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+//     uint32_t dnIP, uint32_t upfn6IP) {
+//   try {
+//     std::string remoteDN  = "192.168.24.160";
+//     uint32_t remoteN6IPv4 = inet_addr(remoteDN.c_str());
+//     // const char* remoteN6MAC = "0061BB000001";
+//     uint8_t remoteN6MAC[6] = {0x52, 0x54, 0x00, 0x71, 0xeb, 0x53};
 
-   /*Logger::upf_app().warn(
-        "updateARPTableForN6 is modified with hard values to test with "
-        "Trex! I dont understand why the execution goes through the "
-        "exception!"
-        "Need to check and debug");
-*/
-    struct s_arp_mapping map_table;
-    memset(&map_table, 0, sizeof(struct s_arp_mapping));
-    memcpy(map_table.mac_address, remoteN6MAC, 6);
-    map_table.ipv4_address = remoteN6IPv4;
+//    /*Logger::upf_app().warn(
+//         "updateARPTableForN6 is modified with hard values to test with "
+//         "Trex! I dont understand why the execution goes through the "
+//         "exception!"
+//         "Need to check and debug");
+// */
+//     struct s_arp_mapping map_table;
+//     memset(&map_table, 0, sizeof(struct s_arp_mapping));
+//     memcpy(map_table.mac_address, remoteN6MAC, 6);
+//     map_table.ipv4_address = remoteN6IPv4;
 
-    pPFCP_Session_LookupProgram->getArpTableMap()->update(
-        upfn6IP, map_table, BPF_ANY);
-  } catch (const std::exception& ex) {
-    Logger::upf_app().error(
-        "Error: The ARP table was not updated for N6 Next HOP");
-  }
-}
+//     pPFCP_Session_LookupProgram->getArpTableMap()->update(
+//         upfn6IP, map_table, BPF_ANY);
+//   } catch (const std::exception& ex) {
+//     Logger::upf_app().error(
+//         "Error: The ARP table was not updated for N6 Next HOP");
+//   }
+// }
 
-/*
 void SessionProgramManager::updateARPTableForN6(
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
     uint32_t dnIP, uint32_t upfn6IP) {
@@ -244,65 +243,27 @@ void SessionProgramManager::updateARPTableForN6(
         "Error: The ARP table was not updated for N6 Next HOP");
   }
 }
-*/
+
 //---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::updateARPTableForN3(
-    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-    uint32_t gNodeBIP, uint32_t upfn3IP, uint32_t seid) {
-  try {
-    std::string remoteGnB = "192.168.23.20";
-    uint32_t remoteN3IPv4 = inet_addr(remoteGnB.c_str());
-    // const char* remoteN3MAC = "0031BB000001";
-    uint8_t remoteN3MAC[6] = {0x52, 0x54, 0x00, 0x8d, 0x18, 0x25};
-
-    /*Logger::upf_app().warn(
-        "updateARPTableForN3 is modified with hard values to test with "
-        "Trex! I dont understand why the execution goes through the "
-        "exception!"
-        "Need to check and debug");
-*/
-    struct s_arp_mapping map_table;
-    memset(&map_table, 0, sizeof(struct s_arp_mapping));
-    memcpy(map_table.mac_address, remoteN3MAC, 6);
-    map_table.ipv4_address = remoteN3IPv4;
-
-    pPFCP_Session_LookupProgram->getArpTableMap()->update(
-        upfn3IP, map_table, BPF_ANY);
-
-    for (auto it = pfcpPrograms->begin(); it != pfcpPrograms->end(); ++it) {
-      // Access the members of the 'farprograms' struct
-      uint64_t savedSeid = it->seid;
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram =
-          it->pPFCP_Session_LookupProgram;
-
-      if (savedSeid == seid) {
-        pPFCP_Session_LookupProgram->getArpTableMap()->update(
-            upfn3IP, map_table, BPF_ANY);
-      }
-    }
-  } catch (const std::exception& ex) {
-    // Handle the exception here or log it for debugging
-    // Note: It's better to handle exceptions rather than ignoring them.
-    Logger::upf_app().error(
-        "Error: The ARP table was not updated for N3 Next HOP");
-  }
-}
-
 // void SessionProgramManager::updateARPTableForN3(
 //     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
 //     uint32_t gNodeBIP, uint32_t upfn3IP, uint32_t seid) {
 //   try {
-//     // uint32_t remoteN3 = getRemoteIP(upfn3IP, gNodeBIP);
+//     std::string remoteGnB = "192.168.23.20";
+//     uint32_t remoteN3IPv4 = inet_addr(remoteGnB.c_str());
+//     // const char* remoteN3MAC = "0031BB000001";
+//     uint8_t remoteN3MAC[6] = {0x52, 0x54, 0x00, 0x8d, 0x18, 0x25};
 
-//     uint32_t ipnexremoteN3hop = (likely(is_little_endian())) ?
-//                                     htole32(getRemoteIP(upfn3IP, gNodeBIP)) :
-//                                     getRemoteIP(upfn3IP, gNodeBIP);
-//     auto remoteN3MAC = NextHopFinder::retrieveNextHopMAC(ipnexremoteN3hop);
-
+//     /*Logger::upf_app().warn(
+//         "updateARPTableForN3 is modified with hard values to test with "
+//         "Trex! I dont understand why the execution goes through the "
+//         "exception!"
+//         "Need to check and debug");
+// */
 //     struct s_arp_mapping map_table;
 //     memset(&map_table, 0, sizeof(struct s_arp_mapping));
 //     memcpy(map_table.mac_address, remoteN3MAC, 6);
-//     map_table.ipv4_address = ipnexremoteN3hop;
+//     map_table.ipv4_address = remoteN3IPv4;
 
 //     pPFCP_Session_LookupProgram->getArpTableMap()->update(
 //         upfn3IP, map_table, BPF_ANY);
@@ -326,6 +287,44 @@ void SessionProgramManager::updateARPTableForN3(
 //         "Error: The ARP table was not updated for N3 Next HOP");
 //   }
 // }
+
+void SessionProgramManager::updateARPTableForN3(
+    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+    uint32_t gNodeBIP, uint32_t upfn3IP, uint32_t seid) {
+  try {
+    // uint32_t remoteN3 = getRemoteIP(upfn3IP, gNodeBIP);
+
+    uint32_t ipnexremoteN3hop = (likely(is_little_endian())) ?
+                                    htole32(getRemoteIP(upfn3IP, gNodeBIP)) :
+                                    getRemoteIP(upfn3IP, gNodeBIP);
+    auto remoteN3MAC = NextHopFinder::retrieveNextHopMAC(ipnexremoteN3hop);
+
+    struct s_arp_mapping map_table;
+    memset(&map_table, 0, sizeof(struct s_arp_mapping));
+    memcpy(map_table.mac_address, remoteN3MAC, 6);
+    map_table.ipv4_address = ipnexremoteN3hop;
+
+    pPFCP_Session_LookupProgram->getArpTableMap()->update(
+        upfn3IP, map_table, BPF_ANY);
+
+    for (auto it = pfcpPrograms->begin(); it != pfcpPrograms->end(); ++it) {
+      // Access the members of the 'farprograms' struct
+      uint64_t savedSeid = it->seid;
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram =
+          it->pPFCP_Session_LookupProgram;
+
+      if (savedSeid == seid) {
+        pPFCP_Session_LookupProgram->getArpTableMap()->update(
+            upfn3IP, map_table, BPF_ANY);
+      }
+    }
+  } catch (const std::exception& ex) {
+    // Handle the exception here or log it for debugging
+    // Note: It's better to handle exceptions rather than ignoring them.
+    Logger::upf_app().error(
+        "Error: The ARP table was not updated for N3 Next HOP");
+  }
+}
 
 //---------------------------------------------------------------------------------------------------------------
 // Helper function to save SEID with FAR program
@@ -432,9 +431,9 @@ void SessionProgramManager::removePipeline(uint64_t seid) {
 
   auto key = it->second->getKey();
 
- // it->second.reset();
+  // it->second.reset();
 
- // mSessionProgramsMap.erase(seid);
+  // mSessionProgramsMap.erase(seid);
 
   Logger::upf_app().debug("Clean PDU Session from the entry program's map");
   // auto pPFCP_Session_LookupProgram =
