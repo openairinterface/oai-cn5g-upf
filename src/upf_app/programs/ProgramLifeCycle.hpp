@@ -292,8 +292,8 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
       // Update the global link state.
       mState = ATTACHED_TO_INGRESS;
       Logger::upf_app().info(
-          "BPF program %s hooked in %s TC interface", sectionName.c_str(),
-          interface.c_str());
+          "BPF program %s hooked on TC Layer for interface %s",
+          sectionName.c_str(), interface.c_str());
       return;
     }
   }
