@@ -100,7 +100,7 @@ void SessionManager::createBPFSession(
   sessions.push_back(pSession_establishment);
 
   logger.debug("Session %lu Received", seid);
-  logger.debug("Preparing the Datapath ...");
+  logger.debug("Data-Path establishment in progress");
   logger.debug("Find the PDR with Highest Precedence");
 
   // Process PDRs to populate uplink and downlink vectors
@@ -130,7 +130,7 @@ void SessionManager::createBPFSession(
   // Store the session in the session map
   mSeidToSession[seid] = pSession_establishment;
 
-  logger.debug("Session %lu successfully created and stored.", seid);
+  logger.debug("Session %lu successfully created and stored", seid);
 }
 
 //---------------------------------------------------------------------------------------------------------------
@@ -324,9 +324,8 @@ void SessionManager::processPDRDetails(
   }
 
   // Log PDI extraction details
-  logger.debug("PDI successfully extracted from PDR ID: %d.", pdr_id);
-  logger.debug(
-      "Extracting FAR from the highest precedence PDR ID: %d.", pdr_id);
+  logger.debug("PDI successfully extracted from PDR ID %d", pdr_id);
+  logger.debug("Extracting FAR from the highest precedence PDR ID %d", pdr_id);
 
   std::shared_ptr<pfcp::pfcp_far> pFar;
 
@@ -341,7 +340,7 @@ void SessionManager::processPDRDetails(
   }
 
   std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer;
- 
+
   /*
   * TODO: implement the QoS Enforcement on the uplink side
 
@@ -359,7 +358,7 @@ void SessionManager::processPDRDetails(
                pSession->qers_downlink :
                std::vector<std::shared_ptr<pfcp::pfcp_qer>>{};
   }
-    
+
   SessionProgramManager::getInstance().createPipeline(
       pSession->get_up_seid(), fteid.teid, interfaceValue,
       ueIpAddress.ipv4_address.s_addr, pFar, pQer, false, 0);
@@ -537,7 +536,6 @@ void SessionManager::updateBPFSessionDL(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
         ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, teid_ul);
   } else {
-    Logger::upf_app().info("Uplink TEID not used for session: 0x%x", seidul);
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
         ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, 0);
@@ -551,8 +549,7 @@ void SessionManager::removeBPFSession(
     itti_n4_session_modification_request* mod_req,
     itti_n4_session_deletion_request* del_req) {
   uint64_t seid = pSession->get_up_seid();
-  Logger::upf_app().info(
-        "Session %lu will be deleted from Data-Path", seid);
+  Logger::upf_app().info("Session %lu will be deleted from Data-Path", seid);
 
   if (mSeidToSession.find(seid) == mSeidToSession.end()) {
     Logger::upf_app().error(
