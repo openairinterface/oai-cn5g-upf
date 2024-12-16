@@ -110,7 +110,6 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
     // check if it is a framed route address, and if yes try again the lookup
     // with the mapped address
     uint32_t big_endian_ue_ip = __builtin_bswap32(ue_ip_address);
-#pragma clang loop unroll(full)
     for (uint32_t i = 32; i > 0; i--) {
       struct FramedRoutingKeyBPF key =
           framed_routing_key_for_ip_cidr(big_endian_ue_ip, i);
