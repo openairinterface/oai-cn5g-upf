@@ -398,12 +398,11 @@ void SessionProgramManager::createPipeline(
 
   initializeNextRuleProgEthIndexKey(key, teid1, ethertype, sourceInterface);
 
-  if ((upf_cfg.enable_qos) && (!pQer.empty())) {
-    enforcing_qos = 1;
-    Logger::upf_app().debug("ETH-PDU: Instantiate a new QERProgram ");
-    std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
-    pQERProgram->setup(seid, pQer);
-  }
+  
+  Logger::upf_app().debug("ETH-PDU: Instantiate a new QERProgram ");
+  std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
+  pQERProgram->setup(seid, pQer);
+  
 
   Logger::upf_app().debug("ETH-PDU: Instantiate a new FARProgram");
   std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();

@@ -123,19 +123,40 @@ static __always_inline u32 handle_eth_downlink_traffic(
       bpf_debug("Invalid ETH packet");
       return XDP_DROP;
   }
+  bpf_debug("Dest MAC %x:%x:%x", eth->h_dest[0], eth->h_dest[1], eth->h_dest[2]);
 
-  struct mac_pdu_session_value* pdu_session = bpf_map_lookup_elem(&m_mac_pdu_session, eth->h_dest);
+  struct iphdr* iph = (void*) (eth + 1);
+  if ((void*) iph + sizeof(*iph) > data_end) {
+    bpf_debug("Invalid Inner IP packet");
+    return XDP_DROP;
+  }
+  bpf_debug("Src IP %pI4 <> Dest IP %pI4", &iph->saddr, &iph->daddr);
+
+  struct mac_pdu_session_value* pdu_session = bpf_map_lookup_elem(&m_mac_pdu_session, &eth->h_dest);
   if (pdu_session) {
     bpf_debug("Found the ETH PDU session");
      create_outer_header_gtpu_ipv4_eth(ctx, pdu_session);
      return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
   }
-  bpf_debug("Could not find the ETH PDU session");
+  // Broadcast packet reach this point. Pass them TC
+  // Check if destination MAC address is a broadcast address
+  for (int i = 0; i < ETH_ALEN; i++) {
+      if (eth->h_dest[i] != 0xFF) {
+          goto out; // Not a broadcast address
+      }
+  }
+  bpf_debug("This is a broadcast packet, prepare GTPU and send to TC layer");
+  struct mac_pdu_session_value pdu = {};
+  __builtin_memset(&pdu, 0, sizeof(struct mac_pdu_session_value));
+  create_outer_header_gtpu_ipv4_eth(ctx, &pdu);
+  return XDP_PASS;
 
   // Should rather have a single FAR program for ETH PDU sessions. Then call this program every time.
   
   // TODO [ETH-PDU] implement routing based on learned MAC
 
+out:
+  bpf_debug("Could not find the ETH PDU session");
   return XDP_PASS;
 }
 
