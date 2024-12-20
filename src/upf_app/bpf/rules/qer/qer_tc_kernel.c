@@ -44,7 +44,9 @@
 
 static __always_inline u32 egress_sdf_filter(
     struct __sk_buff* skb, struct ethhdr* ethh, struct udphdr* udph) {
-  void* data_end = (void*) (long) skb->data_end;
+      bpf_debug("==========< egress_sdf_filter >==========\n");
+  void *data_end = (void *)(unsigned long long)skb->data_end;
+  void *data = (void *)(unsigned long long)skb->data;
 
   struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
 
@@ -62,12 +64,43 @@ static __always_inline u32 egress_sdf_filter(
     return TC_ACT_SHOT;
   }
 
-  struct iphdr* iph_inner = (void*) (ethh + 1);
+  struct ethhdr* ethh_new = (void*) (data + GTP_ENCAPSULATED_SIZE);
 
-  if ((void*) iph_inner + sizeof(*iph_inner) > data_end) {
-    bpf_debug("Invalid Inner IP packet");
+  if ((void*) ethh_new + sizeof(*ethh_new) > data_end) {
+    bpf_debug("egress_sdf_filter: Invalid Ethernet packet");
     return TC_ACT_SHOT;
   }
+
+  struct iphdr* iph_inner = (void*) (ethh_new + 1);
+  if ((void*) (iph_inner + 1) > data_end) {
+    bpf_debug("egress_sdf_filter: Invalid Inner IP packet");
+    return TC_ACT_SHOT;
+  }
+  
+
+  // if ((void*) iph_inner + sizeof(*iph_inner) > data_end) {
+  //   bpf_debug("egress_sdf_filter: Invalid Inner IP packet");
+  //   return TC_ACT_SHOT;
+  // }
+
+  // bpf_debug("egress_sdf_filter: passing inner ip test");
+
+  /**
+   * 1. ETH
+   * 2. Inner Ip
+   * 3. UDP
+   * 4. GTPU
+   * 5. GTPU ext
+   * 6. IP
+   * 7. UDP
+   * 
+   */
+  // struct iphdr* iph_inner = (void*) (ethh + 1);
+
+  // if ((void*) iph_inner + sizeof(*iph_inner) > data_end) {
+  //   bpf_debug("egress_sdf_filter: Invalid Inner IP packet");
+  //   return TC_ACT_SHOT;
+  // }
 
   struct filter_key* key = {0};
 
@@ -120,12 +153,14 @@ static __always_inline u32 egress_sdf_filter(
     u32 classid =
         (seid << 16) |
         ((seid * 256) + (qfi * 251 % 256));  // ( major << 16 ) | minor
+    bpf_debug("classid %d", classid);
     skb->tc_classid = classid;
     return TC_ACT_OK;
   }
 
   // default value qfi = 5 (NON-GBR QoS Flow)
   skb->tc_classid = gtpu_ext_h->qfi;
+  bpf_debug("skb->tc_classid %d", skb->tc_classid);
   return TC_ACT_OK;
 }
 
@@ -144,6 +179,7 @@ static __always_inline u32 egress_sdf_filter(
 
 static __always_inline u32
 ipv4_sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh, struct iphdr* iph) {
+  bpf_debug("==========< ipv4_sdf_filter >==========\n");
   void* data_end = (void*) (long) skb->data_end;
   u8 protocol    = iph->protocol;
 
@@ -182,7 +218,11 @@ struct meta_info {
  */
 static __always_inline u32
 sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
+  bpf_debug("==========< sdf_filter >==========\n");
   void* data_end = (void*) (long) skb->data_end;
+  void *data = (void *)(long) skb->data;
+
+  int payload_len = (data_end - data) - sizeof(struct ethhdr);
 
   u16 eth_type = htons(ethh->h_proto);
   bpf_debug("Debug: eth_type:0x%x", eth_type);
@@ -195,6 +235,13 @@ sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
       if ((void*) (iph + 1) > data_end) {
         bpf_debug("Invalid IPv4 header");
         return TC_ACT_SHOT;
+      }
+
+      // check if skb is non-linear, it if is and pull in non-linear data
+      if (bpf_ntohs(iph->tot_len) > payload_len) {
+        bpf_debug("sdf_filter: tc buffer is non-linear");
+        // if (bpf_skb_pull_data(skb, bpf_ntohs(iph->tot_len) + sizeof(struct ethhdr)) < 0)
+        //     return TC_ACT_UNSPEC;
       }
 
       return ipv4_sdf_filter(skb, ethh, iph);
@@ -226,7 +273,7 @@ sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
 
 SEC("tc/egress")
 int tc_filter_traffic(struct __sk_buff* skb) {
-  bpf_debug("==========< QER Rules >==========\n");
+  bpf_debug("==========< TC Egress >==========\n");
 
   // void *data      = (void *)(long)skb->data;
   // void *data_meta = (void *)(long)skb->data_meta;
@@ -242,7 +289,7 @@ int tc_filter_traffic(struct __sk_buff* skb) {
   // /* Hint: See func tc_cls_act_is_valid_access() for BPF_WRITE access */
   // skb->mark = meta->mark; /* Transfer XDP-mark to SKB-mark */
 
-  bpf_debug("TC Retrieves a Marker metadata value: %d", skb->mark);
+  // bpf_debug("TC Retrieves a Marker metadata value: %d", skb->mark);
 
   // Check if the marker matches
   // if (skb->mark == htonl(MARK_VALUE)) {
@@ -252,7 +299,7 @@ int tc_filter_traffic(struct __sk_buff* skb) {
 
   // Extract Ethernet header
   struct ethhdr* ethh = (void*) (long) skb->data;
-  bpf_debug("tc_filter_traffic: MAC SRC: %pM, MAC DST: %pM", ethh->h_source, ethh->h_dest);
+  bpf_debug("tc_filter_traffic: MAC SRC: %pM, MAC DST: %pM", &ethh->h_source, &ethh->h_dest);
 
   if ((void*) (ethh + 1) > (void*) (long) skb->data_end) {
     bpf_debug("Invalid Ethernet header");
@@ -266,7 +313,7 @@ int tc_filter_traffic(struct __sk_buff* skb) {
     return TC_ACT_SHOT;
   }
 
-  bpf_debug("tc_filter_traffic: IP SRC: %pI4, IP DST: %pI4", iph->saddr, iph->daddr);
+  bpf_debug("tc_filter_traffic: IP SRC: %pI4, IP DST: %pI4", &iph->saddr, &iph->daddr);
 
   return sdf_filter(skb, ethh);
 }
@@ -275,6 +322,7 @@ int tc_filter_traffic(struct __sk_buff* skb) {
 
 SEC("tc/ingress")
 int tc_redirect_traffic(struct __sk_buff* skb) {
+  bpf_debug("==========< TC Ingress >==========\n");
   int key = DOWNLINK, *ifindex;
 
   // return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
@@ -293,7 +341,7 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
     return TC_ACT_SHOT;
   }
 
-  bpf_debug("tc_redirect_traffic: IP SRC: %pI4, IP DST: %pI4", iph->saddr, iph->daddr);
+  bpf_debug("tc_redirect_traffic: IP SRC: %pI4, IP DST: %pI4", &iph->saddr, &iph->daddr);
 
   /* Lookup what ifindex to redirect packets to */
   ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);

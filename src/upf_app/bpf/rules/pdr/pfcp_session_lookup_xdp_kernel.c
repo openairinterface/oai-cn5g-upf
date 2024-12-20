@@ -116,7 +116,7 @@ handle_uplink_traffic(struct xdp_md* ctx, struct udphdr* udph) {
   struct iphdr* iph_inner = (void*) (ethh_new + 1);
 
   if ((void*) iph_inner + sizeof(*iph_inner) > data_end) {
-    bpf_debug("Invalid Inner IP packet");
+    bpf_debug("handle_uplink_traffic: Invalid Inner IP packet");
     return XDP_DROP;
   }
 
@@ -171,6 +171,7 @@ static __always_inline u32 ipv4_handle(struct xdp_md* ctx, struct iphdr* iph) {
       }
     }
     default: {
+      bpf_debug("ipv4_handle: IP DST: %pI4", &iph->daddr);
       return handle_downlink_traffic(ctx, ip_dest);
     }
   }
