@@ -237,7 +237,8 @@ int far_entry_point(struct xdp_md* ctx) {
       return XDP_PASS;
     }
 
-    if (dest_interface == INTERFACE_VALUE_CORE) {
+    if ((dest_interface == INTERFACE_VALUE_CORE) ||
+        (dest_interface == INTERFACE_VALUE_CP_FUNCTION)) {
       // Redirect to data network.
       bpf_debug("GTP Header Removal ...");
 
