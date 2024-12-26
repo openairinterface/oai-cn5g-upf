@@ -159,7 +159,9 @@ class upf_config {
     itti.upf_app_sched_params.sched_priority    = 84;
     itti.async_cmd_sched_params.sched_priority  = 84;
 
+    n3.thread_rd_sched_params.cpu_id = -1;
     n3.thread_rd_sched_params.sched_priority = 98;
+    n3.thread_rd_sched_params.thread_pool_size = 4;
     n3.port                                  = gtpv1u::default_port;
 
     n6.thread_rd_sched_params.sched_priority = 98;
