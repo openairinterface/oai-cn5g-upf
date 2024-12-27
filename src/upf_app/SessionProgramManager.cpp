@@ -1,6 +1,7 @@
 #include "SessionProgramManager.h"
 #include <far_xdp_user.h>
 #include <qer_tc_user.h>
+#include <far_tc_user.h>
 #include <pfcp_session_pdr_lookup_xdp_user.h>
 #include "SessionPrograms.h"
 #include <pfcp_session_lookup_xdp_user.h>
@@ -399,10 +400,16 @@ void SessionProgramManager::createPipeline(
   initializeNextRuleProgEthIndexKey(key, teid1, ethertype, sourceInterface);
 
   
-  Logger::upf_app().debug("ETH-PDU: Instantiate a new QERProgram ");
-  std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
-  pQERProgram->setup(seid, pQer);
+  if ((upf_cfg.enable_qos) && (!pQer.empty())) {
+    enforcing_qos = 1;
+    std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
+    pQERProgram->setup(seid, pQer);
+  }
   
+  // Add TC program to handle ETH PDU session broadcast packets
+  Logger::upf_app().debug("ETH-PDU: Instantiate a new FARTCProgram");
+  std::shared_ptr<FARTCProgram> pFARTCProgram = std::make_shared<FARTCProgram>();
+  pFARTCProgram->setup();
 
   Logger::upf_app().debug("ETH-PDU: Instantiate a new FARProgram");
   std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();

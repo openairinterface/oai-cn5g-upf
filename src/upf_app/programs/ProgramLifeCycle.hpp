@@ -33,6 +33,7 @@
 
 #define INGRESS_HANDLE 0x1
 #define INGRESS_PRIORITY 0xC02F
+#define INGRESS_BROADCAST_PRIORITY 0x0003
 
 /**
  * @brief Program states.
@@ -63,8 +64,8 @@ class ProgramLifeCycle {
   void load();
   void attach();
   void link(std::string sectionName, std::string interface);
-  void tcAttachIngress(std::string sectionName, std::string interface);
-  void tcAttachEgress(std::string sectionName, std::string interface);
+  void tcAttachIngress(std::string sectionName, std::string interface, __u32 priority = INGRESS_PRIORITY);
+  void tcAttachEgress(std::string sectionName, std::string interface, __u32 priority = EGRESS_PRIORITY);
   void destroy();
   void tearDown();
 
@@ -211,7 +212,7 @@ void ProgramLifeCycle<BPFSkeletonType>::link(
 //-------------------------------------------------------------------------------------------------------------
 template<class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
-    std::string sectionName, std::string interface) {
+    std::string sectionName, std::string interface, __u32 priority) {
   int err = 0;
   int fd;
   struct bpf_program* prog = NULL;
@@ -266,7 +267,7 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
       hook.attach_point       = BPF_TC_INGRESS;
       attach_ingress.flags    = BPF_TC_F_REPLACE;
       attach_ingress.handle   = INGRESS_HANDLE;
-      attach_ingress.priority = INGRESS_PRIORITY;
+      attach_ingress.priority = priority;
       err                     = bpf_tc_attach(&hook, &attach_ingress);
       if (err) {
         Logger::upf_app().error(
@@ -305,7 +306,7 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
 //-------------------------------------------------------------------------------------------------------------
 template<class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
-    std::string sectionName, std::string interface) {
+    std::string sectionName, std::string interface, __u32 priority) {
   int err = 0;
   int fd;
   struct bpf_program* prog = NULL;
@@ -359,7 +360,7 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
       hook.attach_point      = BPF_TC_EGRESS;
       attach_egress.flags    = BPF_TC_F_REPLACE;
       attach_egress.handle   = EGRESS_HANDLE;
-      attach_egress.priority = EGRESS_PRIORITY;
+      attach_egress.priority = priority;
       err                    = bpf_tc_attach(&hook, &attach_egress);
       if (err) {
         Logger::upf_app().error(

@@ -418,7 +418,7 @@ void SessionManager::processPDRDetails(
     logger.debug("ETH-PDU: creating pipeline for ETH PDU session");
     pfcp::ethertype_t ethertype;
     if (!ethernetPacketFilter.get(ethertype)) {
-      ethertype.ethertype = ETH_P_IP;
+      ethertype.ethertype = 0;
     }
     // TODO [ETH-PDU] support other packet filters
     logger.info("ETH-PDU: Only considering Ethertype from the Ethernet Packet Filter IE");

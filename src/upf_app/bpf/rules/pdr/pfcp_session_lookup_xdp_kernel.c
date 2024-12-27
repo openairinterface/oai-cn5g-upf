@@ -72,13 +72,21 @@ static __always_inline u32 tail_call_next_eth_prog(
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
 
+  // If inner packet is Ethernet broadcast (ff:ff:ff:ff:ff:ff) pass packet to TC
+  if (eth->h_dest[0] == 0xff && eth->h_dest[1] == 0xff &&
+      eth->h_dest[2] == 0xff && eth->h_dest[3] == 0xff &&
+      eth->h_dest[4] == 0xff && eth->h_dest[5] == 0xff) {
+      bpf_printk("Ethernet broadcast detected!\n");
+      return XDP_PASS; // Drop broadcast packets (or take other action)
+  }
+
   struct next_rule_eth_prog_index_key map_key;
 
   // Check types of maps and the keys that have to be included
   __builtin_memset(&map_key, 0, sizeof(struct next_rule_eth_prog_index_key));
   map_key.teid         = teid;
   map_key.source_value = source_value;
-  map_key.ethertype = bpf_ntohs(eth->h_proto);
+  map_key.ethertype = 0; // bpf_ntohs(eth->h_proto);
 
   // TODO [ETH-PDU] support other eth pkt filters
   bpf_printk("teid: %x - source_value: %u - ethertype: %x", map_key.teid, source_value, eth->h_proto);
@@ -231,10 +239,6 @@ handle_uplink_traffic(struct xdp_md* ctx, struct udphdr* udph) {
   if (!(iph_inner->version == 4 || iph_inner->version == 6)) { // Not IP packet
     bpf_debug("Not an IP packet, attempting ETH PDU");
     struct ethhdr* eth = (void*) (ethh_new + 1);
-    if (!(eth->h_proto == bpf_htons(ETH_P_IP))) {
-      bpf_debug("Expected ETH_P_IP");
-      return XDP_DROP;
-    }
 
     tail_call_next_eth_prog(ctx, gtpuh->teid, INTERFACE_VALUE_ACCESS, eth);
 

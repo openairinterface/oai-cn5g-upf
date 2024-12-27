@@ -1,6 +1,7 @@
 #ifndef __PFCP_SESSION_LOOKUP_MAPS_H__
 #define __PFCP_SESSION_LOOKUP_MAPS_H__
 
+#include <bpf_helpers.h>
 #include <ie/group_ie/create_pdr.h>
 #include <pfcp/pfcp_pdr.h>
 #include <pfcp/pfcp_session.h>
@@ -75,6 +76,7 @@ struct {
   __uint(max_entries, MAX_LENGTH);  // 10,
   __type(key, u8[ETH_ALEN]);
   __type(value, struct mac_pdu_session_value);
+  __uint(pinning, 1);
 } m_mac_pdu_session SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
