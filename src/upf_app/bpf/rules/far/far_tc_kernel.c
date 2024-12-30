@@ -16,11 +16,14 @@
 #include <eth_pdu_session_maps.h>
 #include <mac_pdu_session_key.h>
 
+#define MAX_PDU_SESSIONS 50
 struct callback_ctx {
     struct __sk_buff *skb;
     struct ethhdr *inner_eth;
     struct gtpuhdr* gtpuh;
     int *ifindex;
+    uint32_t pdu_sessions[MAX_PDU_SESSIONS];
+    int size;
 };
 
 static void swap_src_dst_mac(struct ethhdr *eth)
@@ -59,52 +62,75 @@ static long callback_fn(struct bpf_map *map, void *key, void *value,
     void *data_end = (void *)(long) skb->data_end;
     struct ethhdr* eth = (struct ethhdr*) data;
 
-    if (eth + sizeof(*eth) > data_end)
+    if ((void*) (eth + 1) > data_end)
     {
+        bpf_printk("callback_fn: Invalid Ethernet Packet");
         return 0;
     }
 
     struct iphdr* iph = (struct iphdr*) ((void*) data + sizeof(*eth));
     if ((void*) (iph + 1) > data_end) {
-        bpf_printk("Invalid IPv4 Packet");
+        bpf_printk("callback_fn: Invalid IPv4 Packet");
         return 0;
     }
 
     struct udphdr* udph = (struct udphdr*) (iph + 1);
     // Check if the UDP header extends beyond the data end.
     if ((void*) (udph + 1) > data_end) {
-        bpf_printk("Invalid UDP packet");
+        bpf_printk("callback_fn: Invalid UDP packet");
         return 0;
     }
 
     if (bpf_htons(udph->dest) != GTP_UDP_PORT) {
-        bpf_printk("This is not a GTP packet");
+        bpf_printk("callback_fn: This is not a GTP packet");
         return 0;
     }
 
     struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
     if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
-        bpf_printk("Invalid GTPU packet");
+        bpf_printk("callback_fn: Invalid GTPU packet");
         return 0;
     }
 
-    struct ethhdr* ethh_new = eth + GTP_ENCAPSULATED_SIZE;
-    if (ethh_new + sizeof(*ethh_new) > data_end)
+    struct ethhdr* ethh_new = data + GTP_ENCAPSULATED_SIZE + sizeof(struct ethhdr);
+    if ((void*) (ethh_new + 1) > data_end)
     {
-        bpf_printk("Invalid inner ETH packet");
+        bpf_printk("callback_fn: Invalid inner ETH packet");
         return 0;
     }
 
-    // // If teid is not the same don't send broadcast packet
-    // if (pdu_session->teid != gtpuh->teid)
-    //     return 1;
-    gtpuh->teid = 2;
-    int ret = bpf_clone_redirect(skb, *ctx->ifindex, 0);
-    if (ret < 0) {
-        bpf_printk("far_tc_kernel: failed to redirect clone\n");
+    // // If teid (pdu session) is the same skip
+    if (pdu_session->teid == gtpuh->teid) {
+        bpf_printk("callback_fn: same tied, skipping");
         return 1;
     }
-    bpf_printk("far_tc_kernel: successful redirect clone\n");
+
+    /**
+     * Broadcast support (23.501 Section 5.8.2.5.3)
+     * 
+     * for UL traffic received by UPF over a PDU session on a N3/N9 interface, 
+     * the UPF should forward the traffic to the N6 interface and downlink to 
+     * every PDU session (except toward the one of the incoming traffic)
+     * */ 
+    int v;
+    bpf_for(v, 0, MAX_PDU_SESSIONS) {
+        bpf_printk("X = %d", v);
+        if (ctx->pdu_sessions[v] == pdu_session->teid)
+            break;
+        if (v == ctx->size) {
+            ctx->pdu_sessions[v] = pdu_session->teid;
+            ctx->size += 1;
+            gtpuh->teid = pdu_session->teid;
+            int ret = bpf_clone_redirect(skb, *ctx->ifindex, 0);
+            if (ret < 0) {
+                bpf_printk("far_tc_kernel: failed to redirect clone\n");
+                return 1;
+            }
+            break;
+        }
+    }
+
+    bpf_printk("far_tc_kernel: successful redirect clone on ifindex -> %d, ctx->size -> %d\n", *ctx->ifindex, ctx->size);
     return 0;
 }
 
@@ -117,10 +143,11 @@ int handle_broadcast(struct __sk_buff *skb)
     int action = TC_ACT_OK;
     
 
-    if (eth + sizeof(*eth) > data_end)
+    if ((void*) (eth + 1) > data_end)
     {
-            action = TC_ACT_OK;
-            goto out;
+        bpf_printk("Invalid Ethernet Packet");
+        action = TC_ACT_OK;
+        goto out;
     }
     swap_src_dst_mac(eth);
 
@@ -182,7 +209,7 @@ int handle_broadcast(struct __sk_buff *skb)
             bpf_printk("far_tc_kernel: ifindex ---> %d", *ifindex);
             // long (*cb_p)(struct bpf_map *, const void *, int *, void *) = &callback_fn;
             struct callback_ctx callback_ctx = { .skb = skb, .ifindex = ifindex,
-            .inner_eth = eth, .gtpuh = gtpuh };
+            .inner_eth = eth, .gtpuh = gtpuh, .size = 0 };
             long n = bpf_for_each_map_elem(&m_mac_pdu_session, callback_fn, &callback_ctx, 0);
             bpf_printk("far_tc_kernel: transversed ---> %lu", n);
             action = TC_ACT_OK;
