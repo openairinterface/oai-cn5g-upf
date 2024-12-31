@@ -151,7 +151,11 @@ void SessionProgramManager::initializeNextRuleProgEthIndexKey(
     uint8_t sourceInterface) {
   __builtin_memset(&key, 0, sizeof(struct next_rule_prog_index_key));
 
-  key.teid         = htobe32(teid);
+  if (is_little_endian()) {
+    key.teid         = htobe32(teid);
+  } else {
+    key.teid         = htole32(teid);
+  }
   key.ethertype = ethertype;
 
   key.source_value = sourceInterface;

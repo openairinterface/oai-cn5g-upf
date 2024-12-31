@@ -50,7 +50,7 @@ static __always_inline u32 tail_call_next_prog(
   map_key.ipv4_address = ipv4_address;
 
   // Key for ETH filters
-
+  bpf_printk("tail_call_next_prog: teid: %x - source_value: %u", map_key.teid, source_value);
   u32* index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key); // IP for ETH will need another map and new key
 
   if (index_prog) {
@@ -93,7 +93,7 @@ static __always_inline u32 tail_call_next_eth_prog(
   struct next_rule_eth_prog_index_value* index_value = bpf_map_lookup_elem(&m_next_rule_eth_prog_index, &map_key);
 
   if (index_value) {
-    bpf_debug("Value of the eBPF tail call, index_prog = %d", index_value->prog_id);
+    bpf_debug("Value of the eBPF tail call, index_prog = %d, tied = %d", index_value->prog_id, index_value->teid_dl);
     // TODO [ETH-PDU] pdu sess info learn mac
     struct iphdr* iph_outer = (void*) (data + sizeof(struct ethhdr));
 
@@ -132,13 +132,6 @@ static __always_inline u32 handle_eth_downlink_traffic(
       return XDP_DROP;
   }
   bpf_debug("Dest MAC %x:%x:%x", eth->h_dest[0], eth->h_dest[1], eth->h_dest[2]);
-
-  struct iphdr* iph = (void*) (eth + 1);
-  if ((void*) iph + sizeof(*iph) > data_end) {
-    bpf_debug("Invalid Inner IP packet");
-    return XDP_DROP;
-  }
-  bpf_debug("Src IP %pI4 <> Dest IP %pI4", &iph->saddr, &iph->daddr);
 
   struct mac_pdu_session_value* pdu_session = bpf_map_lookup_elem(&m_mac_pdu_session, &eth->h_dest);
   if (pdu_session) {
@@ -347,6 +340,8 @@ static __always_inline u32 eth_handle(struct xdp_md* ctx, struct ethhdr* ethh) {
     case ETH_P_8021Q:
     default: {
       bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x", offset, eth_type);
+      // Check if downlink ETH packet
+      handle_eth_downlink_traffic(ctx);
       return XDP_PASS;
     }
   }

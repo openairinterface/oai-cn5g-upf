@@ -98,12 +98,13 @@ static long callback_fn(struct bpf_map *map, void *key, void *value,
         bpf_printk("callback_fn: Invalid inner ETH packet");
         return 0;
     }
+    bpf_printk("callback_fn: pdu_session->teid = %d", pdu_session->teid);
 
     // // If teid (pdu session) is the same skip
-    if (pdu_session->teid == gtpuh->teid) {
-        bpf_printk("callback_fn: same tied, skipping");
-        return 1;
-    }
+    // if (pdu_session->teid == gtpuh->teid) {
+    //     bpf_printk("callback_fn: same tied, skipping");
+    //     return 0;
+    // }
 
     /**
      * Broadcast support (23.501 Section 5.8.2.5.3)
@@ -114,13 +115,14 @@ static long callback_fn(struct bpf_map *map, void *key, void *value,
      * */ 
     int v;
     bpf_for(v, 0, MAX_PDU_SESSIONS) {
-        bpf_printk("X = %d", v);
-        if (ctx->pdu_sessions[v] == pdu_session->teid)
+        bpf_printk("X = %d, gtpuh->teid = %d, pdu_session->teid = %d, bpf_htonl = %d", v, gtpuh->teid, pdu_session->teid, bpf_htonl(pdu_session->teid));
+        if (ctx->pdu_sessions[v] == bpf_htonl(pdu_session->teid))
             break;
         if (v == ctx->size) {
-            ctx->pdu_sessions[v] = pdu_session->teid;
+            ctx->pdu_sessions[v] = bpf_htonl(pdu_session->teid);
             ctx->size += 1;
-            gtpuh->teid = pdu_session->teid;
+            gtpuh->teid = bpf_htonl(pdu_session->teid);
+            iph->daddr = pdu_session->ipv4_address;
             int ret = bpf_clone_redirect(skb, *ctx->ifindex, 0);
             if (ret < 0) {
                 bpf_printk("far_tc_kernel: failed to redirect clone\n");
@@ -191,8 +193,27 @@ int handle_broadcast(struct __sk_buff *skb)
     }
 
     int key = DOWNLINK, *ifindex;
-
     
+    ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
+    if (!ifindex) {
+        action = TC_ACT_OK;
+        goto out;
+    }
+    bpf_printk("far_tc_kernel: ifindex = %d, skb->ingress_ifindex = %d ", *ifindex, skb->ingress_ifindex);
+
+    // If this is on N6, send to all downlink, but not to uplink
+
+    /**
+     * for DL traffic received by UPF on a N6 Network Instance the UPF should forward the traffic to every DL PDU Session
+     */
+    
+    // Means if this is UL, another packet should be sent to UPLINK
+    // If this is DL then need to all PDU session, hence initial teid should be invalid so that for loop goes
+
+
+    // Initial TIED is zero, if the array doesn't have zero on [0] then 
+    
+
 
     if (!(iph_inner->version == 4 || iph_inner->version == 6)) { // Not IP packet
         bpf_printk("Not an IP packet, attempting ETH PDU");
@@ -204,26 +225,45 @@ int handle_broadcast(struct __sk_buff *skb)
             bpf_printk("Not a broadcast packet\n");
             return TC_ACT_OK; // Drop broadcast packets (or take other action)
         }
+        
+        bpf_printk("far_tc_kernel: ifindex ---> %d", *ifindex);
+        // long (*cb_p)(struct bpf_map *, const void *, int *, void *) = &callback_fn;
+        struct callback_ctx callback_ctx = { .skb = skb, .ifindex = ifindex,
+        .inner_eth = eth, .gtpuh = gtpuh, .size = 0 };
+        
+        // For UL PDU session (except toward the one of the incoming traffic)
+        if (*ifindex == skb->ingress_ifindex) {
+            callback_ctx.pdu_sessions[0] = gtpuh->teid;
+            callback_ctx.size += 1;
+        }
+
+        long n = bpf_for_each_map_elem(&m_mac_pdu_session, callback_fn, &callback_ctx, 0);
+        bpf_printk("far_tc_kernel: transversed ---> %lu", n);
+        action = TC_ACT_OK;
+    }
+
+    // For UL also send to N6 after removing the Header
+    if (*ifindex == skb->ingress_ifindex) {
+        int roomlen = GTP_ENCAPSULATED_SIZE + sizeof(struct ethhdr);
+        int ret = bpf_skb_adjust_room(skb, -roomlen, BPF_ADJ_ROOM_MAC, 0);
+        if (ret) {
+            bpf_printk("far_tc_kernel: error reducing skb adjust room.\n");
+            return TC_ACT_SHOT;
+        }
+        key = UPLINK;
+    
         ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
-        if (ifindex) {
-            bpf_printk("far_tc_kernel: ifindex ---> %d", *ifindex);
-            // long (*cb_p)(struct bpf_map *, const void *, int *, void *) = &callback_fn;
-            struct callback_ctx callback_ctx = { .skb = skb, .ifindex = ifindex,
-            .inner_eth = eth, .gtpuh = gtpuh, .size = 0 };
-            long n = bpf_for_each_map_elem(&m_mac_pdu_session, callback_fn, &callback_ctx, 0);
-            bpf_printk("far_tc_kernel: transversed ---> %lu", n);
-            action = TC_ACT_OK;
-            goto out;
-        } else {
-            bpf_printk("far_tc_kernel: ifindex not defined");
+        if (!ifindex) {
+            bpf_printk("far_tc_kernel: failed to find downlink ifindex.\n");
             action = TC_ACT_OK;
             goto out;
         }
+        return bpf_redirect(*ifindex, 0);
     }
 
 out:     
     bpf_printk("far_tc_kernel: returning with final action\n");
-    return TC_ACT_OK;
+    return TC_ACT_SHOT;
 }
 
 char _license[] SEC("license") = "GPL";
