@@ -244,10 +244,38 @@ int handle_broadcast(struct __sk_buff *skb)
 
     // For UL also send to N6 after removing the Header
     if (*ifindex == skb->ingress_ifindex) {
-        int roomlen = GTP_ENCAPSULATED_SIZE + sizeof(struct ethhdr);
-        int ret = bpf_skb_adjust_room(skb, -roomlen, BPF_ADJ_ROOM_MAC, 0);
+        __u64 flags = // BPF_F_ADJ_ROOM_FIXED_GSO |
+          BPF_F_ADJ_ROOM_ENCAP_L3_IPV4 |
+          BPF_F_ADJ_ROOM_ENCAP_L4_UDP |
+          BPF_F_ADJ_ROOM_ENCAP_L2_ETH;
+
+        int roomlen = sizeof(struct ethhdr);
+        if (data + roomlen > data_end) {
+            bpf_printk("far_tc_kernel: data + roomlen > data_end");
+            return TC_ACT_SHOT;
+        }
+        // max_len = skb->dev ? skb->dev->mtu + skb->dev->hard_header_len :
+		// 	  SKB_MAX_ALLOC;
+
+        // __bpf_skb_min_len(const struct sk_buff *skb)
+        // u32 max_len = __bpf_skb_max_len(skb);
+
+        // ret = bpf_skb_grow_rcsum(skb, new_len);
+        // ret = bpf_skb_trim_rcsum(skb, new_len);
+
+        int payload_len = (data_end - data) - sizeof(struct ethhdr);
+        if (bpf_ntohs(iph->tot_len) > payload_len) {
+            bpf_printk("far_tc_kernel: bpf_ntohs(iph->tot_len) > payload_len");
+            if (bpf_skb_pull_data(skb, bpf_ntohs(iph->tot_len) + sizeof(struct ethhdr)) < 0) {
+                bpf_printk("far_tc_kernel: bpf_skb_pull_data");
+                return TC_ACT_UNSPEC;
+            }
+        }
+            // int ret = bpf_skb_change_head(skb, -roomlen, 0);
+        int ret = bpf_skb_change_tail(skb, -roomlen, 0);
+        // int ret = bpf_skb_adjust_room(skb, -roomlen, BPF_ADJ_ROOM_MAC, 0);
         if (ret) {
-            bpf_printk("far_tc_kernel: error reducing skb adjust room.\n");
+            bpf_printk("far_tc_kernel: error reducing skb adjust room, ret = %d, skb->protocol = %d.\n", ret, skb->protocol);
             return TC_ACT_SHOT;
         }
         key = UPLINK;
