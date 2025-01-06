@@ -349,7 +349,7 @@ int handle_broadcast(struct __sk_buff *skb)
 
         long n = bpf_for_each_map_elem(&m_mac_pdu_session, callback_fn, &callback_ctx, 0);
         bpf_printk("far_tc_kernel: transversed ---> %lu", n);
-        action = TC_ACT_OK;
+        action = TC_ACT_SHOT;
     }
 
     // For UL also send to N6 after removing the Header
@@ -373,7 +373,7 @@ int handle_broadcast(struct __sk_buff *skb)
 
 out:     
     bpf_printk("far_tc_kernel: returning with final action\n");
-    return TC_ACT_SHOT;
+    return action;
 }
 
 char _license[] SEC("license") = "GPL";
