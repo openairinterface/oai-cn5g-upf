@@ -64,6 +64,7 @@ void FARTCProgram::setup() {
 
   Logger::upf_app().info("Attach Section far_tc_kernel to gtp interface");
   mpLifeCycle->tcAttachIngress("handle_broadcast", GTP_INTERFACE.c_str(), INGRESS_BROADCAST_PRIORITY);
+  mpLifeCycle->tcAttachEgress("handle_n3_outgoing_broadcast", GTP_INTERFACE.c_str(), INGRESS_BROADCAST_PRIORITY);
 
   Logger::upf_app().info("Attach Sesction far_tc_kernel to udp interface");
   mpLifeCycle->tcAttachIngress("handle_broadcast", UDP_INTERFACE.c_str(), INGRESS_BROADCAST_PRIORITY);

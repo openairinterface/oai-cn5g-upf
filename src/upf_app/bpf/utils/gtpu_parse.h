@@ -76,14 +76,17 @@ static __always_inline u32
 create_outer_header_gtpu_ipv4_eth(struct xdp_md* ctx, struct mac_pdu_session_value* pdu_session) {
   // bpf_debug("Create Outer Header GTPU_IPv4");
   // bpf_debug("Original Packet: Data/UDP/IP/ETH");
+  void* data     = (void*) (long) ctx->data;
+  void* data_end = (void*) (long) ctx->data_end;
+  int orginal_len = (int)(data_end - data);
 
   // Adjust space to the left.
   if (bpf_xdp_adjust_head(ctx, (int32_t) -(sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE))) {
     return XDP_DROP;
   }
 
-  void* data     = (void*) (long) ctx->data;
-  void* data_end = (void*) (long) ctx->data_end;
+  data     = (void*) (long) ctx->data;
+  data_end = (void*) (long) ctx->data_end;
 
   bpf_debug("Total len %d", (int)(data_end - data));
   // Retrieve the N3 Interface IP address:
@@ -112,6 +115,7 @@ create_outer_header_gtpu_ipv4_eth(struct xdp_md* ctx, struct mac_pdu_session_val
     return XDP_DROP;
   }
   __builtin_memcpy(ethh, ethh_orig, sizeof(*ethh));
+  ethh->h_proto = bpf_htons(ETH_P_IP);
 
   /*
   |----------------------------------------------------------------|
@@ -132,7 +136,7 @@ create_outer_header_gtpu_ipv4_eth(struct xdp_md* ctx, struct mac_pdu_session_val
   iph->ihl     = 5;  // No options
   iph->tos     = 0;
   iph->tot_len =
-      bpf_htons(bpf_ntohs(p_inner_ip->tot_len) + sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE);
+      bpf_htons((data_end - data) - sizeof(struct ethhdr));
   iph->id       = 0;       // No fragmentation
   iph->frag_off = 0x0040;  // Don't fragment; Fragment offset = 0
   iph->ttl      = 64;
@@ -140,8 +144,7 @@ create_outer_header_gtpu_ipv4_eth(struct xdp_md* ctx, struct mac_pdu_session_val
   iph->check    = 0;
   iph->saddr    = n3_ip;
   iph->daddr = pdu_session->ipv4_address;
-
-  bpf_debug("IP SRC: 0x%x, IP DST: 0x%x", iph->saddr, iph->daddr);
+  bpf_debug("create_outer_header_gtpu_ipv4_eth IP SRC: %pI4, IP DST: %pI4, LEN: %d", iph->saddr, iph->daddr, bpf_ntohs(iph->tot_len));
 
   /*
   |----------------------------------------------------------------|
@@ -157,7 +160,7 @@ create_outer_header_gtpu_ipv4_eth(struct xdp_md* ctx, struct mac_pdu_session_val
   udph->dest   = bpf_htons(GTP_UDP_PORT);
   // bpf_htons(p_far->forwarding_parameters.outer_header_creation.port_number);
   udph->len = bpf_htons(
-      bpf_ntohs(p_inner_ip->tot_len) + sizeof(struct ethhdr) + sizeof(*udph) + sizeof(struct gtpuhdr) +
+      orginal_len + sizeof(*udph) + sizeof(struct gtpuhdr) +
       sizeof(struct gtpu_extn_pdu_session_container));
   udph->check = 0;
 
@@ -180,7 +183,7 @@ create_outer_header_gtpu_ipv4_eth(struct xdp_md* ctx, struct mac_pdu_session_val
   __builtin_memcpy(p_gtpuh, &flags, sizeof(u8));
   p_gtpuh->message_type   = GTPU_G_PDU;
   p_gtpuh->message_length = bpf_htons(
-      bpf_ntohs(p_inner_ip->tot_len) + sizeof(struct ethhdr) +
+      orginal_len +
       sizeof(struct gtpu_extn_pdu_session_container) + 4);
   p_gtpuh->teid =
       bpf_htonl(pdu_session->teid);

@@ -123,6 +123,7 @@ static long callback_fn(struct bpf_map *map, void *key, void *value,
             ctx->size += 1;
             gtpuh->teid = bpf_htonl(pdu_session->teid);
             iph->daddr = pdu_session->ipv4_address;
+            bpf_printk("handle_broadcast SRC IP: %pI4, DST IP: %pI4", &iph->saddr, &iph->daddr);
             int ret = bpf_clone_redirect(skb, *ctx->ifindex, 0);
             if (ret < 0) {
                 bpf_printk("far_tc_kernel: failed to redirect clone\n");
@@ -134,6 +135,29 @@ static long callback_fn(struct bpf_map *map, void *key, void *value,
 
     bpf_printk("far_tc_kernel: successful redirect clone on ifindex -> %d, ctx->size -> %d\n", *ctx->ifindex, ctx->size);
     return 0;
+}
+
+SEC("tc/egress")
+int handle_n3_outgoing_broadcast(struct __sk_buff *skb)
+{
+    void *data = (void *)(long)skb->data;
+    void *data_end = (void *)(long)skb->data_end;
+    struct ethhdr *eth = data;
+    int action = TC_ACT_OK;
+    int payload_len = (data_end - data);
+    bpf_printk("handle_n3_outgoing_broadcast: payload_len %d", payload_len);
+
+    if ((void*) (eth + 1) > data_end)
+    {
+        bpf_printk("handle_outgoing_broadcast: Invalid Ethernet Packet");
+        action = TC_ACT_OK;
+        goto out;
+    }
+
+    bpf_printk("handle_n3_outgoing_broadcast: eth->h_proto = %d", eth->h_proto);
+
+out:
+    return action;
 }
 
 SEC("tc/egress")
@@ -160,7 +184,7 @@ int handle_outgoing_broadcast(struct __sk_buff *skb)
         goto out;
     }
 
-    bpf_printk("handle_outgoing_broadcast SRC IP: %pI4, DST IP: %pI4", &iph->saddr, &iph->daddr);
+    bpf_printk("handle_outgoing_broadcast SRC IP: %pI4, DST IP: %pI4 LEN: %d", &iph->saddr, &iph->daddr, bpf_ntohs(iph->tot_len));
 
     struct ethhdr* ethh_new = data + GTP_ENCAPSULATED_SIZE + sizeof(struct ethhdr);
     if ((void*) (ethh_new + 1) > data_end)
@@ -223,6 +247,7 @@ int handle_broadcast(struct __sk_buff *skb)
         goto out;
     }
     swap_src_dst_mac(eth);
+    bpf_printk("handle_broadcast: eth->h_proto = %d", eth->h_proto);
 
     struct iphdr* iph = (struct iphdr*) ((void*) data + sizeof(*eth));
     if ((void*) (iph + 1) > data_end) {
@@ -230,8 +255,8 @@ int handle_broadcast(struct __sk_buff *skb)
         action = TC_ACT_OK;
         goto out;
     }
-    bpf_printk("handle_broadcast SRC IP: %pI4, DST IP: %pI4", &iph->saddr, &iph->daddr);
     swap_src_dst_ipv4(iph);
+    bpf_printk("handle_broadcast SRC IP: %pI4, DST IP: %pI4 LEN: %d", &iph->saddr, &iph->daddr, bpf_ntohs(iph->tot_len));
 
     struct udphdr* udph = (struct udphdr*) (iph + 1);
     // Check if the UDP header extends beyond the data end.
@@ -253,6 +278,19 @@ int handle_broadcast(struct __sk_buff *skb)
         action = TC_ACT_OK;
         goto out;
     }
+    uint32_t teid = gtpuh->teid;
+
+    payload_len = (data_end - data) - sizeof(struct ethhdr);
+    if (bpf_ntohs(iph->tot_len) > payload_len) {
+        bpf_printk("handle_broadcast: bpf_ntohs(iph->tot_len) = %d, payload_len = %d", bpf_ntohs(iph->tot_len), payload_len);
+        if (bpf_skb_pull_data(skb, bpf_ntohs(iph->tot_len) + sizeof(struct ethhdr)) < 0) {
+            bpf_printk("handle_broadcast: bpf_skb_pull_data");
+            return TC_ACT_UNSPEC;
+        }
+    }
+
+    data = (void *)(long)skb->data;
+    data_end = (void *)(long)skb->data_end;
 
     struct ethhdr* ethh_new = data + GTP_ENCAPSULATED_SIZE;
 
@@ -301,11 +339,11 @@ int handle_broadcast(struct __sk_buff *skb)
         bpf_printk("far_tc_kernel: ifindex ---> %d", *ifindex);
         // long (*cb_p)(struct bpf_map *, const void *, int *, void *) = &callback_fn;
         struct callback_ctx callback_ctx = { .skb = skb, .ifindex = ifindex,
-        .inner_eth = eth, .gtpuh = gtpuh, .size = 0 };
+        .inner_eth = eth, .size = 0 };
         
         // For UL PDU session (except toward the one of the incoming traffic)
         if (*ifindex == skb->ingress_ifindex) {
-            callback_ctx.pdu_sessions[0] = gtpuh->teid;
+            callback_ctx.pdu_sessions[0] = teid;
             callback_ctx.size += 1;
         }
 
