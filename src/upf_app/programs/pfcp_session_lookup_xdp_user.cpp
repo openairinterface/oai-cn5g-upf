@@ -104,7 +104,7 @@ void PFCP_Session_LookupProgram::setup() {
 
   Logger::upf_app().debug(
       "Link UDP interface to interface %s", mUDPInterface.c_str());
-  mpLifeCycle->link("xdp_entry_point", mUDPInterface.c_str());
+  mpLifeCycle->link("xdp_entry_point_downlink", mUDPInterface.c_str());
 
   Logger::upf_app().debug(
       "Link GTP interface to interface %s", mGTPInterface.c_str());

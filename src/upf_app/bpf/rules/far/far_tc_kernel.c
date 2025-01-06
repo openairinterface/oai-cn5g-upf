@@ -153,31 +153,54 @@ int handle_outgoing_broadcast(struct __sk_buff *skb)
         goto out;
     }
 
-    int roomlen = sizeof(struct ethhdr); // + GTP_ENCAPSULATED_SIZE;
+    struct iphdr* iph = (struct iphdr*) ((void*) data + sizeof(*eth));
+    if ((void*) (iph + 1) > data_end) {
+        bpf_printk("Invalid IPv4 Packet");
+        action = TC_ACT_OK;
+        goto out;
+    }
+
+    bpf_printk("handle_outgoing_broadcast SRC IP: %pI4, DST IP: %pI4", &iph->saddr, &iph->daddr);
+
+    struct ethhdr* ethh_new = data + GTP_ENCAPSULATED_SIZE + sizeof(struct ethhdr);
+    if ((void*) (ethh_new + 1) > data_end)
+    {
+        bpf_printk("handle_outgoing_broadcast: Invalid Ethernet Packet");
+        action = TC_ACT_OK;
+        goto out;
+    }
+    bpf_printk("handle_outgoing_broadcast SRC MAC: %pM, DST MAC: %pM", &ethh_new->h_source, &ethh_new->h_dest);
+    bpf_printk("handle_outgoing_broadcast 1 SRC MAC: %pM, DST MAC: %pM", ethh_new->h_source, ethh_new->h_dest);
+
+    bpf_printk("handle_outgoing_broadcast 2 SRC MAC: %pMR, DST MAC: %pMR", &ethh_new->h_source, &ethh_new->h_dest);
+    bpf_printk("handle_outgoing_broadcast 3 SRC MAC: %pMR, DST MAC: %pMR", ethh_new->h_source, ethh_new->h_dest);
+
+    struct ethhdr eth_cpy = {};
+    __builtin_memcpy(&eth_cpy, ethh_new, sizeof(struct ethhdr));
+
+    int roomlen = sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE;
     if (data + roomlen > data_end) {
         bpf_printk("handle_outgoing_broadcast: data + roomlen > data_end");
         return TC_ACT_SHOT;
     }
 
-    // int ret = bpf_skb_change_head(skb, -roomlen, 0);
-    int ret = bpf_skb_change_tail(skb, -roomlen, 0);
-    // int ret = bpf_skb_adjust_room(skb, -roomlen, BPF_ADJ_ROOM_MAC, 0);
-    if (ret) {
-        bpf_printk("handle_outgoing_broadcast: error bpf_skb_change_tail, ret = %d, skb->protocol = %d.\n", ret, skb->protocol);
-    }
-
-    ret = bpf_skb_change_head(skb, -roomlen, 0);
-    // int ret = bpf_skb_change_tail(skb, -roomlen, 0);
-    // int ret = bpf_skb_adjust_room(skb, -roomlen, BPF_ADJ_ROOM_MAC, 0);
-    if (ret) {
-        bpf_printk("handle_outgoing_broadcast: error bpf_skb_change_head, ret = %d, skb->protocol = %d.\n", ret, skb->protocol);
-    }
-
-    ret = bpf_skb_adjust_room(skb, -roomlen, BPF_ADJ_ROOM_MAC, 0);
+    int ret = bpf_skb_adjust_room(skb, -roomlen, BPF_ADJ_ROOM_MAC, 0);
     if (ret) {
         bpf_printk("handle_outgoing_broadcast: error bpf_skb_adjust_room, ret = %d, skb->protocol = %d.\n", ret, skb->protocol);
     }
 
+    data = (void *)(long)skb->data;
+    data_end = (void *)(long)skb->data_end;
+    eth = data;
+    if ((void*) (eth + 1) > data_end)
+    {
+        bpf_printk("handle_outgoing_broadcast: Invalid Ethernet Packet");
+        action = TC_ACT_OK;
+        goto out;
+    }
+    __builtin_memcpy(eth, &eth_cpy, sizeof(struct ethhdr));
+
+    bpf_printk("handle_outgoing_broadcast: eth->h_proto = %d", eth->h_proto);
 
 out:
     return action;
@@ -207,6 +230,7 @@ int handle_broadcast(struct __sk_buff *skb)
         action = TC_ACT_OK;
         goto out;
     }
+    bpf_printk("handle_broadcast SRC IP: %pI4, DST IP: %pI4", &iph->saddr, &iph->daddr);
     swap_src_dst_ipv4(iph);
 
     struct udphdr* udph = (struct udphdr*) (iph + 1);

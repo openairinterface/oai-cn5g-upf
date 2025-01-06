@@ -340,8 +340,6 @@ static __always_inline u32 eth_handle(struct xdp_md* ctx, struct ethhdr* ethh) {
     case ETH_P_8021Q:
     default: {
       bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x", offset, eth_type);
-      // Check if downlink ETH packet
-      handle_eth_downlink_traffic(ctx);
       return XDP_PASS;
     }
   }
@@ -359,6 +357,52 @@ int xdp_entry_point(struct xdp_md* ctx) {
   }
 
   return eth_handle(ctx, ethh);
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+SEC("xdp")
+int xdp_entry_point_downlink(struct xdp_md* ctx) {
+  bpf_debug("================< PFCP PDR DL Sesction >================");
+  void* data_end = (void*) (long) ctx->data_end;
+  struct ethhdr* ethh = (void*) (long) ctx->data;
+  u64 offset     = sizeof(*ethh);
+
+  if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
+    bpf_debug("Invalid Ethernet header");
+    return XDP_DROP;
+  }
+  u16 eth_type   = bpf_htons(ethh->h_proto);
+
+  switch (eth_type) {
+    case ETH_P_IP: {
+      struct iphdr* iph = (struct iphdr*) ((void*) ethh + offset);
+
+      if ((void*) (iph + 1) > data_end) {
+        bpf_debug("Invalid IPv4 Packet");
+        return XDP_DROP;
+      }
+
+      return ipv4_handle(ctx, iph);
+    }
+    case ETH_P_8021AD: {
+      bpf_debug("VLAN!! Changing the offset");
+      struct vlan_hdr* vlan_hdr = (struct vlan_hdr*) (ethh + 1);
+      offset += sizeof(*vlan_hdr);
+      if ((void*) (vlan_hdr + 1) <= data_end)
+        eth_type = bpf_htons(vlan_hdr->h_vlan_encapsulated_proto);
+    }
+    case ETH_P_ARP: {
+      bpf_debug("Handling ARP packet ctx->ingress_ifindex  = %d", ctx->ingress_ifindex);
+      handle_eth_downlink_traffic(ctx);
+      return XDP_PASS;
+    }
+    case ETH_P_IPV6:
+    case ETH_P_8021Q:
+    default: {
+      bpf_debug("Cannot parse L2: L3off:%llu proto:0x%x", offset, eth_type);
+      return XDP_PASS;
+    }
+  }
 }
 
 char _license[] SEC("license") = "GPL";
