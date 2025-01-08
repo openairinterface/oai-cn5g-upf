@@ -149,8 +149,8 @@ out:
   return XDP_PASS;
 }
 
-static __always_inline int entry_point__eth_pdu(struct xdp_md* ctx) {
-  bpf_debug("===== ETH PDU =======");
+static __always_inline int entry_point_uplink__eth_pdu(struct xdp_md* ctx) {
+  bpf_debug("===== ETH PDU UL =======");
   void* data_end = (void*) (long) ctx->data_end;
   void* data = (void*) (long) ctx->data;
   int action = XDP_PASS;
@@ -177,6 +177,16 @@ static __always_inline int entry_point__eth_pdu(struct xdp_md* ctx) {
       goto out;
     }
   }
+
+out:
+  return action;
+}
+
+static __always_inline int entry_point_downlink__eth_pdu(struct xdp_md* ctx) {
+  bpf_debug("===== ETH PDU DL =======");
+  void* data_end = (void*) (long) ctx->data_end;
+  void* data = (void*) (long) ctx->data;
+  int action = XDP_PASS;
 
   action = handle_downlink_traffic__eth_pdu(ctx);
 

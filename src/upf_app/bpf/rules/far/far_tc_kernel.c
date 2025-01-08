@@ -20,6 +20,7 @@
 #include <mac_pdu_session_key.h>
 
 
+// TODO [ETH-PDU] seperate UL and DL logic
 SEC("tc/ingress")
 int handle_broadcast(struct __sk_buff *skb)
 {
@@ -33,15 +34,13 @@ int handle_broadcast(struct __sk_buff *skb)
     {
         bpf_printk("handle_broadcast: Invalid Ethernet Packet\n");
         goto out;
-    }
-    swap_src_dst_mac(eth);
+    }  
 
     struct iphdr* iph = (struct iphdr*) ((void*) data + sizeof(*eth));
     if ((void*) (iph + 1) > data_end) {
         bpf_printk("handle_broadcast: Invalid IPv4 Packet\n");
         goto out;
     }
-    swap_src_dst_ipv4(iph);
 
     struct udphdr* udph = (struct udphdr*) (iph + 1);
     // Check if the UDP header extends beyond the data end.
@@ -54,6 +53,8 @@ int handle_broadcast(struct __sk_buff *skb)
         bpf_printk("handle_broadcast: This is not a GTP packet\n");
         goto out;
     }
+    swap_src_dst_mac(eth);
+    swap_src_dst_ipv4(iph);
 
     struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
     if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {

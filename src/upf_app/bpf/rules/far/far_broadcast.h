@@ -1,3 +1,6 @@
+#ifndef __FAR_BROADCAST_H__
+#define __FAR_BROADCAST_H__
+
 #include <linux/bpf.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
@@ -77,3 +80,4 @@ static long broadcast_callback_fn(struct bpf_map *map, void *key, void *value,
     return 0;
 }
 
+#endif  // __FAR_BROADCAST_H__
