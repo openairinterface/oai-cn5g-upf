@@ -51,7 +51,7 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
   struct next_rule_eth_prog_index_value* index_value = bpf_map_lookup_elem(&m_next_rule_eth_prog_index, &map_key);
 
   if (index_value) {
-    // TODO [ETH-PDU] pdu sess info learn mac
+    // pdu sess info learn mac
     struct iphdr* iph_outer = (void*) (data + sizeof(struct ethhdr));
 
     if ((void*) iph_outer + sizeof(*iph_outer) > data_end) {

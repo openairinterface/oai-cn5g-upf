@@ -103,8 +103,6 @@ class pfcp_switch {
   folly::AtomicHashMap<
       uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>
       ue_ipv4_hbo2pfcp_pdr;
-   // TODO [ETH-PDU] ue_mac_hbo2pfcp_pdr
-   // TODO [ETH-PDU] ue_mac_pdu_session
 
   // moodycamel::ConcurrentQueue<pfcp::pfcp_session*> create_session_q;
 

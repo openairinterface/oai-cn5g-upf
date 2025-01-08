@@ -81,7 +81,6 @@ void FARTCProgram::tearDown() {
   mpLifeCycle->tearDown();
 }
 
-// TODO [ETH-PDU] ETH PDU session info
 std::shared_ptr<BPFMap> FARTCProgram::getMacPduSessionMap()
     const {
   return mpMacPduSessionMap;

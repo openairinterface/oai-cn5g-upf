@@ -303,11 +303,6 @@ bool pfcp_session::create(
     if (local_fteid.ch) {
       pdr->pdi.second.set(allocated_fteid);
     }
-
-    // TODO [ETH-PDU] the UPF can act as a local switch with MAC - PDU session map
-    // We can create to a MAC - PDU session entry when a PDU session is established
-    // This will allow traffic from existing UE(a) to connect to a UE(b) that has just
-    // established a Eth PDU session
     
     std::shared_ptr<pfcp_pdr> spdr = std::shared_ptr<pfcp_pdr>(pdr);
     if (pfcp_switch_inst->create_packet_in_access(
