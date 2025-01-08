@@ -441,9 +441,8 @@ void SessionProgramManager::createPipeline(
 
   uint32_t gNodeBIP = getGnodebIp(pFar);
 
+  // TODO [ETH-PDU] store session mapping for ethernet packet filter. Right now DL will use the learned MAC table
   if (isModification) {
-    // TODO [ETH-PDU] store session mapping for ethernet packet filter. Right now DL will use the learned MAC table
-    // storeSessionMappingMap(pPFCP_Session_LookupProgram, ueIpAddress, teid1);
     std::thread arpUpdateThread1(
         [this, pPFCP_Session_LookupProgram, seid, gNodeBIP, dnIP, upfn3IP, upfn6IP]() {
           updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
@@ -451,10 +450,7 @@ void SessionProgramManager::createPipeline(
         });
     // Detach the thread since we don't need to join it
     arpUpdateThread1.detach();
-    // TODO [ETH-PDU] verify if we need to do anything
   } else {
-    // TODO [ETH-PDU] verify if we need to do anything
-    // saveSeidWithinFARProgram(seid, pFARProgram, key);
     std::thread arpUpdateThread2(
         [this, pPFCP_Session_LookupProgram, seid, gNodeBIP, dnIP, upfn3IP, upfn6IP]() {
           updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);

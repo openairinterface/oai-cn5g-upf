@@ -128,7 +128,7 @@ static __always_inline u32 handle_downlink_traffic__eth_pdu(
 
   struct mac_pdu_session_value* pdu_session = bpf_map_lookup_elem(&m_mac_pdu_session, &eth->h_dest);
   if (pdu_session) {
-     create_outer_header_gtpu_ipv4_eth(ctx, pdu_session);
+     create_outer_header_gtpu(ctx, pdu_session->teid, pdu_session->ipv4_address, 1);
      return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
   }
   // Broadcast packet reach this point. Pass them TC
@@ -139,11 +139,9 @@ static __always_inline u32 handle_downlink_traffic__eth_pdu(
       }
   }
 
-  // This is a broadcast packet, prepare GTPU and send to TC layer;
-  struct mac_pdu_session_value pdu = {};
-  __builtin_memset(&pdu, 0, sizeof(struct mac_pdu_session_value));
+  // This is a broadcast packet, prepare GTPU and send to TC layer
   // TODO: handle extension header not needed
-  create_outer_header_gtpu_ipv4_eth(ctx, &pdu);
+  create_outer_header_gtpu(ctx, 0, 0, 1);
   return XDP_PASS;
 
 out:
