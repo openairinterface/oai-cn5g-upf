@@ -182,7 +182,7 @@ void SessionProgramManager::storeFarProgramIndexInNextProgRuleIndexMap(
 // Helper function to store the FARProgram index in the LookupProgram for ETH PDU session
 void SessionProgramManager::storeFarProgramIndexInNextProgEthRuleIndexMap(
     std::shared_ptr<FARProgram> pFARProgram,
-    const next_rule_eth_prog_index_key& key, uint32_t teid_dl,
+    const next_rule_eth_prog_index_key& key, uint32_t teid_dl, uint32_t n3IpAddress,
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
   // auto pPFCP_Session_LookupProgram =
   //     UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
@@ -191,6 +191,12 @@ void SessionProgramManager::storeFarProgramIndexInNextProgEthRuleIndexMap(
   next_rule_eth_prog_index_value value;
   value.prog_id = id;
   value.teid_dl = teid_dl;
+
+  if (is_little_endian()) {
+    value.ipv4_address = htole32(n3IpAddress);
+  } else {
+    value.ipv4_address = n3IpAddress;
+  }
 
   pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->update(
       key, value, BPF_ANY);
@@ -424,7 +430,7 @@ void SessionProgramManager::createPipeline(
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
   storeFarProgramIndexInNextProgEthRuleIndexMap(
-      pFARProgram, key, teid_dl, pPFCP_Session_LookupProgram);
+      pFARProgram, key, teid_dl, upfn3IP, pPFCP_Session_LookupProgram);
 
   Logger::upf_app().debug("ETH-PDU: Store FAR in the FAR program");
   storeFARInFARMap(pFARProgram, pFar);

@@ -144,7 +144,7 @@ class SessionProgramManager {
 
   void storeFarProgramIndexInNextProgEthRuleIndexMap(
     std::shared_ptr<FARProgram> pFARProgram,
-    const next_rule_eth_prog_index_key& key, uint32_t teid_dl,
+    const next_rule_eth_prog_index_key& key, uint32_t teid_dl, uint32_t n3IpAddress,
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
 
   /*---------------------------------------------------------------------------------------------------------------*/

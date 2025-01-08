@@ -149,6 +149,7 @@ static __always_inline u32 handle_eth_downlink_traffic(
   bpf_debug("This is a broadcast packet, prepare GTPU and send to TC layer");
   struct mac_pdu_session_value pdu = {};
   __builtin_memset(&pdu, 0, sizeof(struct mac_pdu_session_value));
+  // TODO: handle extension header not needed
   create_outer_header_gtpu_ipv4_eth(ctx, &pdu);
   return XDP_PASS;
 

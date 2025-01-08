@@ -12,15 +12,6 @@
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, MAX_LENGTH);  // 10,
-  __type(key, u8[ETH_ALEN]);
-  __type(value, struct mac_pdu_session_value);
-  __uint(pinning, 1);
-} m_mac_pdu_session SEC(".maps");
-
-/*---------------------------------------------------------------------------------------------------------------*/
-struct {
   __uint(type, BPF_MAP_TYPE_DEVMAP);
   __uint(max_entries, MAX_INTERFACES);  // 10,
   __type(key, u32);                     // id
