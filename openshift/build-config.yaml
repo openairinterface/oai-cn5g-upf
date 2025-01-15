@@ -22,23 +22,15 @@ kind: BuildConfig
 apiVersion: build.openshift.io/v1
 metadata:
   name: "upf-build-cfg"
+  namespace: oaicicd-core
 spec:
     runPolicy: "Serial"
-    nodeSelector:
-        node-role.kubernetes.io/worker: ""
     source:
         type: "Binary"
         secrets:
           - secret:
               name: etc-pki-entitlement
             destinationDir: etc-pki-entitlement
-        configMaps:
-          - configMap:
-              name: rhsm-conf
-            destinationDir: rhsm-conf
-          - configMap:
-              name: rhsm-ca
-            destinationDir: rhsm-ca
     strategy:
         dockerStrategy:
             dockerfilePath: "docker/Dockerfile.upf.rhel9"
