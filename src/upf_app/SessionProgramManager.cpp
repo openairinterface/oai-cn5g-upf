@@ -156,7 +156,8 @@ void SessionProgramManager::initializeNextRuleProgEthIndexKey(
   } else {
     key.teid         = htole32(teid);
   }
-  key.ethertype = ethertype;
+  // TODO [ETH-PDU] support other eth pkt filters and ethertype
+  key.ethertype = 0; // ethertype;
 
   key.source_value = sourceInterface;
 }
