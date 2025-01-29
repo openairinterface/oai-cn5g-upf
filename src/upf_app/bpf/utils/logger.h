@@ -17,7 +17,7 @@
     bpf_trace_printk(____fmt, sizeof(____fmt), ##__VA_ARGS__);                 \
   })
 #else
-#define bpf_debug(fmt, ...)                                                    
+#define bpf_debug(fmt, ...)
 #endif
 
 #endif  // __LOGGER_H__
