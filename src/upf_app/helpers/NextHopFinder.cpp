@@ -1,4 +1,5 @@
 #include "NextHopFinder.hpp"
+#include <nlohmann/json.hpp>
 #include <string.h>
 #include <arpa/inet.h>
 #include <netinet/ether.h>
@@ -10,69 +11,106 @@
 // NextHopFinder::NextHopFinder() {}
 
 /*---------------------------------------------------------------------------------------------------------------*/
-int NextHopFinder::calculateSubnetMask(uint32_t ip) {
-  int mask      = 0;
-  uint32_t temp = ip;
 
-  while (temp & 0x80000000U) {
-    mask++;
-    temp <<= 1;
+/**
+ * @brief Extract next hop IP from iproute2 JSON result.
+ */
+static std::string extractNextHopIP(const nlohmann::json& data) {
+  // same subnet example:
+  // [{"dst":"10.30.6.1","from":"10.30.6.95","dev":"enp3s0","flags":[],"uid":1000,"cache":[]}]
+  //
+  // different subnet example:
+  // [{"dst":"1.1.1.1","from":"172.17.0.2","gateway":"172.17.0.1","dev":"eth0","flags":[],"uid":0,"cache":[]}]
+
+  if (!data.is_array()) {
+    return "";
   }
 
-  return mask;
+  for (const auto& row : data) {
+    if (!row.is_object()) {
+      continue;
+    }
+
+    auto gateway = row.find("gateway");
+    if (gateway != row.end() && gateway->is_string()) {
+      return gateway->get<std::string>();
+    }
+
+    auto dst = row.find("dst");
+    if (dst != row.end() && dst->is_string()) {
+      return dst->get<std::string>();
+    }
+  }
+
+  return "";
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-int NextHopFinder::sameSubnet(uint32_t ip1, uint32_t ip2) {
-  int subnet_mask = calculateSubnetMask(ip1);
-  uint32_t mask   = 0xFFFFFFFFU << (32 - subnet_mask);
 
-  return (ip1 & mask) == (ip2 & mask);
-}
-
-/*---------------------------------------------------------------------------------------------------------------*/
-
-uint32_t NextHopFinder::retrieveNextHopIP(uint32_t ipDest) {
-  std::string cmd     = {};
-  struct in_addr addr = {.s_addr = ipDest};
-  char* ipAddress     = inet_ntoa(addr);
-
-  if (ipAddress) {
-    cmd = fmt::format("ip route get {} | awk '{print $3}'", ipAddress);
+uint32_t NextHopFinder::retrieveNextHopIP(uint32_t srcIP, uint32_t dstIP) {
+  in_addr srcAddr = {.s_addr = srcIP};
+  in_addr dstAddr = {.s_addr = dstIP};
+  char srcStr[INET_ADDRSTRLEN];
+  char dstStr[INET_ADDRSTRLEN];
+  if (inet_ntop(AF_INET, &srcAddr, srcStr, sizeof(srcStr)) == nullptr) {
+    throw std::invalid_argument(
+        "NextHopFinder::retrieveNextHopIP: invalid srcIP");
+  }
+  if (inet_ntop(AF_INET, &dstAddr, dstStr, sizeof(dstStr)) == nullptr) {
+    throw std::invalid_argument(
+        "NextHopFinder::retrieveNextHopIP: invalid dstIP");
   }
 
-  uint32_t nextHopIp = htonl(inet_addr(CmdRunner::exec(cmd).c_str()));
+  std::string cmd = fmt::format("ip -j route get {} from {}", dstStr, srcStr);
+  Logger::upf_app().debug(
+      "Invoking iproute2 to retrieve nexthop from %s to %s: %s", srcStr, dstStr,
+      cmd.data());
+  std::string output = CmdRunner::exec(cmd);
+  nlohmann::json data;
+  try {
+    data = nlohmann::json::parse(output);
+  } catch (const nlohmann::json::parse_error&) {
+    Logger::upf_app().error("iproute2 command returned bad JSON data");
+    throw std::runtime_error(
+        "NextHopFinder::retrieveNextHopIP: invalid iproute2 output");
+  }
 
-  if (!nextHopIp) {
+  std::string nhStr = extractNextHopIP(data);
+  in_addr nhAddr{};
+  if (nhStr.empty() || inet_pton(AF_INET, nhStr.data(), &nhAddr) != 1) {
     Logger::upf_app().error("The Next Hop IPv4 WAS NOT Retrieved");
-    throw std::runtime_error("The Next Hop IPv4 WAS NOT Retrieved");
+    throw std::runtime_error(
+        "NextHopFinder::retrieveNextHopIP: empty iproute2 output");
   }
 
-  return nextHopIp;
+  return nhAddr.s_addr;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
-ether_addr* NextHopFinder::retrieveNextHopMAC(uint32_t nextHopIp) {
-  std::string cmd        = {};
-  struct in_addr addr    = {.s_addr = nextHopIp};
-  char* ipAddress        = inet_ntoa(addr);
-  std::string nextHopMac = {};
-
-  if (ipAddress) {
-    cmd = fmt::format(
-        "sudo arping -c 1 {} | awk '/from/ {{print $4}}'", ipAddress);
+ether_addr NextHopFinder::retrieveNextHopMAC(uint32_t dstIP) {
+  in_addr dstAddr = {.s_addr = dstIP};
+  char dstStr[INET_ADDRSTRLEN];
+  if (inet_ntop(AF_INET, &dstAddr, dstStr, sizeof(dstStr)) == nullptr) {
+    throw std::invalid_argument(
+        "NextHopFinder::retrieveNextHopMAC: invalid dstIP");
   }
 
-  nextHopMac = CmdRunner::exec(cmd);
+  std::string cmd =
+      fmt::format("sudo arping -c 1 {} | awk '/from/ {{print $4}}'", dstStr);
+  Logger::upf_app().debug(
+      "Invoking arping to retrieve MAC of %s: %s", dstStr, cmd.data());
+  std::string output = CmdRunner::exec(cmd);
 
-  if (nextHopMac.empty()) {
+  ether_addr mac;
+  if (output.empty() || ether_aton_r(output.data(), &mac) == nullptr) {
     Logger::upf_app().error("The Next Hop MAC WAS NOT Retrieved");
-    throw std::runtime_error("The Next Hop MAC WAS NOT Retrieved");
+    throw std::runtime_error(
+        "NextHopFinder::retrieveNextHopMAC: invalid arping output");
   }
 
   Logger::upf_app().debug(
-      "Next Hop <SRC IP, MAC Address> = <%s, %s>", ipAddress, nextHopMac);
+      "Next Hop <SRC IP, MAC Address> = <%s, %s>", dstStr, output.data());
 
-  return ether_aton(nextHopMac.c_str());
+  return mac;
 }

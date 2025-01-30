@@ -7,6 +7,7 @@
 #include <pfcp_far.hpp>
 #include <pfcp_qer.hpp>
 #include <array>
+#include <tuple>
 #include <pfcp/pfcp_far.h>
 #include <next_prog_rule_key.h>
 #include <netinet/ether.h>
@@ -106,7 +107,8 @@ class SessionProgramManager {
       uint32_t remoteIP);
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  uint32_t getRemoteIP(uint32_t upfIP, uint32_t remoteIP);
+  std::tuple<uint32_t, ether_addr> getNextHopIPMac(
+      uint32_t upfIP, uint32_t remoteIP);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   pfcp_far_t_ createFar(std::shared_ptr<pfcp::pfcp_far> pFar);
