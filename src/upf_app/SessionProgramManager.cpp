@@ -81,16 +81,11 @@ void SessionProgramManager::addFarProgram(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-uint32_t SessionProgramManager::getRemoteIP(uint32_t upfIP, uint32_t remoteIP) {
-  uint32_t ipnexthop = 0;
-  if (not NextHopFinder::sameSubnet(upfIP, remoteIP)) {
-    Logger::upf_app().debug("Not in the same subnet");
-    ipnexthop = NextHopFinder::retrieveNextHopIP(remoteIP);
-  } else {
-    Logger::upf_app().debug("The same subnet");
-    ipnexthop = remoteIP;
-  }
-  return ipnexthop;
+std::tuple<uint32_t, ether_addr> SessionProgramManager::getNextHopIPMac(
+    uint32_t upfIP, uint32_t remoteIP) {
+  uint32_t nextHopIP = NextHopFinder::retrieveNextHopIP(upfIP, remoteIP);
+  return std::make_tuple(
+      nextHopIP, NextHopFinder::retrieveNextHopMAC(nextHopIP));
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -195,21 +190,19 @@ void SessionProgramManager::storeFARInFARMap(
 void SessionProgramManager::updateARPTableForN6(
     std::shared_ptr<FARProgram> pFARProgram, uint32_t dnIP, uint32_t upfn6IP) {
   try {
-    // uint32_t remoteN6 = getRemoteIP(upfn6IP, dnIP);
-    uint32_t ipnexremoteN6hop = (is_little_endian()) ?
-                                    htole32(getRemoteIP(upfn6IP, dnIP)) :
-                                    getRemoteIP(upfn6IP, dnIP);
-    auto remoteN6MAC = NextHopFinder::retrieveNextHopMAC(ipnexremoteN6hop);
+    uint32_t remoteN6;
+    ether_addr remoteN6MAC;
+    std::tie(remoteN6, remoteN6MAC) = getNextHopIPMac(upfn6IP, dnIP);
 
     struct s_arp_mapping map_table;
     memset(&map_table, 0, sizeof(struct s_arp_mapping));
-    memcpy(map_table.mac_address, remoteN6MAC->ether_addr_octet, 6);
-    map_table.ipv4_address = ipnexremoteN6hop;
+    memcpy(map_table.mac_address, remoteN6MAC.ether_addr_octet, 6);
+    map_table.ipv4_address = remoteN6;
 
     pFARProgram->getArpTableMap()->update(upfn6IP, map_table, BPF_ANY);
   } catch (const std::exception& ex) {
     Logger::upf_app().error(
-        "Error: The ARP table was not updated for N6 Next HOP");
+        "Error: The ARP table was not updated for N6 Next HOP: %s", ex.what());
   }
 }
 
@@ -220,17 +213,14 @@ void SessionProgramManager::updateARPTableForN3(
     std::shared_ptr<FARProgram> pFARProgram, uint32_t gNodeBIP,
     uint32_t upfn3IP, uint64_t seid) {
   try {
-    // uint32_t remoteN3 = getRemoteIP(upfn3IP, gNodeBIP);
-
-    uint32_t ipnexremoteN3hop = (is_little_endian()) ?
-                                    htole32(getRemoteIP(upfn3IP, gNodeBIP)) :
-                                    getRemoteIP(upfn3IP, gNodeBIP);
-    auto remoteN3MAC = NextHopFinder::retrieveNextHopMAC(ipnexremoteN3hop);
+    uint32_t remoteN3;
+    ether_addr remoteN3MAC;
+    std::tie(remoteN3, remoteN3MAC) = getNextHopIPMac(upfn3IP, gNodeBIP);
 
     struct s_arp_mapping map_table;
     memset(&map_table, 0, sizeof(struct s_arp_mapping));
-    memcpy(map_table.mac_address, remoteN3MAC->ether_addr_octet, 6);
-    map_table.ipv4_address = ipnexremoteN3hop;
+    memcpy(map_table.mac_address, remoteN3MAC.ether_addr_octet, 6);
+    map_table.ipv4_address = remoteN3;
 
     pFARProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
 
@@ -247,7 +237,7 @@ void SessionProgramManager::updateARPTableForN3(
     // Handle the exception here or log it for debugging
     // Note: It's better to handle exceptions rather than ignoring them.
     Logger::upf_app().error(
-        "Error: The ARP table was not updated for N3 Next HOP");
+        "Error: The ARP table was not updated for N3 Next HOP: %s", ex.what());
   }
 }
 
