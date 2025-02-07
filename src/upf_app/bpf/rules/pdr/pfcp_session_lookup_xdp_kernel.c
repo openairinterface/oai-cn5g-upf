@@ -422,7 +422,7 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
     return XDP_DROP;
   }
 
- // struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
+  // struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
   struct iphdr* iph = (void*) (ethh + 1);
 
   if ((void*) (iph + 1) > data_end) {
@@ -430,7 +430,7 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
     return XDP_DROP;
   }
 
-bpf_debug("xxxxxxxxxxxx ip_dest: 0x%x", iph->daddr);
+  bpf_debug("xxxxxxxxxxxx ip_dest: 0x%x", iph->daddr);
   u32 ip_dest = bpf_htonl(iph->daddr);
   struct session_id* session =
       bpf_map_lookup_elem(&m_session_mapping, &ip_dest);
@@ -472,9 +472,9 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
     return XDP_DROP;
   }
 
-  //struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
+  // struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
   struct iphdr* iph = (void*) (ethh + 1);
- 
+
   if ((void*) (iph + 1) > data_end) {
     bpf_debug("Error: Invalid IPv4 Packet");
     return XDP_DROP;

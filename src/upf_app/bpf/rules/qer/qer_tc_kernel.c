@@ -35,13 +35,12 @@
 #define TARGET_INTF 644
 
 //---------------------------------------------------------------------------------------------------------------
-static __always_inline u32 egress_sdf_filter(
-    struct __sk_buff* skb) {
-  void *data      = (void *)(long)skb->data;
+static __always_inline u32 egress_sdf_filter(struct __sk_buff* skb) {
+  void* data     = (void*) (long) skb->data;
   void* data_end = (void*) (long) skb->data_end;
-  
+
   struct ethhdr* ethh = data;
-  
+
   if ((void*) (ethh + 1) > data_end) {
     bpf_debug("Error: Invalid Ethernet header");
     return TC_ACT_SHOT;
@@ -81,13 +80,13 @@ static __always_inline u32 egress_sdf_filter(
   struct filter_key* key = {0};
 
   u8 protocol = iph_inner->protocol;
- 
-  //bpf_debug("Create Key for SDF Filter Map"); 
+
+  // bpf_debug("Create Key for SDF Filter Map");
 
   key->src_ip   = iph_inner->saddr;
   key->dst_ip   = iph_inner->daddr;
   key->protocol = protocol;
-   
+
   switch (protocol) {
     case IPPROTO_UDP: {
       // Extract UDP header
@@ -141,11 +140,10 @@ static __always_inline u32 egress_sdf_filter(
 }
 
 //---------------------------------------------------------------------------------------------------------------
-static __always_inline u32
-ipv4_sdf_filter(struct __sk_buff* skb) {
-  void *data      = (void *)(long)skb->data;
-  void *data_end  = (void *)(long)skb->data_end;
-  
+static __always_inline u32 ipv4_sdf_filter(struct __sk_buff* skb) {
+  void* data     = (void*) (long) skb->data;
+  void* data_end = (void*) (long) skb->data_end;
+
   struct ethhdr* ethh = data;
 
   if ((void*) (ethh + 1) > data_end) {
@@ -160,7 +158,7 @@ ipv4_sdf_filter(struct __sk_buff* skb) {
     return TC_ACT_SHOT;
   }
 
-  u8 protocol    = iph->protocol;
+  u8 protocol = iph->protocol;
 
   switch (protocol) {
     case IPPROTO_UDP: {
@@ -182,15 +180,14 @@ ipv4_sdf_filter(struct __sk_buff* skb) {
   }
 }
 
-
 //---------------------------------------------------------------------------------------------------------------
 
 SEC("tc/egress")
 int tc_filter_traffic(struct __sk_buff* skb) {
   bpf_debug("==========< tc/egress: Filter Traffic >==========\n");
 
-  void *data      = (void *)(long)skb->data;
-  void *data_end  = (void *)(long)skb->data_end;
+  void* data     = (void*) (long) skb->data;
+  void* data_end = (void*) (long) skb->data_end;
 
   struct ethhdr* ethh = data;
 
@@ -243,12 +240,12 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
   int key = DOWNLINK, *ifindex;
 
   ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
-  
+
   if (ifindex) {
     bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer");
     return bpf_redirect(*ifindex, 0);
   }
-  
+
   bpf_debug("TC Packets not redirected! Drop them");
   return TC_ACT_SHOT;
 }
