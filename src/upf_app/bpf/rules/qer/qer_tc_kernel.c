@@ -33,57 +33,68 @@
 #define MARK_VALUE 0x12345678  // Marker value to match
 #define OFFSET 0               // Example offset where marker is stored
 #define TARGET_INTF 644
-/*---------------------------------------------------------------------------------------------------------------*/
-/**
- * @brief Filter the Uplink traffic
- *
- * @param skb
- * @param udph UDP header
- * @return __inline u32 the TC action taken
- */
 
+//---------------------------------------------------------------------------------------------------------------
 static __always_inline u32 egress_sdf_filter(
-    struct __sk_buff* skb, struct ethhdr* ethh, struct udphdr* udph) {
+    struct __sk_buff* skb) {
+  void *data      = (void *)(long)skb->data;
   void* data_end = (void*) (long) skb->data_end;
+  
+  struct ethhdr* ethh = data;
+  
+  if ((void*) (ethh + 1) > data_end) {
+    bpf_debug("Error: Invalid Ethernet header");
+    return TC_ACT_SHOT;
+  }
+
+  struct iphdr* iph = (struct iphdr*) (ethh + 1);
+  if ((void*) (iph + 1) > data_end) {
+    bpf_debug("Error: Invalid IPv4 header");
+    return TC_ACT_SHOT;
+  }
+
+  struct udphdr* udph = (struct udphdr*) (iph + 1);
+  if ((void*) (udph + 1) > data_end) {
+    bpf_debug("Error: Invalid UDP header");
+    return TC_ACT_SHOT;
+  }
 
   struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
-
-  // Check if the GTP header extends beyond the data end.
-  if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
-    bpf_debug("Invalid GTPU packet");
-    return TC_ACT_SHOT;
-  }
+  // if ((void*) (gtpuh + 1) > data_end) {
+  //   bpf_debug("Error: Invalid GTPU packet");
+  //   return TC_ACT_SHOT;
+  // }
 
   struct gtpu_extn_pdu_session_container* gtpu_ext_h = (void*) (gtpuh + 1);
+  // if ((void*) (gtpu_ext_h + 1) > data_end) {
+  //   bpf_debug("Error: Invalid GTPU Extension packet");
+  //   return TC_ACT_SHOT;
+  // }
 
-  // Check if the GTP extension header extends beyond the data end.
-  if ((void*) gtpu_ext_h + sizeof(*gtpu_ext_h) > data_end) {
-    bpf_debug("Invalid GTPU Extension packet");
-    return TC_ACT_SHOT;
-  }
+  struct iphdr* iph_inner = (void*) (gtpu_ext_h + 1);
 
-  struct iphdr* iph_inner = (void*) (ethh + 1);
-
-  if ((void*) iph_inner + sizeof(*iph_inner) > data_end) {
-    bpf_debug("Invalid Inner IP packet");
-    return TC_ACT_SHOT;
-  }
+  // if ((void*) (iph_inner+ 1) > data_end) {
+  //   bpf_debug("Error: Invalid Inner IP packet");
+  //   return TC_ACT_SHOT;
+  // }
 
   struct filter_key* key = {0};
 
   u8 protocol = iph_inner->protocol;
+ 
+  //bpf_debug("Create Key for SDF Filter Map"); 
 
   key->src_ip   = iph_inner->saddr;
   key->dst_ip   = iph_inner->daddr;
   key->protocol = protocol;
-
+   
   switch (protocol) {
     case IPPROTO_UDP: {
       // Extract UDP header
       struct udphdr* udph = (struct udphdr*) (iph_inner + 1);
 
       if ((void*) (udph + 1) > data_end) {
-        bpf_debug("Invalid UDP header");
+        bpf_debug("Error: Invalid UDP header");
         return TC_ACT_SHOT;
       }
 
@@ -95,7 +106,7 @@ static __always_inline u32 egress_sdf_filter(
       struct tcphdr* tcph = (struct tcphdr*) (iph_inner + 1);
 
       if ((void*) (tcph + 1) > data_end) {
-        bpf_debug("Invalid TCP header");
+        bpf_debug("Error: Invalid TCP header");
         return TC_ACT_SHOT;
       }
 
@@ -129,156 +140,119 @@ static __always_inline u32 egress_sdf_filter(
   return TC_ACT_OK;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-/**
- * IP SECTION.
- */
-
-/**
- * @brief Filter IPv4 header.
- *
- * @param skb The user accessible metadata for tc packet hook.
- * @param iph The IP header.
- * @return u32 The TC action.
- */
-
+//---------------------------------------------------------------------------------------------------------------
 static __always_inline u32
-ipv4_sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh, struct iphdr* iph) {
-  void* data_end = (void*) (long) skb->data_end;
+ipv4_sdf_filter(struct __sk_buff* skb) {
+  void *data      = (void *)(long)skb->data;
+  void *data_end  = (void *)(long)skb->data_end;
+  
+  struct ethhdr* ethh = data;
+
+  if ((void*) (ethh + 1) > data_end) {
+    bpf_debug("Error: Invalid Ethernet header");
+    return TC_ACT_SHOT;
+  }
+
+  struct iphdr* iph = (struct iphdr*) (ethh + 1);
+
+  if ((void*) (iph + 1) > data_end) {
+    bpf_debug("Error: Invalid IPv4 header");
+    return TC_ACT_SHOT;
+  }
+
   u8 protocol    = iph->protocol;
 
   switch (protocol) {
     case IPPROTO_UDP: {
-      // Extract UDP header
       struct udphdr* udph = (struct udphdr*) (iph + 1);
 
       if ((void*) (udph + 1) > data_end) {
-        bpf_debug("Invalid UDP header");
+        bpf_debug("Error: Invalid UDP header");
         return TC_ACT_SHOT;
       }
 
       if (htons(udph->dest) == GTP_UDP_PORT) {
-        bpf_printk("This is a GTP traffic");
-        return egress_sdf_filter(skb, ethh, udph);
+        bpf_printk("IPv4 SDF Filter: This is a GTP traffic");
+        return egress_sdf_filter(skb);
       }
     }
     default: {
-      return TC_ACT_SHOT;// XDP_DROP;
+      return TC_ACT_SHOT;
     }
   }
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-struct meta_info {
-  __u32 mark;
-} __attribute__((aligned(4)));
 
-/**
- * @brief Filter traffic according to ETH_TYPE
- *
- * @param skb
- * @param ethh Ethernet header
- * @return ** __inline TC taken action
- */
-static __always_inline u32
-sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
-  void* data_end = (void*) (long) skb->data_end;
-
-  u16 eth_type = htons(ethh->h_proto);
-  bpf_debug("Debug: eth_type:0x%x", eth_type);
-
-  switch (eth_type) {
-    case ETH_P_IP: {
-      // Extract IP header
-      struct iphdr* iph = (struct iphdr*) (ethh + 1);
-
-      if ((void*) (iph + 1) > data_end) {
-        bpf_debug("Invalid IPv4 header");
-        return TC_ACT_SHOT;
-      }
-
-      return ipv4_sdf_filter(skb, ethh, iph);
-    }
-    case ETH_P_IPV6: {
-      // TODO: Check if traitment is needed here
-      return TC_ACT_OK;
-    }
-    case ETH_P_8021Q: {
-      // TODO: Check if traitment is needed here
-      return TC_ACT_OK;
-    }
-    case ETH_P_8021AD: {
-      // TODO: Check if traitment is needed here
-      return TC_ACT_OK;
-    }
-    case ETH_P_ARP: {
-      // TODO: Check if traitment is needed here
-      return TC_ACT_OK;
-    }
-    default: {
-      // TODO: Check if traitment is needed here
-      return TC_ACT_OK;
-    }
-  }
-}
-
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 
 SEC("tc/egress")
 int tc_filter_traffic(struct __sk_buff* skb) {
   bpf_debug("==========< tc/egress: Filter Traffic >==========\n");
 
-  // void *data      = (void *)(long)skb->data;
-  // void *data_meta = (void *)(long)skb->data_meta;
-  // struct meta_info *meta = data_meta;
+  void *data      = (void *)(long)skb->data;
+  void *data_end  = (void *)(long)skb->data_end;
 
-  // /* Check SKB gave us some data_meta */
-  // if ((void *)(meta + 1) > data) {
-  // 	skb->mark = 41;
-  // 	 bpf_debug("No Meta_data found! Drop the packet");
-  // 	return TC_ACT_SHOT;
-  // }
+  struct ethhdr* ethh = data;
 
-  // /* Hint: See func tc_cls_act_is_valid_access() for BPF_WRITE access */
-  // skb->mark = meta->mark; /* Transfer XDP-mark to SKB-mark */
-
-  bpf_debug("TC Retrieves a Marker metadata value: %d", skb->mark);
-
-  // Check if the marker matches
-  // if (skb->mark == htonl(MARK_VALUE)) {
-  //   bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer");
-  //   return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
-  // }
-
-  // Extract Ethernet header
-  struct ethhdr* ethh = (void*) (long) skb->data;
-
-  if ((void*) (ethh + 1) > (void*) (long) skb->data_end) {
-    bpf_debug("Invalid Ethernet header");
+  if ((void*) (ethh + 1) > data_end) {
+    bpf_debug("Error: Invalid Ethernet header");
     return TC_ACT_SHOT;
   }
 
-  return sdf_filter(skb, ethh);
+  u16 eth_type = htons(ethh->h_proto);
+  bpf_debug("SDF FILTER: eth_type: 0x%x", eth_type);
+
+  switch (eth_type) {
+    case ETH_P_IP: {
+      bpf_debug("SDF Filter: This is an IPv4 Packet");
+      return ipv4_sdf_filter(skb);
+    }
+    case ETH_P_IPV6: {
+      // TODO: Check if traitment is needed here
+      bpf_debug("SDF Filter: This is an IPv6 Packet");
+      return TC_ACT_OK;
+    }
+    case ETH_P_8021Q: {
+      // TODO: Check if traitment is needed here
+      bpf_debug("SDF Filter: This is a VLAN Packet");
+      return TC_ACT_OK;
+    }
+    case ETH_P_8021AD: {
+      // TODO: Check if traitment is needed here
+      bpf_debug("SDF Filter: This is a VLAN Packet");
+      return TC_ACT_OK;
+    }
+    case ETH_P_ARP: {
+      // TODO: Check if traitment is needed here
+      bpf_debug("SDF Filter: This is an ARP Packet");
+      return TC_ACT_OK;
+    }
+    default: {
+      // TODO: Check if traitment is needed here
+      bpf_debug("SDF Filter: Packet Type not Known");
+      return TC_ACT_OK;
+    }
+  }
 }
 
-// /*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 
 SEC("tc/ingress")
 int tc_redirect_traffic(struct __sk_buff* skb) {
   bpf_debug("==========< tc/ingress: Redirect Traffic >==========\n");
   int key = DOWNLINK, *ifindex;
 
-  // return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
-
-  /* Lookup what ifindex to redirect packets to */
   ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
+  
   if (ifindex) {
     bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer");
     return bpf_redirect(*ifindex, 0);
   }
+  
   bpf_debug("TC Packets not redirected! Drop them");
   return TC_ACT_SHOT;
 }
 
+//---------------------------------------------------------------------------------------------------------------
+
 char _license[] SEC("license") = "GPL";
-/*---------------------------------------------------------------------------------------------------------------*/

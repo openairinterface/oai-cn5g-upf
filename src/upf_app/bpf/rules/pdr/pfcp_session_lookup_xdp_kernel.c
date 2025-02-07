@@ -417,18 +417,20 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
   void* data_end      = (void*) (long) ctx->data_end;
   struct ethhdr* ethh = (void*) (long) ctx->data;
 
-  if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
+  if ((void*) (ethh + 1) > data_end) {
     bpf_debug("Error: Invalid Ethernet header");
     return XDP_DROP;
   }
 
-  struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
+ // struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
+  struct iphdr* iph = (void*) (ethh + 1);
 
   if ((void*) (iph + 1) > data_end) {
     bpf_debug("Error: Invalid IPv4 Packet");
     return XDP_DROP;
   }
 
+bpf_debug("xxxxxxxxxxxx ip_dest: 0x%x", iph->daddr);
   u32 ip_dest = bpf_htonl(iph->daddr);
   struct session_id* session =
       bpf_map_lookup_elem(&m_session_mapping, &ip_dest);
@@ -465,19 +467,22 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
   void* data_end      = (void*) (long) ctx->data_end;
   struct ethhdr* ethh = (void*) (long) ctx->data;
 
-  if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
+  if ((void*) (ethh + 1) > data_end) {
     bpf_debug("Error: Invalid Ethernet header");
     return XDP_DROP;
   }
 
-  struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
-
+  //struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
+  struct iphdr* iph = (void*) (ethh + 1);
+ 
   if ((void*) (iph + 1) > data_end) {
     bpf_debug("Error: Invalid IPv4 Packet");
     return XDP_DROP;
   }
 
   u32 ip_dest = bpf_htonl(iph->daddr);
+  bpf_debug("************* Shaping IP DST: %pI4", &ip_dest);
+
   struct session_id* session =
       bpf_map_lookup_elem(&m_session_mapping, &ip_dest);
 
