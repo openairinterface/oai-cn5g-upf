@@ -604,6 +604,7 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
   folly::AtomicHashMap<
       uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>::
       const_iterator pit = ue_ipv4_hbo2pfcp_pdr.find(ue_ip);
+
   if (pit == ue_ipv4_hbo2pfcp_pdr.end()) {
     std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs =
         std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>(
@@ -615,6 +616,18 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
     ue_ipv4_hbo2pfcp_pdr.insert(entry);
     // Logger::pfcp_switch().info( "add_pfcp_dl_pdr_by_ue_ip UE IP %8x", ue_ip);
   } else {
+    // TODO: Dirty fix
+    ue_ipv4_hbo2pfcp_pdr.erase(ue_ip);
+    std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs =
+        std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>(
+            new std::vector<std::shared_ptr<pfcp::pfcp_pdr>>());
+    pdrs->push_back(pdr);
+    std::pair<
+        uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>
+        entry(ue_ip, pdrs);
+    ue_ipv4_hbo2pfcp_pdr.insert(entry);
+
+    /*
     // sort by precedence
     // const std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>&
     // spdrs = pit->second;
@@ -627,6 +640,8 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
         return;
       }
     }
+
+*/
   }
 }
 //------------------------------------------------------------------------------
@@ -776,10 +791,12 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             resp->pfcp_ies.set(cause);
             break;
           }
-          pfcp::created_pdr created_pdr = {};
-          created_pdr.set(cr_pdr.pdr_id.second);
-          created_pdr.set(allocated_fteid);
-          resp->pfcp_ies.set(created_pdr);
+          if (allocated_fteid.v4 || allocated_fteid.v6) {
+            pfcp::created_pdr created_pdr = {};
+            created_pdr.set(cr_pdr.pdr_id.second);
+            created_pdr.set(allocated_fteid);
+            resp->pfcp_ies.set(created_pdr);
+          }
         }
       }
 
