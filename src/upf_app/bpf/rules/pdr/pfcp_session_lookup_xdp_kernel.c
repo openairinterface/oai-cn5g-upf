@@ -430,7 +430,7 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
     return XDP_DROP;
   }
 
-  bpf_debug("xxxxxxxxxxxx ip_dest: 0x%x", iph->daddr);
+  bpf_debug("Ip_dest: 0x%x", iph->daddr);
   u32 ip_dest = bpf_htonl(iph->daddr);
   struct session_id* session =
       bpf_map_lookup_elem(&m_session_mapping, &ip_dest);
@@ -480,8 +480,9 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
     return XDP_DROP;
   }
 
+  bpf_debug("000000 Shaping IP DST: 0x%x", iph->daddr);
   u32 ip_dest = bpf_htonl(iph->daddr);
-  bpf_debug("************* Shaping IP DST: %pI4", &ip_dest);
+  bpf_debug("11111 Shaping IP DST: %pI4", &ip_dest);
 
   struct session_id* session =
       bpf_map_lookup_elem(&m_session_mapping, &ip_dest);

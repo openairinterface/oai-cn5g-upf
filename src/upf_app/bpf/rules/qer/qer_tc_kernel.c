@@ -170,7 +170,7 @@ static __always_inline u32 ipv4_sdf_filter(struct __sk_buff* skb) {
       }
 
       if (htons(udph->dest) == GTP_UDP_PORT) {
-        bpf_printk("IPv4 SDF Filter: This is a GTP traffic");
+        bpf_debug("IPv4 SDF Filter: This is a GTP traffic");
         return egress_sdf_filter(skb);
       }
     }
@@ -184,7 +184,7 @@ static __always_inline u32 ipv4_sdf_filter(struct __sk_buff* skb) {
 
 SEC("tc/egress")
 int tc_filter_traffic(struct __sk_buff* skb) {
-  bpf_debug("==========< tc/egress: Filter Traffic >==========\n");
+  bpf_debug("==========< tc/egress: Filter Traffic >==========");
 
   void* data     = (void*) (long) skb->data;
   void* data_end = (void*) (long) skb->data_end;
@@ -236,7 +236,7 @@ int tc_filter_traffic(struct __sk_buff* skb) {
 
 SEC("tc/ingress")
 int tc_redirect_traffic(struct __sk_buff* skb) {
-  bpf_debug("==========< tc/ingress: Redirect Traffic >==========\n");
+  bpf_debug("==========< tc/ingress: Redirect Traffic >==========");
   int key = DOWNLINK, *ifindex;
 
   ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
