@@ -471,7 +471,43 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
     bpf_debug("Error: Invalid Ethernet header");
     return XDP_DROP;
   }
+   
+  /************************************************* */
+  u16 eth_type = htons(ethh->h_proto);
+  bpf_debug("eth_type: 0x%x", eth_type);
 
+  switch (eth_type) {
+    case ETH_P_IP: {
+      bpf_debug("This is an IPv4 Packet");
+      break;
+    }
+    case ETH_P_IPV6: {
+      // TODO: Check if traitment is needed here
+      bpf_debug("This is an IPv6 Packet");
+      return XDP_DROP;
+    }
+    case ETH_P_8021Q: {
+      // TODO: Check if traitment is needed here
+      bpf_debug("This is a VLAN Packet");
+      return XDP_DROP;
+    }
+    case ETH_P_8021AD: {
+      // TODO: Check if traitment is needed here
+      bpf_debug("This is a VLAN Packet");
+      return XDP_DROP;
+    }
+    case ETH_P_ARP: {
+      // TODO: Check if traitment is needed here
+      bpf_debug("This is an ARP Packet");
+      return XDP_PASS;
+    }
+    default: {
+      // TODO: Check if traitment is needed here
+      bpf_debug("Packet Type not Known");
+      return XDP_DROP;
+    }
+  } 
+  /************************************************* */
   // struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
   struct iphdr* iph = (void*) (ethh + 1);
 

@@ -19,6 +19,10 @@
 #include "upf_config.hpp"
 #include <thread>
 
+// #include <sys/utsname.h>
+// #include <stdio.h>
+// #include <string.h>
+
 using namespace oai::config;
 extern upf_config upf_cfg;
 
@@ -34,6 +38,13 @@ int is_little_endian() {
   return (*byte == 1);
 }
 
+// int is_little_endian() {
+//   struct utsname buf;
+//   uname(&buf);
+//   return (
+//       strstr(buf.machine, "x86_64") || strstr(buf.machine, "i386") ||
+//       strstr(buf.machine, "armv7") || strstr(buf.machine, "aarch64"));
+// }
 //---------------------------------------------------------------------------------------------------------------
 std::ostream& operator<<(
     std::ostream& Str, struct next_rule_prog_index_key const& v) {
