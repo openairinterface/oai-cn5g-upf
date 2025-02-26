@@ -1,7 +1,7 @@
 // clang-format off
 #include <types.h>
 // clang-format on
-
+#include <sys/socket.h>
 #include "xdp_stats_kern.h"
 #include <bpf_helpers.h>
 #include <endian.h>
@@ -127,6 +127,50 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
 
   // bpf_debug("IP SRC: 0x%x, IP DST: 0x%x", iph->saddr, iph->daddr);
 
+  // Update the MAC address based on the tables
+  // TODO: put in a function to update the MAC address
+  struct bpf_fib_lookup fib_params = {};
+	__u16 h_proto;
+  h_proto = ethh->h_proto;
+	if (h_proto == bpf_htons(ETH_P_IP)) {
+
+		if (iph + 1 > data_end) {
+      return XDP_DROP;
+		}
+
+		fib_params.family	= AF_INET;
+		fib_params.tos		= iph->tos;
+		fib_params.l4_protocol	= iph->protocol;
+		fib_params.sport	= 0;
+		fib_params.dport	= 0;
+		fib_params.tot_len	= bpf_ntohs(iph->tot_len);
+		fib_params.ipv4_src	= iph->saddr;
+		fib_params.ipv4_dst	= iph->daddr;
+	}
+
+	fib_params.ifindex = ctx->ingress_ifindex;
+
+	int rc = bpf_fib_lookup(ctx, &fib_params, sizeof(fib_params), 0);
+  bpf_printk("BPF_FIB_LKUP_RET_ -> %d", rc);
+	switch (rc) {
+    case BPF_FIB_LKUP_RET_SUCCESS:         /* lookup successful */
+      bpf_debug("BPF_FIB_LKUP_RET_SUCCESS");
+
+      memcpy(ethh->h_dest, fib_params.dmac, ETH_ALEN);
+      memcpy(ethh->h_source, fib_params.smac, ETH_ALEN);
+      break;
+    case BPF_FIB_LKUP_RET_BLACKHOLE:    /* dest is blackholed; can be dropped */
+    case BPF_FIB_LKUP_RET_UNREACHABLE:  /* dest is unreachable; can be dropped */
+    case BPF_FIB_LKUP_RET_PROHIBIT:     /* dest not allowed; can be dropped */
+    case BPF_FIB_LKUP_RET_NOT_FWDED:    /* packet is not forwarded */
+    case BPF_FIB_LKUP_RET_FWD_DISABLED: /* fwding is not enabled on ingress */
+    case BPF_FIB_LKUP_RET_UNSUPP_LWT:   /* fwd requires encapsulation */
+    case BPF_FIB_LKUP_RET_NO_NEIGH:     /* no neighbor entry for nh */
+    case BPF_FIB_LKUP_RET_FRAG_NEEDED:  /* fragmentation required to fwd */
+      /* PASS */
+      break;
+	}
+
   /*
   |----------------------------------------------------------------|
   |-------------------------- Add UDP header ----------------------|
@@ -150,10 +194,10 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   |-------------------------- Add GTP header ----------------------|
   |----------------------------------------------------------------|
   */
-  // Update destination mac address
-  if (!update_dst_mac_address(n3_ip, ethh)) {
-    bpf_debug("N3's Next Hop MAC address not found! Drop the packet");
-  }
+  // // Update destination mac address
+  // if (!update_dst_mac_address(n3_ip, ethh)) {
+  //   bpf_debug("N3's Next Hop MAC address not found! Drop the packet");
+  // }
 
   struct gtpuhdr* p_gtpuh = (void*) (udph + 1);
   if ((void*) (p_gtpuh + 1) > data_end) {
@@ -265,6 +309,70 @@ int far_entry_point(struct xdp_md* ctx) {
       // Adjust head to the right.
       if (bpf_xdp_adjust_head(ctx, GTP_ENCAPSULATED_SIZE)) {
         return XDP_DROP;
+      }
+
+      data     = (void*) (long) ctx->data;
+      data_end = (void*) (long) ctx->data_end;
+
+      ethh = data;
+      if ((void*) (ethh + 1) > data_end) {
+        bpf_debug("Invalid pointer");
+        return XDP_DROP;
+      }
+
+      /*
+      |----------------------------------------------------------------|
+      |-------------------------- Add IP header -----------------------|
+      |----------------------------------------------------------------|
+      */
+      struct iphdr* iph = (void*) (ethh + 1);
+      if ((void*) (iph + 1) > data_end) {
+        return XDP_DROP;
+      }
+
+      bpf_debug("The Packet is redirected for transmission to DN ...");
+
+      // Update MAC address using bpf helper
+      // TODO: put in a function to update the MAC address
+      struct bpf_fib_lookup fib_params = {};
+      __u16 h_proto;
+      h_proto = ethh->h_proto;
+      if (h_proto == bpf_htons(ETH_P_IP)) {
+
+        if (iph + 1 > data_end) {
+          return XDP_DROP;
+        }
+
+        fib_params.family	= AF_INET;
+        fib_params.tos		= iph->tos;
+        fib_params.l4_protocol	= iph->protocol;
+        fib_params.sport	= 0;
+        fib_params.dport	= 0;
+        fib_params.tot_len	= bpf_ntohs(iph->tot_len);
+        fib_params.ipv4_src	= iph->saddr;
+        fib_params.ipv4_dst	= iph->daddr;
+      }
+
+      fib_params.ifindex = ctx->ingress_ifindex;
+
+      int rc = bpf_fib_lookup(ctx, &fib_params, sizeof(fib_params), 0);
+      switch (rc) {
+        case BPF_FIB_LKUP_RET_SUCCESS:         /* lookup successful */
+          bpf_debug("BPF_FIB_LKUP_RET_SUCCESS");
+
+          memcpy(ethh->h_dest, fib_params.dmac, ETH_ALEN);
+          memcpy(ethh->h_source, fib_params.smac, ETH_ALEN);
+          break;
+        case BPF_FIB_LKUP_RET_BLACKHOLE:    /* dest is blackholed; can be dropped */
+        case BPF_FIB_LKUP_RET_UNREACHABLE:  /* dest is unreachable; can be dropped */
+        case BPF_FIB_LKUP_RET_PROHIBIT:     /* dest not allowed; can be dropped */
+        case BPF_FIB_LKUP_RET_NOT_FWDED:    /* packet is not forwarded */
+        case BPF_FIB_LKUP_RET_FWD_DISABLED: /* fwding is not enabled on ingress */
+        case BPF_FIB_LKUP_RET_UNSUPP_LWT:   /* fwd requires encapsulation */
+        case BPF_FIB_LKUP_RET_NO_NEIGH:     /* no neighbor entry for nh */
+        case BPF_FIB_LKUP_RET_FRAG_NEEDED:  /* fragmentation required to fwd */
+          /* PASS */
+          break;
       }
 
       bpf_debug("The Packet is redirected for transmission to DN ...");

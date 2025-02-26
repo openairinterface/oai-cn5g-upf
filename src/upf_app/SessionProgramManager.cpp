@@ -179,11 +179,11 @@ void SessionProgramManager::storeSessionMappingMap(
 
   // If the session exists, update the relevant fields
   if (ret == 0) {
-    if ((session.teid_ul == 0) && (teid_ul != 0)) {
+    if (teid_ul != 0) {
       session.teid_ul = teid_ul;
     }
 
-    if ((session.teid_dl == 0) && (teid_dl != 0)) {
+    if (teid_dl != 0) {
       session.teid_dl = teid_dl;
     }
   } else {

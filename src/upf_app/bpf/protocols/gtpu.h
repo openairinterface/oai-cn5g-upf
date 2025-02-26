@@ -19,7 +19,7 @@
 #define GTP_EXT_MSG_LEN 0x01
 #define GTP_EXT_PDU_TYPE 0x00
 #define GTP_EXT_QFI 0x05
-#define GTP_DEFAULT_QFI 0x08
+#define GTP_DEFAULT_QFI 0x01
 #define GTP_EXT_NEXT_EXT_TYPE 0x00
 
 // TS 29 281 - Section 6 GTP-U Message Formats
