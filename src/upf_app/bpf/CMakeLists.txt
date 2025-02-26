@@ -14,6 +14,12 @@ include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 
 add_definitions(-DKERNEL_SPACE)
 
+if(DEFINED BPF_DEBUG)
+  if(BPF_DEBUG)
+    add_definitions(-DBPF_DEBUG)
+  endif()
+endif()
+
 add_custom_target(upf_xdp_all DEPENDS pfcp_session_lookup_xdp pfcp_session_pdr_lookup_xdp far_xdp)
 add_custom_target(upf_tc_all DEPENDS qer_tc far_tc)
 

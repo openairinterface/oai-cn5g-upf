@@ -36,9 +36,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Paris
 ENV IS_DOCKERFILE=1
 ARG ENABLE_LTTNG=false
+ARG BPF_DEBUG=false
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade --yes && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes \
+      cmake \
       psmisc \
       git \
   && rm -rf /var/lib/apt/lists/*
@@ -66,6 +68,7 @@ FROM oai-upf-base as oai-upf-builder
 COPY . /openair-upf
 # Building UPF
 WORKDIR /openair-upf/build/scripts
+ARG BUILD_ARGS=""
 RUN  if [ "$ENABLE_LTTNG" = "true" ]; then apt-get update && \
         DEBIAN_FRONTEND=noninteractive apt-get install --yes \
         libstdc++-12-dev \
@@ -73,11 +76,12 @@ RUN  if [ "$ENABLE_LTTNG" = "true" ]; then apt-get update && \
         liblttng-ust-dev \
         lttng-tools && \
         ldconfig && \
-        ./build_upf --clean --Verbose --build-type Release --jobs --lttng; \
+        BUILD_ARGS="--lttng"; \
     else \
-        ldconfig && \
-        ./build_upf --clean --Verbose --build-type Release --jobs --jobs; \
+        ldconfig; \
     fi && \
+    if [ "$BPF_DEBUG" = "true" ]; then BUILD_ARGS="$BUILD_ARGS --bpf-debug"; fi && \
+    ./build_upf --clean --Verbose --build-type Release --jobs ${BUILD_ARGS}; \
     ldd /openair-upf/build/upf/build/upf && \
     mv /openair-upf/build/upf/build/upf /openair-upf/build/upf/build/oai_upf && \
     echo "end of UPF build"
