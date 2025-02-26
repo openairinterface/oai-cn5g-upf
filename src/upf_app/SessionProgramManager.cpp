@@ -1,6 +1,7 @@
 #include "SessionProgramManager.h"
 #include <far_xdp_user.h>
 #include <qer_tc_user.h>
+#include <far_tc_user.h>
 #include <pfcp_session_pdr_lookup_xdp_user.h>
 #include "SessionPrograms.h"
 #include <pfcp_session_lookup_xdp_user.h>
@@ -140,7 +141,25 @@ void SessionProgramManager::initializeNextRuleProgIndexKey(
   key.source_value = sourceInterface;
 }
 
-//---------------------------------------------------------------------------------------------------------------
+/*---------------------------------------------------------------------------------------------------------------*/
+// Helper function to initialize the key for the FARProgram
+void SessionProgramManager::initializeNextRuleProgEthIndexKey(
+    next_rule_eth_prog_index_key& key, uint32_t teid, uint16_t ethertype,
+    uint8_t sourceInterface) {
+  __builtin_memset(&key, 0, sizeof(struct next_rule_prog_index_key));
+
+  if (is_little_endian()) {
+    key.teid         = htobe32(teid);
+  } else {
+    key.teid         = htole32(teid);
+  }
+  // TODO [ETH-PDU] support other eth pkt filters and ethertype
+  key.ethertype = 0; // ethertype;
+
+  key.source_value = sourceInterface;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 // Helper function to store the FARProgram index in the LookupProgram
 // std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram
 void SessionProgramManager::storeFarProgramIndexInNextProgRuleIndexMap(
@@ -157,7 +176,32 @@ void SessionProgramManager::storeFarProgramIndexInNextProgRuleIndexMap(
   pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
 }
 
-//---------------------------------------------------------------------------------------------------------------
+/*---------------------------------------------------------------------------------------------------------------*/
+// Helper function to store the FARProgram index in the LookupProgram for ETH PDU session
+void SessionProgramManager::storeFarProgramIndexInNextProgEthRuleIndexMap(
+    std::shared_ptr<FARProgram> pFARProgram,
+    const next_rule_eth_prog_index_key& key, uint32_t teid_dl, uint32_t n3IpAddress,
+    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
+  // auto pPFCP_Session_LookupProgram =
+  //     UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+  u32 id = pFARProgram->getId();
+  s32 fd = pFARProgram->getFd();
+  next_rule_eth_prog_index_value value;
+  value.prog_id = id;
+  value.teid_dl = teid_dl;
+
+  if (is_little_endian()) {
+    value.ipv4_address = htole32(n3IpAddress);
+  } else {
+    value.ipv4_address = n3IpAddress;
+  }
+
+  pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->update(
+      key, value, BPF_ANY);
+  pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 // Helper function to store Session mapping
 void SessionProgramManager::storeSessionMappingMap(
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
@@ -211,8 +255,9 @@ void SessionProgramManager::storeFARInFARMap(
 //---------------------------------------------------------------------------------------------------------------
 // Function to update ARP table with remoteN6 IP and MAC address
 
+template <typename T>
 void SessionProgramManager::updateARPTableForN6(
-    std::shared_ptr<FARProgram> pFARProgram, uint32_t dnIP, uint32_t upfn6IP) {
+    std::shared_ptr<T> pFARProgram, uint32_t dnIP, uint32_t upfn6IP) {
   try {
     // uint32_t remoteN6 = getRemoteIP(upfn6IP, dnIP);
     uint32_t ipnexremoteN6hop = (is_little_endian()) ?
@@ -234,9 +279,9 @@ void SessionProgramManager::updateARPTableForN6(
 
 //---------------------------------------------------------------------------------------------------------------
 // Function to update ARP table with remoteN3 IP and MAC address
-
+template <typename T>
 void SessionProgramManager::updateARPTableForN3(
-    std::shared_ptr<FARProgram> pFARProgram, uint32_t gNodeBIP,
+    std::shared_ptr<T> pFARProgram, uint32_t gNodeBIP,
     uint32_t upfn3IP, uint64_t seid) {
   try {
     // uint32_t remoteN3 = getRemoteIP(upfn3IP, gNodeBIP);
@@ -328,7 +373,7 @@ void SessionProgramManager::createPipeline(
   Logger::upf_app().debug("Instantiate a new FARProgram");
   std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
 
-  pFARProgram->setup(far_id, enforcing_qos);
+  pFARProgram->setup(far_id, enforcing_qos, 0);
 
   auto pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
@@ -371,7 +416,76 @@ void SessionProgramManager::createPipeline(
   }
 }
 
-//---------------------------------------------------------------------------------------------------------------
+/*---------------------------------------------------------------------------------------------------------------*/
+// Function to create a pipeline for a given session and FAR
+void SessionProgramManager::createPipeline(
+    uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
+    uint16_t ethertype, std::shared_ptr<pfcp::pfcp_far> pFar, // TODO [ETH-PDU] include MAC Address
+    std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer, bool isModification,
+    uint32_t teid2) {
+  uint32_t dnIP          = upf_cfg.remote_n6.s_addr;
+  uint32_t upfn3IP       = upf_cfg.n3.addr4.s_addr;
+  uint32_t upfn6IP       = upf_cfg.n6.addr4.s_addr;
+  uint32_t far_id        = pFar->far_id.far_id;
+  uint32_t enforcing_qos = 0;
+  uint32_t teid_dl = pFar->forwarding_parameters.second.outer_header_creation.second.teid;
+
+  next_rule_eth_prog_index_key key;
+
+  initializeNextRuleProgEthIndexKey(key, teid1, ethertype, sourceInterface);
+
+  
+  if ((upf_cfg.enable_qos) && (!pQer.empty())) {
+    enforcing_qos = 1;
+    std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
+    pQERProgram->setup(seid, pQer);
+  }
+  
+  // Add TC program to handle ETH PDU session broadcast packets
+  Logger::upf_app().debug("ETH-PDU: Instantiate a new FARTCProgram");
+  std::shared_ptr<FARTCProgram> pFARTCProgram = std::make_shared<FARTCProgram>();
+  pFARTCProgram->setup();
+
+  Logger::upf_app().debug("ETH-PDU: Instantiate a new FARProgram");
+  std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
+
+  pFARProgram->setup(far_id, enforcing_qos, 1);
+
+  std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram =
+      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+
+  storeFarProgramIndexInNextProgEthRuleIndexMap(
+      pFARProgram, key, teid_dl, upfn3IP, pPFCP_Session_LookupProgram);
+
+  Logger::upf_app().debug("ETH-PDU: Store FAR in the FAR program");
+  storeFARInFARMap(pFARProgram, pFar);
+
+  Logger::upf_app().warn(
+      "TODO: Try to extract the updateARPTableForN6 for the if and else to "
+      "run it only once");
+
+  uint32_t gNodeBIP = getGnodebIp(pFar);
+
+  // TODO [ETH-PDU] store session mapping for ethernet packet filter. Right now DL will use the learned MAC table
+  if (isModification) {
+    std::thread arpUpdateThread1(
+        [this, pPFCP_Session_LookupProgram, seid, gNodeBIP, dnIP, upfn3IP, upfn6IP]() {
+          updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
+          updateARPTableForN3(pPFCP_Session_LookupProgram, gNodeBIP, upfn3IP, seid);
+        });
+    // Detach the thread since we don't need to join it
+    arpUpdateThread1.detach();
+  } else {
+    std::thread arpUpdateThread2(
+        [this, pPFCP_Session_LookupProgram, seid, gNodeBIP, dnIP, upfn3IP, upfn6IP]() {
+          updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
+          updateARPTableForN3(pPFCP_Session_LookupProgram, gNodeBIP, upfn3IP, seid);
+        });
+    arpUpdateThread2.detach();
+  }
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 void SessionProgramManager::removePipeline(uint64_t seid) {
   Logger::upf_app().debug("Remove FARProgram index from UPFProgram map");
   auto it = mSessionProgramsMap.find(seid);
@@ -392,6 +506,7 @@ void SessionProgramManager::removePipeline(uint64_t seid) {
   auto pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
   pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->remove(key);
+  pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->remove(key);
 }
 
 //---------------------------------------------------------------------------------------------------------------

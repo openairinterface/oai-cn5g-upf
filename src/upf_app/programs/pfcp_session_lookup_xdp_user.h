@@ -9,6 +9,7 @@
 #include <signal.h>  // signals
 #include <pfcp_session_lookup_xdp_kernel_skel.h>
 #include <wrappers/BPFMap.hpp>
+#include "interfaces.h"
 // #include "qfi_flow_mapping_table.h"
 
 class BPFMaps;
@@ -78,6 +79,14 @@ class PFCP_Session_LookupProgram {
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
+   * @brief Insert one UPF reference point interface into a map.
+   *
+   */
+
+  void create_upf_interface_map_entry(e_reference_point s);
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  /**
    * @brief Get the TEID to session Map object.
    *
    * @return std::shared_ptr<BPFMap> The TEID to fd map.
@@ -107,6 +116,22 @@ class PFCP_Session_LookupProgram {
    * @return std::shared_ptr<BPFMap> The pdi to index map.
    */
   std::shared_ptr<BPFMap> getNextProgRuleIndexMap() const;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Get the NextProgRuleIndex Map object for ETH PDU sessions.
+   *
+   * @return std::shared_ptr<BPFMap> The pdi to index map.
+   */
+  std::shared_ptr<BPFMap> getNextProgEthRuleIndexMap() const;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Get the MacPduSession Map object for ETH PDU sessions.
+   *
+   * @return std::shared_ptr<BPFMap> The pdi to index map.
+   */
+  std::shared_ptr<BPFMap> getMacPduSessionMap() const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -140,6 +165,31 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> getQosFlowMap() const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Get the Arp Table Map object.
+   *
+   * @return std::shared_ptr<BPFMap>  The arp table map.
+   */
+  std::shared_ptr<BPFMap> getArpTableMap() const;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Get the iface Map object.
+   *
+   * @return std::shared_ptr<BPFMap> The iface_name.
+   */
+  std::shared_ptr<BPFMap> getIfaceMap() const;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Get the Egress Interface Map object.
+   *
+   * @return std::shared_ptr<BPFMap> The egress interface map.
+   */
+  std::shared_ptr<BPFMap> getEgressInterfaceMap() const;
+  
+  /*---------------------------------------------------------------------------------------------------------------*/
+  
 
  private:
   /**
@@ -171,6 +221,13 @@ class PFCP_Session_LookupProgram {
   /*---------------------------------------------------------------------------------------------------------------*/
   // The pdi key to program index map.
   std::shared_ptr<BPFMap> mpNextProgRuleIndexMap;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  // The pdi key to program index map for ETH PDU session.
+  std::shared_ptr<BPFMap> mpNextProgEthRuleIndexMap;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  std::shared_ptr<BPFMap> mpMacPduSessionMap;
 
   /*---------------------------------------------------------------------------------------------------------------*/
   // The next prog rule map.
@@ -206,6 +263,18 @@ class PFCP_Session_LookupProgram {
   // The UDP interface.
   std::string mUDPInterface;
   /*---------------------------------------------------------------------------------------------------------------*/
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  // The arp table map.
+  std::shared_ptr<BPFMap> mpArpTableMap;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  // The iface map.
+  std::shared_ptr<BPFMap> mpUPFIfaceMap;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  // The egress interface map.
+  std::shared_ptr<BPFMap> mpEgressInterfaceMap;
 };
 
 #endif  // __PFCP_SESSION_LOOKUP_XDP_USER_H__

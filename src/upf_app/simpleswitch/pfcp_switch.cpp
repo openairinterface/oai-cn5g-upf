@@ -676,9 +676,12 @@ void pfcp_switch::call_datapath(
         itti_n4_session_establishment_request* est_req,
         itti_n4_session_modification_request* mod_req,
         itti_n4_session_deletion_request* del_req)) {
+  Logger::pfcp_switch().info("Entering ebpf call_datapath");
   std::shared_ptr<pfcp::pfcp_session> pSession =
       std::make_shared<pfcp::pfcp_session>(*s);
+  Logger::pfcp_switch().info("call_datapath: created pSession");
   obj = UserPlaneComponent::getInstance().getSessionManager();
+  Logger::pfcp_switch().info("call_datapath: got session manager object");
 
   itti_n4_session_establishment_request* est_req = establishment_request;
   itti_n4_session_modification_request* mod_req  = modification_request;
@@ -686,8 +689,11 @@ void pfcp_switch::call_datapath(
 
   if (!del_req) {
     obj->sessions.push_back(pSession);
+    Logger::pfcp_switch().info("call_datapath: obj->sessions.push_back(pSession);");
     (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
+    Logger::pfcp_switch().info("call_datapath: (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);");
   } else {
+    Logger::pfcp_switch().info("call_datapath: getting session details");
     uint64_t seid  = pSession->get_up_seid();
     auto& sessions = obj->sessions;
 
@@ -696,6 +702,7 @@ void pfcp_switch::call_datapath(
     //     sessions.erase(it);
     //   }
     // }
+    Logger::pfcp_switch().info("call_datapath: calling crud_func");
     (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
   }
 }
@@ -704,6 +711,7 @@ void pfcp_switch::call_datapath(
 void pfcp_switch::handle_pfcp_session_establishment_request(
     std::shared_ptr<itti_n4_session_establishment_request> sreq,
     itti_n4_session_establishment_response* resp) {
+  Logger::pfcp_switch().info("HANDLE_PFCP_SESSION_ESTABLISHMENT_REQUEST");
   itti_n4_session_establishment_request* req = sreq.get();
   pfcp::fseid_t fseid                        = {};
   pfcp::cause_t cause = {.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED};
@@ -832,6 +840,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
     resp->pfcp_ies.set(offending_ie);
   }
 
+  // TODO [ETH-PDU] update logs to print the MAC access
   if (Logger::should_log(spdlog::level::debug)) {
     std::cout << "\n+----------------------------------------------------------"
                  "--------"

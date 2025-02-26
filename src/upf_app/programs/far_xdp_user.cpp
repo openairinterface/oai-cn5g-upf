@@ -8,6 +8,7 @@
 #include <wrappers/BPFMaps.h>
 #include "logger.hpp"
 #include "upf_config.hpp"
+#include <far_data.h>
 
 using namespace oai::config;
 extern upf_config upf_cfg;
@@ -61,9 +62,10 @@ void FARProgram::create_upf_interface_map_entry(e_reference_point s) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void FARProgram::setup(uint32_t far_id, uint32_t enforcing_qos) {
+void FARProgram::setup(uint32_t far_id, uint32_t enforcing_qos, uint32_t pdu_type) {
   spSkeleton = mpLifeCycle->open();
   initializeMaps();
+  mpLifeCycle->getBPFSkeleton()->rodata->config.pdu_type = pdu_type;
   mpLifeCycle->load();
   mpLifeCycle->attach();
 
@@ -131,7 +133,6 @@ std::shared_ptr<BPFMap> FARProgram::getEnforcingQoSMap() const {
 void FARProgram::initializeMaps() {
   // Store all maps available in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
-
   // Warning - The name of the map must be the same of the BPF program.
   mpFARMap      = std::make_shared<BPFMap>(mpMaps->getMap("m_far"));
   mpArpTableMap = std::make_shared<BPFMap>(mpMaps->getMap("m_arp_table"));
