@@ -40,7 +40,6 @@
 #include <stdbool.h>
 #include <string.h>  //Needed for memcpy
 
-
 /*****************************************************************************************************************/
 
 static __always_inline bool retrieve_upf_iface_from_map(
@@ -170,10 +169,11 @@ create_outer_header_gtpu(struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, int
   |-------------------------- Add GTP header ----------------------|
   |----------------------------------------------------------------|
   */
-  // Update destination mac address
-  if (!update_dst_mac_address(n3_ip, ethh)) {
-    bpf_debug("N3's Next Hop MAC address not found! Drop the packet");
-  }
+  // TODO: remove this
+  // // Update destination mac address
+  // if (!update_dst_mac_address(n3_ip, ethh)) {
+  //   bpf_debug("N3's Next Hop MAC address not found! Drop the packet");
+  // }
 
   struct gtpuhdr* p_gtpuh = (void*) (udph + 1);
   if ((void*) (p_gtpuh + 1) > data_end) {
