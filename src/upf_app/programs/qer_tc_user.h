@@ -96,6 +96,7 @@ class QERProgram : public BPFProgram {
   /*---------------------------------------------------------------------------------------------------------------*/
 
   std::shared_ptr<BPFMap> getQoSFlowMap() const;
+  std::shared_ptr<BPFMap> getDefaultQfiMap() const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
 
@@ -151,6 +152,7 @@ class QERProgram : public BPFProgram {
   // The 5G QoS Flow.
   std::shared_ptr<BPFMap> mpQoSFlowMap;
 
+  std::shared_ptr<BPFMap> mpDefaultQfiMap;
   /*---------------------------------------------------------------------------------------------------------------*/
   std::vector<struct s_fiveQosFlow> qosFlowsQfis;
 };
