@@ -4,7 +4,7 @@
 #include <bpf_helpers.h>
 #include <linux/bpf.h>
 #include <types.h>
-#include "filter_key.h"
+#include "sdf_filter.h"
 #include "qos_flow.h"
 
 #define QFI_MAX_ENTRIES 10000
