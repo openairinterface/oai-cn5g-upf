@@ -30,6 +30,14 @@ struct {
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
+  __uint(type, BPF_MAP_TYPE_ARRAY);
+  __uint(max_entries, 1);
+  __type(key, u32);
+  __type(value, u8);
+} m_default_qfi SEC(".maps");
+
+/*---------------------------------------------------------------------------------------------------------------*/
+struct {
   __uint(type, BPF_MAP_TYPE_DEVMAP);
   __uint(max_entries, MAX_INTERFACES);
   __type(key, u32);
