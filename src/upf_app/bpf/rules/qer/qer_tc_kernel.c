@@ -18,10 +18,8 @@
 #include <utils/csum.h>
 #include <utils/logger.h>
 #include <utils/utils.h>
-//#include <far_maps.h>
 #include <interfaces.h>
-//#include <pfcp_session_lookup_maps.h>
-#include <string.h>  //Needed for memcpy
+#include <string.h>
 #include "bpf_endian.h"
 
 #include <linux/pkt_cls.h>
@@ -30,16 +28,14 @@
 #include <linux/netdevice.h>
 #include <linux/pkt_sched.h>
 
-#define MARK_VALUE 0x12345678  // Marker value to match
-#define OFFSET 0               // Example offset where marker is stored
-#define TARGET_INTF 644
-
 //---------------------------------------------------------------------------------------------------------------
 static __always_inline u32 egress_sdf_filter(struct __sk_buff* skb) {
-  void* data     = (void*) (long) skb->data;
-  void* data_end = (void*) (long) skb->data_end;
+  void* data      = (void*) (long) skb->data;
+  void* data_end  = (void*) (long) skb->data_end;
+  void* data_meta = (void*) (long) skb->data_meta;
 
-  struct ethhdr* ethh = data;
+  struct filter_key* sdf = data_meta;
+  struct ethhdr* ethh    = data;
 
   if ((void*) (ethh + 1) > data_end) {
     bpf_debug("Error: Invalid Ethernet header");
@@ -47,105 +43,72 @@ static __always_inline u32 egress_sdf_filter(struct __sk_buff* skb) {
   }
 
   struct iphdr* iph = (struct iphdr*) (ethh + 1);
+
   if ((void*) (iph + 1) > data_end) {
     bpf_debug("Error: Invalid IPv4 header");
     return TC_ACT_SHOT;
   }
 
   struct udphdr* udph = (struct udphdr*) (iph + 1);
+
   if ((void*) (udph + 1) > data_end) {
     bpf_debug("Error: Invalid UDP header");
     return TC_ACT_SHOT;
   }
 
   struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
+
   if ((void*) (gtpuh + 1) > data_end) {
     bpf_debug("Error: Invalid GTPU packet");
     return TC_ACT_SHOT;
   }
 
-  struct gtpu_extn_pdu_session_container* gtpu_ext_h = (void*) (gtpuh + 1);
+  struct gtpu_extn_pdu_session_container* gtpu_ext_h =
+      (struct gtpu_extn_pdu_session_container*) ((void*) (gtpuh + 1));
+
   if ((void*) (gtpu_ext_h + 1) > data_end) {
     bpf_debug("Error: Invalid GTPU Extension packet");
     return TC_ACT_SHOT;
   }
 
-
-  /************************************************** */
-          struct ethhdr* ethh_new = data + GTP_ENCAPSULATED_SIZE;
-
-        if ((void*) ethh_new + sizeof(*ethh_new) > data_end) {
-          bpf_debug("Error: Invalid encapsulated Ethernet packet");
-          return XDP_DROP;
-        }
-
-        struct iphdr* iph_inner = (void*) (ethh_new + 1);
-
-        if ((void*) iph_inner + sizeof(*iph_inner) > data_end) {
-          bpf_debug("Error: Invalid Inner IP packet");
-          return TC_ACT_SHOT;
-        }
-/******************************************************** */
-
-  struct filter_key* key = {0};
-
-  u8 protocol = iph_inner->protocol;
-
-  // bpf_debug("Create Key for SDF Filter Map");
-
-  key->src_ip   = iph_inner->saddr;
-  key->dst_ip   = iph_inner->daddr;
-  key->protocol = protocol;
-
-  switch (protocol) {
-    case IPPROTO_UDP: {
-      // Extract UDP header
-      struct udphdr* udph = (struct udphdr*) (iph_inner + 1);
-
-      if ((void*) (udph + 1) > data_end) {
-        bpf_debug("Error: Invalid UDP header");
-        return TC_ACT_SHOT;
-      }
-
-      key->dst_port = udph->dest;
-      break;
-    }
-    case IPPROTO_TCP: {
-      // Extract TCP header
-      struct tcphdr* tcph = (struct tcphdr*) (iph_inner + 1);
-
-      if ((void*) (tcph + 1) > data_end) {
-        bpf_debug("Error: Invalid TCP header");
-        return TC_ACT_SHOT;
-      }
-
-      key->dst_port = tcph->dest;
-      break;
-    }
-    default: {
-      bpf_debug("Unknown header");
-      bpf_debug("Use best effort QoS flow (i.e. default qfi)");
-      key->dst_port = 65535;
-    }
+  /* Check XDP gave us some data_meta */
+  if ((void*) (sdf + 1) > data) {
+    bpf_debug("Error: Failed to load metadata from XDP");
+    return TC_ACT_SHOT;
   }
 
-  struct session_qfi* retrieved_value =
-      bpf_map_lookup_elem(&m_sdf_filter, &key);
+  bpf_debug(
+      "TC: Received XDP Metadata - dst_ip: %pI4, src_ip: %pI4", &sdf->dst_ip,
+      &sdf->dst_ip);
+  bpf_debug(
+      "TC: Received XDP Metadata - proto: %d, dst_port: %d", &sdf->protocol,
+      &sdf->dst_port);
+
+  struct session_qfi* retrieved_value = bpf_map_lookup_elem(&m_sdf_filter, sdf);
 
   if (retrieved_value) {
+    bpf_debug("SDF Found!");
     u8 qfi   = retrieved_value->qfi;
     u64 seid = bpf_ntohs(retrieved_value->seid);
 
     gtpu_ext_h->qfi = qfi;
-    u32 classid =
+    skb->tc_classid =
         (seid << 16) |
         ((seid * 256) + (qfi * 251 % 256));  // ( major << 16 ) | minor
-    skb->tc_classid = classid;
     return TC_ACT_OK;
   }
 
-  // default value qfi = 5 (NON-GBR QoS Flow)
-  skb->tc_classid = gtpu_ext_h->qfi;
+  u32 key         = 0;
+  u8* default_qfi = bpf_map_lookup_elem(&m_default_qfi, &key);
+
+  if (default_qfi) {
+    bpf_debug("SDF NOT Found!, Default QFI IS FOUND!");
+    gtpu_ext_h->qfi = *default_qfi;
+    skb->tc_classid = *default_qfi;
+  } else {
+    bpf_debug("SDF NOT Found!, Default QFI NOT found, use value 8 as default");
+    skb->tc_classid = gtpu_ext_h->qfi;
+  }
   return TC_ACT_OK;
 }
 
@@ -168,26 +131,21 @@ static __always_inline u32 ipv4_sdf_filter(struct __sk_buff* skb) {
     return TC_ACT_SHOT;
   }
 
-  u8 protocol = iph->protocol;
+  if (iph->protocol == IPPROTO_UDP) {
+    struct udphdr* udph = (struct udphdr*) (iph + 1);
 
-  switch (protocol) {
-    case IPPROTO_UDP: {
-      struct udphdr* udph = (struct udphdr*) (iph + 1);
-
-      if ((void*) (udph + 1) > data_end) {
-        bpf_debug("Error: Invalid UDP header");
-        return TC_ACT_SHOT;
-      }
-
-      if (htons(udph->dest) == GTP_UDP_PORT) {
-        bpf_debug("IPv4 SDF Filter: This is a GTP traffic");
-        return egress_sdf_filter(skb);
-      }
-    }
-    default: {
+    if ((void*) (udph + 1) > data_end) {
+      bpf_debug("Error: Invalid UDP header");
       return TC_ACT_SHOT;
     }
+
+    if (htons(udph->dest) == GTP_UDP_PORT) {
+      bpf_debug("IPv4 SDF Filter: This is a GTP traffic");
+      return egress_sdf_filter(skb);
+    }
   }
+
+  return TC_ACT_SHOT;
 }
 
 //---------------------------------------------------------------------------------------------------------------
@@ -214,31 +172,13 @@ int tc_filter_traffic(struct __sk_buff* skb) {
       bpf_debug("SDF Filter: This is an IPv4 Packet");
       return ipv4_sdf_filter(skb);
     }
-    case ETH_P_IPV6: {
-      // TODO: Check if traitment is needed here
-      bpf_debug("SDF Filter: This is an IPv6 Packet");
+    case ETH_P_IPV6:
+    case ETH_P_8021Q:
+    case ETH_P_8021AD:
+    case ETH_P_ARP:
       return TC_ACT_OK;
-    }
-    case ETH_P_8021Q: {
-      // TODO: Check if traitment is needed here
-      bpf_debug("SDF Filter: This is a VLAN Packet");
+    default:
       return TC_ACT_OK;
-    }
-    case ETH_P_8021AD: {
-      // TODO: Check if traitment is needed here
-      bpf_debug("SDF Filter: This is a VLAN Packet");
-      return TC_ACT_OK;
-    }
-    case ETH_P_ARP: {
-      // TODO: Check if traitment is needed here
-      bpf_debug("SDF Filter: This is an ARP Packet");
-      return TC_ACT_OK;
-    }
-    default: {
-      // TODO: Check if traitment is needed here
-      bpf_debug("SDF Filter: Packet Type not Known");
-      return TC_ACT_OK;
-    }
   }
 }
 
@@ -250,6 +190,15 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
 
   void* data     = (void*) (long) skb->data;
   void* data_end = (void*) (long) skb->data_end;
+
+  struct filter_key* sdf;
+  sdf = (struct filter_key*) skb->data_meta;
+
+  /* Check XDP gave us some data_meta */
+  if ((void*) (sdf + 1) > data) {
+    bpf_debug("Error: Failed to load metadata from XDP");
+    return TC_ACT_SHOT;
+  }
 
   struct ethhdr* ethh = data;
 
@@ -264,7 +213,7 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
   switch (eth_type) {
     case ETH_P_IP: {
       bpf_debug("INGRESS: This is an IPv4 Packet");
-      
+
       int key = DOWNLINK, *ifindex;
       ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
 
@@ -273,36 +222,17 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
         return bpf_redirect(*ifindex, 0);
       }
 
-      bpf_debug("TC Packets not redirected! Drop them");
+      bpf_debug("TC Packets are not redirected! Drop them");
       return TC_ACT_SHOT;
     }
-    case ETH_P_IPV6: {
-      // TODO: Check if traitment is needed here
-      bpf_debug("INGRESS: This is an IPv6 Packet");
+    case ETH_P_IPV6:
+    case ETH_P_8021Q:
+    case ETH_P_8021AD:
+    case ETH_P_ARP:
       return TC_ACT_OK;
-    }
-    case ETH_P_8021Q: {
-      // TODO: Check if traitment is needed here
-      bpf_debug("INGRESS: This is a VLAN Packet");
+    default:
       return TC_ACT_OK;
-    }
-    case ETH_P_8021AD: {
-      // TODO: Check if traitment is needed here
-      bpf_debug("INGRESS: This is a VLAN Packet");
-      return TC_ACT_OK;
-    }
-    case ETH_P_ARP: {
-      // TODO: Check if traitment is needed here
-      bpf_debug("INGRESS: This is an ARP Packet");
-      return TC_ACT_OK;
-    }
-    default: {
-      // TODO: Check if traitment is needed here
-      bpf_debug("INGRESS: Packet Type not Known");
-      return TC_ACT_OK;
-    }
   }
-
 }
 
 //---------------------------------------------------------------------------------------------------------------
