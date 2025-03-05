@@ -162,6 +162,10 @@ void QERProgram::setup(
       default_qer = pQer.front();
     }
 
+    int key             = 0;
+    uint8_t default_qfi = default_qer->qfi.second.qfi;
+    getDefaultQfiMap()->update(key, default_qfi, BPF_ANY);
+
     // Configure Root Qdisc if not already present
     if (no_htb_root_qdisc(GTP_INTERFACE)) {
       Logger::upf_app().info(
@@ -277,6 +281,11 @@ std::shared_ptr<BPFMap> QERProgram::getEgressIfindexMap() const {
 std::shared_ptr<BPFMap> QERProgram::getSdfFilterMap() const {
   return mpSdfFilterMap;
 }
+
+/*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<BPFMap> QERProgram::getDefaultQfiMap() const {
+  return mpDefaultQfiMap;
+}
 /*---------------------------------------------------------------------------------------------------------------*/
 void QERProgram::initializeMaps() {
   // Store all maps available in the program.
@@ -287,4 +296,5 @@ void QERProgram::initializeMaps() {
   mpSdfFilterMap = std::make_shared<BPFMap>(mpMaps->getMap("m_sdf_filter"));
   mpEgressIfindexMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_egress_ifindex"));
+  mpDefaultQfiMap = std::make_shared<BPFMap>(mpMaps->getMap("m_default_qfi"));
 }
