@@ -19,6 +19,7 @@
 #include <pfcp_session_lookup_maps.h>
 #include <far_maps.h>
 #include <interfaces.h>
+#include <sdf_filter.h>
 
 #include <utils/logger.h>
 #include <utils/utils.h>
@@ -84,9 +85,6 @@ static __always_inline bool update_dst_mac_address(
 
 static __always_inline u32
 create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
-  // bpf_debug("Create Outer Header GTPU_IPv4");
-  // bpf_debug("Original Packet: Data/UDP/IP/ETH");
-
   // Adjust space to the left.
   if (bpf_xdp_adjust_head(ctx, (int32_t) -GTP_ENCAPSULATED_SIZE)) {
     return XDP_DROP;
@@ -171,7 +169,7 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   iph->daddr =
       p_far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
 
-  bpf_debug("IP SRC: 0x%x, IP DST: 0x%x", iph->saddr, iph->daddr);
+  bpf_debug("IP SRC: %pI4, IP DST: %pI4", iph->saddr, iph->daddr);
 
   /*
   |----------------------------------------------------------------|
@@ -422,7 +420,6 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
     return XDP_DROP;
   }
 
-  // struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
   struct iphdr* iph = (void*) (ethh + 1);
 
   if ((void*) (iph + 1) > data_end) {
@@ -430,14 +427,14 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
     return XDP_DROP;
   }
 
-  bpf_debug("Ip_dest: 0x%x", iph->daddr);
+  bpf_debug("Ip_dest:  %pI4", iph->daddr);
   u32 ip_dest = bpf_htonl(iph->daddr);
   struct session_id* session =
       bpf_map_lookup_elem(&m_session_mapping, &ip_dest);
 
   if (session) {
     u32 teid_dl = session->teid_dl;
-    bpf_debug("TEID for downlink: 0x%x, UE IP: 0x%x", teid_dl, ip_dest);
+    bpf_debug("TEID for downlink: 0x%x, UE IP: %pI4", teid_dl, ip_dest);
 
     struct next_rule_prog_index_key map_key = {0};
     map_key.teid                            = teid_dl;
@@ -464,15 +461,21 @@ SEC("xdp")
 int xdp_handle_shaping(struct xdp_md* ctx) {
   bpf_debug("================< XDP: Handle Shaping >================");
 
+  struct filter_key* key;
+  if (bpf_xdp_adjust_meta(ctx, -(int) sizeof(struct filter_key))) {
+    bpf_debug("Error: Unable to reserve metadata space");
+    return XDP_DROP;
+  }
+
+  void* data          = (void*) (long) ctx->data;
   void* data_end      = (void*) (long) ctx->data_end;
-  struct ethhdr* ethh = (void*) (long) ctx->data;
+  struct ethhdr* ethh = data;
 
   if ((void*) (ethh + 1) > data_end) {
     bpf_debug("Error: Invalid Ethernet header");
     return XDP_DROP;
   }
-   
-  /************************************************* */
+
   u16 eth_type = htons(ethh->h_proto);
   bpf_debug("eth_type: 0x%x", eth_type);
 
@@ -506,9 +509,8 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
       bpf_debug("Packet Type not Known");
       return XDP_DROP;
     }
-  } 
-  /************************************************* */
-  // struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
+  }
+
   struct iphdr* iph = (void*) (ethh + 1);
 
   if ((void*) (iph + 1) > data_end) {
@@ -516,9 +518,51 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
     return XDP_DROP;
   }
 
-  bpf_debug("000000 Shaping IP DST: 0x%x", iph->daddr);
   u32 ip_dest = bpf_htonl(iph->daddr);
-  bpf_debug("11111 Shaping IP DST: %pI4", &ip_dest);
+  u8 protocol = iph->protocol;
+
+  key = (struct filter_key*) ctx->data_meta;
+
+  if ((void*) (key + 1) > data) {
+    bpf_debug("Error: Invalid Metadata");
+    return XDP_DROP;
+  }
+
+  bpf_debug("Shaping IP DST: %pI4", &ip_dest);
+
+  key->src_ip   = bpf_htonl(iph->saddr);
+  key->dst_ip   = ip_dest;
+  key->protocol = iph->protocol;
+
+  switch (protocol) {
+    case IPPROTO_UDP: {
+      struct udphdr* udph = (struct udphdr*) (iph + 1);
+
+      if ((void*) (udph + 1) > data_end) {
+        bpf_debug("Error: Invalid UDP header");
+        return XDP_DROP;
+      }
+
+      key->dst_port = udph->dest;
+      break;
+    }
+    case IPPROTO_TCP: {
+      struct tcphdr* tcph = (struct tcphdr*) (iph + 1);
+
+      if ((void*) (tcph + 1) > data_end) {
+        bpf_debug("Error: Invalid TCP header");
+        return XDP_DROP;
+      }
+
+      key->dst_port = tcph->dest;
+      break;
+    }
+    default: {
+      bpf_debug("Unknown header");
+      bpf_debug("Use best effort QoS flow (i.e. default qfi)");
+      key->dst_port = 65535;
+    }
+  }
 
   struct session_id* session =
       bpf_map_lookup_elem(&m_session_mapping, &ip_dest);
@@ -526,7 +570,7 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
   if (session) {
     u32 teid_dl = session->teid_dl;
     bpf_debug(
-        "TEID downlink: 0x%x was found for UE IP: 0x%x", teid_dl, ip_dest);
+        "TEID downlink: 0x%x was found for UE IP: %pI4", teid_dl, ip_dest);
     struct next_rule_prog_index_key map_key = {0};
     map_key.teid                            = teid_dl;
     map_key.source_value                    = INTERFACE_VALUE_CORE;
@@ -535,9 +579,7 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
     pfcp_far_t_* p_far = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
 
     if (p_far) {
-      bpf_debug("FAR ID = %d", p_far->far_id.far_id);
       create_outer_header_gtpu_ipv4(ctx, p_far);
-      bpf_debug("The packet is passed to tc layer");
       return XDP_PASS;
     }
   }
