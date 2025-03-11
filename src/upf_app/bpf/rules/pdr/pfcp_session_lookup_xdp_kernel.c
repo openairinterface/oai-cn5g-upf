@@ -267,10 +267,10 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
     return XDP_DROP;
   }
 
-  u16 eth_type = bpf_htons(ethh->h_proto);
-  bpf_debug("Debug: eth_type:0x%x", eth_type);
+  u16 l3_protocol = bpf_htons(ethh->h_proto);
+  bpf_debug("Debug: l3_protocol:0x%x", l3_protocol);
 
-  switch (eth_type) {
+  switch (l3_protocol) {
     case ETH_P_IP: {
       struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
 
@@ -401,7 +401,7 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
       }
     }
     default: {
-      bpf_debug("Unsupported protocol: 0x%x", eth_type);
+      bpf_debug("Unsupported protocol: 0x%x", l3_protocol);
       return XDP_PASS;
     }
   }
@@ -461,8 +461,8 @@ SEC("xdp")
 int xdp_handle_shaping(struct xdp_md* ctx) {
   bpf_debug("================< XDP: Handle Shaping >================");
 
-  struct filter_key* key;
-  if (bpf_xdp_adjust_meta(ctx, -(int) sizeof(struct filter_key))) {
+  struct metadata_filter* key;
+  if (bpf_xdp_adjust_meta(ctx, -(int) sizeof(struct metadata_filter))) {
     bpf_debug("Error: Unable to reserve metadata space");
     return XDP_DROP;
   }
@@ -476,10 +476,10 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
     return XDP_DROP;
   }
 
-  u16 eth_type = htons(ethh->h_proto);
-  bpf_debug("eth_type: 0x%x", eth_type);
+  u16 l3_protocol = htons(ethh->h_proto);
+  bpf_debug("l3_protocol: 0x%x", l3_protocol);
 
-  switch (eth_type) {
+  switch (l3_protocol) {
     case ETH_P_IP: {
       bpf_debug("This is an IPv4 Packet");
       break;
@@ -521,7 +521,7 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
   u32 ip_dest = bpf_htonl(iph->daddr);
   u8 protocol = iph->protocol;
 
-  key = (struct filter_key*) ctx->data_meta;
+  key = (struct metadata_filter*) ctx->data_meta;
 
   if ((void*) (key + 1) > data) {
     bpf_debug("Error: Invalid Metadata");
@@ -543,6 +543,7 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
         return XDP_DROP;
       }
 
+      key->src_port = udph->source;
       key->dst_port = udph->dest;
       break;
     }
@@ -554,6 +555,7 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
         return XDP_DROP;
       }
 
+      key->src_port = tcph->source;
       key->dst_port = tcph->dest;
       break;
     }

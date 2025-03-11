@@ -11,13 +11,14 @@
 #define FIVE_QI_MAX_ENTRIES 100
 #define QOS_FLOWS_MAX_ENTRIES 10000
 #define MAX_INTERFACES 10
+#define MAX_SDF_FITLER_ENTRIES 15
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, QFI_MAX_ENTRIES);  // 10,
-  __type(key, struct filter_key);
-  __type(value, struct session_qfi);
+  __uint(type, BPF_MAP_TYPE_ARRAY);
+  __uint(max_entries, MAX_SDF_FITLER_ENTRIES);
+  __type(key, u8);  // u32
+  __type(value, struct sdf_filter);
 } m_sdf_filter SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -32,7 +33,7 @@ struct {
 struct {
   __uint(type, BPF_MAP_TYPE_ARRAY);
   __uint(max_entries, 1);
-  __type(key, u32);
+  __type(key, u8);  // u32
   __type(value, u8);
 } m_default_qfi SEC(".maps");
 
@@ -40,7 +41,7 @@ struct {
 struct {
   __uint(type, BPF_MAP_TYPE_DEVMAP);
   __uint(max_entries, MAX_INTERFACES);
-  __type(key, u32);
+  __type(key, u8);  // u32
   __type(value, u32);
 } m_egress_ifindex SEC(".maps");
 

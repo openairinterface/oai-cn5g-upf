@@ -28,14 +28,83 @@
 #include <linux/netdevice.h>
 #include <linux/pkt_sched.h>
 
+#define GET_TC_CLASSID(seid, qfi)                                              \
+  (((seid) << 16) | (((seid) *256) + ((qfi) *251 % 256)))
+
+static __always_inline u32 match_sdf_filter_ipv4(
+    const struct metadata_filter* filter, const struct sdf_filter* sdf) {
+  u8 packet_protocol  = filter->protocol;
+  u16 packet_src_port = filter->src_port;
+  u16 packet_dst_port = filter->dst_port;
+  u32 packet_src_ip   = bpf_htonl(filter->src_ip);
+  u32 packet_dst_ip   = bpf_htonl(filter->dst_ip);
+
+  u32 sdf_src_ip   = bpf_htonl(sdf->src_addr.ip);
+  u32 sdf_dst_ip   = bpf_htonl(sdf->dst_addr.ip);
+  u32 sdf_src_mask = bpf_htonl(sdf->src_addr.mask);
+  u32 sdf_dst_mask = bpf_htonl(sdf->dst_addr.mask);
+
+  bpf_debug("SDF: filter protocol: %u", sdf->protocol);
+  bpf_debug(
+      "SDF: filter source ip: %pI4, destination ip: %pI4", &sdf_src_ip,
+      &sdf_dst_ip);
+  bpf_debug(
+      "SDF: filter source ip mask: %pI4, destination ip mask: %pI4",
+      &sdf_src_mask, &sdf_dst_mask);
+  bpf_debug(
+      "SDF: filter source port lower bound: %u, source port upper bound: %u",
+      sdf->src_port.lower_bound, sdf->src_port.upper_bound);
+  bpf_debug(
+      "SDF: filter destination port lower bound: %u, destination port upper "
+      "bound: %u",
+      sdf->dst_port.lower_bound, sdf->dst_port.upper_bound);
+
+  bpf_debug("SDF: packet protocol: %u", packet_protocol);
+  bpf_debug(
+      "SDF: packet source ip: %pI4, destination ip: %pI4", &packet_src_ip,
+      &packet_dst_ip);
+  bpf_debug(
+      "SDF: packet source port: %u, destination port: %u", packet_src_port,
+      packet_dst_port);
+
+  // TODO: Start with the hit and not miss
+  /*
+   * TODO:
+   * 1. Start with the hit and not miss
+   * 2. Check if an enum is really needed to redifine protocol:
+   * switch (ip_protocol) {
+         case IPPROTO_ICMP:
+           return 0;
+         case IPPROTO_TCP:
+           return 2;
+         case IPPROTO_UDP:
+           return 3;
+         default:
+           return 1;
+     }
+ */
+  if ((sdf->protocol == 1 || sdf->protocol == packet_protocol) &&
+      ((packet_src_ip & sdf_src_mask) == sdf_src_ip) &&
+      ((packet_dst_ip & sdf_dst_mask) == sdf_dst_ip) &&
+      (packet_src_port >= sdf->src_port.lower_bound &&
+       packet_src_port <= sdf->src_port.upper_bound) &&
+      (packet_dst_port >= sdf->dst_port.lower_bound &&
+       packet_dst_port <= sdf->dst_port.upper_bound)) {
+    return 1;
+  }
+
+  bpf_debug("Packet Metadata and SDF are matching");
+  return 0;
+}
+
 //---------------------------------------------------------------------------------------------------------------
-static __always_inline u32 egress_sdf_filter(struct __sk_buff* skb) {
+static __always_inline u32 egress_sdf_classifier(struct __sk_buff* skb) {
   void* data      = (void*) (long) skb->data;
   void* data_end  = (void*) (long) skb->data_end;
   void* data_meta = (void*) (long) skb->data_meta;
 
-  struct filter_key* sdf = data_meta;
-  struct ethhdr* ethh    = data;
+  struct metadata_filter* filter = data_meta;
+  struct ethhdr* ethh            = data;
 
   if ((void*) (ethh + 1) > data_end) {
     bpf_debug("Error: Invalid Ethernet header");
@@ -72,43 +141,48 @@ static __always_inline u32 egress_sdf_filter(struct __sk_buff* skb) {
   }
 
   /* Check XDP gave us some data_meta */
-  if ((void*) (sdf + 1) > data) {
+  if ((void*) (filter + 1) > data) {
     bpf_debug("Error: Failed to load metadata from XDP");
     return TC_ACT_SHOT;
   }
 
   bpf_debug(
-      "TC: Received XDP Metadata - dst_ip: %pI4, src_ip: %pI4", &sdf->dst_ip,
-      &sdf->dst_ip);
+      "TC: Received XDP Metadata - dst_ip: %pI4, src_ip: %pI4", &filter->dst_ip,
+      &filter->src_ip);
   bpf_debug(
-      "TC: Received XDP Metadata - proto: %d, dst_port: %d", &sdf->protocol,
-      &sdf->dst_port);
+      "TC: Received XDP Metadata - proto: %d, dst_port: %d", &filter->protocol,
+      &filter->dst_port);
 
-  struct session_qfi* retrieved_value = bpf_map_lookup_elem(&m_sdf_filter, sdf);
+  for (u8 key = 0; key < MAX_SDF_FITLER_ENTRIES; key++) {
+    struct sdf_filter* sdf = bpf_map_lookup_elem(&m_sdf_filter, &key);
+    if (sdf && match_sdf_filter_ipv4(&filter, &sdf)) {
+      bpf_debug("An SDF Filter matched to the packet");
+      u8 qfi   = sdf->session.qfi;
+      u64 seid = bpf_ntohs(sdf->session.seid);
 
-  if (retrieved_value) {
-    bpf_debug("SDF Found!");
-    u8 qfi   = retrieved_value->qfi;
-    u64 seid = bpf_ntohs(retrieved_value->seid);
-
-    gtpu_ext_h->qfi = qfi;
-    skb->tc_classid =
-        (seid << 16) |
-        ((seid * 256) + (qfi * 251 % 256));  // ( major << 16 ) | minor
-    return TC_ACT_OK;
+      gtpu_ext_h->qfi = qfi;
+      skb->tc_classid = GET_TC_CLASSID(seid, qfi);
+      // (seid << 16) |
+      // ((seid * 256) + (qfi * 251 % 256));  // ( major << 16 ) | minor
+      return TC_ACT_OK;
+    }
   }
 
-  u32 key         = 0;
+  bpf_debug(
+      "No SDF Filter matched. Defining the best effort QoS Flow for Internet "
+      "PDU Session");
+  u8 key          = 0;
   u8* default_qfi = bpf_map_lookup_elem(&m_default_qfi, &key);
 
   if (default_qfi) {
-    bpf_debug("SDF NOT Found!, Default QFI IS FOUND!");
+    bpf_debug("Default QFI %d", *default_qfi);
     gtpu_ext_h->qfi = *default_qfi;
     skb->tc_classid = *default_qfi;
   } else {
-    bpf_debug("SDF NOT Found!, Default QFI NOT found, use value 8 as default");
-    skb->tc_classid = gtpu_ext_h->qfi;
+    bpf_debug("No default QFI found. Droping packet");
+    return TC_ACT_SHOT;
   }
+
   return TC_ACT_OK;
 }
 
@@ -141,7 +215,7 @@ static __always_inline u32 ipv4_sdf_filter(struct __sk_buff* skb) {
 
     if (htons(udph->dest) == GTP_UDP_PORT) {
       bpf_debug("IPv4 SDF Filter: This is a GTP traffic");
-      return egress_sdf_filter(skb);
+      return egress_sdf_classifier(skb);
     }
   }
 
@@ -164,10 +238,10 @@ int tc_filter_traffic(struct __sk_buff* skb) {
     return TC_ACT_SHOT;
   }
 
-  u16 eth_type = htons(ethh->h_proto);
-  bpf_debug("SDF FILTER: eth_type: 0x%x", eth_type);
+  u16 l3_protocol = htons(ethh->h_proto);
+  bpf_debug("SDF FILTER: l3_protocol: 0x%x", l3_protocol);
 
-  switch (eth_type) {
+  switch (l3_protocol) {
     case ETH_P_IP: {
       bpf_debug("SDF Filter: This is an IPv4 Packet");
       return ipv4_sdf_filter(skb);
@@ -191,11 +265,11 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
   void* data     = (void*) (long) skb->data;
   void* data_end = (void*) (long) skb->data_end;
 
-  struct filter_key* sdf;
-  sdf = (struct filter_key*) skb->data_meta;
+  struct metadata_filter* filter;
+  filter = (struct metadata_filter*) skb->data_meta;
 
   /* Check XDP gave us some data_meta */
-  if ((void*) (sdf + 1) > data) {
+  if ((void*) (filter + 1) > data) {
     bpf_debug("Error: Failed to load metadata from XDP");
     return TC_ACT_SHOT;
   }
@@ -207,10 +281,10 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
     return TC_ACT_SHOT;
   }
 
-  u16 eth_type = htons(ethh->h_proto);
-  bpf_debug("INGRESS: eth_type: 0x%x", eth_type);
+  u16 l3_protocol = htons(ethh->h_proto);
+  bpf_debug("INGRESS: l3_protocol: 0x%x", l3_protocol);
 
-  switch (eth_type) {
+  switch (l3_protocol) {
     case ETH_P_IP: {
       bpf_debug("INGRESS: This is an IPv4 Packet");
 

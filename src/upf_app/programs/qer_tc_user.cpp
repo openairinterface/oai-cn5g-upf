@@ -95,7 +95,7 @@ void QERProgram::storeQosFlow(std::shared_ptr<pfcp::pfcp_qer> pQer) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-bool QERProgram::no_htb_root_qdisc(std::string interface) {
+bool QERProgram::no_htb_root_qdisc(const std::string interface) {
   std::string cmd = {};
   uint32_t ret    = 0;
 
@@ -108,11 +108,25 @@ bool QERProgram::no_htb_root_qdisc(std::string interface) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+bool QERProgram::no_htb_default_class(const std::string interface) {
+  std::string cmd = {};
+  uint32_t ret    = 0;
+
+  cmd = fmt::format(
+      "tc qdisc show dev {} | awk '/htb/ && /default/ {{found=1; print 1}} END "
+      "{{if "
+      "(!found) print 0}}'",
+      interface);
+  ret = std::stoi(CmdRunner::exec(cmd).c_str());
+  return ret ? false : true;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<pfcp::pfcp_qer>
 QERProgram::retrive_default_qer_with_default_qfi(
     std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer) {
   for (const auto& qer : pQer) {
-    if (!qer->gbr.first && !qer->mbr.first) {
+    if (!qer->gbr.first && !qer->mbr.first && !qer->gate_status.first) {
       Logger::upf_app().debug(
           "Default QoS Flow: (QER ID, QFI): (%d, %d)",
           qer->qer_id.second.qer_id, qer->qfi.second.qfi);
@@ -153,29 +167,42 @@ void QERProgram::setup(
   mpEgressIfindexMap->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
 
   if (!pQer.empty()) {
-    default_qer = retrive_default_qer_with_default_qfi(pQer);
-
-    if (!default_qer) {
-      Logger::upf_app().error(
-          "QER with default QFI not found! select the first element as "
-          "default");
-      default_qer = pQer.front();
-    }
-
-    int key             = 0;
-    uint8_t default_qfi = default_qer->qfi.second.qfi;
-    getDefaultQfiMap()->update(key, default_qfi, BPF_ANY);
-
     // Configure Root Qdisc if not already present
     if (no_htb_root_qdisc(GTP_INTERFACE)) {
       Logger::upf_app().info(
           "Create Root qdisc on interface %s", GTP_INTERFACE.c_str());
-      cmd = fmt::format(
-          "tc qdisc add dev {} root handle 1:0 htb default {}", GTP_INTERFACE,
-          static_cast<uint8_t>(default_qer->qfi.second.qfi));
-      // rc = system((const char*) cmd.c_str());
+
+      default_qer = retrive_default_qer_with_default_qfi(pQer);
+
+      if (default_qer) {
+        int key             = 0;
+        uint8_t default_qfi = default_qer->qfi.second.qfi;
+        getDefaultQfiMap()->update(key, default_qfi, BPF_ANY);
+        cmd = fmt::format(
+            "tc qdisc add dev {} root handle 1:0 htb default {}", GTP_INTERFACE,
+            static_cast<uint8_t>(default_qer->qfi.second.qfi));
+        // rc = system((const char*) cmd.c_str());
+      } else {
+        Logger::upf_app().error(
+            "QER with default QFI not found, creating HTB root Qdisc without "
+            "default class");
+        cmd = fmt::format(
+            "tc qdisc add dev {} root handle 1:0 htb", GTP_INTERFACE);
+      }
+
       if (system(cmd.c_str()) != 0) {
-        Logger::upf_app().error("Failed to create root Qdisc");
+        Logger::upf_app().error("Failed command: {}", cmd);
+        return;
+      }
+    } else {
+      if (no_htb_default_class(GTP_INTERFACE) && default_qer) {
+        cmd = fmt::format(
+            "tc qdisc change dev {} root handle 1:0 htb default {}",
+            GTP_INTERFACE, static_cast<uint8_t>(default_qer->qfi.second.qfi));
+
+        if (system(cmd.c_str()) != 0) {
+          Logger::upf_app().error("Failed command: {}", cmd);
+        }
       }
     }
 
@@ -186,7 +213,7 @@ void QERProgram::setup(
         GTP_INTERFACE, seid, MAX_RATE);
 
     if (system(cmd.c_str()) != 0) {
-      Logger::upf_app().error("Failed to create PDU Session class");
+      Logger::upf_app().error("Failed command: {}", cmd);
     }
 
     Logger::upf_app().debug("QDISC Root DL Rate (GBR) : %dkbps", MAX_RATE);
@@ -227,7 +254,7 @@ void QERProgram::setup(
             GTP_INTERFACE, seid, seid, minor, dl_rate, dl_ceil);
 
         if (system(cmd.c_str()) != 0) {
-          Logger::upf_app().error("Failed to add tc class for QER {}", qer_id);
+          Logger::upf_app().error("Failed command: {}", cmd);
         }
 
         Logger::upf_app().debug(
