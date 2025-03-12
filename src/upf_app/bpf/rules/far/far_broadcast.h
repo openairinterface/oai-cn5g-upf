@@ -16,6 +16,7 @@
 #include <bpf_helpers.h>
 #include <bpf_endian.h>
 
+#include <utils/logger.h>
 #include <eth_pdu_session_maps.h>
 #include <mac_pdu_session_key.h>
 #include <next_prog_rule_key.h>
@@ -41,14 +42,14 @@ static long broadcast_callback_fn(struct bpf_map *map, void *key, void *value,
 
     struct iphdr* iph = (struct iphdr*) ((void*) data + sizeof(struct ethhdr));
     if ((void*) (iph + 1) > data_end) {
-        bpf_printk("broadcast_callback_fn: Invalid IPv4 Packet");
+        bpf_debug("broadcast_callback_fn: Invalid IPv4 Packet");
         return 0;
     }
 
     struct gtpuhdr* gtpuh = (struct gtpuhdr*) ((void*) data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr));
     // struct gtpuhdr* gtpuh = (struct gtpuhdr*) ((void*) data + ctx->gtpuh_offset);
     if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
-        bpf_printk("broadcast_callback_fn: Invalid GTPU packet");
+        bpf_debug("broadcast_callback_fn: Invalid GTPU packet");
         return 0;
     }
 
@@ -70,7 +71,7 @@ static long broadcast_callback_fn(struct bpf_map *map, void *key, void *value,
             iph->daddr = pdu_session->ipv4_address;
             int ret = bpf_clone_redirect(skb, *ctx->ifindex, 0);
             if (ret < 0) {
-                bpf_printk("broadcast_callback_fn: failed to redirect clone\n");
+                bpf_debug("broadcast_callback_fn: failed to redirect clone\n");
                 return 1;
             }
             break;
