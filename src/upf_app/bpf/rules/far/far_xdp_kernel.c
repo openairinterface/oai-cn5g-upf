@@ -124,7 +124,7 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
 	fib_params.ifindex = ctx->ingress_ifindex;
 
 	int rc = bpf_fib_lookup(ctx, &fib_params, sizeof(fib_params), 0);
-  bpf_printk("BPF_FIB_LKUP_RET_ -> %d", rc);
+  bpf_debug("BPF_FIB_LKUP_RET_ -> %d", rc);
 	switch (rc) {
     case BPF_FIB_LKUP_RET_SUCCESS:         /* lookup successful */
       bpf_debug("BPF_FIB_LKUP_RET_SUCCESS");
