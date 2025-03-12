@@ -158,7 +158,7 @@ ipv4_sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh, struct iphdr* iph) {
       }
 
       if (htons(udph->dest) == GTP_UDP_PORT) {
-        bpf_printk("This is a GTP traffic");
+        bpf_debug("This is a GTP traffic");
         return egress_sdf_filter(skb, ethh, udph);
       }
     }

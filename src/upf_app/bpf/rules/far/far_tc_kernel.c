@@ -7,6 +7,7 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 #include <protocols/gtpu.h>
+#include <utils/logger.h>
 #include <utils/utils.h>
 
 #include <linux/pkt_cls.h>
@@ -32,25 +33,25 @@ int handle_broadcast(struct __sk_buff *skb)
 
     if ((void*) (eth + 1) > data_end)
     {
-        bpf_printk("handle_broadcast: Invalid Ethernet Packet\n");
+        bpf_debug("handle_broadcast: Invalid Ethernet Packet\n");
         goto out;
     }  
 
     struct iphdr* iph = (struct iphdr*) ((void*) data + sizeof(*eth));
     if ((void*) (iph + 1) > data_end) {
-        bpf_printk("handle_broadcast: Invalid IPv4 Packet\n");
+        bpf_debug("handle_broadcast: Invalid IPv4 Packet\n");
         goto out;
     }
 
     struct udphdr* udph = (struct udphdr*) (iph + 1);
     // Check if the UDP header extends beyond the data end.
     if ((void*) (udph + 1) > data_end) {
-        bpf_printk("handle_broadcast: Invalid UDP packet\n");
+        bpf_debug("handle_broadcast: Invalid UDP packet\n");
         goto out;
     }
 
     if (bpf_htons(udph->dest) != GTP_UDP_PORT) {
-        bpf_printk("handle_broadcast: This is not a GTP packet\n");
+        bpf_debug("handle_broadcast: This is not a GTP packet\n");
         goto out;
     }
     swap_src_dst_mac(eth);
@@ -58,14 +59,14 @@ int handle_broadcast(struct __sk_buff *skb)
 
     struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
     if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
-        bpf_printk("handle_broadcast: Invalid GTPU packet\n");
+        bpf_debug("handle_broadcast: Invalid GTPU packet\n");
         goto out;
     }
 
     eth = (struct ethhdr*) ((void*) data + sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE);
     if ((void*) (eth + 1) > data_end)
     {
-        bpf_printk("handle_broadcast: Invalid Ethernet Packet\n");
+        bpf_debug("handle_broadcast: Invalid Ethernet Packet\n");
         goto out;
     }
     __builtin_memcpy(&eth_cpy, eth, sizeof(struct ethhdr));
@@ -74,13 +75,13 @@ int handle_broadcast(struct __sk_buff *skb)
     
     ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
     if (!ifindex) {
-        bpf_printk("handle_broadcast: failed to find downlink ifindex\n");
+        bpf_debug("handle_broadcast: failed to find downlink ifindex\n");
         goto out;
     }
 
 
     if (eth->h_proto != bpf_htons(ETH_P_ARP)) {
-        bpf_printk("handle_broadcast: Inner packet not a broadcast packet\n");
+        bpf_debug("handle_broadcast: Inner packet not a broadcast packet\n");
         goto out;
     }
         
@@ -102,19 +103,19 @@ int handle_broadcast(struct __sk_buff *skb)
     
         ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
         if (!ifindex) {
-            bpf_printk("handle_broadcast: failed to find uplink ifindex.\n");
+            bpf_debug("handle_broadcast: failed to find uplink ifindex.\n");
             goto out;
         }
 
         int roomlen = sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE;
         if (data + roomlen > data_end) {
-            bpf_printk("handle_broadcast: data + roomlen > data_end");
+            bpf_debug("handle_broadcast: data + roomlen > data_end");
             goto out;
         }
 
         int ret = bpf_skb_adjust_room(skb, -roomlen, BPF_ADJ_ROOM_MAC, 0);
         if (ret) {
-            bpf_printk("handle_broadcast: error bpf_skb_adjust_room, ret = %d, skb->protocol = %d.\n", ret, skb->protocol);
+            bpf_debug("handle_broadcast: error bpf_skb_adjust_room, ret = %d, skb->protocol = %d.\n", ret, skb->protocol);
         }
 
         data = (void *)(long)skb->data;

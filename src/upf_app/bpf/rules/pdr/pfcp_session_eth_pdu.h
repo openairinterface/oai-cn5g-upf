@@ -35,7 +35,7 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
   if (eth->h_dest[0] == 0xff && eth->h_dest[1] == 0xff &&
       eth->h_dest[2] == 0xff && eth->h_dest[3] == 0xff &&
       eth->h_dest[4] == 0xff && eth->h_dest[5] == 0xff) {
-      bpf_printk("Ethernet broadcast detected!\n");
+      bpf_debug("Ethernet broadcast detected!\n");
       return XDP_PASS;
   }
 
@@ -157,7 +157,7 @@ static __always_inline int entry_point_uplink__eth_pdu(struct xdp_md* ctx) {
 
   struct iphdr* iph = (struct iphdr*) ((void*) data + sizeof(struct ethhdr));
   if ((void*) (iph + 1) > data_end) {
-      bpf_printk("xdp_entry_point__eth_pdu: Invalid IPv4 Packet");
+      bpf_debug("xdp_entry_point__eth_pdu: Invalid IPv4 Packet");
       goto out;
   }
 
