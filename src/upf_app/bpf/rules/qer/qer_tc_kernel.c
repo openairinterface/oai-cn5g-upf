@@ -21,6 +21,7 @@
 #include <interfaces.h>
 #include <string.h>
 #include "bpf_endian.h"
+#include "sdf_filter.h"
 
 #include <linux/pkt_cls.h>
 #include <qer_maps.h>
@@ -32,7 +33,7 @@
   (((seid) << 16) | (((seid) *256) + ((qfi) *251 % 256)))
 
 static __always_inline u32 match_sdf_filter_ipv4(
-    const struct metadata_filter* filter, const struct sdf_filter* sdf) {
+    const struct metadata_filter* filter, const struct sdf_filtr* sdf) {
   u8 packet_protocol  = filter->protocol;
   u16 packet_src_port = filter->src_port;
   u16 packet_dst_port = filter->dst_port;
@@ -154,8 +155,8 @@ static __always_inline u32 egress_sdf_classifier(struct __sk_buff* skb) {
       &filter->dst_port);
 
   for (u8 key = 0; key < MAX_SDF_FITLER_ENTRIES; key++) {
-    struct sdf_filter* sdf = bpf_map_lookup_elem(&m_sdf_filter, &key);
-    if (sdf && match_sdf_filter_ipv4(&filter, &sdf)) {
+    struct sdf_filtr* sdf = bpf_map_lookup_elem(&m_sdf_filter, &key);
+    if (sdf && match_sdf_filter_ipv4(filter, sdf)) {
       bpf_debug("An SDF Filter matched to the packet");
       u8 qfi   = sdf->session.qfi;
       u64 seid = bpf_ntohs(sdf->session.seid);
@@ -266,7 +267,8 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
   void* data_end = (void*) (long) skb->data_end;
 
   struct metadata_filter* filter;
-  filter = (struct metadata_filter*) skb->data_meta;
+  filter = (struct metadata_filter*) (long)
+               skb->data_meta;  // long may cause issues here
 
   /* Check XDP gave us some data_meta */
   if ((void*) (filter + 1) > data) {

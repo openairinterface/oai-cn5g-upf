@@ -16,7 +16,9 @@
 #include <netlink/route/qdisc/htb.h>
 #include "helpers/GetNicInformation.hpp"
 #include "helpers/CmdRunner.hpp"
+#include "helpers/SdfFilterParser.hpp"
 
+#include "sdf_filter.h"
 #include <errno.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -139,8 +141,27 @@ QERProgram::retrive_default_qer_with_default_qfi(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+void QERProgram::build_pdr_map(
+    const std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs) {
+  pdr_map.clear();
+  for (const auto& pdr : pdrs) {
+    if (pdr && pdr->qer_id.first) {
+      pdr_map[pdr->qer_id.second.qer_id] = pdr;
+    }
+  }
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<pfcp::pfcp_pdr> QERProgram::get_pdr_by_qer_id(
+    uint32_t qer_id) const {
+  auto it = pdr_map.find(qer_id);
+  return (it != pdr_map.end()) ? it->second : nullptr;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 void QERProgram::setup(
-    uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer) {
+    uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
+    std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs) {
   spSkeleton = mpLifeCycle->open();
   initializeMaps();
   mpLifeCycle->load();
@@ -220,17 +241,26 @@ void QERProgram::setup(
     Logger::upf_app().debug("QDISC Root DL Ceil (MBR) : %dkbps", MAX_CEIL);
 
     // Process each QER
+    struct sdf_filtr sdfFilter;
+    std::string flowDescription = nullptr;
+    uint32_t key                = 0;
+    build_pdr_map(pdrs);
+
     for (const auto& qer : pQer) {
       if (qer == default_qer) {
         continue;
       }
 
-      if ((qer->gbr.first) && (qer->mbr.first)) {
+      if (qer->mbr.first) {
         uint32_t qer_id  = qer->qer_id.second.qer_id;
         uint8_t qfi      = qer->qfi.second.qfi;
-        uint64_t dl_rate = qer->gbr.second.dl_gbr ? qer->gbr.second.dl_gbr : 1;
-        uint64_t dl_ceil = qer->mbr.second.dl_mbr ? qer->mbr.second.dl_mbr : 1;
+        uint64_t dl_ceil = std::max(qer->mbr.second.dl_mbr, 1UL);
         uint8_t dl_gate  = qer->gate_status.second.dl_gate;
+
+        uint64_t dl_rate = 1;
+        if (qer->gbr.first) {
+          dl_rate = std::max(qer->gbr.second.dl_gbr, 1UL);
+        }
 
         Logger::upf_app().warn(
             "Setting dl_rate and dl_ceil to minimum values (1 kbit) for QER %d "
@@ -262,6 +292,25 @@ void QERProgram::setup(
         Logger::upf_app().debug("         Class QFI:      %d", qfi);
         Logger::upf_app().debug("         Class DL Rate:     %dkbps", dl_rate);
         Logger::upf_app().debug("         Class DL Ceil:     %dkbps", dl_ceil);
+
+        // Parse the SDF Flow Description
+        std::shared_ptr<pfcp::pfcp_pdr> pdr = get_pdr_by_qer_id(qer_id);
+        pfcp::pdi pdi;
+        pfcp::sdf_filter_t sdf;
+        pdr->get(pdi);
+        pdi.get(sdf);
+
+        if (sdf.fd && sdf.length_of_flow_description > 0)
+          flowDescription = std::string(sdf.flow_label);
+
+        auto filterInfo = SdfFilterParser::ParseSdfFilter(flowDescription);
+        if (filterInfo) {
+          sdfFilter              = *filterInfo;
+          sdfFilter.session.seid = seid;
+          sdfFilter.session.qfi  = qfi;
+          getSdfFilterMap()->update(key, sdfFilter, BPF_ANY);
+          key++;
+        }
       }
     }
 

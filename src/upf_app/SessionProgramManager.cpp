@@ -374,7 +374,8 @@ uint32_t SessionProgramManager::getGnodebIp(
 void SessionProgramManager::createPipeline(
     uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
     uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
-    std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer, bool isModification,
+    std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
+    std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs, bool isModification,
     uint32_t teid2) {
   uint32_t dnIP    = upf_cfg.remote_n6.s_addr;
   uint32_t upfn3IP = upf_cfg.n3.addr4.s_addr;
@@ -389,13 +390,12 @@ void SessionProgramManager::createPipeline(
   const bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
   const bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
 
-  /*======================================================================================*/
   if (isQosEnabled && enforcing_qos) {
     Logger::upf_app().debug("Instantiate a new QERProgram ");
     std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
-    pQERProgram->setup(seid, pQer);
+    pQERProgram->setup(seid, pQer, pdrs);
   }
-  /*======================================================================================*/
+
   auto pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
   storeFarProgramIndexInNextProgRuleIndexMap(

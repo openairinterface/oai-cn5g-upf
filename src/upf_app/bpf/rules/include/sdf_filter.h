@@ -2,14 +2,11 @@
 #define __SDF_FILTER_H__
 
 #include <types.h>
-#include <bpf/bpf_helpers.h>
-#include <bpf/bpf_endian.h>
-#include <linux/bpf.h>
-#include <linux/in.h>
-#include <linux/ip.h>
-#include <linux/ipv6.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
+//#include <linux/in.h>
+//#include <linux/ip.h>
+//#include <linux/ipv6.h>
+//#include <linux/tcp.h>
+//#include <linux/udp.h>
 
 struct ip_subnet {
   u8 type;
@@ -46,7 +43,7 @@ struct session_qfi {
   u8 qfi;
 };
 
-struct sdf_filter {
+struct sdf_filtr {
   u8 protocol;  // Required by SDF. 0: icmp, 1: ip, 2: tcp, 3: udp
   struct ip_subnet src_addr;
   struct port_range src_port;

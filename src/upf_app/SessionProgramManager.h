@@ -6,6 +6,7 @@
 #include <map>
 #include <pfcp_far.hpp>
 #include <pfcp_qer.hpp>
+#include "pfcp_pdr.hpp"
 #include <array>
 #include <pfcp/pfcp_far.h>
 #include <next_prog_rule_key.h>
@@ -108,6 +109,7 @@ class SessionProgramManager {
       uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
       uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
       std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
+      std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs,
       bool isModification = false, uint32_t teid2 = 0);
 
   /*---------------------------------------------------------------------------------------------------------------*/

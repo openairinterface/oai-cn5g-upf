@@ -44,6 +44,7 @@ add_library(UPF_XDP STATIC
   SignalHandler.cpp
   helpers/NextHopFinder.cpp
   helpers/CmdRunner.cpp
+  helpers/SdfFilterParser.cpp
   SessionProgramManager.cpp
   SessionManager.cpp
   SessionPrograms.cpp
@@ -96,6 +97,7 @@ install(
   Configuration.cpp
   SignalHandler.cpp
   helpers/NextHopFinder.cpp
+  helpers/SdfFilterParser.cpp
   helpers/GetNicInformation.cpp
   SessionProgramManager.cpp
   SessionManager.cpp
@@ -134,3 +136,4 @@ install(
       RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
       INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
   )
+

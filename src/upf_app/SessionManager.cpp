@@ -353,15 +353,17 @@ void SessionManager::processPDRDetails(
       ueIpAddress.ipv4_address.s_addr, pFar, pQer, false, 0);
   */
 
+  std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs;
   if (is_qos_enabled) {
     pQer = (direction == Direction::Downlink) ?
                pSession->qers_downlink :
                std::vector<std::shared_ptr<pfcp::pfcp_qer>>{};
+    pdrs = pSession->pdrs_downlink;
   }
 
   SessionProgramManager::getInstance().createPipeline(
       pSession->get_up_seid(), fteid.teid, interfaceValue,
-      ueIpAddress.ipv4_address.s_addr, pFar, pQer, false, 0);
+      ueIpAddress.ipv4_address.s_addr, pFar, pQer, pdrs, false, 0);
 }
 
 //---------------------------------------------------------------------------------------------------------------
@@ -534,11 +536,13 @@ void SessionManager::updateBPFSessionDL(
   if (teid_ul) {
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
-        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, teid_ul);
+        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, pSession->pdrs,
+        true, teid_ul);
   } else {
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
-        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, 0);
+        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, pSession->pdrs,
+        true, 0);
   }
 }
 

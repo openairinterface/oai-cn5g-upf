@@ -60,10 +60,10 @@ static u32 upf_n3_ip = 0;
 static u32 upf_n6_ip = 0;
 
 static u8 next_hop_n3_mac_address[6] = {0};
-static u8 next_hop_n6_mac_address[6] = {0};
+// static u8 next_hop_n6_mac_address[6] = {0};
 
 static bool cached_n3 = false;
-static bool cached_n6 = false;
+// static bool cached_n6 = false;
 
 /*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline bool update_dst_mac_address(
@@ -521,7 +521,8 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
   u32 ip_dest = bpf_htonl(iph->daddr);
   u8 protocol = iph->protocol;
 
-  key = (struct metadata_filter*) ctx->data_meta;
+  key = (struct metadata_filter*) (long)
+            ctx->data_meta;  // long here may cause issue
 
   if ((void*) (key + 1) > data) {
     bpf_debug("Error: Invalid Metadata");

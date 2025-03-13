@@ -59,7 +59,9 @@ class QERProgram : public BPFProgram {
    * @param uint64_t
    * @param struct gtpUTunnel*
    */
-  void setup(uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer);
+  void setup(
+      uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
+      std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs);
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the BPFMaps object.
@@ -122,6 +124,11 @@ class QERProgram : public BPFProgram {
    *
    */
   void initializeMaps();
+
+  void build_pdr_map(const std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs);
+  std::shared_ptr<pfcp::pfcp_pdr> get_pdr_by_qer_id(uint32_t qer_id) const;
+
+  std::unordered_map<uint32_t, std::shared_ptr<pfcp::pfcp_pdr>> pdr_map;
 
   void storeQosFlow(std::shared_ptr<pfcp::pfcp_qer> pQer);
   /*---------------------------------------------------------------------------------------------------------------*/
