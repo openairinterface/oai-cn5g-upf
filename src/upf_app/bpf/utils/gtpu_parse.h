@@ -79,12 +79,15 @@ create_outer_header_gtpu(struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, int
   // bpf_debug("Original Packet: Data/UDP/IP/ETH");
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
-  int orginal_len = (int)(data_end - data);
+  int packet_len = (int)(data_end - data);
 
   // Adjust space to the left.
   int roomlen = GTP_ENCAPSULATED_SIZE;
-  if (pdu_type)
+  if (pdu_type) {
     roomlen += sizeof(struct ethhdr);
+  } else {
+    packet_len -= sizeof(struct ethhdr);
+  }
   if (bpf_xdp_adjust_head(ctx, (int32_t) -roomlen)) {
     return XDP_DROP;
   }
@@ -162,7 +165,8 @@ create_outer_header_gtpu(struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, int
   udph->dest   = bpf_htons(GTP_UDP_PORT);
   // bpf_htons(p_far->forwarding_parameters.outer_header_creation.port_number);
   udph->len = bpf_htons(
-      orginal_len + roomlen - sizeof(struct ethhdr) - sizeof(struct iphdr));
+      packet_len + sizeof(*udph) + sizeof(struct gtpuhdr) +
+      sizeof(struct gtpu_extn_pdu_session_container));
   udph->check = 0;
 
   /*
@@ -184,7 +188,7 @@ create_outer_header_gtpu(struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, int
   __builtin_memcpy(p_gtpuh, &flags, sizeof(u8));
   p_gtpuh->message_type   = GTPU_G_PDU;
   p_gtpuh->message_length = bpf_htons(
-      orginal_len +
+      packet_len +
       sizeof(struct gtpu_extn_pdu_session_container) + 4);
   p_gtpuh->teid =
       bpf_htonl(teid);
