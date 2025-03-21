@@ -980,9 +980,14 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       for (auto it : req->pfcp_ies.create_fars) {
         if (upf_cfg.enable_bpf_datapath) {
           Logger::pfcp_switch().info("Modifying datapath: create FARs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
+          try {
+            call_datapath(
+                NULL, req, NULL, session, spSessionManager,
+                &SessionManager::updateBPFSession);
+          } catch (const std::exception& e) {
+            Logger::pfcp_switch().error(
+                "Error while calling datapath: create FARs: %s", e.what());
+          }
         }
         create_far& cr_far = it;
         if (not session->create(cr_far, cause, offending_ie.offending_ie)) {

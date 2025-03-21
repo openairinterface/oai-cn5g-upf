@@ -78,12 +78,15 @@ create_outer_header_gtpu(struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, int
   // bpf_debug("Original Packet: Data/UDP/IP/ETH");
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
-  int orginal_len = (int)(data_end - data);
+  int packet_len = (int)(data_end - data);
 
   // Adjust space to the left.
   int roomlen = GTP_ENCAPSULATED_SIZE;
-  if (pdu_type)
+  if (pdu_type) {
     roomlen += sizeof(struct ethhdr);
+  } else {
+    packet_len -= sizeof(struct ethhdr);
+  }
   if (bpf_xdp_adjust_head(ctx, (int32_t) -roomlen)) {
     return XDP_DROP;
   }
@@ -147,6 +150,50 @@ create_outer_header_gtpu(struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, int
   iph->saddr    = n3_ip;
   iph->daddr = ipv4_address;
 
+  // Update the MAC address based on the tables
+  // TODO: put in a function to update the MAC address
+  struct bpf_fib_lookup fib_params = {};
+	__u16 h_proto;
+  h_proto = ethh->h_proto;
+	if (h_proto == bpf_htons(ETH_P_IP)) {
+
+		if (iph + 1 > data_end) {
+      return XDP_DROP;
+		}
+
+		fib_params.family	= AF_INET;
+		fib_params.tos		= iph->tos;
+		fib_params.l4_protocol	= iph->protocol;
+		fib_params.sport	= 0;
+		fib_params.dport	= 0;
+		fib_params.tot_len	= bpf_ntohs(iph->tot_len);
+		fib_params.ipv4_src	= iph->saddr;
+		fib_params.ipv4_dst	= iph->daddr;
+	}
+
+	fib_params.ifindex = ctx->ingress_ifindex;
+
+	int rc = bpf_fib_lookup(ctx, &fib_params, sizeof(fib_params), 0);
+  bpf_debug("BPF_FIB_LKUP_RET_ -> %d", rc);
+	switch (rc) {
+    case BPF_FIB_LKUP_RET_SUCCESS:         /* lookup successful */
+      bpf_debug("BPF_FIB_LKUP_RET_SUCCESS");
+
+      memcpy(ethh->h_dest, fib_params.dmac, ETH_ALEN);
+      memcpy(ethh->h_source, fib_params.smac, ETH_ALEN);
+      break;
+    case BPF_FIB_LKUP_RET_BLACKHOLE:    /* dest is blackholed; can be dropped */
+    case BPF_FIB_LKUP_RET_UNREACHABLE:  /* dest is unreachable; can be dropped */
+    case BPF_FIB_LKUP_RET_PROHIBIT:     /* dest not allowed; can be dropped */
+    case BPF_FIB_LKUP_RET_NOT_FWDED:    /* packet is not forwarded */
+    case BPF_FIB_LKUP_RET_FWD_DISABLED: /* fwding is not enabled on ingress */
+    case BPF_FIB_LKUP_RET_UNSUPP_LWT:   /* fwd requires encapsulation */
+    case BPF_FIB_LKUP_RET_NO_NEIGH:     /* no neighbor entry for nh */
+    case BPF_FIB_LKUP_RET_FRAG_NEEDED:  /* fragmentation required to fwd */
+      /* PASS */
+      break;
+	}
+
   /*
   |----------------------------------------------------------------|
   |-------------------------- Add UDP header ----------------------|
@@ -161,7 +208,8 @@ create_outer_header_gtpu(struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, int
   udph->dest   = bpf_htons(GTP_UDP_PORT);
   // bpf_htons(p_far->forwarding_parameters.outer_header_creation.port_number);
   udph->len = bpf_htons(
-      orginal_len + roomlen - sizeof(struct ethhdr) - sizeof(struct iphdr));
+      packet_len + sizeof(*udph) + sizeof(struct gtpuhdr) +
+      sizeof(struct gtpu_extn_pdu_session_container));
   udph->check = 0;
 
   /*
@@ -184,7 +232,7 @@ create_outer_header_gtpu(struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, int
   __builtin_memcpy(p_gtpuh, &flags, sizeof(u8));
   p_gtpuh->message_type   = GTPU_G_PDU;
   p_gtpuh->message_length = bpf_htons(
-      orginal_len +
+      packet_len +
       sizeof(struct gtpu_extn_pdu_session_container) + 4);
   p_gtpuh->teid =
       bpf_htonl(teid);

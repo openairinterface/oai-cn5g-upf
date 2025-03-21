@@ -481,7 +481,8 @@ void SessionManager::updateBPFSession(
 
     if ((pSession->pdrs_uplink.empty()) && (pSession->pdrs_downlink.empty())) {
       Logger::upf_app().error("No PDR was found in session %d", pSession->seid);
-      throw std::runtime_error("No PDR was found in session");
+      // throw std::runtime_error("No PDR was found in session");
+      return;
     }
 
     if (pdrs_downlink_size != pSession->pdrs_downlink.size()) {

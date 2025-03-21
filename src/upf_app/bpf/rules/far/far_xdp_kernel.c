@@ -351,6 +351,7 @@ int far_entry_point(struct xdp_md* ctx) {
         case BPF_FIB_LKUP_RET_NO_NEIGH:     /* no neighbor entry for nh */
         case BPF_FIB_LKUP_RET_FRAG_NEEDED:  /* fragmentation required to fwd */
           /* PASS */
+          bpf_debug("BPF_FIB_LKUP_RET_ -> %d", rc);
           break;
       }
 
