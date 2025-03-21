@@ -136,6 +136,7 @@ COPY --from=oai-upf-builder \
     /usr/local/sbin/bpftool \
     /openair-upf/build/upf/build/oai_upf \
     /openair-upf/scripts/healthcheck.sh \
+    /openair-upf/scripts/entrypoint.sh \
     ./
 
 WORKDIR /usr/local/lib
@@ -177,3 +178,5 @@ HEALTHCHECK --interval=10s \
     CMD /openair-upf/bin/healthcheck.sh
 
 CMD ["/openair-upf/bin/oai_upf", "-c", "/openair-upf/etc/config.yaml", "-o"]
+
+# ENTRYPOINT [ "sh", "/openair-upf/bin/entrypoint.sh" ]

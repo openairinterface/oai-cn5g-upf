@@ -39,10 +39,19 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <stdexcept>
 
+#include <iostream>
+#include <cstring>
+#include <cerrno>
+#include <thread>
+#include <chrono>
+
+
 using namespace pfcp;
 using namespace oai::upf::app;
 using namespace oai::config;
 using namespace std;
+
+#define LOG_MAP_PATH "/sys/fs/bpf/logs_map"
 
 // C includes
 
@@ -55,7 +64,84 @@ extern pfcp_switch* pfcp_switch_inst;
 extern upf_app* upf_app_inst;
 extern upf_config upf_cfg;
 
+#define SAMPLE_SIZE 1024ul
+#define MAX_CPUS 128
+
+
 void upf_app_task(void*);
+
+void handle_event(void *ctx, int cpu, void *data, __u32 size) {
+  Logger::upf_app().info("Handling event");
+    struct S {
+        __u16 cookie;
+        __u16 pkt_len;
+        char message[128];
+        void *d;
+    } __attribute__((packed));
+
+    S *event = static_cast<S*>(data);
+    // event->message has a string with %s format, and *d has the data to be printed
+    // Print the message with the data
+    
+    Logger::upf_app().info("CPU: %d, Cookie: %d, Packet Length: %d, Message: %s", cpu, event->cookie, event->pkt_len, event->message);
+}
+
+void handle_lost_events(void *ctx, int cpu, __u64 lost_cnt) {
+    Logger::upf_app().error("Lost %lu events on CPU %d", lost_cnt, cpu);
+}
+
+void upf_app::init_log_reader() {
+
+    // Need to create and mount the logs_map first in kernel
+    
+
+    Logger::upf_app().info("Initializing log reader");
+    const int max_retries = 10;
+    const int retry_interval_ms = 2000; // 2 second
+
+    int fd = -1;
+    Logger::upf_app().info("Opening BPF map");
+    for (int attempt = 0; attempt < max_retries; ++attempt) {
+        Logger::upf_app().info("Attempt %d/%d", attempt + 1, max_retries);
+        fd = bpf_obj_get(LOG_MAP_PATH);
+        Logger::upf_app().info("Map fd: %d", fd);
+        if (fd >= 0) {
+            Logger::upf_app().info("Map fd >= 0");
+            break;
+        }
+        // Logger::upf_app().info("Failed to open BPF map: %s", strerror(errno));
+        // // Logger::upf_app().warn("Failed to open BPF map (attempt %d/%d): %s", attempt + 1, max_retries, strerror(errno));
+        std::this_thread::sleep_for(std::chrono::milliseconds(retry_interval_ms));
+    }
+    Logger::upf_app().info("Opened BPF map");
+
+    if (fd < 0) {
+        Logger::upf_app().error("Failed to open BPF map after %d attempts: %s", max_retries, strerror(errno));
+        return; // Gracefully continue without throwing an exception
+    }
+
+    // struct perf_buffer_opts pb_opts = {
+    //     .sample_cb = handle_event,
+    //     .lost_cb = handle_lost_events,
+    // };
+    map_fd = fd;
+    Logger::upf_app().info("Creating perf buffer");
+    pb = perf_buffer__new(fd, 8, handle_event, NULL, NULL, NULL);
+    if (!pb) {
+        Logger::upf_app().error("Failed to create perf buffer: %s", strerror(errno));
+        close(fd);
+        return; // Gracefully continue without throwing an exception
+    }
+    Logger::upf_app().info("Created perf buffer");;
+}
+
+void upf_app::poll_log_reader() {
+    Logger::upf_app().info("Polling log reader");
+    int err = perf_buffer__poll(pb, 1000);
+    if (err < 0) {
+        Logger::upf_app().error("Error polling perf buffer: %s", strerror(errno));
+    }
+}
 
 //------------------------------------------------------------------------------
 void upf_app_task(void* args_p) {
@@ -138,11 +224,17 @@ upf_app::upf_app(const std::string& config_file) {
   Logger::upf_app().startup("Starting...");
   upf_cfg.execute();
 
+  // Initialize log reader
+  // init_log_reader();
+
   if (itti_inst->create_task(
           TASK_UPF_APP, upf_app_task, &upf_cfg.itti.upf_app_sched_params)) {
     Logger::upf_app().error("Cannot create task TASK_UPF_APP");
     throw std::runtime_error("Cannot create task TASK_UPF_APP");
   }
+
+  Logger::upf_app().info("Creating UPF_N4");
+
   try {
     upf_n4_inst = new upf_n4();
   } catch (std::exception& e) {
@@ -187,6 +279,16 @@ upf_app::~upf_app() {
   if (pfcp_switch_inst) {
     delete pfcp_switch_inst;
   }
+  // if (pb) {
+  //   perf_buffer__free(pb);
+  // }
+  // if (map_fd >= 0) {
+  //   close(map_fd);
+  // }
+  // if (thread_perf_buffer.joinable()) {
+  //   thread_perf_buffer.join();
+  // }
+  Logger::upf_app().startup("Terminated");
 }
 
 //------------------------------------------------------------------------------

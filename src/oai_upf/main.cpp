@@ -214,6 +214,12 @@ int main(int argc, char** argv) {
   // once all udp servers initialized
   io_service.run();
 
+  // Logger::upf_app().info("----------------- Starting event loop -----------------");
+  // int err;
+  // while ((err = perf_buffer__poll(upf_app_inst->pb, 1000)) >= 0) {
+  //   Logger::upf_app().info("========= Polling perf buffer =================");
+  // }
+
   pause();
   return 0;
 }

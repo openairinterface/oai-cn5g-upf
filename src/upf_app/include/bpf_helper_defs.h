@@ -3609,6 +3609,38 @@ static long (*bpf_copy_from_user)(void* dst, __u32 size, const void* user_ptr) =
     (void*) 148;
 
 /*
+ * bpf_snprintf
+ *
+ * 	Outputs a string into the **str** buffer of size **str_size**
+ * 	based on a format string stored in a read-only map pointed by
+ * 	**fmt**.
+ *
+ * 	Each format specifier in **fmt** corresponds to one u64 element
+ * 	in the **data** array. For strings and pointers where pointees
+ * 	are accessed, only the pointer values are stored in the *data*
+ * 	array. The *data_len* is the size of *data* in bytes - must be
+ * 	a multiple of 8.
+ *
+ * 	Formats **%s** and **%p{i,I}{4,6}** require to read kernel
+ * 	memory. Reading kernel memory may fail due to either invalid
+ * 	address or valid address but requiring a major memory fault. If
+ * 	reading kernel memory fails, the string for **%s** will be an
+ * 	empty string, and the ip address for **%p{i,I}{4,6}** will be 0.
+ * 	Not returning error to bpf program is consistent with what
+ * 	**bpf_trace_printk**\ () does for now.
+ *
+ *
+ * Returns
+ * 	The strictly positive length of the formatted string, including
+ * 	the trailing zero character. If the return value is greater than
+ * 	**str_size**, **str** contains a truncated string, guaranteed to
+ * 	be zero-terminated except when **str_size** is 0.
+ *
+ * 	Or **-EBUSY** if the per-CPU memory copy buffer is busy.
+ */
+static long (*bpf_snprintf)(char *str, __u32 str_size, const char *fmt, __u64 *data, __u32 data_len) = (void *) 165;
+
+/*
  * bpf_snprintf_btf
  *
  * 	Use BTF to store a string representation of *ptr*->ptr in *str*,

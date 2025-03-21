@@ -42,6 +42,9 @@
 #include <map>
 #include <set>
 
+#include <bpf/libbpf.h>
+#include <bpf/bpf.h>
+
 namespace oai {
 namespace upf {
 namespace app {
@@ -50,6 +53,9 @@ class upf_app {
  private:
   std::thread::id thread_id;
   std::thread thread;
+  std::thread::id thread_perf_buffer_id;
+  std::thread thread_perf_buffer;
+  int map_fd;
 
  public:
   explicit upf_app(const std::string& config_file);
@@ -58,6 +64,7 @@ class upf_app {
   void operator=(upf_app const&) = delete;
 
   void stop();
+  struct perf_buffer *pb;
 
   teid_t generate_s5s8_up_teid();
 
@@ -83,6 +90,10 @@ class upf_app {
   //  void handle_itti_msg (itti_n4_session_deletion_response& m);
   //  void handle_itti_msg (itti_n4_session_report_request& m);
   void handle_itti_msg(std::shared_ptr<itti_n4_session_report_response> m);
+
+  void init_log_reader();
+  void poll_log_reader();
+
 };
 }  // namespace app
 }  // namespace upf
