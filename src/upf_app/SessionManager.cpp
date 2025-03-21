@@ -401,14 +401,16 @@ void SessionManager::processPDRDetails(
 
   std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer;
 
+  std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs;
   if (upf_cfg.enable_qos) {
     pQer = (direction == "Uplink") ? pSession->qers_uplink :
                                      pSession->qers_downlink;
+    pdrs = pSession->pdrs_downlink;
   }
 
   SessionProgramManager::getInstance().createPipeline(
       pSession->get_up_seid(), fteid.teid, interfaceValue,
-      ueIpAddress.ipv4_address.s_addr, pFar, pQer, false, 0);
+      ueIpAddress.ipv4_address.s_addr, pFar, pQer, pdrs, false, 0);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -581,12 +583,12 @@ void SessionManager::updateBPFSessionDL(
   if (teid_ul) {
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
-        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, teid_ul);
+        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, pSession->pdrs, true, teid_ul);
   } else {
     Logger::upf_app().info("Uplink TEID not used for session: 0x%x", seidul);
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
-        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, 0);
+        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, pSession->pdrs, true, 0);
   }
 }
 

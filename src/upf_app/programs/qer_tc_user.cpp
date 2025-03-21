@@ -31,6 +31,7 @@
 
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
+#include "filter_key.h"
 
 #ifndef UDP_INTERFACE
 #define UDP_INTERFACE UserPlaneComponent::getInstance().getUDPInterface()
@@ -117,9 +118,30 @@ bool QERProgram::no_htb_root_qdisc(std::string interface) {
   return ret ? false : true;
 }
 
+/***** Adapted from commit: 24f4c7b80e783cd16ef4c4762283dff797450f79 *****/
+/*---------------------------------------------------------------------------------------------------------------*/
+void QERProgram::build_pdr_map(
+  const std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs) {
+pdr_map.clear();
+for (const auto& pdr : pdrs) {
+  if (pdr && pdr->qer_id.first) {
+    pdr_map[pdr->qer_id.second.qer_id] = pdr;
+  }
+}
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<pfcp::pfcp_pdr> QERProgram::get_pdr_by_qer_id(
+  uint32_t qer_id) const {
+auto it = pdr_map.find(qer_id);
+return (it != pdr_map.end()) ? it->second : nullptr;
+}
+/***** End of adaptation *****/
+
 /*---------------------------------------------------------------------------------------------------------------*/
 void QERProgram::setup(
-    uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer) {
+    uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
+    std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs) {
   spSkeleton = mpLifeCycle->open();
   initializeMaps();
   mpLifeCycle->load();
@@ -144,17 +166,24 @@ void QERProgram::setup(
     cmd = fmt::format(
         "tc qdisc add dev {} root handle 1:0 htb default {}", GTP_INTERFACE,
         DEFAULT_QFI);
-    rc = system((const char*) cmd.c_str());
+    if (system(cmd.c_str()) != 0) {
+      Logger::upf_app().error("Failed command: {}", cmd.c_str());
+    }
   }
 
   Logger::upf_app().info("Create PDU Session Class 1:%d", seid);
   cmd = fmt::format(
       "tc class add dev {} parent 1:0 classid 1:{} htb rate {}kbit",
       GTP_INTERFACE, seid, MAX_RATE);
-  rc = system((const char*) cmd.c_str());
+  
+  if (system(cmd.c_str()) != 0) {
+    Logger::upf_app().error("Failed command: {}", cmd.c_str());
+  }
 
   Logger::upf_app().debug("QDISC Root DL Rate (GBR) : %dkbps", MAX_RATE);
   Logger::upf_app().debug("QDISC Root DL Ceil (MBR) : %dkbps", MAX_CEIL);
+
+  build_pdr_map(pdrs);
 
   for (const auto& qer : pQer) {
     if (qer == nullptr) {
@@ -211,12 +240,49 @@ void QERProgram::setup(
         "tc class add dev {} parent 1:{} classid {}:{} htb rate {}kbit ceil "
         "{}kbit",
         GTP_INTERFACE, seid, seid, minor, dl_rate, dl_ceil);
-    rc = system((const char*) cmd.c_str());
+    
+    if (system(cmd.c_str()) != 0) {
+      Logger::upf_app().error("Failed command: {}", cmd.c_str());
+    }
+    
 
     Logger::upf_app().debug("    HTB Class ID (QER) ........... %d", qer_id);
     Logger::upf_app().debug("         Class QFI:      %d", qfi);
     Logger::upf_app().debug("         Class DL Rate:     %dkbps", dl_rate);
     Logger::upf_app().debug("         Class DL Ceil:     %dkbps", dl_ceil);
+
+    /***** Adapted from commit: 24f4c7b80e783cd16ef4c4762283dff797450f79 *****/
+    // Parse the SDF Flow Description
+    std::shared_ptr<pfcp::pfcp_pdr> pdr = get_pdr_by_qer_id(qer_id);
+    pfcp::pdi pdi;
+    pfcp::sdf_filter_t sdf;
+    // std::string flowDescription = nullptr;
+    pdr->get(pdi);
+    pdi.get(sdf);
+
+    // if (sdf.fd && sdf.length_of_flow_description > 0)
+    //   flowDescription = std::string(sdf.flow_label);
+
+    // Logger::upf_app().debug("         Flow Description: %s", flowDescription.c_str());
+
+    struct filter_key sdf_filter_key = {};
+    sdf_filter_key.src_ip            = 0;
+    // TODO [QOS]: Support dynamic setting of dst_ip, for now set it to UE IP since it's only for downlink
+    sdf_filter_key.dst_ip            = pdi.ue_ip_address.second.ipv4_address.s_addr;
+    sdf_filter_key.protocol          = 0;
+    sdf_filter_key.dst_port          = 0;
+    // TODO [QOS] Support for src_port
+    // sdf_filter_key.src_port          = 0;
+    sdf_filter_key.tos              = 0; 
+    
+    struct session_qfi sdf_filter_value = {};
+    sdf_filter_value.qfi = qfi;
+    sdf_filter_value.seid = seid;
+
+    getSdfFilterMap()->update(sdf_filter_key, sdf_filter_value, BPF_ANY);
+     
+    /***** End of adaptation *****/
+
   }
 
   Logger::upf_app().info("Attach Section tc_filter_traffic to gtp interface");

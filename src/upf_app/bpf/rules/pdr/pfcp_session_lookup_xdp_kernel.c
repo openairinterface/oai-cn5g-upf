@@ -19,6 +19,7 @@
 #include <utils/logger.h>
 #include <utils/utils.h>
 #include <next_prog_rule_key.h>
+#include "qer/filter_key.h"
 
 #ifdef KERNEL_SPACE
 #include <linux/in.h>
@@ -72,6 +73,118 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
     bpf_debug(
         "TEID downlink: 0x%x was found for UE IP: 0x%x", teid_dl,
         ue_ip_address);
+
+    bpf_debug("Adding metadata to the packet, UE IP: %pi4", ue_ip_address);
+    // Add metadata to the packet
+    /***** Adapted from commit: c4b6ef3ea238652926a003b630eb5cc7fcb3db12 *****/
+    struct filter_key* key;
+    if (bpf_xdp_adjust_meta(ctx, -(int) sizeof(struct filter_key))) {
+      bpf_debug("Error: Unable to reserve metadata space");
+      return XDP_DROP;
+    }
+
+    void* data          = (void*) (long) ctx->data;
+    void* data_end      = (void*) (long) ctx->data_end;
+    struct ethhdr* ethh = data;
+
+    if ((void*) (ethh + 1) > data_end) {
+      bpf_debug("Error: Invalid Ethernet header");
+      return XDP_DROP;
+    }
+
+    u16 l3_protocol = htons(ethh->h_proto);
+    bpf_debug("l3_protocol: 0x%x", l3_protocol);
+
+    switch (l3_protocol) {
+      case ETH_P_IP: {
+        bpf_debug("This is an IPv4 Packet");
+        break;
+      }
+      case ETH_P_IPV6: {
+        // TODO: Check if traitment is needed here
+        bpf_debug("This is an IPv6 Packet");
+        return XDP_DROP;
+      }
+      case ETH_P_8021Q: {
+        // TODO: Check if traitment is needed here
+        bpf_debug("This is a VLAN Packet");
+        return XDP_DROP;
+      }
+      case ETH_P_8021AD: {
+        // TODO: Check if traitment is needed here
+        bpf_debug("This is a VLAN Packet");
+        return XDP_DROP;
+      }
+      case ETH_P_ARP: {
+        // TODO: Check if traitment is needed here
+        bpf_debug("This is an ARP Packet");
+        return XDP_PASS;
+      }
+      default: {
+        // TODO: Check if traitment is needed here
+        bpf_debug("Packet Type not Known");
+        return XDP_DROP;
+      }
+    }
+
+    struct iphdr* iph = (void*) (ethh + 1);
+
+    if ((void*) (iph + 1) > data_end) {
+      bpf_debug("Error: Invalid IPv4 Packet");
+      return XDP_DROP;
+    }
+
+    u32 ip_dest = bpf_htonl(iph->daddr);
+    u8 protocol = iph->protocol;
+
+    key = (struct filter_key*) ctx->data_meta;
+
+    if ((void*) (key + 1) > data) {
+      bpf_debug("Error: Invalid Metadata");
+      return XDP_DROP;
+    }
+
+    bpf_debug("Shaping IP DST: %pI4", &ip_dest);
+
+    key->src_ip   = bpf_htonl(iph->saddr);
+    key->dst_ip   = ip_dest;
+    key->protocol = iph->protocol;
+
+    switch (protocol) {
+      case IPPROTO_UDP: {
+        struct udphdr* udph = (struct udphdr*) (iph + 1);
+
+        if ((void*) (udph + 1) > data_end) {
+          bpf_debug("Error: Invalid UDP header");
+          return XDP_DROP;
+        }
+
+        // TODO [QOS]: Support for src port
+        // key->src_port = udph->source;
+        key->dst_port = udph->dest;
+        break;
+      }
+      case IPPROTO_TCP: {
+        struct tcphdr* tcph = (struct tcphdr*) (iph + 1);
+
+        if ((void*) (tcph + 1) > data_end) {
+          bpf_debug("Error: Invalid TCP header");
+          return XDP_DROP;
+        }
+
+        // TODO [QOS]: Support for src port
+        // key->src_port = tcph->source;
+        key->dst_port = tcph->dest;
+        break;
+      }
+      default: {
+        bpf_debug("Unknown header");
+        bpf_debug("Use best effort QoS flow (i.e. default qfi)");
+        key->dst_port = 65535;
+      }
+    }
+    /***** End of adaptation *****/
+
     tail_call_next_prog(ctx, teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
   }
 

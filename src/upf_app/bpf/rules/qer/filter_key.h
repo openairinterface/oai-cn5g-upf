@@ -7,6 +7,8 @@ struct filter_key {
   u32 src_ip;
   u32 dst_ip;
   u8 protocol;
+  // TODO [QOS]: Support for src port
+  // u16 src_port;
   u16 dst_port;
   u32 tos;
 };

@@ -30,6 +30,10 @@
 #include <linux/netdevice.h>
 #include <linux/pkt_sched.h>
 
+#define GET_TC_CLASSID(seid, qfi)                                              \
+  (((seid) << 16) | (((seid) *256) + ((qfi) *251 % 256)))
+
+
 #define MARK_VALUE 0x12345678  // Marker value to match
 #define OFFSET 0               // Example offset where marker is stored
 #define TARGET_INTF 644
@@ -178,7 +182,7 @@ static __always_inline u32 egress_sdf_filter(
  */
 
 static __always_inline u32
-ipv4_sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh, struct iphdr* iph) {
+ipv4_sdf_filter_old(struct __sk_buff* skb, struct ethhdr* ethh, struct iphdr* iph) {
   bpf_debug("==========< ipv4_sdf_filter >==========\n");
   void* data_end = (void*) (long) skb->data_end;
   u8 protocol    = iph->protocol;
@@ -244,7 +248,7 @@ sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
         //     return TC_ACT_UNSPEC;
       }
 
-      return ipv4_sdf_filter(skb, ethh, iph);
+      return ipv4_sdf_filter_old(skb, ethh, iph);
     }
     case ETH_P_IPV6: {
       // TODO: Check if traitment is needed here
@@ -268,6 +272,119 @@ sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
     }
   }
 }
+
+/***** Adapted from commit: c4b6ef3ea238652926a003b630eb5cc7fcb3db12 *****/
+//---------------------------------------------------------------------------------------------------------------
+static __always_inline u32 egress_sdf_classifier(struct __sk_buff* skb) {
+  void* data      = (void*) (long) skb->data;
+  void* data_end  = (void*) (long) skb->data_end;
+  void* data_meta = (void*) (long) skb->data_meta;
+
+  struct ethhdr* ethh            = data;
+
+  if ((void*) (ethh + 1) > data_end) {
+    bpf_debug("Error: Invalid Ethernet header");
+    return TC_ACT_SHOT;
+  }
+
+  struct iphdr* iph = (struct iphdr*) (ethh + 1);
+
+  if ((void*) (iph + 1) > data_end) {
+    bpf_debug("Error: Invalid IPv4 header");
+    return TC_ACT_SHOT;
+  }
+
+  struct udphdr* udph = (struct udphdr*) (iph + 1);
+
+  if ((void*) (udph + 1) > data_end) {
+    bpf_debug("Error: Invalid UDP header");
+    return TC_ACT_SHOT;
+  }
+
+  struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
+
+  if ((void*) (gtpuh + 1) > data_end) {
+    bpf_debug("Error: Invalid GTPU packet");
+    return TC_ACT_SHOT;
+  }
+
+  struct gtpu_extn_pdu_session_container* gtpu_ext_h =
+      (struct gtpu_extn_pdu_session_container*) ((void*) (gtpuh + 1));
+
+  if ((void*) (gtpu_ext_h + 1) > data_end) {
+    bpf_debug("Error: Invalid GTPU Extension packet");
+    return TC_ACT_SHOT;
+  }
+
+  /* Check XDP gave us some data_meta */
+  struct filter_key* filter = data_meta;
+  if ((void*) (filter + 1) > data) {
+    bpf_debug("Error: Failed to load metadata from XDP");
+    return TC_ACT_SHOT;
+  }
+
+  bpf_debug(
+      "TC: Received XDP Metadata - dst_ip: %pI4, src_ip: %pI4", &filter->dst_ip,
+      &filter->src_ip);
+  bpf_debug(
+      "TC: Received XDP Metadata - proto: 0x%x, dst_port: %d", filter->protocol,
+      filter->dst_port);
+
+  struct session_qfi* retrieved_value =
+      bpf_map_lookup_elem(&m_sdf_filter, filter);
+
+  if (retrieved_value) {
+    u8 qfi   = retrieved_value->qfi;
+    u64 seid = bpf_ntohs(retrieved_value->seid);
+
+    gtpu_ext_h->qfi = qfi;
+    skb->tc_classid = GET_TC_CLASSID(seid, qfi);
+    return TC_ACT_OK;
+  }
+
+  // TODO [QOS] assign default QFI
+
+  bpf_debug("No default QFI found. Droping packet");
+  return TC_ACT_SHOT;
+}
+
+//---------------------------------------------------------------------------------------------------------------
+static __always_inline u32 ipv4_sdf_filter(struct __sk_buff* skb) {
+  void* data     = (void*) (long) skb->data;
+  void* data_end = (void*) (long) skb->data_end;
+
+  struct ethhdr* ethh = data;
+
+  if ((void*) (ethh + 1) > data_end) {
+    bpf_debug("Error: Invalid Ethernet header");
+    return TC_ACT_SHOT;
+  }
+
+  struct iphdr* iph = (struct iphdr*) (ethh + 1);
+
+  if ((void*) (iph + 1) > data_end) {
+    bpf_debug("Error: Invalid IPv4 header");
+    return TC_ACT_SHOT;
+  }
+
+  if (iph->protocol == IPPROTO_UDP) {
+    struct udphdr* udph = (struct udphdr*) (iph + 1);
+
+    if ((void*) (udph + 1) > data_end) {
+      bpf_debug("Error: Invalid UDP header");
+      return TC_ACT_SHOT;
+    }
+
+    if (htons(udph->dest) == GTP_UDP_PORT) {
+      bpf_debug("IPv4 SDF Filter: This is a GTP traffic");
+      return egress_sdf_classifier(skb);
+    }
+  }
+
+  return TC_ACT_SHOT;
+}
+
+/***** End of adaptation *****/
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
@@ -299,7 +416,6 @@ int tc_filter_traffic(struct __sk_buff* skb) {
 
   // Extract Ethernet header
   struct ethhdr* ethh = (void*) (long) skb->data;
-  bpf_debug("tc_filter_traffic: MAC SRC: %pM, MAC DST: %pM", &ethh->h_source, &ethh->h_dest);
 
   if ((void*) (ethh + 1) > (void*) (long) skb->data_end) {
     bpf_debug("Invalid Ethernet header");
@@ -313,9 +429,25 @@ int tc_filter_traffic(struct __sk_buff* skb) {
     return TC_ACT_SHOT;
   }
 
-  bpf_debug("tc_filter_traffic: IP SRC: %pI4, IP DST: %pI4", &iph->saddr, &iph->daddr);
+  bpf_debug("SDF FILTER: IP SRC: %pi4, IP DST: %pi4", &iph->saddr, &iph->daddr);
 
-  return sdf_filter(skb, ethh);
+  u16 l3_protocol = htons(ethh->h_proto);
+  bpf_debug("SDF FILTER: l3_protocol: 0x%x", l3_protocol);
+
+  // return sdf_filter(skb, ethh);
+  switch (l3_protocol) {
+    case ETH_P_IP: {
+      bpf_debug("SDF Filter: This is an IPv4 Packet");
+      return ipv4_sdf_filter(skb);
+    }
+    case ETH_P_IPV6:
+    case ETH_P_8021Q:
+    case ETH_P_8021AD:
+    case ETH_P_ARP:
+      return TC_ACT_OK;
+    default:
+      return TC_ACT_OK;
+  }
 }
 
 // /*---------------------------------------------------------------------------------------------------------------*/
@@ -323,34 +455,65 @@ int tc_filter_traffic(struct __sk_buff* skb) {
 SEC("tc/ingress")
 int tc_redirect_traffic(struct __sk_buff* skb) {
   bpf_debug("==========< TC Ingress >==========\n");
-  int key = DOWNLINK, *ifindex;
 
-  // return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
-  struct ethhdr* ethh = (void*) (long) skb->data;
-  bpf_debug("tc_redirect_traffic: MAC SRC: %pM, MAC DST: %pM", ethh->h_source, ethh->h_dest);
+  /***** Adapted from commit: c4b6ef3ea238652926a003b630eb5cc7fcb3db12 *****/
+  void* data     = (void*) (long) skb->data;
+  void* data_end = (void*) (long) skb->data_end;
 
-  if ((void*) (ethh + 1) > (void*) (long) skb->data_end) {
-    bpf_debug("Invalid Ethernet header");
+  struct filter_key* filter;
+  filter = (struct filter_key*) skb->data_meta;
+
+  /* Check XDP gave us some data_meta */
+  if ((void*) (filter + 1) > data) {
+    bpf_debug("Error: Failed to load metadata from XDP");
     return TC_ACT_SHOT;
   }
 
-  struct iphdr* iph = (struct iphdr*) (ethh + 1);
+  struct ethhdr* ethh = data;
 
-  if ((void*) (iph + 1) > (void*) (long) skb->data_end) {
-    bpf_debug("Invalid IPv4 header");
+  if ((void*) (ethh + 1) > data_end) {
+    bpf_debug("Error: Invalid Ethernet header");
     return TC_ACT_SHOT;
   }
 
-  bpf_debug("tc_redirect_traffic: IP SRC: %pI4, IP DST: %pI4", &iph->saddr, &iph->daddr);
+  u16 l3_protocol = htons(ethh->h_proto);
+  bpf_debug("INGRESS: l3_protocol: 0x%x", l3_protocol);
 
-  /* Lookup what ifindex to redirect packets to */
-  ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
-  if (ifindex) {
-    bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer: ifindex -> %d", *ifindex);
-    return bpf_redirect(*ifindex, 0);
+  switch (l3_protocol) {
+    case ETH_P_IP: {
+      bpf_debug("INGRESS: This is an IPv4 Packet");
+
+      struct iphdr* iph = (struct iphdr*) (ethh + 1);
+
+      if ((void*) (iph + 1) > (void*) (long) skb->data_end) {
+        bpf_debug("Invalid IPv4 header");
+        return TC_ACT_SHOT;
+      }
+
+      bpf_debug("INGRESS: IP SRC: %pI4, IP DST: %pI4", &iph->saddr, &iph->daddr);
+
+      int key = DOWNLINK, *ifindex;
+      ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
+
+      if (ifindex) {
+        bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer");
+        return bpf_redirect(*ifindex, 0);
+      }
+
+      bpf_debug("TC Packets are not redirected! Drop them");
+      return TC_ACT_SHOT;
+    }
+    case ETH_P_IPV6:
+    case ETH_P_8021Q:
+    case ETH_P_8021AD:
+    case ETH_P_ARP:
+      return TC_ACT_OK;
+    default:
+      return TC_ACT_OK;
   }
-  bpf_debug("TC Packets not redirected! Drop them");
-  return TC_ACT_SHOT;
+
+  /***** End of adaptation *****/
+
 }
 
 char _license[] SEC("license") = "GPL";

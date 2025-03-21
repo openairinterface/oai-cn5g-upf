@@ -11,6 +11,7 @@
 #define FIVE_QI_MAX_ENTRIES 100
 #define QOS_FLOWS_MAX_ENTRIES 10000
 #define MAX_INTERFACES 10
+#define MAX_SDF_FITLER_ENTRIES 15
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
