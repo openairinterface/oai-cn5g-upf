@@ -125,6 +125,10 @@ void QERProgram::build_pdr_map(
 pdr_map.clear();
 for (const auto& pdr : pdrs) {
   if (pdr && pdr->qer_id.first) {
+    // Log the id for the PDR and the QER
+    Logger::upf_app().debug(
+        "PDR ID: %d, QER ID: %d", pdr->pdr_id.rule_id,
+        pdr->qer_id.second.qer_id);
     pdr_map[pdr->qer_id.second.qer_id] = pdr;
   }
 }
@@ -133,8 +137,18 @@ for (const auto& pdr : pdrs) {
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<pfcp::pfcp_pdr> QERProgram::get_pdr_by_qer_id(
   uint32_t qer_id) const {
-auto it = pdr_map.find(qer_id);
-return (it != pdr_map.end()) ? it->second : nullptr;
+  // Print size of pdr_map
+  Logger::upf_app().debug("PDR Map size: %d", pdr_map.size());
+  // Find the PDR by QER ID
+  Logger::upf_app().debug("Finding PDR by QER ID: %d", qer_id);
+  auto it = pdr_map.find(qer_id);
+  // Return the PDR if found, otherwise return nullptr
+  if (it != pdr_map.end()) {
+    Logger::upf_app().debug("PDR found for QER ID: %d", qer_id);
+    return it->second;
+  }
+  Logger::upf_app().debug("PDR not found for QER ID: %d", qer_id);
+  return nullptr;
 }
 /***** End of adaptation *****/
 
@@ -166,8 +180,9 @@ void QERProgram::setup(
     cmd = fmt::format(
         "tc qdisc add dev {} root handle 1:0 htb default {}", GTP_INTERFACE,
         DEFAULT_QFI);
+    Logger::upf_app().debug("Running command: %s", cmd.c_str());
     if (system(cmd.c_str()) != 0) {
-      Logger::upf_app().error("Failed command: {}", cmd.c_str());
+      Logger::upf_app().error("Failed command: %s", cmd.c_str());
     }
   }
 
@@ -175,9 +190,9 @@ void QERProgram::setup(
   cmd = fmt::format(
       "tc class add dev {} parent 1:0 classid 1:{} htb rate {}kbit",
       GTP_INTERFACE, seid, MAX_RATE);
-  
+  Logger::upf_app().debug("Running command: %s", cmd.c_str());
   if (system(cmd.c_str()) != 0) {
-    Logger::upf_app().error("Failed command: {}", cmd.c_str());
+    Logger::upf_app().error("Failed command: %s", cmd.c_str());
   }
 
   Logger::upf_app().debug("QDISC Root DL Rate (GBR) : %dkbps", MAX_RATE);
@@ -210,6 +225,7 @@ void QERProgram::setup(
     uint8_t ul_gate  = 0;
 
     if (qfi != DEFAULT_QFI) {
+      Logger::upf_app().debug("QFI not equal to default QFI: %d", qfi);
       if (qer->gbr.second.dl_gbr != 0) dl_rate = qer->gbr.second.dl_gbr;
 
       if (qer->gbr.second.ul_gbr != 0) ul_rate = qer->gbr.second.ul_gbr;
@@ -235,14 +251,19 @@ void QERProgram::setup(
     fiveFlow.qfi = qfi;
     getQoSFlowMap()->update(qer_id, fiveFlow, BPF_ANY);
 
-    uint16_t minor = (ntohs(seid) * 256) + (qfi * 251 % 256);
+    Logger::upf_app().debug("Create minor from QFI %d and SEID %d", qfi, seid);
+
+    uint32_t minor = GET_TC_CLASSID(seid, qfi); //  (ntohs(seid) * 256) + (qfi * 251 % 256);
+    Logger::upf_app().debug("Create QER Class 1:%d", minor);
     cmd            = fmt::format(
         "tc class add dev {} parent 1:{} classid {}:{} htb rate {}kbit ceil "
         "{}kbit",
         GTP_INTERFACE, seid, seid, minor, dl_rate, dl_ceil);
     
+    Logger::upf_app().debug("Running command: %s", cmd.c_str());
+
     if (system(cmd.c_str()) != 0) {
-      Logger::upf_app().error("Failed command: {}", cmd.c_str());
+      Logger::upf_app().error("Failed command: %s", cmd.c_str());
     }
     
 
@@ -254,6 +275,10 @@ void QERProgram::setup(
     /***** Adapted from commit: 24f4c7b80e783cd16ef4c4762283dff797450f79 *****/
     // Parse the SDF Flow Description
     std::shared_ptr<pfcp::pfcp_pdr> pdr = get_pdr_by_qer_id(qer_id);
+    if (pdr == nullptr) {
+      Logger::upf_app().error("PDR not found for QER %d", qer_id);
+      continue;
+    }
     pfcp::pdi pdi;
     pfcp::sdf_filter_t sdf;
     // std::string flowDescription = nullptr;
@@ -269,11 +294,15 @@ void QERProgram::setup(
     sdf_filter_key.src_ip            = 0;
     // TODO [QOS]: Support dynamic setting of dst_ip, for now set it to UE IP since it's only for downlink
     sdf_filter_key.dst_ip            = pdi.ue_ip_address.second.ipv4_address.s_addr;
+    // TODO [QOS]: Support for protocol
     sdf_filter_key.protocol          = 0;
+    // TODO [QOS]: Support for dst_port
     sdf_filter_key.dst_port          = 0;
     // TODO [QOS] Support for src_port
     // sdf_filter_key.src_port          = 0;
+    // TODO [QOS] Support for TOS
     sdf_filter_key.tos              = 0; 
+
     
     struct session_qfi sdf_filter_value = {};
     sdf_filter_value.qfi = qfi;

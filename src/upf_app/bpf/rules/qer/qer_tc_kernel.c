@@ -30,9 +30,6 @@
 #include <linux/netdevice.h>
 #include <linux/pkt_sched.h>
 
-#define GET_TC_CLASSID(seid, qfi)                                              \
-  (((seid) << 16) | (((seid) *256) + ((qfi) *251 % 256)))
-
 
 #define MARK_VALUE 0x12345678  // Marker value to match
 #define OFFSET 0               // Example offset where marker is stored
@@ -164,7 +161,7 @@ static __always_inline u32 egress_sdf_filter(
 
   // default value qfi = 5 (NON-GBR QoS Flow)
   skb->tc_classid = gtpu_ext_h->qfi;
-  bpf_debug("skb->tc_classid %d", skb->tc_classid);
+  bpf_debug("skb->tc_classid %d or ", skb->tc_classid, bpf_htons(skb->tc_classid));
   return TC_ACT_OK;
 }
 
@@ -327,18 +324,27 @@ static __always_inline u32 egress_sdf_classifier(struct __sk_buff* skb) {
       "TC: Received XDP Metadata - dst_ip: %pI4, src_ip: %pI4", &filter->dst_ip,
       &filter->src_ip);
   bpf_debug(
-      "TC: Received XDP Metadata - proto: 0x%x, dst_port: %d", filter->protocol,
+    "TC: Received XDP Metadata - dst_ip: %d, src_ip: %d", filter->dst_ip,
+    filter->src_ip);
+  bpf_debug(
+      "TC: Received XDP Metadata - protocol: 0x%x, dst_port: %d", filter->protocol,
       filter->dst_port);
+  bpf_debug(
+    "TC: Received XDP Metadata - TOS: %d", filter->tos);
+
 
   struct session_qfi* retrieved_value =
       bpf_map_lookup_elem(&m_sdf_filter, filter);
 
   if (retrieved_value) {
     u8 qfi   = retrieved_value->qfi;
-    u64 seid = bpf_ntohs(retrieved_value->seid);
+    u64 seid = retrieved_value->seid;
+    bpf_debug("TC: Retrieved QFI: %d", qfi);
+    bpf_debug("TC: Retrieved SEID: %d", seid);
 
     gtpu_ext_h->qfi = qfi;
     skb->tc_classid = GET_TC_CLASSID(seid, qfi);
+    bpf_debug("TC: classid %d", skb->tc_classid);
     return TC_ACT_OK;
   }
 
@@ -429,7 +435,7 @@ int tc_filter_traffic(struct __sk_buff* skb) {
     return TC_ACT_SHOT;
   }
 
-  bpf_debug("SDF FILTER: IP SRC: %pi4, IP DST: %pi4", &iph->saddr, &iph->daddr);
+  bpf_debug("SDF FILTER: IP SRC: %pI4, IP DST: %pI4", &iph->saddr, &iph->daddr);
 
   u16 l3_protocol = htons(ethh->h_proto);
   bpf_debug("SDF FILTER: l3_protocol: 0x%x", l3_protocol);
@@ -460,15 +466,6 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
   void* data     = (void*) (long) skb->data;
   void* data_end = (void*) (long) skb->data_end;
 
-  struct filter_key* filter;
-  filter = (struct filter_key*) skb->data_meta;
-
-  /* Check XDP gave us some data_meta */
-  if ((void*) (filter + 1) > data) {
-    bpf_debug("Error: Failed to load metadata from XDP");
-    return TC_ACT_SHOT;
-  }
-
   struct ethhdr* ethh = data;
 
   if ((void*) (ethh + 1) > data_end) {
@@ -482,6 +479,16 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
   switch (l3_protocol) {
     case ETH_P_IP: {
       bpf_debug("INGRESS: This is an IPv4 Packet");
+
+      // If it is an IPv4 packet, we expect the filter key to be present in the metadata
+      struct filter_key* filter;
+      filter = (struct filter_key*) skb->data_meta;
+
+      /* Check XDP gave us some data_meta */
+      if ((void*) (filter + 1) > data) {
+        bpf_debug("Error: Failed to load metadata from XDP");
+        return TC_ACT_SHOT;
+      }
 
       struct iphdr* iph = (struct iphdr*) (ethh + 1);
 

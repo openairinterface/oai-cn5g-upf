@@ -74,7 +74,7 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
         "TEID downlink: 0x%x was found for UE IP: 0x%x", teid_dl,
         ue_ip_address);
 
-    bpf_debug("Adding metadata to the packet, UE IP: %pi4", ue_ip_address);
+    bpf_debug("Adding metadata to the packet, UE IP: %pi4", &ue_ip_address);
     // Add metadata to the packet
     /***** Adapted from commit: c4b6ef3ea238652926a003b630eb5cc7fcb3db12 *****/
     struct filter_key* key;
@@ -134,7 +134,7 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
       return XDP_DROP;
     }
 
-    u32 ip_dest = bpf_htonl(iph->daddr);
+    u32 ip_dest = iph->daddr;
     u8 protocol = iph->protocol;
 
     key = (struct filter_key*) ctx->data_meta;
@@ -146,9 +146,11 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
 
     bpf_debug("Shaping IP DST: %pI4", &ip_dest);
 
-    key->src_ip   = bpf_htonl(iph->saddr);
+    // TODO [QOS]: Support for source IP
+    key->src_ip   = 0; // bpf_htonl(iph->saddr);
     key->dst_ip   = ip_dest;
-    key->protocol = iph->protocol;
+    // TODO [QOS]: Support for protocol
+    key->protocol = 0; // iph->protocol;
 
     switch (protocol) {
       case IPPROTO_UDP: {
@@ -180,7 +182,7 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
       default: {
         bpf_debug("Unknown header");
         bpf_debug("Use best effort QoS flow (i.e. default qfi)");
-        key->dst_port = 65535;
+        key->dst_port = 0; // 65535;
       }
     }
     /***** End of adaptation *****/
