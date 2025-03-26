@@ -1034,15 +1034,15 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.create_qers) {
+        create_qer& cr_qer = it;
+        if (not session->create(cr_qer, cause, offending_ie.offending_ie)) {
+          break;
+        }
         if (upf_cfg.enable_bpf_datapath) {
           Logger::pfcp_switch().info("Modifying datapath: create QERs");
           call_datapath(
               NULL, req, NULL, session, spSessionManager,
               &SessionManager::updateBPFSession);
-        }
-        create_qer& cr_qer = it;
-        if (not session->create(cr_qer, cause, offending_ie.offending_ie)) {
-          break;
         }
       }
     }

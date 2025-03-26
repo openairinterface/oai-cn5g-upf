@@ -241,16 +241,16 @@ void QERProgram::setup(
     if (qfi != DEFAULT_QFI) {
       Logger::upf_app().debug("QFI not equal to default QFI: %d", qfi);
       Logger::upf_app().debug("dl_gbr: %d", qer->gbr.second.dl_gbr);
-      if (qer->gbr.second.dl_gbr != 0) dl_rate = qer->gbr.second.dl_gbr;
+      dl_rate = qer->gbr.second.dl_gbr;
 
       Logger::upf_app().debug("ul_gbr: %d", qer->gbr.second.ul_gbr);
-      if (qer->gbr.second.ul_gbr != 0) ul_rate = qer->gbr.second.ul_gbr;
+      ul_rate = qer->gbr.second.ul_gbr;
 
       Logger::upf_app().debug("dl_mbr: %d", qer->mbr.second.dl_mbr);
-      if (qer->mbr.second.dl_mbr != 0) dl_ceil = qer->mbr.second.dl_mbr;
+      dl_ceil = qer->mbr.second.dl_mbr;
 
       Logger::upf_app().debug("ul_mbr: %d", qer->mbr.second.ul_mbr);
-      if (qer->mbr.second.ul_mbr != 0) ul_ceil = qer->mbr.second.ul_mbr;
+      ul_ceil = qer->mbr.second.ul_mbr;
 
       Logger::upf_app().debug("dl_gate: %d", qer->gate_status.second.dl_gate);
       dl_gate = qer->gate_status.second.dl_gate;
@@ -277,6 +277,13 @@ void QERProgram::setup(
 
     // Convert the minor to hex string
     std::string minor_hex = fmt::format("{:x}", minor);
+    // When dl_rate or dl_ceil is 0, the class is not created
+    if (dl_rate == 0 || dl_ceil == 0) {
+      Logger::upf_app().warn(
+        "dl_rate or dl_ceil is 0, the class is not created for QER %d", qer_id);
+        continue;
+    }
+      
     // TODO [QOS]: Remove the class when the QER is removed or UE is detached
     Logger::upf_app().debug("Create QER Class 1:%d", minor);
     cmd            = fmt::format(
