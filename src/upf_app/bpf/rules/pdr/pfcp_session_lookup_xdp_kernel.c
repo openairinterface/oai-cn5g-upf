@@ -75,10 +75,17 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
         ue_ip_address);
 
     bpf_debug("Adding metadata to the packet, UE IP: %pi4", &ue_ip_address);
-    // Add metadata to the packet
-    /***** Adapted from commit: c4b6ef3ea238652926a003b630eb5cc7fcb3db12 *****/
-    struct filter_key* key;
-    if (bpf_xdp_adjust_meta(ctx, -(int) sizeof(struct filter_key))) {
+    /* Prepare the metadata for the next program. To be used by TC QER program.
+     * The metadata is used to store the session context. 
+     * In eBPF we cannot create a skb->meta_data so we create it here. It will be
+     * populated by the TC QER ingress program and used by the TC QER egress program.
+     * Since we are loading the TC QER egress program, using tc command and not libbpf
+     * we are not able to have the two programs communicate via maps i.e., share maps
+     * so we use the skb->meta_data to pass the session context.
+     */
+
+    struct session_qfi* key;
+    if (bpf_xdp_adjust_meta(ctx, -(int) sizeof(struct session_qfi))) {
       bpf_debug("Error: Unable to reserve metadata space");
       return XDP_DROP;
     }
@@ -137,55 +144,13 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
     u32 ip_dest = iph->daddr;
     u8 protocol = iph->protocol;
 
-    key = (struct filter_key*) ctx->data_meta;
-
+    key = (struct session_qfi*) ctx->data_meta;
     if ((void*) (key + 1) > data) {
       bpf_debug("Error: Invalid Metadata");
       return XDP_DROP;
     }
-
-    bpf_debug("Shaping IP DST: %pI4", &ip_dest);
-
-    // TODO [QOS]: Support for source IP
-    key->src_ip   = 0; // bpf_htonl(iph->saddr);
-    key->dst_ip   = ip_dest;
-    // TODO [QOS]: Support for protocol
-    key->protocol = 0; // iph->protocol;
-
-    switch (protocol) {
-      case IPPROTO_UDP: {
-        struct udphdr* udph = (struct udphdr*) (iph + 1);
-
-        if ((void*) (udph + 1) > data_end) {
-          bpf_debug("Error: Invalid UDP header");
-          return XDP_DROP;
-        }
-
-        // TODO [QOS]: Support for src port
-        // key->src_port = udph->source;
-        key->dst_port = udph->dest;
-        break;
-      }
-      case IPPROTO_TCP: {
-        struct tcphdr* tcph = (struct tcphdr*) (iph + 1);
-
-        if ((void*) (tcph + 1) > data_end) {
-          bpf_debug("Error: Invalid TCP header");
-          return XDP_DROP;
-        }
-
-        // TODO [QOS]: Support for src port
-        // key->src_port = tcph->source;
-        key->dst_port = tcph->dest;
-        break;
-      }
-      default: {
-        bpf_debug("Unknown header");
-        bpf_debug("Use best effort QoS flow (i.e. default qfi)");
-        key->dst_port = 0; // 65535;
-      }
-    }
-    /***** End of adaptation *****/
+    key->seid = 0;
+    key->qfi = 0;
 
     tail_call_next_prog(ctx, teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
   }

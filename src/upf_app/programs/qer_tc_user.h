@@ -110,6 +110,7 @@ class QERProgram : public BPFProgram {
   //   int add_clsact_qdisc(int ifindex, enum bpf_tc_attach_point attach_point);
 
   bool no_htb_root_qdisc(std::string interface);
+  bool no_tc_filter_bpf(std::string interface);
   /*---------------------------------------------------------------------------------------------------------------*/
  private:
   /**

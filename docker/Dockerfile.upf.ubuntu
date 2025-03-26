@@ -131,7 +131,9 @@ WORKDIR /openair-upf/bin
 COPY --from=oai-upf-builder \
     /usr/local/sbin/bpftool \
     /openair-upf/build/upf/build/oai_upf \
+    /openair-upf/build/upf/build/upf_app/bpf/CMakeFiles/qer_tc.dir/rules/qer/qer_tc_kernel.c.o \
     /openair-upf/scripts/healthcheck.sh \
+    /openair-upf/scripts/entrypoint.sh \
     ./
 
 WORKDIR /usr/local/lib
@@ -172,4 +174,6 @@ HEALTHCHECK --interval=10s \
             --retries=6 \
     CMD /openair-upf/bin/healthcheck.sh
 
-CMD ["/openair-upf/bin/oai_upf", "-c", "/openair-upf/etc/config.yaml", "-o"]
+# CMD ["/openair-upf/bin/oai_upf", "-c", "/openair-upf/etc/config.yaml", "-o"]
+
+ENTRYPOINT [ "sh", "/openair-upf/bin/entrypoint.sh" ]

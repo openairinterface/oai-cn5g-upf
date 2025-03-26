@@ -19,6 +19,7 @@ struct {
   __uint(max_entries, QFI_MAX_ENTRIES);  // 10,
   __type(key, struct filter_key);
   __type(value, struct session_qfi);
+  __uint(pinning, 1);
 } m_sdf_filter SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
