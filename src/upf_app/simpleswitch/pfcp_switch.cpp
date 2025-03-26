@@ -893,7 +893,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     resp->seid = session->cp_fseid.seid;
 
     for (auto it : req->pfcp_ies.remove_pdrs) {
-      if (upf_cfg.enable_bpf_datapath) {
+      if (upf_cfg.enable_bpf_datapath) { // FIXME?? Should be after the session update
         Logger::pfcp_switch().info("Modifying datapath: remove PDRs");
         call_datapath(
             NULL, req, NULL, session, spSessionManager,
@@ -915,7 +915,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.remove_fars) {
-        if (upf_cfg.enable_bpf_datapath) {
+        if (upf_cfg.enable_bpf_datapath) { // FIXME?? Should be after the session update
           Logger::pfcp_switch().info("Modifying datapath: remove FARs");
           call_datapath(
               NULL, req, NULL, session, spSessionManager,
@@ -942,7 +942,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
      */
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.remove_qers) {
-        if (upf_cfg.enable_bpf_datapath) {
+        if (upf_cfg.enable_bpf_datapath) { // FIXME?? Should be after the session update
           Logger::pfcp_switch().info("Modifying datapath: remove QERs");
           call_datapath(
               NULL, req, NULL, session, spSessionManager,
@@ -967,7 +967,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.create_fars) {
-        if (upf_cfg.enable_bpf_datapath) {
+        if (upf_cfg.enable_bpf_datapath) { // FIXME?? Should be after the session update
           Logger::pfcp_switch().info("Modifying datapath: create FARs");
           call_datapath(
               NULL, req, NULL, session, spSessionManager,
@@ -1051,7 +1051,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.update_pdrs) {
-        if (upf_cfg.enable_bpf_datapath) {
+        if (upf_cfg.enable_bpf_datapath) { // FIXME?? Should be after the session update
           Logger::pfcp_switch().info("Modifying datapath: update PDRs");
           call_datapath(
               NULL, req, NULL, session, spSessionManager,
@@ -1069,7 +1069,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       }
 
       for (auto it : req->pfcp_ies.update_fars) {
-        if (upf_cfg.enable_bpf_datapath) {
+        if (upf_cfg.enable_bpf_datapath) { // FIXME?? Should be after the session update
           Logger::pfcp_switch().info("Modifying datapath: update FARs");
           call_datapath(
               NULL, req, NULL, session, spSessionManager,
@@ -1093,7 +1093,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
        *  Add update_qers
        */
       for (auto it : req->pfcp_ies.update_qers) {
-        if (upf_cfg.enable_bpf_datapath) {
+        if (upf_cfg.enable_bpf_datapath) { // FIXME?? Should be after the session update
           Logger::pfcp_switch().info("Modifying datapath: update QERs");
           call_datapath(
               NULL, req, NULL, session, spSessionManager,
