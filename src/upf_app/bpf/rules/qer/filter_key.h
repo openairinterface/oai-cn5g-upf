@@ -4,7 +4,7 @@
 #include <types.h>
 
 #define GET_TC_CLASSID(seid, qfi)                                              \
-  (u32)((((u32)(seid) *256) + ((u8)(qfi) *251 % 256)))
+  (u32)((((u32) (seid) *256) + ((u8) (qfi) *251 % 256)))
 
 struct filter_key {
   u32 src_ip;

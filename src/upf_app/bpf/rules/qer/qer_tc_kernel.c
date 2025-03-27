@@ -30,7 +30,6 @@
 #include <linux/netdevice.h>
 #include <linux/pkt_sched.h>
 
-
 /***** Adapted from commit: c4b6ef3ea238652926a003b630eb5cc7fcb3db12 *****/
 //---------------------------------------------------------------------------------------------------------------
 static __always_inline u32 egress_sdf_classifier(struct __sk_buff* skb) {
@@ -38,7 +37,7 @@ static __always_inline u32 egress_sdf_classifier(struct __sk_buff* skb) {
   void* data_end  = (void*) (long) skb->data_end;
   void* data_meta = (void*) (long) skb->data_meta;
 
-  struct ethhdr* ethh            = data;
+  struct ethhdr* ethh = data;
 
   if ((void*) (ethh + 1) > data_end) {
     bpf_debug("Error: Invalid Ethernet header");
@@ -82,8 +81,9 @@ static __always_inline u32 egress_sdf_classifier(struct __sk_buff* skb) {
     return TC_ACT_SHOT;
   }
 
-  bpf_debug("TC: Received XDP Metadata - SEID: %d, QFI: %d", session->seid,
-            session->qfi);
+  bpf_debug(
+      "TC: Received XDP Metadata - SEID: %d, QFI: %d", session->seid,
+      session->qfi);
 
   skb->tc_classid = GET_TC_CLASSID(session->seid, session->qfi);
   bpf_debug("TC: classid %x", skb->tc_classid);
@@ -197,26 +197,27 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
     bpf_debug("Error: Invalid IPv4 Packet");
     return TC_ACT_SHOT;
   }
-  
+
   u8 protocol = iph->protocol;
-  
+
   // If this is a GTP packet, go to inner IP header
   if (protocol == IPPROTO_UDP) {
     struct udphdr* udph = (struct udphdr*) (iph + 1);
-    
+
     if ((void*) (udph + 1) > data_end) {
       bpf_debug("Error: Invalid UDP header");
       return TC_ACT_SHOT;
     }
-    
+
     if (htons(udph->dest) != GTP_UDP_PORT) {
       bpf_debug("This is a GTP traffic");
       return TC_ACT_OK;
     }
   }
-  
+
   // Inner IP header
-  struct iphdr* iph_inner = (void*) (data + sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE);
+  struct iphdr* iph_inner =
+      (void*) (data + sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE);
   if ((void*) (iph_inner + 1) > data_end) {
     bpf_debug("Error: Invalid Inner IP header");
     return TC_ACT_SHOT;
@@ -224,19 +225,17 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
 
   u32 ip_dest = iph_inner->daddr;
 
-
   struct filter_key filter_key = {0};
-
 
   bpf_debug("Shaping IP DST: %pI4", &ip_dest);
 
   // TODO [QOS]: Support for source IP
-  filter_key.src_ip   = 0; // bpf_htonl(iph->saddr);
-  filter_key.dst_ip   = ip_dest;
+  filter_key.src_ip = 0;  // bpf_htonl(iph->saddr);
+  filter_key.dst_ip = ip_dest;
   // TODO [QOS]: Support for protocol
-  filter_key.protocol = 0; // iph->protocol;
+  filter_key.protocol = 0;  // iph->protocol;
   // TODO [QOS]: Support for TOS
-  filter_key.tos      = 0; // iph->tos;
+  filter_key.tos = 0;  // iph->tos;
 
   switch (protocol) {
     case IPPROTO_UDP: {
@@ -250,7 +249,7 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
       // TODO [QOS]: Support for src port
       // key->src_port = udph->source;
       // TODO [QOS]: Support for dst port
-      filter_key.dst_port = 0; // udph->dest;
+      filter_key.dst_port = 0;  // udph->dest;
       break;
     }
     case IPPROTO_TCP: {
@@ -264,13 +263,13 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
       // TODO [QOS]: Support for src port
       // key->src_port = tcph->source;
       // TODO [QOS]: Support for dst port
-      filter_key.dst_port = 0; // tcph->dest;
+      filter_key.dst_port = 0;  // tcph->dest;
       break;
     }
     default: {
       bpf_debug("Unknown header");
       bpf_debug("Use best effort QoS flow (i.e. default qfi)");
-      filter_key.dst_port = 0; // 65535;
+      filter_key.dst_port = 0;  // 65535;
     }
   }
 
@@ -280,7 +279,6 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
   bpf_debug("Shaping Port: %d", filter_key.dst_port);
   bpf_debug("Shaping TOS: %d", filter_key.tos);
   bpf_debug("Shaping SRC IP: %d", filter_key.src_ip);
-
 
   struct session_qfi* session;
   session = (struct session_qfi*) skb->data_meta;
@@ -292,10 +290,10 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
   session->seid = 2;
 
   struct session_qfi* retrieved_value =
-      bpf_map_lookup_elem(&m_sdf_filter, &filter_key); 
+      bpf_map_lookup_elem(&m_sdf_filter, &filter_key);
 
   if (retrieved_value) {
-    session->qfi = retrieved_value->qfi;
+    session->qfi  = retrieved_value->qfi;
     session->seid = retrieved_value->seid;
     bpf_debug("TC: Retrieved QFI: %d", session->qfi);
     bpf_debug("TC: Retrieved SEID: %d", session->seid);
@@ -311,7 +309,6 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
 
   bpf_debug("TC Packets are not redirected! Drop them");
   return TC_ACT_SHOT;
-
 }
 
 char _license[] SEC("license") = "GPL";

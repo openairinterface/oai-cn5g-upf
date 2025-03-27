@@ -76,12 +76,13 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
 
     bpf_debug("Adding metadata to the packet, UE IP: %pi4", &ue_ip_address);
     /* Prepare the metadata for the next program. To be used by TC QER program.
-     * The metadata is used to store the session context. 
-     * In eBPF we cannot create a skb->meta_data so we create it here. It will be
-     * populated by the TC QER ingress program and used by the TC QER egress program.
-     * Since we are loading the TC QER egress program, using tc command and not libbpf
-     * we are not able to have the two programs communicate via maps i.e., share maps
-     * so we use the skb->meta_data to pass the session context.
+     * The metadata is used to store the session context.
+     * In eBPF we cannot create a skb->meta_data so we create it here. It will
+     * be populated by the TC QER ingress program and used by the TC QER egress
+     * program. Since we are loading the TC QER egress program, using tc command
+     * and not libbpf we are not able to have the two programs communicate via
+     * maps i.e., share maps so we use the skb->meta_data to pass the session
+     * context.
      */
 
     struct session_qfi* key;
@@ -90,7 +91,7 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
       return XDP_DROP;
     }
 
-    void* data          = (void*) (long) ctx->data;
+    void* data = (void*) (long) ctx->data;
 
     key = (struct session_qfi*) ctx->data_meta;
     if ((void*) (key + 1) > data) {
@@ -98,7 +99,7 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
       return XDP_DROP;
     }
     key->seid = 0;
-    key->qfi = 0;
+    key->qfi  = 0;
 
     tail_call_next_prog(ctx, teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
   }

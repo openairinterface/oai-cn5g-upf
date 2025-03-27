@@ -583,12 +583,14 @@ void SessionManager::updateBPFSessionDL(
   if (teid_ul) {
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
-        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, pSession->pdrs, true, teid_ul);
+        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, pSession->pdrs,
+        true, teid_ul);
   } else {
     Logger::upf_app().info("Uplink TEID not used for session: 0x%x", seidul);
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
-        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, pSession->pdrs, true, 0);
+        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, pSession->pdrs,
+        true, 0);
   }
 }
 

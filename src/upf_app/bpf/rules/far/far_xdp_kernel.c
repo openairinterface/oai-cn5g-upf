@@ -126,8 +126,10 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
       p_far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
 
   // bpf_debug("IP SRC: 0x%x, IP DST: 0x%x", iph->saddr, iph->daddr);
-  
-  bpf_debug("create_outer_header_gtpu_ipv4: IP SRC: %pI4, IP DST: %pI4", &iph->saddr, &iph->daddr);
+
+  bpf_debug(
+      "create_outer_header_gtpu_ipv4: IP SRC: %pI4, IP DST: %pI4", &iph->saddr,
+      &iph->daddr);
 
   /*
   |----------------------------------------------------------------|
