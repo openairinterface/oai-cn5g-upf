@@ -91,58 +91,6 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
     }
 
     void* data          = (void*) (long) ctx->data;
-    void* data_end      = (void*) (long) ctx->data_end;
-    struct ethhdr* ethh = data;
-
-    if ((void*) (ethh + 1) > data_end) {
-      bpf_debug("Error: Invalid Ethernet header");
-      return XDP_DROP;
-    }
-
-    u16 l3_protocol = htons(ethh->h_proto);
-    bpf_debug("l3_protocol: 0x%x", l3_protocol);
-
-    switch (l3_protocol) {
-      case ETH_P_IP: {
-        bpf_debug("This is an IPv4 Packet");
-        break;
-      }
-      case ETH_P_IPV6: {
-        // TODO: Check if traitment is needed here
-        bpf_debug("This is an IPv6 Packet");
-        return XDP_DROP;
-      }
-      case ETH_P_8021Q: {
-        // TODO: Check if traitment is needed here
-        bpf_debug("This is a VLAN Packet");
-        return XDP_DROP;
-      }
-      case ETH_P_8021AD: {
-        // TODO: Check if traitment is needed here
-        bpf_debug("This is a VLAN Packet");
-        return XDP_DROP;
-      }
-      case ETH_P_ARP: {
-        // TODO: Check if traitment is needed here
-        bpf_debug("This is an ARP Packet");
-        return XDP_PASS;
-      }
-      default: {
-        // TODO: Check if traitment is needed here
-        bpf_debug("Packet Type not Known");
-        return XDP_DROP;
-      }
-    }
-
-    struct iphdr* iph = (void*) (ethh + 1);
-
-    if ((void*) (iph + 1) > data_end) {
-      bpf_debug("Error: Invalid IPv4 Packet");
-      return XDP_DROP;
-    }
-
-    u32 ip_dest = iph->daddr;
-    u8 protocol = iph->protocol;
 
     key = (struct session_qfi*) ctx->data_meta;
     if ((void*) (key + 1) > data) {
@@ -196,7 +144,7 @@ handle_uplink_traffic(struct xdp_md* ctx, struct udphdr* udph) {
   struct iphdr* iph_inner = (void*) (ethh_new + 1);
 
   if ((void*) iph_inner + sizeof(*iph_inner) > data_end) {
-    bpf_debug("handle_uplink_traffic: Invalid Inner IP packet");
+    bpf_debug("Invalid Inner IP packet");
     return XDP_DROP;
   }
 

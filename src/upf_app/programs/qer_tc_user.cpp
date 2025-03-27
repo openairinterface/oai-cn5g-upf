@@ -151,17 +151,12 @@ for (const auto& pdr : pdrs) {
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<pfcp::pfcp_pdr> QERProgram::get_pdr_by_qer_id(
   uint32_t qer_id) const {
-  // Print size of pdr_map
-  Logger::upf_app().debug("PDR Map size: %d", pdr_map.size());
-  // Find the PDR by QER ID
-  Logger::upf_app().debug("Finding PDR by QER ID: %d", qer_id);
+ 
   auto it = pdr_map.find(qer_id);
   // Return the PDR if found, otherwise return nullptr
   if (it != pdr_map.end()) {
-    Logger::upf_app().debug("PDR found for QER ID: %d", qer_id);
     return it->second;
   }
-  Logger::upf_app().debug("PDR not found for QER ID: %d", qer_id);
   return nullptr;
 }
 /***** End of adaptation *****/
@@ -239,22 +234,15 @@ void QERProgram::setup(
     uint8_t ul_gate  = 0;
 
     if (qfi != DEFAULT_QFI) {
-      Logger::upf_app().debug("QFI not equal to default QFI: %d", qfi);
-      Logger::upf_app().debug("dl_gbr: %d", qer->gbr.second.dl_gbr);
       dl_rate = qer->gbr.second.dl_gbr;
 
-      Logger::upf_app().debug("ul_gbr: %d", qer->gbr.second.ul_gbr);
       ul_rate = qer->gbr.second.ul_gbr;
 
-      Logger::upf_app().debug("dl_mbr: %d", qer->mbr.second.dl_mbr);
       dl_ceil = qer->mbr.second.dl_mbr;
 
-      Logger::upf_app().debug("ul_mbr: %d", qer->mbr.second.ul_mbr);
       ul_ceil = qer->mbr.second.ul_mbr;
 
-      Logger::upf_app().debug("dl_gate: %d", qer->gate_status.second.dl_gate);
       dl_gate = qer->gate_status.second.dl_gate;
-      Logger::upf_app().debug("ul_gate: %d", qer->gate_status.second.ul_gate);
       ul_gate = qer->gate_status.second.ul_gate;
     }
 
@@ -315,8 +303,6 @@ void QERProgram::setup(
     }
 
 
-    /***** Adapted from commit: 24f4c7b80e783cd16ef4c4762283dff797450f79 *****/
-    // Parse the SDF Flow Description
     std::shared_ptr<pfcp::pfcp_pdr> pdr = get_pdr_by_qer_id(qer_id);
     if (pdr == nullptr) {
       Logger::upf_app().error("PDR not found for QER %d", qer_id);
@@ -324,14 +310,8 @@ void QERProgram::setup(
     }
     pfcp::pdi pdi;
     pfcp::sdf_filter_t sdf;
-    // std::string flowDescription = nullptr;
     pdr->get(pdi);
     pdi.get(sdf);
-
-    // if (sdf.fd && sdf.length_of_flow_description > 0)
-    //   flowDescription = std::string(sdf.flow_label);
-
-    // Logger::upf_app().debug("         Flow Description: %s", flowDescription.c_str());
 
     struct filter_key sdf_filter_key = {};
     sdf_filter_key.src_ip            = 0;
@@ -353,13 +333,11 @@ void QERProgram::setup(
 
     getSdfFilterMap()->update(sdf_filter_key, sdf_filter_value, BPF_ANY);
      
-    /***** End of adaptation *****/
 
   }
 
   Logger::upf_app().info("Attach Section tc_filter_traffic to gtp interface");
   // mpLifeCycle->tcAttachEgress("tc_filter_traffic", GTP_INTERFACE.c_str());
-
   if(no_tc_filter_bpf(GTP_INTERFACE)) {
     Logger::upf_app().info("Attach Section tc_filter_traffic to gtp interface");
     // Create tc filter for the GTP interface
@@ -371,6 +349,7 @@ void QERProgram::setup(
       Logger::upf_app().error("Failed command: %s", cmd.c_str());
     }
   }
+
   Logger::upf_app().info("Attach Sesction tc_redirect to udp interface");
   mpLifeCycle->tcAttachIngress("tc_redirect_traffic", UDP_INTERFACE.c_str());
 }

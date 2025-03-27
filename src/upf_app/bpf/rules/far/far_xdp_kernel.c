@@ -289,7 +289,6 @@ int far_entry_point(struct xdp_md* ctx) {
           }
           case 1: {
             bpf_debug("The packet is passed to tc layer");
-
             return XDP_PASS;
           }
           default: {
