@@ -118,7 +118,10 @@ std::optional<uint16_t> SdfFilterParser::ParsePort(const std::string& str) {
 std::optional<struct sdf_filtr> SdfFilterParser::ParseSdfFilter(
     const std::string& flowDescription) {
   std::regex re(
-      R"(^permit out (icmp|ip|tcp|udp|\d+) from (any|[\d.]+|[\da-fA-F:]+)(?:/(\d+))?(?: (\d+|\d+-\d+))? to (assigned|any|[\d.]+|[\da-fA-F:]+)(?:/(\d+))?(?: (\d+|\d+-\d+))?$)");
+      R"(^permit out (icmp|ip|tcp|udp|\d+) from (any|[\d.]+|[\da-fA-F:]+)(?:/(\d+))?(?:\s+(\d+|\d+-\d+))? to (assigned|any|[\d.]+|[\da-fA-F:]+)(?:/(\d+))?(?:\s+(\d+|\d+-\d+))?$)");
+  // permit out (icmp|ip|tcp|udp|\d+) from
+  // (any|[\d.]+|[\da-fA-F:]+)(?:/(\d+))?(?: (\d+|\d+-\d+))? to
+  // (assigned|any|[\d.]+|[\da-fA-F:]+)(?:/(\d+))?(?: (\d+|\d+-\d+))?$
   //                        proto                        src src ports dst dst
   //                        port
   std::smatch match;
@@ -126,7 +129,7 @@ std::optional<struct sdf_filtr> SdfFilterParser::ParseSdfFilter(
   if (!std::regex_match(flowDescription, match, re)) {
     Logger::upf_app().error(
         "SDF Filter: bad formatting. Should be compatible with regex:");
-    throw std::runtime_error("SDF Filter: bad formatting");
+    // throw std::runtime_error("SDF Filter: bad formatting");
     return std::nullopt;
   }
 

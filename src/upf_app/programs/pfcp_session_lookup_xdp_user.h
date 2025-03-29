@@ -129,6 +129,10 @@ class PFCP_Session_LookupProgram {
    */
   std::shared_ptr<BPFMap> getSessionMappingMap() const;
 
+  std::shared_ptr<BPFMap> getRulesMatchPdrMap() const;
+  std::shared_ptr<BPFMap> getSessionPdrsMap() const;
+  std::shared_ptr<BPFMap> getSdfFilterMap() const;
+
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the UE QFI TEID Map object.
@@ -166,6 +170,9 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> mpEgressInterfaceMap;
   std::shared_ptr<BPFMap> mpArpTableMap;
   std::shared_ptr<BPFMap> mpUPFIfaceMap;
+  std::shared_ptr<BPFMap> mpRulesMatchPdrMap;
+  std::shared_ptr<BPFMap> mpSessionPdrsMap;
+  std::shared_ptr<BPFMap> mpSdfFilterMap;
   /*---------------------------------------------------------------------------------------------------------------*/
 };
 

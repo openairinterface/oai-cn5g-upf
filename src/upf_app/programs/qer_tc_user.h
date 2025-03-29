@@ -149,8 +149,6 @@ class QERProgram : public BPFProgram {
   std::shared_ptr<QERProgramLifeCycle> mpLifeCycle;
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  // The SDF Filter map.
-  std::shared_ptr<BPFMap> mpSdfFilterMap;
 
   /*---------------------------------------------------------------------------------------------------------------*/
   // The 5G QoS Flow Parameters map.

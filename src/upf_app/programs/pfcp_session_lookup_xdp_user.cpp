@@ -31,6 +31,24 @@ int is_little_endian2() {
 PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
     const std::string& gtpInterface, const std::string& udpInterface)
     : mGTPInterface(gtpInterface), mUDPInterface(udpInterface) {
+  // Open the eBPF skeleton
+  // auto skel = pfcp_session_lookup_xdp_kernel_c__open();
+  // if (!skel) {
+  //   std::cerr << "Failed to open eBPF skeleton" << std::endl;
+  //   return;
+  // }
+  // // Resize the map BEFORE loading
+  // struct bpf_map* arp_table_map =
+  //     bpf_object__find_map_by_name(skel->obj, "m_arp_table");
+  // if (!arp_table_map) {
+  //   std::cerr << "Failed to find map: m_arp_table" << std::endl;
+  // } else {
+  //   int max_entries = 55;  // Set your new desired size
+  //   if (bpf_map__set_max_entries(arp_table_map, max_entries)) {
+  //     std::cerr << "Failed to resize map: m_arp_table" << std::endl;
+  //   }
+  // }
+
   mpLifeCycle = std::make_shared<PFCP_Session_LookupProgramLifeCycle>(
       pfcp_session_lookup_xdp_kernel_c__open,
       pfcp_session_lookup_xdp_kernel_c__load,
@@ -198,6 +216,20 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getIfaceMap() const {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getRulesMatchPdrMap()
+    const {
+  return mpRulesMatchPdrMap;
+}
+
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSessionPdrsMap() const {
+  return mpSessionPdrsMap;
+}
+
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSdfFilterMap() const {
+  return mpSdfFilterMap;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_LookupProgram::initializeMaps() {
   // Store all maps available in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
@@ -215,6 +247,11 @@ void PFCP_Session_LookupProgram::initializeMaps() {
   mpEgressInterfaceMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_redirect_interfaces"));
   mpUPFIfaceMap = std::make_shared<BPFMap>(mpMaps->getMap("m_upf_interfaces"));
+  mpSessionPdrsMap = std::make_shared<BPFMap>(mpMaps->getMap("m_session_pdrs"));
+  mpRulesMatchPdrMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_rules_match_pdr"));
+
+  mpSdfFilterMap = std::make_shared<BPFMap>(mpMaps->getMap("m_sdf_filter"));
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

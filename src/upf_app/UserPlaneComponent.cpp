@@ -85,7 +85,7 @@ void UserPlaneComponent::setMembers(
 //---------------------------------------------------------------------------------------------------------------
 void UserPlaneComponent::setup(
     const std::string& gtpInterface, const std::string& udpInterface) {
-  const bool isQosEnabled = upf_cfg.enable_qos;
+  const bool isQosEnabled = upf_cfg.enable_bpf_datapath && upf_cfg.enable_qos;
 
   setMembers(gtpInterface, udpInterface);
   SignalHandler::getInstance().enable();

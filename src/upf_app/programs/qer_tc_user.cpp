@@ -16,9 +16,7 @@
 #include <netlink/route/qdisc/htb.h>
 #include "helpers/GetNicInformation.hpp"
 #include "helpers/CmdRunner.hpp"
-#include "helpers/SdfFilterParser.hpp"
 
-#include "sdf_filter.h"
 #include <errno.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -63,12 +61,14 @@
 
 static int verbose = 1;
 
-#define EGRESS_HANDLE 0x1
-#define EGRESS_PRIORITY 0xC02F
+// #define EGRESS_HANDLE 0x1
+// #define EGRESS_PRIORITY 0xC02F
 
-#define INGRESS_HANDLE 0x1
-#define INGRESS_PRIORITY 0xC02F
-
+// #define INGRESS_HANDLE 0x1
+// #define INGRESS_PRIORITY 0xC02F
+#define DEFAULT_CLASS_HANDLE 65535
+#define DEFAULT_CLASS_RATE 1024 /*kbit*/
+#define DEFAULT_CLASS_CEIL 2048 /*kbit*/
 /*---------------------------------------------------------------------------------------------------------------*/
 QERProgram::QERProgram() : BPFProgram() {
   mpLifeCycle = std::make_shared<QERProgramLifeCycle>(
@@ -163,11 +163,13 @@ void QERProgram::setup(
     uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
     std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs) {
   spSkeleton = mpLifeCycle->open();
+
   initializeMaps();
   mpLifeCycle->load();
   mpLifeCycle->attach();
 
-  std::shared_ptr<pfcp::pfcp_qer> default_qer = nullptr;
+  std::shared_ptr<pfcp::pfcp_qer> default_qer =
+      retrive_default_qer_with_default_qfi(pQer);
 
   std::string cmd = {};
   int rc          = 0;
@@ -193,45 +195,54 @@ void QERProgram::setup(
       Logger::upf_app().info(
           "Create Root qdisc on interface %s", GTP_INTERFACE.c_str());
 
-      default_qer = retrive_default_qer_with_default_qfi(pQer);
+      // default_qer = retrive_default_qer_with_default_qfi(pQer);
 
-      if (default_qer) {
-        int key             = 0;
-        uint8_t default_qfi = default_qer->qfi.second.qfi;
-        getDefaultQfiMap()->update(key, default_qfi, BPF_ANY);
-        cmd = fmt::format(
-            "tc qdisc add dev {} root handle 1:0 htb default {}", GTP_INTERFACE,
-            static_cast<uint8_t>(default_qer->qfi.second.qfi));
-        // rc = system((const char*) cmd.c_str());
-      } else {
-        Logger::upf_app().error(
-            "QER with default QFI not found, creating HTB root Qdisc without "
-            "default class");
-        cmd = fmt::format(
-            "tc qdisc add dev {} root handle 1:0 htb", GTP_INTERFACE);
-      }
+      // if (default_qer) {
+      //   int key             = 0;
+      //   uint8_t default_qfi = default_qer->qfi.second.qfi;
+      //   getDefaultQfiMap()->update(key, default_qfi, BPF_ANY);
+      //   cmd = fmt::format(
+      //       "tc qdisc add dev {} root handle 1:0 htb default {}",
+      //       GTP_INTERFACE,
+      //       static_cast<uint8_t>(default_qer->qfi.second.qfi));
+      //   // rc = system((const char*) cmd.c_str());
+      // } else {
+      //   Logger::upf_app().info(
+      //       "QER with default QFI not found, creating HTB root Qdisc without
+      //       " "default class");
+      //   cmd = fmt::format(
+      //       "tc qdisc add dev {} root handle 1:0 htb", GTP_INTERFACE);
+      // }
+
+      cmd = fmt::format(
+          "tc qdisc add dev {} root handle 1:0 htb default {}", GTP_INTERFACE,
+          DEFAULT_CLASS_HANDLE);
 
       if (system(cmd.c_str()) != 0) {
         Logger::upf_app().error("Failed command: {}", cmd);
         return;
       }
     } else {
-      if (no_htb_default_class(GTP_INTERFACE) && default_qer) {
-        cmd = fmt::format(
-            "tc qdisc change dev {} root handle 1:0 htb default {}",
-            GTP_INTERFACE, static_cast<uint8_t>(default_qer->qfi.second.qfi));
+      // if (no_htb_default_class(GTP_INTERFACE) && default_qer) {
+      //   cmd = fmt::format(
+      //       "tc qdisc change dev {} root handle 1:0 htb default {}",
+      //       GTP_INTERFACE,
+      //       static_cast<uint8_t>(default_qer->qfi.second.qfi));
 
-        if (system(cmd.c_str()) != 0) {
-          Logger::upf_app().error("Failed command: {}", cmd);
-        }
-      }
+      //   if (system(cmd.c_str()) != 0) {
+      //     Logger::upf_app().error("Failed command: {}", cmd);
+      //   }
+      // }
+      Logger::upf_app().debug(
+          "HTB Root qdisc on interface %s already created",
+          GTP_INTERFACE.c_str());
     }
 
     // Create PDU Session Class
     Logger::upf_app().info("Create PDU Session Class 1:%d", seid);
     cmd = fmt::format(
-        "tc class add dev {} parent 1:0 classid 1:{} htb rate {}kbit",
-        GTP_INTERFACE, seid, MAX_RATE);
+        "tc class add dev {} parent 1: classid 1:{} htb rate {}kbit r2q{}",
+        GTP_INTERFACE, seid, MAX_RATE, 1);
 
     if (system(cmd.c_str()) != 0) {
       Logger::upf_app().error("Failed command: {}", cmd);
@@ -241,31 +252,57 @@ void QERProgram::setup(
     Logger::upf_app().debug("QDISC Root DL Ceil (MBR) : %dkbps", MAX_CEIL);
 
     // Process each QER
-    struct sdf_filtr sdfFilter;
-    std::string flowDescription = nullptr;
-    uint32_t key                = 0;
+    // struct sdf_filtr sdfFilter;
+    // std::string flowDescription;
+    // uint32_t key = 0;
     build_pdr_map(pdrs);
 
     for (const auto& qer : pQer) {
+      uint8_t qfi    = qer->qfi.second.qfi;
+      uint16_t minor = (ntohs(seid) * 256) + ((qfi * 251) % 256);
+
       if (qer == default_qer) {
+        uint16_t default_minor =
+            (ntohs(seid) * 256) + (DEFAULT_CLASS_HANDLE * 251 % 256);
+        cmd = fmt::format(
+            "tc class add dev {} parent 1:{} classid 1:{} htb rate {}kbit "
+            "ceil "
+            "{}kbit r2q{}",
+            GTP_INTERFACE, seid, default_minor, DEFAULT_CLASS_RATE,
+            DEFAULT_CLASS_CEIL, DEFAULT_CLASS_CEIL / DEFAULT_CLASS_RATE);
+
+        if (system(cmd.c_str()) != 0) {
+          Logger::upf_app().error("Failed command: {}", cmd);
+        } else {
+          cmd = fmt::format(
+              "tc class add dev {} parent 1:{} handle {}: pfifo", GTP_INTERFACE,
+              default_minor, minor);
+
+          if (system(cmd.c_str()) != 0) {
+            Logger::upf_app().error("Failed command: {}", cmd);
+          }
+        }
         continue;
       }
-
       if (qer->mbr.first) {
-        uint32_t qer_id  = qer->qer_id.second.qer_id;
-        uint8_t qfi      = qer->qfi.second.qfi;
+        uint32_t qer_id = qer->qer_id.second.qer_id;
+        Logger::upf_app().debug(
+            "qer->mbr.second.dl_mbr = %d", qer->mbr.second.dl_mbr);
+        Logger::upf_app().debug(
+            "qer->mbr.second.ul_mbr = %d", qer->mbr.second.ul_mbr);
         uint64_t dl_ceil = std::max(qer->mbr.second.dl_mbr, 1UL);
-        uint8_t dl_gate  = qer->gate_status.second.dl_gate;
+        Logger::upf_app().debug("dl_ceil = %d", dl_ceil);
+        uint8_t dl_gate = qer->gate_status.second.dl_gate;
 
         uint64_t dl_rate = 1;
         if (qer->gbr.first) {
           dl_rate = std::max(qer->gbr.second.dl_gbr, 1UL);
+          Logger::upf_app().debug("dl_rate = %d", dl_rate);
+          Logger::upf_app().debug(
+              "qer->gbr.second.ul_gbr = %d", qer->gbr.second.ul_gbr);
+          Logger::upf_app().debug(
+              "qer->gbr.second.dl_gbr = %d", qer->gbr.second.dl_gbr);
         }
-
-        Logger::upf_app().warn(
-            "Setting dl_rate and dl_ceil to minimum values (1 kbit) for QER %d "
-            "if GBR/MBR are null",
-            qer_id);
 
         // Update QoS flow map
         struct s_fiveQosFlow fiveFlow = {};
@@ -276,12 +313,16 @@ void QERProgram::setup(
         getQoSFlowMap()->update(qer_id, fiveFlow, BPF_ANY);
 
         // Add tc class for QER
-        uint16_t minor = (ntohs(seid) * 256) + (qfi * 251 % 256);
-        cmd            = fmt::format(
-            "tc class add dev {} parent 1:{} classid {}:{} htb rate {}kbit "
+        // Create QoS Flow Class for Session
+        Logger::upf_app().info(
+            "Create QoS Flow Class 1:%d for PDU Session Parent 1:%d", minor,
+            seid);
+
+        cmd = fmt::format(
+            "tc class add dev {} parent 1:{} classid 1:{} htb rate {}kbit "
             "ceil "
-            "{}kbit",
-            GTP_INTERFACE, seid, seid, minor, dl_rate, dl_ceil);
+            "{}kbit r2q{}",
+            GTP_INTERFACE, seid, minor, dl_rate, dl_ceil, dl_ceil / dl_rate);
 
         if (system(cmd.c_str()) != 0) {
           Logger::upf_app().error("Failed command: {}", cmd);
@@ -292,25 +333,6 @@ void QERProgram::setup(
         Logger::upf_app().debug("         Class QFI:      %d", qfi);
         Logger::upf_app().debug("         Class DL Rate:     %dkbps", dl_rate);
         Logger::upf_app().debug("         Class DL Ceil:     %dkbps", dl_ceil);
-
-        // Parse the SDF Flow Description
-        std::shared_ptr<pfcp::pfcp_pdr> pdr = get_pdr_by_qer_id(qer_id);
-        pfcp::pdi pdi;
-        pfcp::sdf_filter_t sdf;
-        pdr->get(pdi);
-        pdi.get(sdf);
-
-        if (sdf.fd && sdf.length_of_flow_description > 0)
-          flowDescription = std::string(sdf.flow_label);
-
-        auto filterInfo = SdfFilterParser::ParseSdfFilter(flowDescription);
-        if (filterInfo) {
-          sdfFilter              = *filterInfo;
-          sdfFilter.session.seid = seid;
-          sdfFilter.session.qfi  = qfi;
-          getSdfFilterMap()->update(key, sdfFilter, BPF_ANY);
-          key++;
-        }
       }
     }
 
@@ -354,11 +376,6 @@ std::shared_ptr<BPFMap> QERProgram::getEgressIfindexMap() const {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> QERProgram::getSdfFilterMap() const {
-  return mpSdfFilterMap;
-}
-
-/*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> QERProgram::getDefaultQfiMap() const {
   return mpDefaultQfiMap;
 }
@@ -368,8 +385,8 @@ void QERProgram::initializeMaps() {
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
 
   // Warning - The name of the map must be the same of the BPF program.
-  mpQoSFlowMap   = std::make_shared<BPFMap>(mpMaps->getMap("m_qos_flow"));
-  mpSdfFilterMap = std::make_shared<BPFMap>(mpMaps->getMap("m_sdf_filter"));
+  mpQoSFlowMap = std::make_shared<BPFMap>(mpMaps->getMap("m_qos_flow"));
+
   mpEgressIfindexMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_egress_ifindex"));
   mpDefaultQfiMap = std::make_shared<BPFMap>(mpMaps->getMap("m_default_qfi"));

@@ -10,18 +10,30 @@
 #include <ie/teid.h>
 #include <next_prog_rule_map.h>
 #include <next_prog_rule_key.h>
+#include <rules_matching_pdr.h>
 #include "interfaces.h"
 #include "session_id.h"
 
 #define MAX_LENGTH 10000  // 10
 #define INTERFACE_ENTRIES_MAX 12
 #define MAX_UEs 10000
+#define MAX_PDRS_PER_SESSION 32
 
 // struct next_rule_prog_index_key {
 //   teid_t_ teid;
 //   u8 source_value;
 //   u32 ipv4_address;
 // };
+
+#define MAX_SDF_FITLER_ENTRIES 15
+
+/*---------------------------------------------------------------------------------------------------------------*/
+struct {
+  __uint(type, BPF_MAP_TYPE_ARRAY);
+  __uint(max_entries, MAX_SDF_FITLER_ENTRIES);
+  __type(key, u32);  
+  __type(value, struct sdf_filtr);
+} m_sdf_filter SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
@@ -47,7 +59,7 @@ struct {
   __uint(max_entries, MAX_UEs);  //!< TODO: Is it enought?
 } m_ueip_session SEC(".maps");
 
-/*---------------------------------------------------------------------------------------------------------------*/
+
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, MAX_UEs);
@@ -55,7 +67,7 @@ struct {
   __type(value, u32);  //!< PDR
 } m_ue_ip_pdr SEC(".maps");
 
-/*---------------------------------------------------------------------------------------------------------------*/
+
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, MAX_LENGTH);  // 10,
@@ -63,7 +75,7 @@ struct {
   __type(value, pfcp_far_t_);  //
 } m_next_rule_prog_index SEC(".maps");
 
-/*---------------------------------------------------------------------------------------------------------------*/
+
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, INTERFACE_ENTRIES_MAX);
@@ -71,7 +83,7 @@ struct {
   __type(value, struct s_interface);
 } m_upf_interfaces SEC(".maps");
 
-/*---------------------------------------------------------------------------------------------------------------*/
+
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, MAX_LENGTH);
@@ -79,6 +91,23 @@ struct {
   __type(value, struct session_id);  // < teid_ul, teid_dl, seid >
 } m_session_mapping SEC(".maps");
 
-/*---------------------------------------------------------------------------------------------------------------*/
+
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, MAX_LENGTH);
+  __type(key, u32);                  // seid
+  __type(value, pfcp_pdr_t_[MAX_PDRS_PER_SESSION]); 
+} m_session_pdrs SEC(".maps");
+
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, MAX_LENGTH); // max_rules = max_pdrs_per_pdu_session * max_pdu_session
+  __type(key, struct pdrs_per_session);   // < pdr_id, seid >
+  __type(value, struct rules_match_pdr);  // < FAR, QER, /* MAR, BAR, URR */ >
+} m_rules_match_pdr SEC(".maps");
+
+
 
 #endif  // __PFCP_SESSION_LOOKUP_MAPS_H__
