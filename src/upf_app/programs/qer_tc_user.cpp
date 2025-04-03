@@ -69,6 +69,7 @@ static int verbose = 1;
 #define DEFAULT_CLASS_HANDLE 65535
 #define DEFAULT_CLASS_RATE 1024 /*kbit*/
 #define DEFAULT_CLASS_CEIL 2048 /*kbit*/
+#define R2Q_ROOT 5
 /*---------------------------------------------------------------------------------------------------------------*/
 QERProgram::QERProgram() : BPFProgram() {
   mpLifeCycle = std::make_shared<QERProgramLifeCycle>(
@@ -128,7 +129,7 @@ std::shared_ptr<pfcp::pfcp_qer>
 QERProgram::retrive_default_qer_with_default_qfi(
     std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer) {
   for (const auto& qer : pQer) {
-    if (!qer->gbr.first && !qer->mbr.first && !qer->gate_status.first) {
+    if (!qer->gbr.first && !qer->mbr.first) {
       Logger::upf_app().debug(
           "Default QoS Flow: (QER ID, QFI): (%d, %d)",
           qer->qer_id.second.qer_id, qer->qfi.second.qfi);
@@ -158,6 +159,17 @@ std::shared_ptr<pfcp::pfcp_pdr> QERProgram::get_pdr_by_qer_id(
   return (it != pdr_map.end()) ? it->second : nullptr;
 }
 
+/*---------------------------------------------------------------------------------------------------------------*/
+static inline uint16_t generate_minor_id(uint64_t seid, uint8_t qfi) {
+  uint16_t hash = (seid ^ (seid >> 16) ^ (seid >> 32) ^ (seid >> 48));
+  uint16_t minor_id =
+      (hash + (qfi * 37)) & 0xFFFF;  // Avoid modulo, use bitmask
+
+  // Limit minor_id to a max of 9999
+  minor_id = (minor_id > 9999) ? 9999 : minor_id;
+
+  return minor_id ? minor_id : 1;  // Ensure nonzero
+}
 /*---------------------------------------------------------------------------------------------------------------*/
 void QERProgram::setup(
     uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
@@ -193,7 +205,9 @@ void QERProgram::setup(
     // Configure Root Qdisc if not already present
     if (no_htb_root_qdisc(GTP_INTERFACE)) {
       Logger::upf_app().info(
-          "Create Root qdisc on interface %s", GTP_INTERFACE.c_str());
+          "Create Root qdisc on interface %s with Default Class: %d, and r2q: "
+          "%d",
+          GTP_INTERFACE.c_str(), DEFAULT_CLASS_HANDLE, R2Q_ROOT);
 
       // default_qer = retrive_default_qer_with_default_qfi(pQer);
 
@@ -215,13 +229,16 @@ void QERProgram::setup(
       // }
 
       cmd = fmt::format(
-          "tc qdisc add dev {} root handle 1:0 htb default {}", GTP_INTERFACE,
-          DEFAULT_CLASS_HANDLE);
+          "tc qdisc add dev {} root handle 1:0 htb default {} r2q {}",
+          GTP_INTERFACE, DEFAULT_CLASS_HANDLE, R2Q_ROOT);
 
       if (system(cmd.c_str()) != 0) {
-        Logger::upf_app().error("Failed command: {}", cmd);
+        Logger::upf_app().error("Failed command: %s", cmd);
         return;
       }
+
+      Logger::upf_app().debug("QDISC Root DL Rate (GBR) : %dkbps", MAX_RATE);
+      Logger::upf_app().debug("QDISC Root DL Ceil (MBR) : %dkbps", MAX_CEIL);
     } else {
       // if (no_htb_default_class(GTP_INTERFACE) && default_qer) {
       //   cmd = fmt::format(
@@ -230,7 +247,7 @@ void QERProgram::setup(
       //       static_cast<uint8_t>(default_qer->qfi.second.qfi));
 
       //   if (system(cmd.c_str()) != 0) {
-      //     Logger::upf_app().error("Failed command: {}", cmd);
+      //     Logger::upf_app().error("Failed command: %s", cmd);
       //   }
       // }
       Logger::upf_app().debug(
@@ -239,17 +256,15 @@ void QERProgram::setup(
     }
 
     // Create PDU Session Class
-    Logger::upf_app().info("Create PDU Session Class 1:%d", seid);
+    Logger::upf_app().info(
+        "Create PDU Session Class 1:%d with rate: %d", seid, MAX_RATE);
     cmd = fmt::format(
-        "tc class add dev {} parent 1: classid 1:{} htb rate {}kbit r2q{}",
-        GTP_INTERFACE, seid, MAX_RATE, 1);
+        "tc class add dev {} parent 1: classid 1:{} htb rate {}kbit",
+        GTP_INTERFACE, seid, MAX_RATE);
 
     if (system(cmd.c_str()) != 0) {
-      Logger::upf_app().error("Failed command: {}", cmd);
+      Logger::upf_app().error("Failed command: %s", cmd);
     }
-
-    Logger::upf_app().debug("QDISC Root DL Rate (GBR) : %dkbps", MAX_RATE);
-    Logger::upf_app().debug("QDISC Root DL Ceil (MBR) : %dkbps", MAX_CEIL);
 
     // Process each QER
     // struct sdf_filtr sdfFilter;
@@ -259,31 +274,46 @@ void QERProgram::setup(
 
     for (const auto& qer : pQer) {
       uint8_t qfi    = qer->qfi.second.qfi;
-      uint16_t minor = (ntohs(seid) * 256) + ((qfi * 251) % 256);
+      uint16_t minor = generate_minor_id(seid, qfi);
+      //(ntohs(seid) * 256) + ((qfi * 251) % 256);
 
       if (qer == default_qer) {
-        uint16_t default_minor =
-            (ntohs(seid) * 256) + (DEFAULT_CLASS_HANDLE * 251 % 256);
+        uint16_t default_minor = (DEFAULT_CLASS_HANDLE - minor) % 10000;
+        //(ntohs(seid) * 256) + (DEFAULT_CLASS_HANDLE * 251 % 256);
+
+        Logger::upf_app().info(
+            "Create Default Class 1:%d Child of Parent 1:%d", default_minor,
+            seid);
+        Logger::upf_app().info(
+            "The Default Class 1:%d is of Rate: %d kbit and Ceil: %d kbit",
+            default_minor, DEFAULT_CLASS_RATE, DEFAULT_CLASS_CEIL);
+
         cmd = fmt::format(
             "tc class add dev {} parent 1:{} classid 1:{} htb rate {}kbit "
             "ceil "
-            "{}kbit r2q{}",
+            "{}kbit",
             GTP_INTERFACE, seid, default_minor, DEFAULT_CLASS_RATE,
-            DEFAULT_CLASS_CEIL, DEFAULT_CLASS_CEIL / DEFAULT_CLASS_RATE);
+            DEFAULT_CLASS_CEIL);
 
         if (system(cmd.c_str()) != 0) {
-          Logger::upf_app().error("Failed command: {}", cmd);
+          Logger::upf_app().error("Failed command: %s", cmd);
         } else {
+          Logger::upf_app().info(
+              "Create PFIFO default class %d: Child of Parent 1:%d", minor,
+              default_minor, seid);
           cmd = fmt::format(
-              "tc class add dev {} parent 1:{} handle {}: pfifo", GTP_INTERFACE,
-              default_minor, minor);
+              "tc class add dev {} parent 1:{} classid 1:{} htb rate {}kbit "
+              "ceil {}kbit",
+              GTP_INTERFACE, default_minor, minor, DEFAULT_CLASS_RATE,
+              DEFAULT_CLASS_CEIL);
 
           if (system(cmd.c_str()) != 0) {
-            Logger::upf_app().error("Failed command: {}", cmd);
+            Logger::upf_app().error("Failed command: %s", cmd);
           }
         }
         continue;
       }
+
       if (qer->mbr.first) {
         uint32_t qer_id = qer->qer_id.second.qer_id;
         Logger::upf_app().debug(
@@ -321,11 +351,11 @@ void QERProgram::setup(
         cmd = fmt::format(
             "tc class add dev {} parent 1:{} classid 1:{} htb rate {}kbit "
             "ceil "
-            "{}kbit r2q{}",
-            GTP_INTERFACE, seid, minor, dl_rate, dl_ceil, dl_ceil / dl_rate);
+            "{}kbit",
+            GTP_INTERFACE, seid, minor, dl_rate, dl_ceil);
 
         if (system(cmd.c_str()) != 0) {
-          Logger::upf_app().error("Failed command: {}", cmd);
+          Logger::upf_app().error("Failed command: %s", cmd);
         }
 
         Logger::upf_app().debug(
@@ -339,7 +369,7 @@ void QERProgram::setup(
     Logger::upf_app().info("Attach Section tc_filter_traffic to gtp interface");
     mpLifeCycle->tcAttachEgress("tc_filter_traffic", GTP_INTERFACE.c_str());
 
-    Logger::upf_app().info("Attach Sesction tc_redirect to udp interface");
+    Logger::upf_app().info("Attach Section tc_redirect to udp interface");
     mpLifeCycle->tcAttachIngress("tc_redirect_traffic", UDP_INTERFACE.c_str());
   }
 }

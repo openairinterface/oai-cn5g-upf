@@ -220,9 +220,9 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
   auto ifIndex = if_nametoindex(interface.c_str());
 
   if (!ifIndex) {
-    perror("if_nametoindex");
+    // perror("if_nametoindex");
     Logger::upf_app().error("Interface %s not found", interface.c_str());
-    throw std::runtime_error("Interface not found");
+    throw std::runtime_error("Interface not found: " + interface);
   }
 
   // Retrieve the BPF program based on the section name
@@ -236,9 +236,9 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
 
       if (fd < 0) {
         Logger::upf_app().error(
-            "Couldn't get file descriptor for program with section name: %s\n",
-            sectionName);
-        throw std::runtime_error("File descriptor not found");
+            "Failed to retrieve FD for program %s", sectionName);
+        throw std::runtime_error(
+            "File descriptor not found for " + sectionName);
       }
 
       // Create TC-BPF hook
@@ -249,17 +249,19 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
       attach_ingress.prog_fd = fd;
 
       err = bpf_tc_hook_create(&hook);
-      if (err && err != -EEXIST) {
-        Logger::upf_app().error(
-            "Couldn't create TC-BPF hook for interface %s (err:%d)\n",
-            interface, err);
-        throw std::runtime_error("TC Program not hooked to interface");
-      }
 
       if (err == -EEXIST) {
         Logger::upf_app().info(
-            "Success: TC-BPF hook already existed (Ignore: \"libbpf: Kernel "
-            "error message: Exclusivity flag on, cannot modify\")\n");
+            "Success: TC-BPF hook %s already exists for interface %s (Ignore: "
+            "libbpf: Kernel error message))",
+            sectionName, interface);
+      } else if (err) {
+        Logger::upf_app().error(
+            "Failed to create TC-BPF hook %s on %s (err: %d)", sectionName,
+            interface, err);
+        throw std::runtime_error(
+            "TC Program %s could not be hooked to interface " + sectionName +
+            interface);
       }
 
       // Attach the BPF program
@@ -270,8 +272,8 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
       err                     = bpf_tc_attach(&hook, &attach_ingress);
       if (err) {
         Logger::upf_app().error(
-            "Couldn't attach ingress program to interface %s (err:%d)\n",
-            interface, err);
+            "Failed to attach ingress program %s to interface %s (err: %d)",
+            sectionName, interface, err);
         throw std::runtime_error(
             "TC Program could not be attached to ingress interface");
       }
@@ -292,7 +294,7 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
       // Update the global link state.
       mState = ATTACHED_TO_INGRESS;
       Logger::upf_app().info(
-          "BPF program %s hooked on TC Layer for interface %s",
+          "BPF program %s successfully attached to %s interface",
           sectionName.c_str(), interface.c_str());
       return;
     }
@@ -314,9 +316,9 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
   auto ifIndex = if_nametoindex(interface.c_str());
 
   if (!ifIndex) {
-    perror("if_nametoindex");
+    // perror("if_nametoindex");
     Logger::upf_app().error("Interface %s not found", interface.c_str());
-    throw std::runtime_error("Interface not found");
+    throw std::runtime_error("Interface not found: " + interface);
   }
 
   // Retrieve the BPF program based on the section name
@@ -330,9 +332,9 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
 
       if (fd < 0) {
         Logger::upf_app().error(
-            "Couldn't get file descriptor for program with section name: %s\n",
-            sectionName);
-        throw std::runtime_error("File descriptor not found");
+            "Failed to retrieve FD for program %s", sectionName);
+        throw std::runtime_error(
+            "File descriptor not found for " + sectionName);
       }
 
       // Create TC-BPF hook
@@ -343,16 +345,19 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
       attach_egress.prog_fd = fd;
 
       err = bpf_tc_hook_create(&hook);
-      if (err && err != -EEXIST) {
-        Logger::upf_app().error(
-            "Couldn't create TC-BPF hook for interface %s\n", interface);
-        throw std::runtime_error("TC Program not hooked to interface");
-      }
 
       if (err == -EEXIST) {
         Logger::upf_app().info(
-            "Success: TC-BPF hook already existed (Ignore: \"libbpf: Kernel "
-            "error message: Exclusivity flag on, cannot modify\")\n");
+            "Success: TC-BPF hook %s already exists for interface %s (Ignore: "
+            "libbpf: Kernel error message))",
+            sectionName, interface);
+      } else if (err) {
+        Logger::upf_app().error(
+            "Failed to create TC-BPF hook %s on %s (err: %d)", sectionName,
+            interface, err);
+        throw std::runtime_error(
+            "TC Program %s could not be hooked to interface " + sectionName +
+            interface);
       }
 
       // Attach the BPF program
@@ -363,8 +368,8 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
       err                    = bpf_tc_attach(&hook, &attach_egress);
       if (err) {
         Logger::upf_app().error(
-            "Couldn't attach egress program to interface %s (err:%d)\n",
-            interface, err);
+            "Failed to attach egress program %s to interface %s (err: %d)",
+            sectionName, interface, err);
         throw std::runtime_error(
             "TC Program could not be attached to egress interface");
       }
@@ -382,8 +387,8 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
       // Update the global link state.
       mState = ATTACHED_TO_EGRESS;
       Logger::upf_app().info(
-          "BPF program %s hooked in %s TC interface", sectionName.c_str(),
-          interface.c_str());
+          "BPF program %s successfully attached to %s interface", sectionName,
+          interface);
       return;
     }
   }
