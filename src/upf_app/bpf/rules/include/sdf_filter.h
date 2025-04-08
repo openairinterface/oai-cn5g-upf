@@ -29,7 +29,7 @@ struct port_range {
   __u16 upper_bound;  // If not specified in SDF: 65535
 };
 
-struct metadata_filter {
+struct packet_filter {
   u32 src_ip;
   u32 dst_ip;
   u8 protocol;

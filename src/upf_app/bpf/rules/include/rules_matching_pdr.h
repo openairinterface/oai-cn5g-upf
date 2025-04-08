@@ -15,4 +15,9 @@ struct pdrs_per_session {
   uint64_t seid;
 };
 
+// struct sdfs_per_session {
+//   uint16_t qer_id;
+//   uint64_t seid;
+// };
+
 #endif  // __RULES_MATCHING_PDR_H__

@@ -529,7 +529,6 @@ void SessionProgramManager::createPipeline(
        * TODO: Implement the logic when fteid is not present
        */
     }
-
     if (!pdi.get(ueIpAddress)) {
       ueIpAddress.ipv4_address.s_addr = 0;
       logger.warn("UE IP Address is missing for PDR %d", pdr_id);
@@ -538,7 +537,6 @@ void SessionProgramManager::createPipeline(
        * TODO: Implement the logic when ipv4_address.s_addr is not present
        */
     }
-
     // sessionIds(pduSession, seid, fteid.teid, 0);
 
     storePduSessionInMap(
@@ -582,8 +580,7 @@ void SessionProgramManager::createPipeline(
           updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
         });
     arpUpdateThread.detach();
-    saveSeidWithinFARProgram(seid, pPFCP_Session_LookupProgram, key);
-
+    // saveSeidWithinFARProgram(seid, pPFCP_Session_LookupProgram, key);
     /*
     TO BE CONTINUED
     ..................
@@ -594,7 +591,6 @@ void SessionProgramManager::createPipeline(
   }
 
   pPFCP_Session_LookupProgram->getSessionPdrsMap()->update(seid, pdrs, BPF_ANY);
-
   /*
   TO BE CONTINUED: We Shall treat the case where there are downlink PDRs in
   the establishment request. To be done later
@@ -643,15 +639,18 @@ void SessionProgramManager::modifyPipeline(
   bool enforcing_qos                  = !session->qers_downlink.empty();
   const bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
   const bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
+  auto pPFCP_Session_LookupProgram =
+      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
   if (isQosEnabled && enforcing_qos) {
+    uint32_t key = seid;
+    pPFCP_Session_LookupProgram->getQosEnablingMap()->update(
+        key, isQosEnabled, BPF_ANY);
+
     logger.debug("Instantiate a new QERProgram");
     std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
     pQERProgram->setup(seid, session->qers_downlink, session->pdrs_downlink);
   }
-
-  auto pPFCP_Session_LookupProgram =
-      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
   storePduSessionInMap(
       pPFCP_Session_LookupProgram, ueIp, teid_ul, teid_dl, seid);
@@ -711,8 +710,16 @@ void SessionProgramManager::modifyPipeline(
           sdfFilter              = *filterInfo;
           sdfFilter.session.seid = seid;
           sdfFilter.session.qfi  = qfi;
+
+          // struct sdfs_per_session sdf_key = {0};
+          // sdf_key.qer_id                  = pdr->qer_id.second.qer_id;
+          // sdf_key.seid                    = seid;
+          struct session_qfi sdf_key = {0};
+          sdf_key.qfi                = qfi;
+          sdf_key.seid               = seid;
+
           pPFCP_Session_LookupProgram->getSdfFilterMap()->update(
-              pdr->qer_id.second.qer_id, sdfFilter, BPF_ANY);
+              sdf_key, sdfFilter, BPF_ANY);
         }
       }
     }

@@ -229,6 +229,10 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSdfFilterMap() const {
   return mpSdfFilterMap;
 }
 
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getQosEnablingMap() const {
+  return mpQosEnablingMap;
+}
+
 /*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_LookupProgram::initializeMaps() {
   // Store all maps available in the program.
@@ -252,6 +256,8 @@ void PFCP_Session_LookupProgram::initializeMaps() {
       std::make_shared<BPFMap>(mpMaps->getMap("m_rules_match_pdr"));
 
   mpSdfFilterMap = std::make_shared<BPFMap>(mpMaps->getMap("m_sdf_filter"));
+
+  mpQosEnablingMap = std::make_shared<BPFMap>(mpMaps->getMap("m_qos_enabling"));
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
