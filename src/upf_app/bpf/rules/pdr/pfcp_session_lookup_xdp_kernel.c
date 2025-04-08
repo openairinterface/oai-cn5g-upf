@@ -16,6 +16,8 @@
 #include <pfcp/pfcp_far.h>
 #include <pfcp/pfcp_pdr.h>
 
+#include <ie/group_ie/pdi.h>
+
 #include <pfcp_session_lookup_maps.h>
 #include <far_maps.h>
 #include <interfaces.h>
@@ -65,6 +67,8 @@ static u8 next_hop_n3_mac_address[6] = {0};
 static bool cached_n3 = false;
 // static bool cached_n6 = false;
 
+#define MAX_PDRS_PER_SESSION 32
+
 /*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline bool update_dst_mac_address(
     u32 ip, struct ethhdr* p_eth) {
@@ -79,6 +83,72 @@ static __always_inline bool update_dst_mac_address(
   }
 
   return false;
+}
+
+static __always_inline u32 match_sdf_filter_ipv4(
+    const struct packet_filter* filter, const struct sdf_filtr* sdf) {
+  u8 packet_protocol  = filter->protocol;
+  u16 packet_src_port = filter->src_port;
+  u16 packet_dst_port = filter->dst_port;
+  u32 packet_src_ip   = bpf_htonl(filter->src_ip);
+  u32 packet_dst_ip   = bpf_htonl(filter->dst_ip);
+
+  u32 sdf_src_ip   = bpf_htonl(sdf->src_addr.ip);
+  u32 sdf_dst_ip   = bpf_htonl(sdf->dst_addr.ip);
+  u32 sdf_src_mask = bpf_htonl(sdf->src_addr.mask);
+  u32 sdf_dst_mask = bpf_htonl(sdf->dst_addr.mask);
+
+  bpf_debug("SDF: filter protocol: %u", sdf->protocol);
+  bpf_debug(
+      "SDF: filter source ip: %pI4, destination ip: %pI4", &sdf_src_ip,
+      &sdf_dst_ip);
+  bpf_debug(
+      "SDF: filter source ip mask: %pI4, destination ip mask: %pI4",
+      &sdf_src_mask, &sdf_dst_mask);
+  bpf_debug(
+      "SDF: filter source port lower bound: %u, source port upper bound: %u",
+      sdf->src_port.lower_bound, sdf->src_port.upper_bound);
+  bpf_debug(
+      "SDF: filter destination port lower bound: %u, destination port upper "
+      "bound: %u",
+      sdf->dst_port.lower_bound, sdf->dst_port.upper_bound);
+
+  bpf_debug("SDF: packet protocol: %u", packet_protocol);
+  bpf_debug(
+      "SDF: packet source ip: %pI4, destination ip: %pI4", &packet_src_ip,
+      &packet_dst_ip);
+  bpf_debug(
+      "SDF: packet source port: %u, destination port: %u", packet_src_port,
+      packet_dst_port);
+
+  // TODO: Start with the hit and not miss
+  /*
+   * TODO:
+   * 1. Start with the hit and not miss
+   * 2. Check if an enum is really needed to redifine protocol:
+   * switch (ip_protocol) {
+         case IPPROTO_ICMP:
+           return 0;
+         case IPPROTO_TCP:
+           return 2;
+         case IPPROTO_UDP:
+           return 3;
+         default:
+           return 1;
+     }
+  */
+  if ((sdf->protocol == 1 || sdf->protocol == packet_protocol) &&
+      ((packet_src_ip & sdf_src_mask) == sdf_src_ip) &&
+      ((packet_dst_ip & sdf_dst_mask) == sdf_dst_ip) &&
+      (packet_src_port >= sdf->src_port.lower_bound &&
+       packet_src_port <= sdf->src_port.upper_bound) &&
+      (packet_dst_port >= sdf->dst_port.lower_bound &&
+       packet_dst_port <= sdf->dst_port.upper_bound)) {
+    return 1;
+  }
+
+  bpf_debug("Packet Metadata and SDF are matching");
+  return 0;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -253,216 +323,560 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
 }
 
 //--------------------------------------------------------------------------------------
+static __always_inline struct session_id* pfcp_session_lookup_over_n3(
+    void* data, void* data_end, struct ethhdr* ethh, u32* ue_ip_out,
+    u8* qfi_out) {
+  u16 l3_protocol = bpf_htons(ethh->h_proto);
+  bpf_debug("Debug: l3_protocol:0x%x", l3_protocol);
+
+  switch (l3_protocol) {
+    case ETH_P_IP: {
+      struct iphdr* iph = (struct iphdr*) (ethh + 1);
+      if ((void*) (iph + 1) > data_end) {
+        bpf_debug("Error: Invalid IPv4 Packet");
+        return NULL;
+      }
+
+      struct udphdr* udph = (struct udphdr*) (iph + 1);
+      if ((void*) (udph + 1) > data_end) {
+        bpf_debug("Error: Invalid UDP packet");
+        return NULL;
+      }
+
+      if (bpf_htons(udph->dest) != GTP_UDP_PORT) {
+        bpf_debug("Error: Invalid GTP Port");
+        return NULL;
+      }
+
+      bpf_debug("Identified GTP Traffic");
+
+      struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
+      if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
+        bpf_debug("Error: Invalid GTP-U packet");
+        return NULL;
+      }
+
+      if (gtpuh->message_type != GTPU_G_PDU) {
+        bpf_debug(
+            "Message type 0x%x is not GTPU GPDU(0x%x)\n", gtpuh->message_type,
+            GTPU_G_PDU);
+        return NULL;
+      }
+
+      struct gtpu_extn_pdu_session_container* ext_gtpuh =
+          (struct gtpu_extn_pdu_session_container*) (gtpuh + 1);
+
+      if ((void*) (ext_gtpuh + 1) > data_end) {
+        bpf_debug("Error: Invalid GTPU Extension packet");
+        return NULL;
+      }
+      // struct ethhdr* ethh_new = data + GTP_ENCAPSULATED_SIZE;
+      // if ((void*) ethh_new + sizeof(*ethh_new) > data_end) {
+      //   bpf_debug("Error: Invalid encapsulated Ethernet packet");
+      //   return NULL;
+      // }
+
+      // struct iphdr* iph_inner = (void*) (ethh_new + 1);
+      // struct iphdr* iph_inner =(void*) (data + GTP_ENCAPSULATED_SIZE + 1);
+
+      struct iphdr* iph_inner = (struct iphdr*) (ext_gtpuh + 1);
+      if ((void*) (iph_inner + 1) > data_end) {
+        bpf_debug("Error: Invalid Inner IP packet");
+        return NULL;
+      }
+
+      *ue_ip_out = bpf_htonl(iph_inner->saddr);
+      *qfi_out   = ext_gtpuh->qfi;
+      return bpf_map_lookup_elem(&m_session_mapping, ue_ip_out);
+    }
+    case ETH_P_IPV6: {
+      bpf_debug("Error: Unsupported IPv6 Packet");
+      return NULL;
+    }
+    case ETH_P_ARP: {
+      bpf_debug("Info: This is an ARP Packet");
+      return NULL;
+    }
+    case ETH_P_8021Q: {
+      bpf_debug("Info: This is a VLAN Packet");
+      return NULL;
+    }
+    case ETH_P_8021AD: {
+      bpf_debug("This is a VLAN Packet");
+      return NULL;
+    }
+
+    default: {
+      bpf_debug("Error: Unknown L3 Packet");
+      return NULL;
+    }
+  }
+}
+
+//--------------------------------------------------------------------------------------
+
+static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
+    u64 seid, u32 packet_teid, u32 packet_ue_ip, u8 packet_qfi) {
+  pfcp_pdr_t_(*pdrs)[MAX_PDRS_PER_SESSION] =
+      bpf_map_lookup_elem(&m_session_pdrs, &seid);
+
+  if (!pdrs) {
+    bpf_debug("No PDRs found for SEID: %llu", seid);
+    return NULL;
+  }
+
+#pragma clang loop unroll(full)
+  for (int i = 0; i < MAX_PDRS_PER_SESSION; i++) {
+    pfcp_pdr_t_* pdr_high_prec = &(*pdrs)[i];
+    pdi_t_ pdi                 = pdr_high_prec->pdi;
+    if ((pdi.ue_ip_address.ipv4_address == packet_ue_ip) &&
+        (pdi.source_interface.interface_value == INTERFACE_VALUE_ACCESS)) {
+      // After uplink/downlink separation, we can remove the source_interface
+      // check
+      if ((packet_teid == pdi.fteid.teid) && (packet_qfi == pdi.qfi.qfi)) {
+        return pdr_high_prec;  // Maybe continue here directly is better
+      }
+    }
+  }
+
+  // No match found
+  return NULL;
+}
+
+//--------------------------------------------------------------------------------------
+static __always_inline void apply_rules_matching_pdr_over_n3(
+    struct xdp_md* ctx, struct ethhdr* ethh,
+    struct pdrs_per_session key_rules_matching_pdr) {
+  void* data                    = (void*) (long) ctx->data;
+  void* data_end                = (void*) (long) ctx->data_end;
+  struct rules_match_pdr* rules = {0};
+  u64 seid                      = key_rules_matching_pdr.seid;
+
+  rules = bpf_map_lookup_elem(&m_rules_match_pdr, &key_rules_matching_pdr);
+
+  if (!rules) {
+    bpf_debug("No rule was found for the PDR");
+    return XDP_PASS;
+  }
+  pfcp_far_t_* far = &rules->far;
+
+  if (far) {
+    bpf_debug("FAR ID = %d", far->far_id.far_id);
+
+    if (!far->apply_action.forw) {
+      bpf_debug("Forward Action Is NOT set");
+      return XDP_PASS;
+    }
+
+    bpf_debug("GTP Header Removal in Progress");
+
+    struct ethhdr* new_ethh = data + GTP_ENCAPSULATED_SIZE;
+    if ((void*) new_ethh + sizeof(*new_ethh) > data_end) {
+      bpf_debug("Error: Invalid encapsulated Ethernet packet");
+      return NULL;
+    }
+    __builtin_memcpy(new_ethh, ethh, sizeof(*ethh));
+
+    e_reference_point n6_key = N6_INTERFACE;
+
+    // if (!cached_n6) {
+    struct s_interface* map_element =
+        bpf_map_lookup_elem(&m_upf_interfaces, &n6_key);
+
+    if (!map_element) {
+      bpf_debug("N6 interface is missing in UPF map, Drop the packet");
+      return XDP_DROP;
+    }
+
+    upf_n6_ip = map_element->ipv4_address;
+
+    struct s_arp_mapping* map_entry = {0};
+    map_entry = bpf_map_lookup_elem(&m_arp_table, &upf_n6_ip);
+
+    if (!map_entry) {
+      bpf_debug("N6's Next Hop MAC address not found! Drop the packet");
+      return XDP_DROP;
+    }
+
+    memcpy(new_ethh->h_dest, map_entry->mac_address, sizeof(new_ethh->h_dest));
+
+    bpf_debug(
+        "Destination MAC  %x:%x:%x:", new_ethh->h_dest[0], new_ethh->h_dest[1],
+        new_ethh->h_dest[2]);
+    bpf_debug(
+        " %x:%x:%x", new_ethh->h_dest[3], new_ethh->h_dest[4],
+        new_ethh->h_dest[5]);
+
+    // Adjust head to the right.
+    if (bpf_xdp_adjust_head(ctx, GTP_ENCAPSULATED_SIZE)) {
+      bpf_debug("Error: Adjusting packet head failed");
+      return XDP_DROP;
+    }
+
+    bpf_debug("Redirecting Packet to DN");
+
+    return bpf_redirect_map(&m_redirect_interfaces, UPLINK, 0);
+
+    bpf_debug("OUTER_HEADER_CREATION_UDP_IPV4 REDIRECT FAILED");
+  }
+
+  bpf_debug("Forwarding Action (FAR) not found for session %llu", seid);
+  return XDP_DROP;
+}
+
+//--------------------------------------------------------------------------------------
+static __always_inline void apply_rules_matching_pdr_over_n6(
+    struct xdp_md* ctx, struct ethhdr* ethh,
+    struct pdrs_per_session key_rules_matching_pdr) {
+  void* data                    = (void*) (long) ctx->data;
+  void* data_end                = (void*) (long) ctx->data_end;
+  struct rules_match_pdr* rules = {0};
+  u64 seid                      = key_rules_matching_pdr.seid;
+
+  rules = bpf_map_lookup_elem(&m_rules_match_pdr, &key_rules_matching_pdr);
+
+  if (!rules) {
+    bpf_debug("No rule was found for the PDR");
+    return XDP_PASS;
+  }
+
+  pfcp_far_t_* far = &rules->far;
+  if (far) {
+    bpf_debug("FAR ID = %d", far->far_id.far_id);
+    create_outer_header_gtpu_ipv4(ctx, far);
+
+    u32* qos_enabling = bpf_map_lookup_elem(&m_qos_enabling, &seid);
+    if (!qos_enabling) {
+      bpf_debug("QoS Enforcement is Disabled for PDU session %llu", seid);
+      return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+    } else {
+      pfcp_qer_t_* qer = &rules->qer;
+      if (qer->gate_status.dl_gate == 1) {
+        return XDP_PASS;
+      } else {
+        bpf_debug("Gate is close for Session %llu. Drop all traffic", seid);
+        return XDP_DROP;
+      }
+    }
+  }
+
+  bpf_debug("Forwarding Action (FAR) not found for session %llu", seid);
+
+  return XDP_PASS;
+}
+
+//--------------------------------------------------------------------------------------
+static __always_inline struct session_id* pfcp_session_lookup_over_n6(
+    void* data, void* data_end, struct ethhdr* ethh, u32* ue_ip_out,
+    struct packet_filter* packet_filter_out) {
+  u16 l3_protocol = bpf_htons(ethh->h_proto);
+  bpf_debug("Debug: l3_protocol:0x%x", l3_protocol);
+
+  switch (l3_protocol) {
+    case ETH_P_IP: {
+      struct iphdr* iph = (struct iphdr*) (ethh + 1);
+      if ((void*) (iph + 1) > data_end) {
+        bpf_debug("Error: Invalid IPv4 Packet");
+        return NULL;
+      }
+
+      *ue_ip_out = bpf_htonl(iph->daddr);
+      struct session_id* session =
+          bpf_map_lookup_elem(&m_session_mapping, ue_ip_out);
+
+      // Check if the QoS enforcement is enabled:
+      if (session) {
+        u64 key = session->seid;
+        if (bpf_map_lookup_elem(&m_qos_enabling, &key)) {
+          u8 protocol = iph->protocol;
+
+          packet_filter_out->src_ip   = bpf_htonl(iph->saddr);
+          packet_filter_out->dst_ip   = *ue_ip_out;
+          packet_filter_out->protocol = iph->protocol;
+
+          switch (protocol) {
+            case IPPROTO_UDP: {
+              struct udphdr* udph = (struct udphdr*) (iph + 1);
+
+              if ((void*) (udph + 1) > data_end) {
+                bpf_debug("Error: Invalid UDP header");
+                return NULL;
+              }
+
+              packet_filter_out->src_port = udph->source;
+              packet_filter_out->dst_port = udph->dest;
+              break;
+            }
+            case IPPROTO_TCP: {
+              struct tcphdr* tcph = (struct tcphdr*) (iph + 1);
+
+              if ((void*) (tcph + 1) > data_end) {
+                bpf_debug("Error: Invalid TCP header");
+                return NULL;
+              }
+
+              packet_filter_out->src_port = tcph->source;
+              packet_filter_out->dst_port = tcph->dest;
+              break;
+            }
+            default: {
+              bpf_debug("Use best effort QoS flow (i.e. default qfi)");
+              packet_filter_out->src_port = 0;
+              packet_filter_out->dst_port = 0;
+            }
+          }
+        }
+      }
+      return session;
+    }
+    case ETH_P_IPV6: {
+      bpf_debug("Error: Unsupported IPv6 Packet");
+      return NULL;
+    }
+    case ETH_P_ARP: {
+      bpf_debug("Info: This is an ARP Packet");
+      return NULL;
+    }
+    case ETH_P_8021Q: {
+      bpf_debug("Info: This is a VLAN Packet");
+      return NULL;
+    }
+    case ETH_P_8021AD: {
+      bpf_debug("This is a VLAN Packet");
+      return NULL;
+    }
+
+    default: {
+      bpf_debug("Error: Unknown L3 Packet");
+      return NULL;
+    }
+  }
+}
+
+//--------------------------------------------------------------------------------------
+static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
+    u64 seid, u32 packet_ue_ip, u8* qfi_out,
+    struct packet_filter* packet_filter) {
+  pfcp_pdr_t_(*pdrs)[MAX_PDRS_PER_SESSION] =
+      bpf_map_lookup_elem(&m_session_pdrs, &seid);
+
+  if (!pdrs) {
+    bpf_debug("No PDRs found for SEID: %llu", seid);
+    return NULL;
+  }
+
+#pragma clang loop unroll(full)
+  for (int i = 0; i < MAX_PDRS_PER_SESSION; i++) {
+    pfcp_pdr_t_* pdr_high_prec = &(*pdrs)[i];
+    pdi_t_ pdi                 = pdr_high_prec->pdi;
+    if (pdi.ue_ip_address.ipv4_address == packet_ue_ip) {
+      u32 source_interface = pdi.source_interface.interface_value;
+      switch (source_interface) {
+        case INTERFACE_VALUE_ACCESS: {
+          bpf_debug(
+              "Info: We should extract this case from the Map on downlink");
+          break;
+        }
+        case INTERFACE_VALUE_CORE: {
+          // Check if the QoS enforcement is enabled:
+          if (bpf_map_lookup_elem(&m_qos_enabling, &seid)) {
+            *qfi_out                   = pdi.qfi.qfi;
+            struct session_qfi sdf_key = {0};
+            sdf_key.seid               = seid;
+            sdf_key.qfi                = *qfi_out;
+
+            const struct sdf_filtr* sdf =
+                bpf_map_lookup_elem(&m_sdf_filter, &sdf_key);
+            if (!sdf) {
+              bpf_debug("SDF Filter not found! This is a NON-GBR Traffic");
+              // TODO:
+              // Treat default qos flow here !!!
+            }
+
+            if (match_sdf_filter_ipv4(packet_filter, sdf)) {
+              return pdr_high_prec;
+            }
+
+            break;
+          }
+        }
+        case INTERFACE_VALUE_SGI_LAN_N6_LAN: {
+          // TODO: Perform actions here
+          break;
+        }
+        case INTERFACE_VALUE_LI_FUNCTION: {
+          // TODO: Perform actions here
+          break;
+        }
+
+        default: {
+          // TODO: Perform actions here
+          break;
+        }
+      }
+    }
+  }
+}
+
+//--------------------------------------------------------------------------------------
 
 SEC("xdp")
 int xdp_handle_uplink(struct xdp_md* ctx) {
   bpf_debug("================< XDP: Handle Uplink >================");
-
+  /*
+    |-----------------------------------------------------------------------|
+    |----------------------------- N3 Entry Point --------------------------|
+    |-----------------------------------------------------------------------|
+    */
   void* data          = (void*) (long) ctx->data;
   void* data_end      = (void*) (long) ctx->data_end;
-  struct ethhdr* ethh = (void*) (long) ctx->data;
+  struct ethhdr* ethh = data;
 
   if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
     bpf_debug("Error: Invalid Ethernet header");
     return XDP_DROP;
   }
 
-  u16 l3_protocol = bpf_htons(ethh->h_proto);
-  bpf_debug("Debug: l3_protocol:0x%x", l3_protocol);
+  /*
+    |-----------------------------------------------------------------------|
+    |-------------------------- PFCP Session Lookup ------------------------|
+    |----------------- (Find PFCP session with matching PDRs) --------------|
+    |-----------------------------------------------------------------------|
+    */
+  u32 ue_ip = 0;
+  u8 qfi    = 0;
 
-  switch (l3_protocol) {
-    case ETH_P_IP: {
-      struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
+  struct session_id* session =
+      pfcp_session_lookup_over_n3(data, data_end, ethh, &ue_ip, &qfi);
 
-      if ((void*) (iph + 1) > data_end) {
-        bpf_debug("Error: Invalid IPv4 Packet");
-        return XDP_DROP;
-      }
-
-      struct udphdr* udph = (struct udphdr*) (iph + 1);
-
-      if ((void*) (udph + 1) > data_end) {
-        bpf_debug("Error: Invalid UDP packet");
-        return XDP_DROP;
-      }
-
-      if (bpf_htons(udph->dest) == GTP_UDP_PORT) {
-        bpf_debug("Identified GTP Traffic");
-
-        struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
-
-        if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
-          bpf_debug("Error: Invalid GTP-U packet");
-          return XDP_DROP;
-        }
-
-        if (gtpuh->message_type != GTPU_G_PDU) {
-          bpf_debug(
-              "Message type 0x%x is not GTPU GPDU(0x%x)\n", gtpuh->message_type,
-              GTPU_G_PDU);
-          return XDP_PASS;
-        }
-
-        struct ethhdr* ethh_new = data + GTP_ENCAPSULATED_SIZE;
-
-        if ((void*) ethh_new + sizeof(*ethh_new) > data_end) {
-          bpf_debug("Error: Invalid encapsulated Ethernet packet");
-          return XDP_DROP;
-        }
-
-        struct iphdr* iph_inner = (void*) (ethh_new + 1);
-
-        if ((void*) iph_inner + sizeof(*iph_inner) > data_end) {
-          bpf_debug("Error: Invalid Inner IP packet");
-          return XDP_DROP;
-        }
-
-        u32 src_ip_in = bpf_htonl(iph_inner->saddr);
-
-        struct next_rule_prog_index_key map_key = {0};
-        map_key.teid                            = gtpuh->teid;
-        map_key.source_value                    = INTERFACE_VALUE_ACCESS;
-        map_key.ipv4_address                    = src_ip_in;
-
-        pfcp_far_t_* p_far =
-            bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
-
-        if (p_far) {
-          bpf_debug("FAR ID = %d", p_far->far_id.far_id);
-          // u8 dest_interface =
-          // p_far->forwarding_parameters.destination_interface.interface_value;
-
-          if (!p_far->apply_action.forw) {
-            bpf_debug("Forward Action Is NOT set");
-            return XDP_PASS;
-          }
-
-          bpf_debug("GTP Header Removal in Progress");
-
-          __builtin_memcpy(ethh_new, ethh, sizeof(*ethh));
-
-          e_reference_point n6_key = N6_INTERFACE;
-
-          // if (!cached_n6) {
-          struct s_interface* map_element =
-              bpf_map_lookup_elem(&m_upf_interfaces, &n6_key);
-
-          if (!map_element) {
-            bpf_debug("N6 interface is missing in UPF map, Drop the packet");
-            return XDP_DROP;
-          }
-
-          upf_n6_ip = map_element->ipv4_address;
-
-          struct s_arp_mapping* map_entry = {0};
-          map_entry = bpf_map_lookup_elem(&m_arp_table, &upf_n6_ip);
-
-          if (!map_entry) {
-            bpf_debug("N6's Next Hop MAC address not found! Drop the packet");
-            return XDP_DROP;
-          }
-
-          //   memcpy(
-          //       next_hop_n6_mac_address, map_entry->mac_address,
-          //       sizeof(next_hop_n6_mac_address));
-
-          //   cached_n6 = true;
-          // }
-
-          // memcpy(
-          //     ethh_new->h_dest, next_hop_n6_mac_address,
-          //     sizeof(ethh_new->h_dest));
-
-          memcpy(
-              ethh_new->h_dest, map_entry->mac_address,
-              sizeof(ethh_new->h_dest));
-
-          bpf_debug(
-              "Destination MAC  %x:%x:%x:", ethh_new->h_dest[0],
-              ethh_new->h_dest[1], ethh_new->h_dest[2]);
-          bpf_debug(
-              " %x:%x:%x", ethh_new->h_dest[3], ethh_new->h_dest[4],
-              ethh_new->h_dest[5]);
-
-          // Adjust head to the right.
-          if (bpf_xdp_adjust_head(ctx, GTP_ENCAPSULATED_SIZE)) {
-            bpf_debug("Error: Adjusting packet head failed");
-            return XDP_DROP;
-          }
-
-          bpf_debug("Redirecting Packet to DN");
-
-          return bpf_redirect_map(&m_redirect_interfaces, UPLINK, 0);
-
-          bpf_debug("OUTER_HEADER_CREATION_UDP_IPV4 REDIRECT FAILED");
-        }
-
-        return XDP_PASS;
-      }
-    }
-    default: {
-      bpf_debug("Unsupported protocol: 0x%x", l3_protocol);
-      return XDP_PASS;
-    }
+  if (!session) {
+    bpf_debug("Session lookup failed");
+    return XDP_PASS;
   }
+
+  u64 seid    = session->seid;
+  u32 teid_ul = session->teid_ul;
+  bpf_debug("Session found, SEID = %llu", seid);
+  bpf_debug("TEID_UL = %x", teid_ul);
+  bpf_debug("TEID_DL = %x", session->teid_dl);
+
+  /*
+    |-----------------------------------------------------------------------|
+    |------------------------ PFCP Session's Lookup ------------------------|
+    |--- (Find matching PDR of the PFCP session with highest precedence) ---|
+    |-----------------------------------------------------------------------|
+    */
+  pfcp_pdr_t_* pdr_high_precedence =
+      pfcp_session_s_lookup_precedence_over_n3(seid, teid_ul, ue_ip, qfi);
+
+  if (!pdr_high_precedence) {
+    bpf_debug("Session lookup failed");
+    return XDP_PASS;
+  }
+
+  u32 pdr_id = pdr_high_precedence->pdr_id.rule_id;
+  bpf_debug("Highest precedence PDR found %x", pdr_id);
+
+  /*
+    |-----------------------------------------------------------------------|
+    |--------------------- Apply RUles in Matching PDR ---------------------|
+    |----------------------------- (FARs, QERs) ----------------------------|
+    |-----------------------------------------------------------------------|
+    */
+  struct pdrs_per_session key_rules_matching_pdr = {0};
+  key_rules_matching_pdr.pdr_id                  = pdr_id;
+  key_rules_matching_pdr.seid                    = seid;
+
+  apply_rules_matching_pdr_over_n3(ctx, ethh, key_rules_matching_pdr);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 SEC("xdp")
 int xdp_handle_downlink(struct xdp_md* ctx) {
   bpf_debug("================< XDP: Handle Downlink >================");
-
+  /*
+   |-----------------------------------------------------------------------|
+   |----------------------------- N6 Entry Point --------------------------|
+   |-----------------------------------------------------------------------|
+   */
+  void* data          = (void*) (long) ctx->data;
   void* data_end      = (void*) (long) ctx->data_end;
-  struct ethhdr* ethh = (void*) (long) ctx->data;
+  struct ethhdr* ethh = data;
 
   if ((void*) (ethh + 1) > data_end) {
     bpf_debug("Error: Invalid Ethernet header");
     return XDP_DROP;
   }
 
-  struct iphdr* iph = (void*) (ethh + 1);
-
-  if ((void*) (iph + 1) > data_end) {
-    bpf_debug("Error: Invalid IPv4 Packet");
-    return XDP_DROP;
-  }
-
-  bpf_debug("Ip_dest:  %pI4", iph->daddr);
-  u32 ip_dest = bpf_htonl(iph->daddr);
+  /*
+    |-----------------------------------------------------------------------|
+    |-------------------------- PFCP Session Lookup ------------------------|
+    |----------------- (Find PFCP session with matching PDRs) --------------|
+    |-----------------------------------------------------------------------|
+    */
+  u32 ue_ip                          = 0;
+  struct packet_filter packet_filter = {0};
   struct session_id* session =
-      bpf_map_lookup_elem(&m_session_mapping, &ip_dest);
+      pfcp_session_lookup_over_n6(data, data_end, ethh, &ue_ip, &packet_filter);
 
-  if (session) {
-    u32 teid_dl = session->teid_dl;
-    bpf_debug("TEID for downlink: 0x%x, UE IP: %pI4", teid_dl, ip_dest);
-
-    struct next_rule_prog_index_key map_key = {0};
-    map_key.teid                            = teid_dl;
-    map_key.source_value                    = INTERFACE_VALUE_CORE;
-    map_key.ipv4_address                    = ip_dest;
-
-    pfcp_far_t_* p_far = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
-
-    if (p_far) {
-      bpf_debug("FAR ID = %d", p_far->far_id.far_id);
-      create_outer_header_gtpu_ipv4(ctx, p_far);
-
-      return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
-    }
+  if (!session) {
+    bpf_debug("Session lookup failed");
+    return XDP_PASS;
   }
 
-  bpf_debug("Session not found for Downlink");
+  u64 seid    = session->seid;
+  u32 teid_ul = session->teid_ul;
+  bpf_debug("Session found, SEID = %llu", seid);
+  bpf_debug("TEID_UL = %x", teid_ul);
+  bpf_debug("TEID_DL = %x", session->teid_dl);
+  bpf_debug("UE = %pI4", ue_ip);
 
-  return XDP_PASS;
+  /*
+    |-----------------------------------------------------------------------|
+    |------------------------ PFCP Session's Lookup ------------------------|
+    |--- (Find matching PDR of the PFCP session with highest precedence) ---|
+    |-----------------------------------------------------------------------|
+    */
+  u8 qfi                           = 0;
+  pfcp_pdr_t_* pdr_high_precedence = pfcp_session_s_lookup_precedence_over_n6(
+      seid, ue_ip, &qfi, &packet_filter);
+
+  if (!pdr_high_precedence) {
+    bpf_debug("Session lookup failed");
+    return XDP_PASS;
+  }
+
+  u32 pdr_id = pdr_high_precedence->pdr_id.rule_id;
+  bpf_debug("Highest precedence PDR found %x", pdr_id);
+
+  /*
+    |-----------------------------------------------------------------------|
+    |--------------------- Apply RUles in Matching PDR ---------------------|
+    |----------------------------- (FARs, QERs) ----------------------------|
+    |-----------------------------------------------------------------------|
+    */
+  struct pdrs_per_session key_rules_matching_pdr = {0};
+  key_rules_matching_pdr.pdr_id                  = pdr_id;
+  key_rules_matching_pdr.seid                    = seid;
+
+  apply_rules_matching_pdr_over_n6(ctx, ethh, key_rules_matching_pdr);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 SEC("xdp")
 int xdp_handle_shaping(struct xdp_md* ctx) {
   bpf_debug("================< XDP: Handle Shaping >================");
+  /*
+   |-----------------------------------------------------------------------|
+   |----------------------------- N6 Entry Point --------------------------|
+   |-----------------------------------------------------------------------|
+   */
 
-  struct metadata_filter* key;
-  if (bpf_xdp_adjust_meta(ctx, -(int) sizeof(struct metadata_filter))) {
+  // struct packet_filter* packet_filter = {0};
+  // struct packet_filter* key;
+  struct session_qfi* qos_metadata = {0};
+
+  if (bpf_xdp_adjust_meta(ctx, -(int) sizeof(struct session_qfi))) {
     bpf_debug("Error: Unable to reserve metadata space");
     return XDP_DROP;
   }
@@ -476,120 +890,67 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
     return XDP_DROP;
   }
 
-  u16 l3_protocol = htons(ethh->h_proto);
-  bpf_debug("l3_protocol: 0x%x", l3_protocol);
+  /*
+    |-----------------------------------------------------------------------|
+    |-------------------------- PFCP Session Lookup ------------------------|
+    |----------------- (Find PFCP session with matching PDRs) --------------|
+    |-----------------------------------------------------------------------|
+    */
+  u32 ue_ip                          = 0;
+  struct packet_filter packet_filter = {0};
+  struct session_id* session =
+      pfcp_session_lookup_over_n6(data, data_end, ethh, &ue_ip, &packet_filter);
 
-  switch (l3_protocol) {
-    case ETH_P_IP: {
-      bpf_debug("This is an IPv4 Packet");
-      break;
-    }
-    case ETH_P_IPV6: {
-      // TODO: Check if traitment is needed here
-      bpf_debug("This is an IPv6 Packet");
-      return XDP_DROP;
-    }
-    case ETH_P_8021Q: {
-      // TODO: Check if traitment is needed here
-      bpf_debug("This is a VLAN Packet");
-      return XDP_DROP;
-    }
-    case ETH_P_8021AD: {
-      // TODO: Check if traitment is needed here
-      bpf_debug("This is a VLAN Packet");
-      return XDP_DROP;
-    }
-    case ETH_P_ARP: {
-      // TODO: Check if traitment is needed here
-      bpf_debug("This is an ARP Packet");
-      return XDP_PASS;
-    }
-    default: {
-      // TODO: Check if traitment is needed here
-      bpf_debug("Packet Type not Known");
-      return XDP_DROP;
-    }
+  if (!session) {
+    bpf_debug("Session lookup failed");
+    return XDP_PASS;
   }
 
-  struct iphdr* iph = (void*) (ethh + 1);
+  u64 seid    = session->seid;
+  u32 teid_ul = session->teid_ul;
+  bpf_debug("Session found, SEID = %llu", seid);
+  bpf_debug("TEID_UL = %x", teid_ul);
+  bpf_debug("TEID_DL = %x", session->teid_dl);
+  bpf_debug("UE = %pI4", ue_ip);
 
-  if ((void*) (iph + 1) > data_end) {
-    bpf_debug("Error: Invalid IPv4 Packet");
-    return XDP_DROP;
+  /*
+    |-----------------------------------------------------------------------|
+    |------------------------ PFCP Session's Lookup ------------------------|
+    |--- (Find matching PDR of the PFCP session with highest precedence) ---|
+    |-----------------------------------------------------------------------|
+    */
+  u8 qfi                           = 0;
+  pfcp_pdr_t_* pdr_high_precedence = pfcp_session_s_lookup_precedence_over_n6(
+      seid, ue_ip, &qfi, &packet_filter);
+
+  if (!pdr_high_precedence) {
+    bpf_debug("Session lookup failed");
+    return XDP_PASS;
   }
 
-  u32 ip_dest = bpf_htonl(iph->daddr);
-  u8 protocol = iph->protocol;
+  u32 pdr_id = pdr_high_precedence->pdr_id.rule_id;
+  bpf_debug("Highest precedence PDR found %x", pdr_id);
 
-  key = (struct metadata_filter*) (long)
-            ctx->data_meta;  // long here may cause issue
-
-  if ((void*) (key + 1) > data) {
+  /*
+      |-----------------------------------------------------------------------|
+      |--------------------- Apply RUles in Matching PDR ---------------------|
+      |----------------------------- (FARs, QERs) ----------------------------|
+      |-----------------------------------------------------------------------|
+      */
+  qos_metadata = (struct session_qfi*) (long) ctx->data_meta;
+  if ((void*) (qos_metadata + 1) > data) {
     bpf_debug("Error: Invalid Metadata");
     return XDP_DROP;
   }
 
-  bpf_debug("Shaping IP DST: %pI4", &ip_dest);
+  qos_metadata->seid = seid;
+  qos_metadata->qfi  = qfi;
 
-  key->src_ip   = bpf_htonl(iph->saddr);
-  key->dst_ip   = ip_dest;
-  key->protocol = iph->protocol;
+  struct pdrs_per_session key_rules_matching_pdr = {0};
+  key_rules_matching_pdr.pdr_id                  = pdr_id;
+  key_rules_matching_pdr.seid                    = seid;
 
-  switch (protocol) {
-    case IPPROTO_UDP: {
-      struct udphdr* udph = (struct udphdr*) (iph + 1);
-
-      if ((void*) (udph + 1) > data_end) {
-        bpf_debug("Error: Invalid UDP header");
-        return XDP_DROP;
-      }
-
-      key->src_port = udph->source;
-      key->dst_port = udph->dest;
-      break;
-    }
-    case IPPROTO_TCP: {
-      struct tcphdr* tcph = (struct tcphdr*) (iph + 1);
-
-      if ((void*) (tcph + 1) > data_end) {
-        bpf_debug("Error: Invalid TCP header");
-        return XDP_DROP;
-      }
-
-      key->src_port = tcph->source;
-      key->dst_port = tcph->dest;
-      break;
-    }
-    default: {
-      bpf_debug("Unknown header");
-      bpf_debug("Use best effort QoS flow (i.e. default qfi)");
-      key->dst_port = 65535;
-    }
-  }
-
-  struct session_id* session =
-      bpf_map_lookup_elem(&m_session_mapping, &ip_dest);
-
-  if (session) {
-    u32 teid_dl = session->teid_dl;
-    bpf_debug(
-        "TEID downlink: 0x%x was found for UE IP: %pI4", teid_dl, ip_dest);
-    struct next_rule_prog_index_key map_key = {0};
-    map_key.teid                            = teid_dl;
-    map_key.source_value                    = INTERFACE_VALUE_CORE;
-    map_key.ipv4_address                    = ip_dest;
-
-    pfcp_far_t_* p_far = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
-
-    if (p_far) {
-      create_outer_header_gtpu_ipv4(ctx, p_far);
-      return XDP_PASS;
-    }
-  }
-
-  bpf_debug("BPF tail call was not executed!");
-
-  return XDP_PASS;
+  apply_rules_matching_pdr_over_n6(ctx, ethh, key_rules_matching_pdr);
 }
 
 char _license[] SEC("license") = "GPL";
