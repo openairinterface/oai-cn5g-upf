@@ -277,7 +277,9 @@ bool pfcp_session::create(
   }
 
   // source interface of the incoming packet
-  if (pdi.source_interface.second.interface_value == INTERFACE_VALUE_ACCESS) {
+  if (pdi.source_interface.second.interface_value == INTERFACE_VALUE_ACCESS ||
+      pdi.source_interface.second.interface_value ==
+          INTERFACE_VALUE_CP_FUNCTION) {
     // Uplink traffic
     if (not pdi.local_fteid.first) {
       cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;

@@ -49,29 +49,24 @@ void pfcp_far::apply_forwarding_rules(
   // far_id.far_id);
   if (apply_action.forw) {
     if (forwarding_parameters.first) {
-      if (forwarding_parameters.second.destination_interface.first) {
-        if (forwarding_parameters.second.destination_interface.second
-                .interface_value == INTERFACE_VALUE_ACCESS) {
-          if (forwarding_parameters.second.outer_header_creation.first) {
-            switch (forwarding_parameters.second.outer_header_creation.second
+      auto rule = forwarding_parameters.second;
+      if (rule.destination_interface.first) {
+        if (rule.destination_interface.second.interface_value ==
+            INTERFACE_VALUE_ACCESS) {
+          if (rule.outer_header_creation.first) {
+            switch (rule.outer_header_creation.second
                         .outer_header_creation_description) {
               case OUTER_HEADER_CREATION_GTPU_UDP_IPV4:
                 upf_n3_inst->send_g_pdu(
-                    forwarding_parameters.second.outer_header_creation.second
-                        .ipv4_address,
-                    upf_cfg.n3.port,
-                    forwarding_parameters.second.outer_header_creation.second
-                        .teid,
+                    rule.outer_header_creation.second.ipv4_address,
+                    upf_cfg.n3.port, rule.outer_header_creation.second.teid,
                     reinterpret_cast<const char*>(iph), num_bytes, qfi);
 
                 break;
               case OUTER_HEADER_CREATION_GTPU_UDP_IPV6:
                 upf_n3_inst->send_g_pdu(
-                    forwarding_parameters.second.outer_header_creation.second
-                        .ipv6_address,
-                    upf_cfg.n3.port,
-                    forwarding_parameters.second.outer_header_creation.second
-                        .teid,
+                    rule.outer_header_creation.second.ipv6_address,
+                    upf_cfg.n3.port, rule.outer_header_creation.second.teid,
                     reinterpret_cast<const char*>(iph), num_bytes);
                 break;
               case OUTER_HEADER_CREATION_UDP_IPV4:  // TODO
@@ -80,8 +75,10 @@ void pfcp_far::apply_forwarding_rules(
             }
           }
         } else if (
-            forwarding_parameters.second.destination_interface.second
-                .interface_value == INTERFACE_VALUE_CORE) {
+            rule.destination_interface.second.interface_value ==
+                INTERFACE_VALUE_CORE ||
+            rule.destination_interface.second.interface_value ==
+                INTERFACE_VALUE_CP_FUNCTION) {
           if (!upf_cfg.enable_bpf_datapath) {
             if (pfcp_switch_inst->no_internal_loop(iph, num_bytes)) {
               pfcp_switch_inst->send_to_core(
