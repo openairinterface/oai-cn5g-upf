@@ -462,6 +462,7 @@ void SessionProgramManager::createPipeline(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+// TODO [ETH-PDU] remove the entry from the eth prog index map
 void SessionProgramManager::removePipeline(uint64_t seid) {
   Logger::upf_app().debug("Remove FARProgram index from UPFProgram map");
   auto it = mSessionProgramsMap.find(seid);
@@ -482,7 +483,8 @@ void SessionProgramManager::removePipeline(uint64_t seid) {
   auto pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
   pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->remove(key);
-  pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->remove(key);
+  // TODO [ETH-PDU] remove the entry from the eth prog index map
+  // pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->remove(key);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
