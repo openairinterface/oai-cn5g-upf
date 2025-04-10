@@ -370,14 +370,6 @@ static __always_inline struct session_id* pfcp_session_lookup_over_n3(
         bpf_debug("Error: Invalid GTPU Extension packet");
         return NULL;
       }
-      // struct ethhdr* ethh_new = data + GTP_ENCAPSULATED_SIZE;
-      // if ((void*) ethh_new + sizeof(*ethh_new) > data_end) {
-      //   bpf_debug("Error: Invalid encapsulated Ethernet packet");
-      //   return NULL;
-      // }
-
-      // struct iphdr* iph_inner = (void*) (ethh_new + 1);
-      // struct iphdr* iph_inner =(void*) (data + GTP_ENCAPSULATED_SIZE + 1);
 
       struct iphdr* iph_inner = (struct iphdr*) (ext_gtpuh + 1);
       if ((void*) (iph_inner + 1) > data_end) {
@@ -425,14 +417,37 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
     return NULL;
   }
 
+  /*
+   * The pragma unrol will be replace with:
+   *
+   *      int i;
+   *      bpf_for(i, 0, MAX_PDRS_PER_SESSION) {
+   *
+   * This is supported on newer kernels (v6.3+), Clang >= 17, libbpf >= 1.3 or
+   * so, Linux kernel headers >= 6.3
+   */
+
 #pragma clang loop unroll(full)
   for (int i = 0; i < MAX_PDRS_PER_SESSION; i++) {
     pfcp_pdr_t_* pdr_high_prec = &(*pdrs)[i];
     pdi_t_ pdi                 = pdr_high_prec->pdi;
-    if ((pdi.ue_ip_address.ipv4_address == packet_ue_ip) &&
-        (pdi.source_interface.interface_value == INTERFACE_VALUE_ACCESS)) {
+    u32 ipaddr                 = bpf_htonl(pdi.ue_ip_address.ipv4_address);
+
+    if ((ipaddr == packet_ue_ip) &&
+        (bpf_htonl(pdi.source_interface.interface_value) ==
+         INTERFACE_VALUE_ACCESS)) {
       // After uplink/downlink separation, we can remove the source_interface
       // check
+
+      bpf_debug(
+          "( packet_ue_ip,  pdi.ue_ip_address ) : ( %pI4, %pI4 )",
+          &packet_ue_ip, &ipaddr);
+      bpf_debug(
+          "( packet_teid,   pdi.fteid.teid    ) : ( %d  , %d )", packet_teid,
+          pdi.fteid.teid);
+      bpf_debug(
+          "( packet_qfi,    pdi.qfi.qfi       ) : ( %u  , %u )", packet_qfi,
+          pdi.qfi.qfi);
       if ((packet_teid == pdi.fteid.teid) && (packet_qfi == pdi.qfi.qfi)) {
         return pdr_high_prec;  // Maybe continue here directly is better
       }
@@ -444,7 +459,7 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
 }
 
 //--------------------------------------------------------------------------------------
-static __always_inline void apply_rules_matching_pdr_over_n3(
+static __always_inline u32 apply_rules_matching_pdr_over_n3(
     struct xdp_md* ctx, struct ethhdr* ethh,
     struct pdrs_per_session key_rules_matching_pdr) {
   void* data                    = (void*) (long) ctx->data;
@@ -473,7 +488,7 @@ static __always_inline void apply_rules_matching_pdr_over_n3(
     struct ethhdr* new_ethh = data + GTP_ENCAPSULATED_SIZE;
     if ((void*) new_ethh + sizeof(*new_ethh) > data_end) {
       bpf_debug("Error: Invalid encapsulated Ethernet packet");
-      return NULL;
+      return XDP_DROP;
     }
     __builtin_memcpy(new_ethh, ethh, sizeof(*ethh));
 
@@ -525,11 +540,11 @@ static __always_inline void apply_rules_matching_pdr_over_n3(
 }
 
 //--------------------------------------------------------------------------------------
-static __always_inline void apply_rules_matching_pdr_over_n6(
+static __always_inline u32 apply_rules_matching_pdr_over_n6(
     struct xdp_md* ctx, struct ethhdr* ethh,
     struct pdrs_per_session key_rules_matching_pdr) {
-  void* data                    = (void*) (long) ctx->data;
-  void* data_end                = (void*) (long) ctx->data_end;
+  // void* data                    = (void*) (long) ctx->data;
+  // void* data_end                = (void*) (long) ctx->data_end;
   struct rules_match_pdr* rules = {0};
   u64 seid                      = key_rules_matching_pdr.seid;
 
@@ -619,6 +634,11 @@ static __always_inline struct session_id* pfcp_session_lookup_over_n6(
               packet_filter_out->dst_port = tcph->dest;
               break;
             }
+            case IPPROTO_ICMP: {
+              packet_filter_out->src_port = 0;
+              packet_filter_out->dst_port = 0;
+              break;
+            }
             default: {
               bpf_debug("Use best effort QoS flow (i.e. default qfi)");
               packet_filter_out->src_port = 0;
@@ -665,21 +685,43 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
     return NULL;
   }
 
+  /*
+   * The pragma unrol will be replace with:
+   *
+   *      int i;
+   *      bpf_for(i, 0, MAX_PDRS_PER_SESSION) {
+   *
+   * This is supported on newer kernels (v6.3+), Clang >= 17, libbpf >= 1.3 or
+   * so, Linux kernel headers >= 6.3
+   */
+
 #pragma clang loop unroll(full)
   for (int i = 0; i < MAX_PDRS_PER_SESSION; i++) {
     pfcp_pdr_t_* pdr_high_prec = &(*pdrs)[i];
     pdi_t_ pdi                 = pdr_high_prec->pdi;
-    if (pdi.ue_ip_address.ipv4_address == packet_ue_ip) {
+    u32 ipaddr                 = bpf_htonl(pdi.ue_ip_address.ipv4_address);
+
+    if (bpf_htonl(pdi.ue_ip_address.ipv4_address) == packet_ue_ip) {
       u32 source_interface = pdi.source_interface.interface_value;
       switch (source_interface) {
         case INTERFACE_VALUE_ACCESS: {
-          bpf_debug(
-              "Info: We should extract this case from the Map on downlink");
+          // bpf_debug(
+          //     "Info: We should extract this case from the Map on downlink");
           break;
         }
         case INTERFACE_VALUE_CORE: {
+          bpf_debug(
+              "( packet_ue_ip,  pdi.ue_ip_address ) : ( %pI4, %pI4 )",
+              &packet_ue_ip, &ipaddr);
+
+          bpf_debug(
+              "pdi.source_interface.interface_value: %d",
+              pdi.source_interface.interface_value);
           // Check if the QoS enforcement is enabled:
-          if (bpf_map_lookup_elem(&m_qos_enabling, &seid)) {
+          u32* enabling_qos = bpf_map_lookup_elem(&m_qos_enabling, &seid);
+          if (!enabling_qos) {
+            bpf_debug("Qos enforcement not ebabled for Session %llu", seid);
+          } else {
             *qfi_out                   = pdi.qfi.qfi;
             struct session_qfi sdf_key = {0};
             sdf_key.seid               = seid;
@@ -691,9 +733,13 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
               bpf_debug("SDF Filter not found! This is a NON-GBR Traffic");
               // TODO:
               // Treat default qos flow here !!!
+              break;
             }
-
+            bpf_debug(
+                "SDF key ( seid, qfi ): ( %llu, %u )", sdf_key.seid,
+                sdf_key.qfi);
             if (match_sdf_filter_ipv4(packet_filter, sdf)) {
+              bpf_debug("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz");
               return pdr_high_prec;
             }
 
@@ -716,6 +762,7 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
       }
     }
   }
+  return NULL;
 }
 
 //--------------------------------------------------------------------------------------
@@ -750,15 +797,17 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
       pfcp_session_lookup_over_n3(data, data_end, ethh, &ue_ip, &qfi);
 
   if (!session) {
-    bpf_debug("Session lookup failed");
+    bpf_debug(
+        "PFCP Session Lookup (Find PFCP session with matching PDRs) failed");
     return XDP_PASS;
   }
 
   u64 seid    = session->seid;
-  u32 teid_ul = session->teid_ul;
-  bpf_debug("Session found, SEID = %llu", seid);
-  bpf_debug("TEID_UL = %x", teid_ul);
-  bpf_debug("TEID_DL = %x", session->teid_dl);
+  u32 teid_ul = bpf_htonl(session->teid_ul);
+  u32 teid_dl = bpf_htonl(session->teid_dl);
+  bpf_debug(
+      "Session found ( seid, teid_ul, teid_dl ) : ( %llu, %u, %u )", seid,
+      teid_ul, teid_dl);
 
   /*
     |-----------------------------------------------------------------------|
@@ -770,7 +819,9 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
       pfcp_session_s_lookup_precedence_over_n3(seid, teid_ul, ue_ip, qfi);
 
   if (!pdr_high_precedence) {
-    bpf_debug("Session lookup failed");
+    bpf_debug(
+        "PFCP Session's Lookup (Find matching PDR of the PFCP session with "
+        "highest precedence) failed");
     return XDP_PASS;
   }
 
@@ -788,6 +839,103 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
   key_rules_matching_pdr.seid                    = seid;
 
   apply_rules_matching_pdr_over_n3(ctx, ethh, key_rules_matching_pdr);
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------------------------------------------*/
+SEC("xdp")
+int xdp_handle_shaping(struct xdp_md* ctx) {
+  bpf_debug("================< XDP: Handle Shaping >================");
+  /*
+   |-----------------------------------------------------------------------|
+   |----------------------------- N6 Entry Point --------------------------|
+   |-----------------------------------------------------------------------|
+   */
+
+  // struct packet_filter* packet_filter = {0};
+  // struct packet_filter* key;
+  struct session_qfi* qos_metadata = {0};
+
+  if (bpf_xdp_adjust_meta(ctx, -(int) sizeof(struct session_qfi))) {
+    bpf_debug("Error: Unable to reserve metadata space");
+    return XDP_DROP;
+  }
+
+  void* data          = (void*) (long) ctx->data;
+  void* data_end      = (void*) (long) ctx->data_end;
+  struct ethhdr* ethh = data;
+
+  if ((void*) (ethh + 1) > data_end) {
+    bpf_debug("Error: Invalid Ethernet header");
+    return XDP_DROP;
+  }
+
+  /*
+    |-----------------------------------------------------------------------|
+    |-------------------------- PFCP Session Lookup ------------------------|
+    |----------------- (Find PFCP session with matching PDRs) --------------|
+    |-----------------------------------------------------------------------|
+    */
+  u32 ue_ip                          = 0;
+  struct packet_filter packet_filter = {0};
+
+  struct session_id* session =
+      pfcp_session_lookup_over_n6(data, data_end, ethh, &ue_ip, &packet_filter);
+
+  if (!session) {
+    bpf_debug(
+        "PFCP Session Lookup (Find PFCP session with matching PDRs) failed");
+    return XDP_PASS;
+  }
+
+  u64 seid    = session->seid;
+  u32 teid_ul = bpf_htonl(session->teid_ul);
+  u32 teid_dl = bpf_htonl(session->teid_dl);
+  bpf_debug(
+      "Session found ( seid, teid_ul, teid_dl ) : ( %llu, %u, %u )", seid,
+      teid_ul, teid_dl);
+
+  /*
+   |-----------------------------------------------------------------------|
+   |------------------------ PFCP Session's Lookup ------------------------|
+   |--- (Find matching PDR of the PFCP session with highest precedence) ---|
+   |-----------------------------------------------------------------------|
+   */
+  u8 qfi                           = 0;
+  pfcp_pdr_t_* pdr_high_precedence = pfcp_session_s_lookup_precedence_over_n6(
+      seid, ue_ip, &qfi, &packet_filter);
+
+  if (!pdr_high_precedence) {
+    bpf_debug(
+        "PFCP Session's Lookup (Find matching PDR of the PFCP session with "
+        "highest precedence) failed");
+    return XDP_PASS;
+  }
+
+  u32 pdr_id = pdr_high_precedence->pdr_id.rule_id;
+  bpf_debug("Highest precedence PDR found %x", pdr_id);
+
+  /*
+    |-----------------------------------------------------------------------|
+    |--------------------- Apply RUles in Matching PDR ---------------------|
+    |----------------------------- (FARs, QERs) ----------------------------|
+    |-----------------------------------------------------------------------|
+    */
+  qos_metadata = (struct session_qfi*) (long) ctx->data_meta;
+  if ((void*) (qos_metadata + 1) > data) {
+    bpf_debug("Error: Invalid Metadata");
+    return XDP_DROP;
+  }
+
+  qos_metadata->seid = seid;
+  qos_metadata->qfi  = qfi;
+
+  struct pdrs_per_session key_rules_matching_pdr = {0};
+  key_rules_matching_pdr.pdr_id                  = pdr_id;
+  key_rules_matching_pdr.seid                    = seid;
+
+  apply_rules_matching_pdr_over_n6(ctx, ethh, key_rules_matching_pdr);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -847,7 +995,7 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
   }
 
   u32 pdr_id = pdr_high_precedence->pdr_id.rule_id;
-  bpf_debug("Highest precedence PDR found %x", pdr_id);
+  bpf_debug("Highest precedence PDR found %d", pdr_id);
 
   /*
     |-----------------------------------------------------------------------|
@@ -858,101 +1006,7 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
   struct pdrs_per_session key_rules_matching_pdr = {0};
   key_rules_matching_pdr.pdr_id                  = pdr_id;
   key_rules_matching_pdr.seid                    = seid;
-
-  apply_rules_matching_pdr_over_n6(ctx, ethh, key_rules_matching_pdr);
-}
-
-/*---------------------------------------------------------------------------------------------------------------*/
-SEC("xdp")
-int xdp_handle_shaping(struct xdp_md* ctx) {
-  bpf_debug("================< XDP: Handle Shaping >================");
-  /*
-   |-----------------------------------------------------------------------|
-   |----------------------------- N6 Entry Point --------------------------|
-   |-----------------------------------------------------------------------|
-   */
-
-  // struct packet_filter* packet_filter = {0};
-  // struct packet_filter* key;
-  struct session_qfi* qos_metadata = {0};
-
-  if (bpf_xdp_adjust_meta(ctx, -(int) sizeof(struct session_qfi))) {
-    bpf_debug("Error: Unable to reserve metadata space");
-    return XDP_DROP;
-  }
-
-  void* data          = (void*) (long) ctx->data;
-  void* data_end      = (void*) (long) ctx->data_end;
-  struct ethhdr* ethh = data;
-
-  if ((void*) (ethh + 1) > data_end) {
-    bpf_debug("Error: Invalid Ethernet header");
-    return XDP_DROP;
-  }
-
-  /*
-    |-----------------------------------------------------------------------|
-    |-------------------------- PFCP Session Lookup ------------------------|
-    |----------------- (Find PFCP session with matching PDRs) --------------|
-    |-----------------------------------------------------------------------|
-    */
-  u32 ue_ip                          = 0;
-  struct packet_filter packet_filter = {0};
-  struct session_id* session =
-      pfcp_session_lookup_over_n6(data, data_end, ethh, &ue_ip, &packet_filter);
-
-  if (!session) {
-    bpf_debug("Session lookup failed");
-    return XDP_PASS;
-  }
-
-  u64 seid    = session->seid;
-  u32 teid_ul = session->teid_ul;
-  bpf_debug("Session found, SEID = %llu", seid);
-  bpf_debug("TEID_UL = %x", teid_ul);
-  bpf_debug("TEID_DL = %x", session->teid_dl);
-  bpf_debug("UE = %pI4", ue_ip);
-
-  /*
-    |-----------------------------------------------------------------------|
-    |------------------------ PFCP Session's Lookup ------------------------|
-    |--- (Find matching PDR of the PFCP session with highest precedence) ---|
-    |-----------------------------------------------------------------------|
-    */
-  u8 qfi                           = 0;
-  pfcp_pdr_t_* pdr_high_precedence = pfcp_session_s_lookup_precedence_over_n6(
-      seid, ue_ip, &qfi, &packet_filter);
-
-  if (!pdr_high_precedence) {
-    bpf_debug("Session lookup failed");
-    return XDP_PASS;
-  }
-
-  u32 pdr_id = pdr_high_precedence->pdr_id.rule_id;
-  bpf_debug("Highest precedence PDR found %x", pdr_id);
-
-  /*
-      |-----------------------------------------------------------------------|
-      |--------------------- Apply RUles in Matching PDR ---------------------|
-      |----------------------------- (FARs, QERs) ----------------------------|
-      |-----------------------------------------------------------------------|
-      */
-  qos_metadata = (struct session_qfi*) (long) ctx->data_meta;
-  if ((void*) (qos_metadata + 1) > data) {
-    bpf_debug("Error: Invalid Metadata");
-    return XDP_DROP;
-  }
-
-  qos_metadata->seid = seid;
-  qos_metadata->qfi  = qfi;
-
-  struct pdrs_per_session key_rules_matching_pdr = {0};
-  key_rules_matching_pdr.pdr_id                  = pdr_id;
-  key_rules_matching_pdr.seid                    = seid;
-
   apply_rules_matching_pdr_over_n6(ctx, ethh, key_rules_matching_pdr);
 }
 
 char _license[] SEC("license") = "GPL";
-
-/*---------------------------------------------------------------------------------------------------------------*/
