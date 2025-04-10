@@ -283,13 +283,13 @@ void SessionProgramManager::storeFarProgramIndexInNextProgRuleIndexMap(
 // Helper function to store Session mapping
 void SessionProgramManager::storePduSessionInMap(
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-    uint32_t ue_ip_addr, uint32_t teid_ul, uint32_t teid_dl, uint32_t seid) {
+    uint32_t ue_ip_addr, uint32_t teid_ul, uint32_t teid_dl, uint64_t seid) {
   // Normalize TEIDs and SEID for little-endian systems
   if (likely(is_little_endian())) {
     ue_ip_addr = htonl(ue_ip_addr);
     teid_ul    = htonl(teid_ul);
     teid_dl    = htonl(teid_dl);
-    seid       = htonl(seid);
+    seid       = seid;  // TODO: verify if correct
   }
 
   struct session_id session = {0};
@@ -643,9 +643,9 @@ void SessionProgramManager::modifyPipeline(
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
   if (isQosEnabled && enforcing_qos) {
-    uint32_t key = seid;
+    uint32_t value = 1;
     pPFCP_Session_LookupProgram->getQosEnablingMap()->update(
-        key, isQosEnabled, BPF_ANY);
+        seid, value, BPF_ANY);
 
     logger.debug("Instantiate a new QERProgram");
     std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
@@ -705,6 +705,11 @@ void SessionProgramManager::modifyPipeline(
 
         uint32_t qfi = getQer(session, pdr, qer) ? qer->qfi.second.qfi : 0;
 
+        if (qfi != 0) {
+          pdi.qfi.first      = true;
+          pdi.qfi.second.qfi = qfi;
+          pdr->set(pdi);
+        }
         auto filterInfo = SdfFilterParser::ParseSdfFilter(flowDescription);
         if (filterInfo) {
           sdfFilter              = *filterInfo;

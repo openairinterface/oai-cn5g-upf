@@ -90,7 +90,7 @@ class SessionProgramManager {
   void storePduSessionInMap(
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
       uint32_t ue_ip_address, uint32_t teid_dl, uint32_t teid_ul,
-      uint32_t seid);
+      uint64_t seid);
 
   void storeFARInFARMap(
       std::shared_ptr<FARProgram> pFARProgram,
