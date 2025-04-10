@@ -31,14 +31,6 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
 
-  // If inner packet is Ethernet broadcast (ff:ff:ff:ff:ff:ff) pass packet to TC
-  if (eth->h_dest[0] == 0xff && eth->h_dest[1] == 0xff &&
-      eth->h_dest[2] == 0xff && eth->h_dest[3] == 0xff &&
-      eth->h_dest[4] == 0xff && eth->h_dest[5] == 0xff) {
-      bpf_debug("Ethernet broadcast detected!\n");
-      return XDP_PASS;
-  }
-
   struct next_rule_eth_prog_index_key map_key;
 
   // Check types of maps and the keys that have to be included
@@ -64,6 +56,15 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
     pdu_session.teid = index_value->teid_dl;
     pdu_session.ipv4_address = src_ip_out;
     bpf_map_update_elem(&m_mac_pdu_session, &eth->h_source, &pdu_session, BPF_NOEXIST);
+
+    // If inner packet is Ethernet broadcast (ff:ff:ff:ff:ff:ff) pass packet to TC
+    if (eth->h_dest[0] == 0xff && eth->h_dest[1] == 0xff &&
+      eth->h_dest[2] == 0xff && eth->h_dest[3] == 0xff &&
+      eth->h_dest[4] == 0xff && eth->h_dest[5] == 0xff) {
+      bpf_debug("Ethernet broadcast detected!\n");
+      return XDP_PASS;
+    }
+
     bpf_tail_call(ctx, &m_next_rule_prog, index_value->prog_id);
   }
 

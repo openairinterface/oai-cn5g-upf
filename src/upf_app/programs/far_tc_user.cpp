@@ -32,6 +32,7 @@ static int verbose = 1;
 #define INGRESS_HANDLE 0x1
 #define INGRESS_PRIORITY 0xC02F
 
+// TODO [ETH-PDU]: remove tc program when user exits
 /*---------------------------------------------------------------------------------------------------------------*/
 FARTCProgram::FARTCProgram() : BPFProgram() {
   mpLifeCycle = std::make_shared<FARTCProgramLifeCycle>(
