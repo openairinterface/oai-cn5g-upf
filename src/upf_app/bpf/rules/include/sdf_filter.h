@@ -32,7 +32,7 @@ struct port_range {
 struct packet_filter {
   u32 src_ip;
   u32 dst_ip;
-  u8 protocol;
+  u16 protocol;
   u16 src_port;
   u16 dst_port;
   // u32 tos;
@@ -44,7 +44,7 @@ struct session_qfi {
 };
 
 struct sdf_filtr {
-  u8 protocol;  // Required by SDF. 0: icmp, 1: ip, 2: tcp, 3: udp
+  u16 protocol;
   struct ip_subnet src_addr;
   struct port_range src_port;
   struct ip_subnet dst_addr;
