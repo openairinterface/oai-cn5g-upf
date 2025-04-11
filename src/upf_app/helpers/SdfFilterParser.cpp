@@ -145,8 +145,9 @@ std::optional<struct sdf_filtr> SdfFilterParser::ParseSdfFilter(
 
   if (!std::regex_match(flowDescription, match, re)) {
     Logger::upf_app().error(
-        "SDF Filter: bad formatting. Should be compatible with regex: %s",
-        flowRegexStr);
+        "SDF Filter: bad formatting. flow description  {{ %s }} must follow "
+        "regex: {{ %s }}",
+        flowDescription, flowRegexStr);
     // throw std::runtime_error("SDF Filter: bad formatting");
     return std::nullopt;
   }
