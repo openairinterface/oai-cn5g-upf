@@ -250,7 +250,9 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   iph->daddr =
       p_far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
 
-  bpf_debug("IP SRC: %pI4, IP DST: %pI4", iph->saddr, iph->daddr);
+  bpf_debug(
+      "outer IP header ( ip_saddr, ip_daddr ) : ( %pI4, %pI4 )", &iph->saddr,
+      &iph->daddr);
 
   /*
   |----------------------------------------------------------------|
@@ -330,7 +332,7 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
 
   bpf_debug(
       "Pushes the GTP-Encapsulated Packet: Data/UDP/IP/EXT/GTP/UDP/IP/ETH");
-  return XDP_PASS;
+  // return XDP_PASS;
 }
 
 //--------------------------------------------------------------------------------------
@@ -554,8 +556,6 @@ static __always_inline u32 apply_rules_matching_pdr_over_n3(
 static __always_inline u32 apply_rules_matching_pdr_over_n6(
     struct xdp_md* ctx, struct ethhdr* ethh,
     struct pdrs_per_session key_rules_matching_pdr) {
-  // void* data                    = (void*) (long) ctx->data;
-  // void* data_end                = (void*) (long) ctx->data_end;
   struct rules_match_pdr* rules = {0};
   u64 seid                      = key_rules_matching_pdr.seid;
 
@@ -569,6 +569,7 @@ static __always_inline u32 apply_rules_matching_pdr_over_n6(
   pfcp_far_t_* far = &rules->far;
   if (far) {
     bpf_debug("FAR ID = %d", far->far_id.far_id);
+
     create_outer_header_gtpu_ipv4(ctx, far);
 
     u32* qos_enabling = bpf_map_lookup_elem(&m_qos_enabling, &seid);
@@ -577,7 +578,8 @@ static __always_inline u32 apply_rules_matching_pdr_over_n6(
       return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
     } else {
       pfcp_qer_t_* qer = &rules->qer;
-      if (qer->gate_status.dl_gate == 1) {
+      if (qer->gate_status.dl_gate == 0) {
+        bpf_debug("I pass here 22222222222222222");
         return XDP_PASS;
       } else {
         bpf_debug("Gate is close for Session %llu. Drop all traffic", seid);
@@ -944,8 +946,9 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
   struct pdrs_per_session key_rules_matching_pdr = {0};
   key_rules_matching_pdr.pdr_id                  = pdr_id;
   key_rules_matching_pdr.seid                    = seid;
-
   apply_rules_matching_pdr_over_n6(ctx, ethh, key_rules_matching_pdr);
+
+  return XDP_PASS;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
