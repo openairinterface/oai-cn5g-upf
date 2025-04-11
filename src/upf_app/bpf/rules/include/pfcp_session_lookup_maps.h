@@ -73,5 +73,20 @@ struct {
 } m_session_mapping SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
+/* Framed Routing */
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, MAX_UEs);
+  __type(key, u32);    // hash_framed_routing_key
+  __type(value, u32);  // ue_ip
+} m_framed_route_mapping SEC(".maps");
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, 1);  // Single entry for the flag
+  __type(key, u8);         // Key is a constant, e.g., 0
+  __type(value, u8);       // Value indicates if framed routing is enabled
+} framed_routing_flag SEC(".maps");
 
 #endif  // __PFCP_SESSION_LOOKUP_MAPS_H__
