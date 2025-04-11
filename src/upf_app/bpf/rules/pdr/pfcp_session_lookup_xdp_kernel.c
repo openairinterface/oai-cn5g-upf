@@ -85,6 +85,7 @@ static __always_inline bool update_dst_mac_address(
   return false;
 }
 
+/*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline u32 match_sdf_filter_ipv4(
     const struct packet_filter* filter, const struct sdf_filtr* sdf) {
   u8 packet_protocol  = filter->protocol;
@@ -93,39 +94,49 @@ static __always_inline u32 match_sdf_filter_ipv4(
   u32 packet_src_ip   = bpf_htonl(filter->src_ip);
   u32 packet_dst_ip   = bpf_htonl(filter->dst_ip);
 
-  u32 sdf_src_ip   = bpf_htonl(sdf->src_addr.ip);
-  u32 sdf_dst_ip   = bpf_htonl(sdf->dst_addr.ip);
-  u32 sdf_src_mask = bpf_htonl(sdf->src_addr.mask);
-  u32 sdf_dst_mask = bpf_htonl(sdf->dst_addr.mask);
+  u32 sdf_src_ip = bpf_htonl(sdf->src_addr.ip);
+  u32 sdf_dst_ip = bpf_htonl(sdf->dst_addr.ip);
 
-  bpf_debug("SDF: filter protocol: %u", sdf->protocol);
-  bpf_debug(
-      "SDF: filter source ip: %pI4, destination ip: %pI4", &sdf_src_ip,
-      &sdf_dst_ip);
-  bpf_debug(
-      "SDF: filter source ip mask: %pI4, destination ip mask: %pI4",
-      &sdf_src_mask, &sdf_dst_mask);
-  bpf_debug(
-      "SDF: filter source port lower bound: %u, source port upper bound: %u",
-      sdf->src_port.lower_bound, sdf->src_port.upper_bound);
-  bpf_debug(
-      "SDF: filter destination port lower bound: %u, destination port upper "
-      "bound: %u",
-      sdf->dst_port.lower_bound, sdf->dst_port.upper_bound);
+  /*
+  * TODO:
+  * Currently we are only working with Ipv4 packets but the struct are designed
+  * to support both Ipv4 and Ipv6
+  * For now we only treat IPv4 packets over the datapath/PFCP
+    }
+ */
 
-  bpf_debug("SDF: packet protocol: %u", packet_protocol);
-  bpf_debug(
-      "SDF: packet source ip: %pI4, destination ip: %pI4", &packet_src_ip,
-      &packet_dst_ip);
-  bpf_debug(
-      "SDF: packet source port: %u, destination port: %u", packet_src_port,
-      packet_dst_port);
+  u32 sdf_src_mask = bpf_htonl((
+      u32) (sdf->src_addr.mask >> 96));  // get the top 32 bits of 128-bits mask
+  u32 sdf_dst_mask = bpf_htonl((
+      u32) (sdf->dst_addr.mask >> 96));  // get the top 32 bits of 128-bits mask
 
-  // TODO: Start with the hit and not miss
+  bpf_debug(" Standard IANA-assigned IP protocol numbers:");
+
+  bpf_debug("{ip, 0}, {icmp, 1}, {tcp, 6}, {udp, 17}, {icmp6, 58}");
+
+  bpf_debug(
+      "( sdf_protocol, packet_protocol ) : ( %u, %u )", sdf->protocol,
+      packet_protocol);
+
+  bpf_debug(
+      "( sdf_saddr/mask, packet_saddr ) : ( %pI4/%pI4, %pI4 )", &sdf_src_ip,
+      &sdf_dst_mask, &packet_src_ip);
+
+  bpf_debug(
+      "( sdf_daddr/mask, packet_daddr ) : ( %pI4/%pI4, %pI4 )", &sdf_dst_ip,
+      &sdf_dst_mask, &packet_dst_ip);
+
+  bpf_debug(
+      "( (sdf_sport_lower, sdf_sport_upper), packet_sport ) : ( (%u, %u), %u )",
+      sdf->src_port.lower_bound, sdf->src_port.upper_bound, packet_src_port);
+
+  bpf_debug(
+      "( (sdf_dport_lower, sdf_dport_upper), packet_dport ) : ( (%u, %u), %u )",
+      sdf->dst_port.lower_bound, sdf->dst_port.upper_bound, packet_dst_port);
+
   /*
    * TODO:
-   * 1. Start with the hit and not miss
-   * 2. Check if an enum is really needed to redifine protocol:
+   * Check if an enum is really needed to redifine protocol:
    * switch (ip_protocol) {
          case IPPROTO_ICMP:
            return 0;
@@ -137,17 +148,17 @@ static __always_inline u32 match_sdf_filter_ipv4(
            return 1;
      }
   */
-  if ((sdf->protocol == 1 || sdf->protocol == packet_protocol) &&
+  if ((packet_protocol == sdf->protocol) &&
       ((packet_src_ip & sdf_src_mask) == sdf_src_ip) &&
       ((packet_dst_ip & sdf_dst_mask) == sdf_dst_ip) &&
-      (packet_src_port >= sdf->src_port.lower_bound &&
-       packet_src_port <= sdf->src_port.upper_bound) &&
-      (packet_dst_port >= sdf->dst_port.lower_bound &&
-       packet_dst_port <= sdf->dst_port.upper_bound)) {
+      ((packet_src_port >= sdf->src_port.lower_bound) &&
+       (packet_src_port <= sdf->src_port.upper_bound)) &&
+      ((packet_dst_port >= sdf->dst_port.lower_bound) &&
+       (packet_dst_port <= sdf->dst_port.upper_bound))) {
+    bpf_debug("Packet filter is matching SDF");
     return 1;
   }
-
-  bpf_debug("Packet Metadata and SDF are matching");
+  bpf_debug("Packet filter and SDF are not matching");
   return 0;
 }
 
@@ -701,7 +712,7 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
     pdi_t_ pdi                 = pdr_high_prec->pdi;
     u32 ipaddr                 = bpf_htonl(pdi.ue_ip_address.ipv4_address);
 
-    if (bpf_htonl(pdi.ue_ip_address.ipv4_address) == packet_ue_ip) {
+    if (ipaddr == packet_ue_ip) {
       u32 source_interface = pdi.source_interface.interface_value;
       switch (source_interface) {
         case INTERFACE_VALUE_ACCESS: {
@@ -739,7 +750,6 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
                 "SDF key ( seid, qfi ): ( %llu, %u )", sdf_key.seid,
                 sdf_key.qfi);
             if (match_sdf_filter_ipv4(packet_filter, sdf)) {
-              bpf_debug("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz");
               return pdr_high_prec;
             }
 
