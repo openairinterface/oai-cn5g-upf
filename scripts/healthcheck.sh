@@ -71,7 +71,7 @@ check_configuration_file() {
 check_n3_xdp_program() {
   local interface_name="$1"
   # Retrieve the XDP program ID associated with the n3 interface
-  XDP_PROGRAM_ID=$(ip link show $interface_name | grep -oP 'prog/xdp id \K\d+')
+  XDP_PROGRAM_ID=$(ip link show dev $interface_name | grep -oP 'prog/xdp id \K\d+')
   
   if [[ -z "$XDP_PROGRAM_ID" ]]; then
     echo "Healthcheck error: XDP program ID not found for $interface_name interface."
@@ -79,7 +79,7 @@ check_n3_xdp_program() {
   fi
 
   # Retrieve the program name associated with the XDP program ID from bpftool
-  XDP_PROGRAM_NAME=$(/openair-upf/bin/bpftool prog list | grep -B 0 "$XDP_PROGRAM_ID" | awk '{print $4}')
+  XDP_PROGRAM_NAME=$(/openair-upf/bin/bpftool prog list | grep -w "$XDP_PROGRAM_ID" | awk '{print $4}')
 
    if [[ -z "$XDP_PROGRAM_NAME" ]]; then
     echo "Healthcheck error: XDP program name not found for $interface_name interface."
@@ -101,7 +101,7 @@ check_n3_xdp_program() {
 check_n6_xdp_program() {
   local interface_name="$1"
   # Retrieve the XDP program ID associated with the n6 interface
-  XDP_PROGRAM_ID=$(ip link show $interface_name | grep -oP 'prog/xdp id \K\d+')
+  XDP_PROGRAM_ID=$(ip link show dev $interface_name | grep -oP 'prog/xdp id \K\d+')
   
   if [[ -z "$XDP_PROGRAM_ID" ]]; then
     echo "Healthcheck error: XDP program ID not found for $interface_name interface."
@@ -109,7 +109,7 @@ check_n6_xdp_program() {
   fi
 
   # Retrieve the program name associated with the XDP program ID from bpftool
-  XDP_PROGRAM_NAME=$(/openair-upf/bin/bpftool prog list | grep -B 0 "$XDP_PROGRAM_ID" | awk '{print $4}')
+  XDP_PROGRAM_NAME=$(/openair-upf/bin/bpftool prog list | grep -w "$XDP_PROGRAM_ID" | awk '{print $4}')
 
    if [[ -z "$XDP_PROGRAM_NAME" ]]; then
     echo "Healthcheck error: XDP program name not found for interface_name interface."
