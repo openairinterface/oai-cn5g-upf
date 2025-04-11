@@ -120,8 +120,6 @@ class SessionManager {
   std::shared_ptr<pfcp::pfcp_qer> findQER(
       std::shared_ptr<pfcp::pfcp_session> session, uint32_t qer_id);
 
-  void printPDRs(const std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs);
-
   void setupEbpfPipeline(
       std::shared_ptr<pfcp::pfcp_session> session,
       std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs, Direction direction);

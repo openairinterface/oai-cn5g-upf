@@ -167,17 +167,6 @@ bool SessionManager::getFar(
 }
 
 //---------------------------------------------------------------------------------------------------------------
-void SessionManager::printPDRs(
-    const std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs) {
-  bool first = true;
-  for (const auto& pdr : pdrs) {
-    if (!first) std::cout << ", ";
-    std::cout << pdr->pdr_id.rule_id;
-    first = false;
-  }
-  std::cout << "]" << std::endl;
-}
-//---------------------------------------------------------------------------------------------------------------
 void SessionManager::createBpfSession(
     std::shared_ptr<pfcp::pfcp_session> session,
     itti_n4_session_establishment_request* est_req,
@@ -196,11 +185,6 @@ void SessionManager::createBpfSession(
 
   sortPDRs(session->pdrs_uplink);
   sortPDRs(session->pdrs_downlink);
-
-  std::cout << "Uplink PDRs:[";
-  printPDRs(session->pdrs_uplink);
-  std::cout << "Downlink PDRs:[";
-  printPDRs(session->pdrs_downlink);
 
   // for (auto direction : {Direction::Uplink, Direction::Downlink}) {
   //   auto& pdrs = (direction == Direction::Uplink) ? session->pdrs_uplink :
@@ -298,11 +282,6 @@ void SessionManager::modifyBpfSession(
 
     sortPDRs(session->pdrs_uplink);
     sortPDRs(session->pdrs_downlink);
-
-    std::cout << "Uplink PDRs:[";
-    printPDRs(session->pdrs_uplink);
-    std::cout << "Downlink PDRs:[";
-    printPDRs(session->pdrs_downlink);
 
     pfcp::pdi pdi;
     pfcp::fteid_t fteid;
