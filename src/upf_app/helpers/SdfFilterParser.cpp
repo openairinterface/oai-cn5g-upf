@@ -10,13 +10,29 @@
 #include "sdf_filter.h"
 
 //---------------------------------------------------------------------------------------------------------------
-std::optional<int> SdfFilterParser::ParseProtocol(const std::string& protocol) {
-  static const std::unordered_map<std::string, uint8_t> protocolMap = {
-      {"icmp", 0}, {"ip", 1}, {"tcp", 2}, {"udp", 3}, {"icmp6", 4}};
+std::optional<uint16_t> SdfFilterParser::ParseProtocol(
+    const std::string& protocol) {
+  static const std::unordered_map<std::string, uint8_t> allowedProtocolMap = {
+      // Standard IANA-assigned IP protocol numbers
+      {"icmp", 1},    // IPv4 ICMP
+      {"ip", 0},      // IP in IP
+      {"tcp", 6},     // TCP over IP
+      {"udp", 17},    // UDP over IP
+      {"icmp6", 58},  // IPv6 ICMP ?
+      /*
+       * We can also accept numbers to specify protocol:
+       *         eg: permit out 6 from any to any
+       * So here:    permit out tcp from any to any
+       */
+      {"0", 0},    // icmp
+      {"1", 1},    // ip
+      {"6", 6},    // tcp
+      {"17", 17},  // udp
+      {"58", 58}   // icmp6 ?
+  };
 
-  std::string proto = (protocol == "58") ? "icmp6" : protocol;
-  auto it           = protocolMap.find(proto);
-  if (it != protocolMap.end()) {
+  auto it = allowedProtocolMap.find(protocol);
+  if (it != allowedProtocolMap.end()) {
     return it->second;
   }
   return std::nullopt;
@@ -117,8 +133,9 @@ std::optional<uint16_t> SdfFilterParser::ParsePort(const std::string& str) {
 
 std::optional<struct sdf_filtr> SdfFilterParser::ParseSdfFilter(
     const std::string& flowDescription) {
-  std::regex re(
-      R"(^permit out (icmp|ip|tcp|udp|\d+) from (any|[\d.]+|[\da-fA-F:]+)(?:/(\d+))?(?:\s+(\d+|\d+-\d+))? to (assigned|any|[\d.]+|[\da-fA-F:]+)(?:/(\d+))?(?:\s+(\d+|\d+-\d+))?$)");
+  const std::string flowRegexStr =
+      R"(^permit out (icmp|ip|tcp|udp|\d+) from (any|[\d.]+|[\da-fA-F:]+)(?:/(\d+))?(?:\s+(\d+|\d+-\d+))? to (assigned|any|[\d.]+|[\da-fA-F:]+)(?:/(\d+))?(?:\s+(\d+|\d+-\d+))?$)";
+  std::regex re(flowRegexStr);
   // permit out (icmp|ip|tcp|udp|\d+) from
   // (any|[\d.]+|[\da-fA-F:]+)(?:/(\d+))?(?: (\d+|\d+-\d+))? to
   // (assigned|any|[\d.]+|[\da-fA-F:]+)(?:/(\d+))?(?: (\d+|\d+-\d+))?$
@@ -128,7 +145,8 @@ std::optional<struct sdf_filtr> SdfFilterParser::ParseSdfFilter(
 
   if (!std::regex_match(flowDescription, match, re)) {
     Logger::upf_app().error(
-        "SDF Filter: bad formatting. Should be compatible with regex:");
+        "SDF Filter: bad formatting. Should be compatible with regex: %s",
+        flowRegexStr);
     // throw std::runtime_error("SDF Filter: bad formatting");
     return std::nullopt;
   }

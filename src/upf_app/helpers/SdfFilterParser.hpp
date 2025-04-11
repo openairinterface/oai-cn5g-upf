@@ -13,7 +13,7 @@
 class SdfFilterParser {
  public:
   // SdfFilterParser();
-  static std::optional<int> ParseProtocol(const std::string& protocol);
+  static std::optional<uint16_t> ParseProtocol(const std::string& protocol);
   static std::optional<struct ip_subnet> ParseCidrIp(
       const std::string& ipStr, const std::string& maskStr);
   static std::optional<struct port_range> ParsePortRange(
