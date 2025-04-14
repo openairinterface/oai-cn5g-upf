@@ -114,6 +114,7 @@ class QERProgram : public BPFProgram {
   bool no_htb_root_qdisc(const std::string interface);
 
   bool no_htb_default_class(const std::string interface);
+  bool no_tc_filter_bpf(const std::string interface);
   /*---------------------------------------------------------------------------------------------------------------*/
   std::shared_ptr<pfcp::pfcp_qer> retrive_default_qer_with_default_qfi(
       std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer);

@@ -159,6 +159,18 @@ std::shared_ptr<pfcp::pfcp_pdr> QERProgram::get_pdr_by_qer_id(
   auto it = pdr_map.find(qer_id);
   return (it != pdr_map.end()) ? it->second : nullptr;
 }
+bool QERProgram::no_tc_filter_bpf(std::string interface) {
+  std::string cmd = {};
+  uint32_t ret    = 0;
+
+  cmd = fmt::format(
+      "tc filter show dev {} | awk '/bpf/ {{found=1; print 1}} END {{if "
+      "(!found) print 0}}'",
+      interface.c_str());
+  Logger::upf_app().debug("Running command: %s", cmd.c_str());
+  ret = std::stoi(CmdRunner::exec(cmd).c_str());
+  return ret ? false : true;
+}
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void QERProgram::setup(
@@ -246,11 +258,13 @@ void QERProgram::setup(
     }
 
     // Create PDU Session Class
+    uint16_t casted_seid = static_cast<uint16_t>(seid);
+
     Logger::upf_app().info(
         "Create PDU Session Class 1:%d with rate: %d", seid, MAX_RATE);
     cmd = fmt::format(
-        "tc class add dev {} parent 1: classid 1:{} htb rate {}kbit",
-        GTP_INTERFACE, seid, MAX_RATE);
+        "tc class add dev {} parent 1: classid 1:{:x} htb rate {}kbit",
+        GTP_INTERFACE, casted_seid, MAX_RATE);
 
     if (system(cmd.c_str()) != 0) {
       Logger::upf_app().error("Failed command: %s", cmd);
@@ -265,7 +279,6 @@ void QERProgram::setup(
     for (const auto& qer : pQer) {
       uint8_t qfi    = qer->qfi.second.qfi;
       uint16_t minor = generate_minor_id(seid, qfi);
-      //(ntohs(seid) * 256) + ((qfi * 251) % 256);
 
       if (qer == default_qer) {
         uint16_t default_minor = (DEFAULT_CLASS_HANDLE - minor) % 10000;
@@ -279,10 +292,10 @@ void QERProgram::setup(
             default_minor, DEFAULT_CLASS_RATE, DEFAULT_CLASS_CEIL);
 
         cmd = fmt::format(
-            "tc class add dev {} parent 1:{} classid 1:{} htb rate {}kbit "
+            "tc class add dev {} parent 1:{:x} classid 1:{:x} htb rate {}kbit "
             "ceil "
             "{}kbit",
-            GTP_INTERFACE, seid, default_minor, DEFAULT_CLASS_RATE,
+            GTP_INTERFACE, casted_seid, default_minor, DEFAULT_CLASS_RATE,
             DEFAULT_CLASS_CEIL);
 
         if (system(cmd.c_str()) != 0) {
@@ -292,7 +305,8 @@ void QERProgram::setup(
               "Create PFIFO default class %d: Child of Parent 1:%d", minor,
               default_minor, seid);
           cmd = fmt::format(
-              "tc class add dev {} parent 1:{} classid 1:{} htb rate {}kbit "
+              "tc class add dev {} parent 1:{:x} classid 1:{:x} htb rate "
+              "{}kbit "
               "ceil {}kbit",
               GTP_INTERFACE, default_minor, minor, DEFAULT_CLASS_RATE,
               DEFAULT_CLASS_CEIL);
@@ -339,10 +353,10 @@ void QERProgram::setup(
             seid);
 
         cmd = fmt::format(
-            "tc class add dev {} parent 1:{} classid 1:{} htb rate {}kbit "
+            "tc class add dev {} parent 1:{:x} classid 1:{:x} htb rate {}kbit "
             "ceil "
             "{}kbit",
-            GTP_INTERFACE, seid, minor, dl_rate, dl_ceil);
+            GTP_INTERFACE, casted_seid, minor, dl_rate, dl_ceil);
 
         if (system(cmd.c_str()) != 0) {
           Logger::upf_app().error("Failed command: %s", cmd);
@@ -356,13 +370,247 @@ void QERProgram::setup(
       }
     }
 
-    Logger::upf_app().info("Attach Section tc_filter_traffic to gtp interface");
-    mpLifeCycle->tcAttachEgress("tc_filter_traffic", GTP_INTERFACE.c_str());
+    // Logger::upf_app().info("Attach Section tc_filter_traffic to gtp
+    // interface");
+    // mpLifeCycle->tcAttachEgress("tc_filter_traffic", GTP_INTERFACE.c_str());
+    if (no_tc_filter_bpf(GTP_INTERFACE)) {
+      Logger::upf_app().info(
+          "Attach Section tc_filter_traffic to gtp interface");
+      // Create tc filter for the GTP interface
+      cmd = fmt::format(
+          "tc filter add dev {} parent 1:0 protocol ip bpf obj "
+          "/openair-upf/bin/qer_tc_kernel.c.o classid 1: direct-action",
+          GTP_INTERFACE.c_str());
+      Logger::upf_app().debug("Running command: %s", cmd.c_str());
+      if (system(cmd.c_str()) != 0) {
+        Logger::upf_app().error("Failed command: %s", cmd.c_str());
+      }
+    }
 
     Logger::upf_app().info("Attach Section tc_redirect to udp interface");
     mpLifeCycle->tcAttachIngress("tc_redirect_traffic", UDP_INTERFACE.c_str());
   }
 }
+
+// void QERProgram::setup(
+//     uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
+//     std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs) {
+//   spSkeleton = mpLifeCycle->open();
+
+//   initializeMaps();
+//   mpLifeCycle->load();
+//   mpLifeCycle->attach();
+
+//   std::shared_ptr<pfcp::pfcp_qer> default_qer =
+//       retrive_default_qer_with_default_qfi(pQer);
+
+//   std::string cmd = {};
+//   int rc          = 0;
+//   int if_index    = 0;
+
+//   uint32_t udpInterfaceIndex = if_nametoindex(UDP_INTERFACE.c_str());
+//   uint32_t gtpInterfaceIndex = if_nametoindex(GTP_INTERFACE.c_str());
+
+//   if (udpInterfaceIndex == 0 || gtpInterfaceIndex == 0) {
+//     Logger::upf_app().error("Failed to retrieve interface indices");
+//     throw std::runtime_error("Invalid network interface index");
+//   }
+
+//   uint32_t uplinkId   = static_cast<uint32_t>(FlowDirection::UPLINK);
+//   uint32_t downlinkId = static_cast<uint32_t>(FlowDirection::DOWNLINK);
+
+//   mpEgressIfindexMap->update(uplinkId, udpInterfaceIndex, BPF_ANY);
+//   mpEgressIfindexMap->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
+
+//   if (!pQer.empty()) {
+//     // Configure Root Qdisc if not already present
+//     if (no_htb_root_qdisc(GTP_INTERFACE)) {
+//       Logger::upf_app().info(
+//           "Create Root qdisc on interface %s with Default Class: %d, and r2q:
+//           "
+//           "%d",
+//           GTP_INTERFACE.c_str(), DEFAULT_CLASS_HANDLE, R2Q_ROOT);
+
+//       // default_qer = retrive_default_qer_with_default_qfi(pQer);
+
+//       // if (default_qer) {
+//       //   int key             = 0;
+//       //   uint8_t default_qfi = default_qer->qfi.second.qfi;
+//       //   getDefaultQfiMap()->update(key, default_qfi, BPF_ANY);
+//       //   cmd = fmt::format(
+//       //       "tc qdisc add dev {} root handle 1:0 htb default {}",
+//       //       GTP_INTERFACE,
+//       //       static_cast<uint8_t>(default_qer->qfi.second.qfi));
+//       //   // rc = system((const char*) cmd.c_str());
+//       // } else {
+//       //   Logger::upf_app().info(
+//       //       "QER with default QFI not found, creating HTB root Qdisc
+//       without
+//       //       " "default class");
+//       //   cmd = fmt::format(
+//       //       "tc qdisc add dev {} root handle 1:0 htb", GTP_INTERFACE);
+//       // }
+
+//       cmd = fmt::format(
+//           "tc qdisc add dev {} root handle 1:0 htb default {} r2q {}",
+//           GTP_INTERFACE, DEFAULT_CLASS_HANDLE, R2Q_ROOT);
+
+//       if (system(cmd.c_str()) != 0) {
+//         Logger::upf_app().error("Failed command: %s", cmd);
+//         return;
+//       }
+
+//       Logger::upf_app().debug("QDISC Root DL Rate (GBR) : %dkbps", MAX_RATE);
+//       Logger::upf_app().debug("QDISC Root DL Ceil (MBR) : %dkbps", MAX_CEIL);
+//     } else {
+//       // if (no_htb_default_class(GTP_INTERFACE) && default_qer) {
+//       //   cmd = fmt::format(
+//       //       "tc qdisc change dev {} root handle 1:0 htb default {}",
+//       //       GTP_INTERFACE,
+//       //       static_cast<uint8_t>(default_qer->qfi.second.qfi));
+
+//       //   if (system(cmd.c_str()) != 0) {
+//       //     Logger::upf_app().error("Failed command: %s", cmd);
+//       //   }
+//       // }
+//       Logger::upf_app().debug(
+//           "HTB Root qdisc on interface %s already created",
+//           GTP_INTERFACE.c_str());
+//     }
+
+//     // Create PDU Session Class
+//     Logger::upf_app().info(
+//         "Create PDU Session Class 1:%d with rate: %d", seid, MAX_RATE);
+//     cmd = fmt::format(
+//         "tc class add dev {} parent 1: classid 1:{} htb rate {}kbit",
+//         GTP_INTERFACE, seid, MAX_RATE);
+
+//     if (system(cmd.c_str()) != 0) {
+//       Logger::upf_app().error("Failed command: %s", cmd);
+//     }
+
+//     // Process each QER
+//     // struct sdf_filtr sdfFilter;
+//     // std::string flowDescription;
+//     // uint32_t key = 0;
+//     build_pdr_map(pdrs);
+
+//     for (const auto& qer : pQer) {
+//       uint8_t qfi    = qer->qfi.second.qfi;
+//       uint16_t minor = generate_minor_id(seid, qfi);
+
+//       if (qer == default_qer) {
+//         uint16_t default_minor = (DEFAULT_CLASS_HANDLE - minor) % 10000;
+//         //(ntohs(seid) * 256) + (DEFAULT_CLASS_HANDLE * 251 % 256);
+
+//         Logger::upf_app().info(
+//             "Create Default Class 1:%d Child of Parent 1:%d", default_minor,
+//             seid);
+//         Logger::upf_app().info(
+//             "The Default Class 1:%d is of Rate: %d kbit and Ceil: %d kbit",
+//             default_minor, DEFAULT_CLASS_RATE, DEFAULT_CLASS_CEIL);
+
+//         cmd = fmt::format(
+//             "tc class add dev {} parent 1:{} classid 1:{} htb rate {}kbit "
+//             "ceil "
+//             "{}kbit",
+//             GTP_INTERFACE, seid, default_minor, DEFAULT_CLASS_RATE,
+//             DEFAULT_CLASS_CEIL);
+
+//         if (system(cmd.c_str()) != 0) {
+//           Logger::upf_app().error("Failed command: %s", cmd);
+//         } else {
+//           Logger::upf_app().info(
+//               "Create PFIFO default class %d: Child of Parent 1:%d", minor,
+//               default_minor, seid);
+//           cmd = fmt::format(
+//               "tc class add dev {} parent 1:{} classid 1:{} htb rate {}kbit "
+//               "ceil {}kbit",
+//               GTP_INTERFACE, default_minor, minor, DEFAULT_CLASS_RATE,
+//               DEFAULT_CLASS_CEIL);
+
+//           if (system(cmd.c_str()) != 0) {
+//             Logger::upf_app().error("Failed command: %s", cmd);
+//           }
+//         }
+//         continue;
+//       }
+
+//       if (qer->mbr.first) {
+//         uint32_t qer_id = qer->qer_id.second.qer_id;
+//         Logger::upf_app().debug(
+//             "qer->mbr.second.dl_mbr = %d", qer->mbr.second.dl_mbr);
+//         Logger::upf_app().debug(
+//             "qer->mbr.second.ul_mbr = %d", qer->mbr.second.ul_mbr);
+//         uint64_t dl_ceil = std::max(qer->mbr.second.dl_mbr, 1UL);
+//         Logger::upf_app().debug("dl_ceil = %d", dl_ceil);
+//         uint8_t dl_gate = qer->gate_status.second.dl_gate;
+
+//         uint64_t dl_rate = 1;
+//         if (qer->gbr.first) {
+//           dl_rate = std::max(qer->gbr.second.dl_gbr, 1UL);
+//           Logger::upf_app().debug("dl_rate = %d", dl_rate);
+//           Logger::upf_app().debug(
+//               "qer->gbr.second.ul_gbr = %d", qer->gbr.second.ul_gbr);
+//           Logger::upf_app().debug(
+//               "qer->gbr.second.dl_gbr = %d", qer->gbr.second.dl_gbr);
+//         }
+
+//         // Update QoS flow map
+//         struct s_fiveQosFlow fiveFlow = {};
+//         fiveFlow.gate                 = dl_gate;
+//         fiveFlow.gbr                  = dl_rate;
+//         fiveFlow.mbr                  = dl_ceil;
+
+//         getQoSFlowMap()->update(qer_id, fiveFlow, BPF_ANY);
+
+//         // Add tc class for QER
+//         // Create QoS Flow Class for Session
+//         Logger::upf_app().info(
+//             "Create QoS Flow Class 1:%d for PDU Session Parent 1:%d", minor,
+//             seid);
+
+//         cmd = fmt::format(
+//             "tc class add dev {} parent 1:{} classid 1:{} htb rate {}kbit "
+//             "ceil "
+//             "{}kbit",
+//             GTP_INTERFACE, seid, minor, dl_rate, dl_ceil);
+
+//         if (system(cmd.c_str()) != 0) {
+//           Logger::upf_app().error("Failed command: %s", cmd);
+//         }
+
+//         Logger::upf_app().debug(
+//             "    HTB Class ID (QER) ........... %d", qer_id);
+//         Logger::upf_app().debug("         Class QFI:      %d", qfi);
+//         Logger::upf_app().debug("         Class DL Rate:     %dkbps",
+//         dl_rate); Logger::upf_app().debug("         Class DL Ceil: %dkbps",
+//         dl_ceil);
+//       }
+//     }
+
+//     // Logger::upf_app().info("Attach Section tc_filter_traffic to gtp
+//     // interface");
+//     // mpLifeCycle->tcAttachEgress("tc_filter_traffic",
+//     GTP_INTERFACE.c_str()); if (no_tc_filter_bpf(GTP_INTERFACE)) {
+//       Logger::upf_app().info(
+//           "Attach Section tc_filter_traffic to gtp interface");
+//       // Create tc filter for the GTP interface
+//       cmd = fmt::format(
+//           "tc filter add dev {} parent 1:0 protocol ip bpf obj "
+//           "/openair-upf/bin/qer_tc_kernel.c.o classid 1: direct-action",
+//           GTP_INTERFACE.c_str());
+//       Logger::upf_app().debug("Running command: %s", cmd.c_str());
+//       if (system(cmd.c_str()) != 0) {
+//         Logger::upf_app().error("Failed command: %s", cmd.c_str());
+//       }
+//     }
+
+//     Logger::upf_app().info("Attach Section tc_redirect to udp interface");
+//     mpLifeCycle->tcAttachIngress("tc_redirect_traffic",
+//     UDP_INTERFACE.c_str());
+//   }
+// }
 
 // change:
 //  sudo tc class change dev br0 parent 1:1 classid 1:10 htb rate 1kbit ceil
