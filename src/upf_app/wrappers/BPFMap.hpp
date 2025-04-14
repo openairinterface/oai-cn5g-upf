@@ -109,7 +109,8 @@ int BPFMap::update(KeyType& key, ValueType& value, int flags) {
   if (updateReturn != 0) {
     // FIXME: Maybe Key is not support by fmt.
     Logger::upf_app().error("The key cannot be updated in map");
-    throw std::runtime_error("The BPF map cannot be updated");
+    // throw std::runtime_error("The BPF map cannot be updated");
+    // TODO: handle the error.
   } else {
     Logger::upf_app().debug("The key is updated in the map: %s", mName.c_str());
   }
@@ -125,7 +126,8 @@ int BPFMap::remove(KeyType& key) {
 
   if (deleteReturn != 0) {
     Logger::upf_app().error("The key cannot be removed in map ");
-    throw std::runtime_error("The BPF map cannot be removed");
+    // throw std::runtime_error("The BPF map cannot be removed");
+    // TODO: handle the error.
   } else {
     Logger::upf_app().debug(
         "The key is removed from the map: %s", mName.c_str());

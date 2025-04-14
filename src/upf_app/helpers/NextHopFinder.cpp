@@ -45,7 +45,8 @@ uint32_t NextHopFinder::retrieveNextHopIP(uint32_t ipDest) {
 
   if (!nextHopIp) {
     Logger::upf_app().error("The Next Hop IPv4 WAS NOT Retrieved");
-    throw std::runtime_error("The Next Hop IPv4 WAS NOT Retrieved");
+    Logger::upf_n4().error("The Next Hop IPv4 WAS NOT Retrieved");
+    return 0;
   }
 
   return nextHopIp;
@@ -68,7 +69,8 @@ ether_addr* NextHopFinder::retrieveNextHopMAC(uint32_t nextHopIp) {
 
   if (nextHopMac.empty()) {
     Logger::upf_app().error("The Next Hop MAC WAS NOT Retrieved");
-    throw std::runtime_error("The Next Hop MAC WAS NOT Retrieved");
+    Logger::upf_n4().error("The Next Hop MAC WAS NOT Retrieved");
+    return nullptr;
   }
 
   Logger::upf_app().debug(

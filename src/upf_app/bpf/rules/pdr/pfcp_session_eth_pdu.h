@@ -31,14 +31,6 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
 
-  // If inner packet is Ethernet broadcast (ff:ff:ff:ff:ff:ff) pass packet to TC
-  if (eth->h_dest[0] == 0xff && eth->h_dest[1] == 0xff &&
-      eth->h_dest[2] == 0xff && eth->h_dest[3] == 0xff &&
-      eth->h_dest[4] == 0xff && eth->h_dest[5] == 0xff) {
-      bpf_debug("Ethernet broadcast detected!\n");
-      return XDP_PASS;
-  }
-
   struct next_rule_eth_prog_index_key map_key;
 
   // Check types of maps and the keys that have to be included
@@ -47,6 +39,8 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
   map_key.source_value = source_value;
   map_key.ethertype = 0; // bpf_ntohs(eth->h_proto);
 
+  bpf_debug("tail_call_next_prog__eth_pdu: teid: %u, source_value: %u, teid byte order: %u",
+    teid, map_key.source_value, bpf_ntohl(teid));
   // TODO [ETH-PDU] support other eth pkt filters
   struct next_rule_eth_prog_index_value* index_value = bpf_map_lookup_elem(&m_next_rule_eth_prog_index, &map_key);
 
@@ -64,9 +58,20 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
     pdu_session.teid = index_value->teid_dl;
     pdu_session.ipv4_address = src_ip_out;
     bpf_map_update_elem(&m_mac_pdu_session, &eth->h_source, &pdu_session, BPF_NOEXIST);
+
+    // If inner packet is Ethernet broadcast (ff:ff:ff:ff:ff:ff) pass packet to TC
+    if (eth->h_dest[0] == 0xff && eth->h_dest[1] == 0xff &&
+      eth->h_dest[2] == 0xff && eth->h_dest[3] == 0xff &&
+      eth->h_dest[4] == 0xff && eth->h_dest[5] == 0xff) {
+      bpf_debug("Ethernet broadcast detected!\n");
+      return XDP_PASS;
+    }
+
     bpf_tail_call(ctx, &m_next_rule_prog, index_value->prog_id);
   }
 
+  bpf_debug("tail_call_next_prog__eth_pdu: No next prog found");
+  // If no next prog found, pass the packet to the next layer
   return XDP_PASS;
 }
 
@@ -126,6 +131,7 @@ static __always_inline u32 handle_downlink_traffic__eth_pdu(
       return XDP_DROP;
   }
 
+  // Pri
   struct mac_pdu_session_value* pdu_session = bpf_map_lookup_elem(&m_mac_pdu_session, &eth->h_dest);
   if (pdu_session) {
      create_outer_header_gtpu(ctx, pdu_session->teid, pdu_session->ipv4_address, 1);

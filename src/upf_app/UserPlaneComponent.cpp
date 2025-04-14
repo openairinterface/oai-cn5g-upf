@@ -76,7 +76,8 @@ void UserPlaneComponent::setMembers(
 
   if (!mpPFCP_Session_LookupProgram) {
     Logger::upf_app().error("The eBPF Program is Not Initialized");
-    throw std::runtime_error("The eBPF Program is Not Initialized");
+    Logger::upf_n4().error("The eBPF Program is Not Initialized");
+    return;
   }
 }
 

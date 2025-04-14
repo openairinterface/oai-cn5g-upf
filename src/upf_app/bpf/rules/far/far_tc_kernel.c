@@ -33,25 +33,25 @@ int handle_broadcast(struct __sk_buff *skb)
 
     if ((void*) (eth + 1) > data_end)
     {
-        bpf_debug("handle_broadcast: Invalid Ethernet Packet\n");
+        // bpf_debug("handle_broadcast: Invalid Ethernet Packet\n");
         goto out;
     }  
 
     struct iphdr* iph = (struct iphdr*) ((void*) data + sizeof(*eth));
     if ((void*) (iph + 1) > data_end) {
-        bpf_debug("handle_broadcast: Invalid IPv4 Packet\n");
+        // bpf_debug("handle_broadcast: Invalid IPv4 Packet\n");
         goto out;
     }
 
     struct udphdr* udph = (struct udphdr*) (iph + 1);
     // Check if the UDP header extends beyond the data end.
     if ((void*) (udph + 1) > data_end) {
-        bpf_debug("handle_broadcast: Invalid UDP packet\n");
+        // bpf_debug("handle_broadcast: Invalid UDP packet\n");
         goto out;
     }
 
     if (bpf_htons(udph->dest) != GTP_UDP_PORT) {
-        bpf_debug("handle_broadcast: This is not a GTP packet\n");
+        // bpf_debug("handle_broadcast: This is not a GTP packet\n");
         goto out;
     }
     swap_src_dst_mac(eth);

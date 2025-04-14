@@ -188,12 +188,17 @@ void SessionProgramManager::storeFarProgramIndexInNextProgEthRuleIndexMap(
   s32 fd = pFARProgram->getFd();
   next_rule_eth_prog_index_value value;
   value.prog_id = id;
-  value.teid_dl = teid_dl;
-
+  
+  // teid_dl is straight from the FAR so it is in the same endianess as the system
+  Logger::upf_app().debug(
+      "storeFarProgramIndexInNextProgEthRuleIndexMap: teid_dl: %u, htole32(teid_dl): %u, htobe32(teid_dl): %u",
+      teid_dl, htole32(teid_dl), htobe32(teid_dl));
   if (is_little_endian()) {
     value.ipv4_address = htole32(n3IpAddress);
+    value.teid_dl = teid_dl;
   } else {
     value.ipv4_address = n3IpAddress;
+    value.teid_dl = htole32(teid_dl);
   }
 
   pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->update(
@@ -335,7 +340,8 @@ uint32_t SessionProgramManager::getGnodebIp(
   if (not pFar->get(foward_param)) {
     Logger::upf_app().error(
         "Could not retrieve the forwarding parameters from FAR");
-    throw std::runtime_error("gNodeB IP cannot be retrieved");
+    Logger::upf_n4().error("gNodeB IP cannot be retrieved");
+    return 0;
   }
 
   pfcp::ue_ip_address_t gNBIpAddress;
@@ -454,6 +460,9 @@ void SessionProgramManager::createPipeline(
   std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
+  Logger::upf_app().debug(
+      "ETH-PDU: Store FAR program index in the NextProgEthRuleIndexMap. teid_dl: %u, teid_ul: %u",
+      teid_dl, teid1);
   storeFarProgramIndexInNextProgEthRuleIndexMap(
       pFARProgram, key, teid_dl, upfn3IP, pPFCP_Session_LookupProgram);
 
@@ -495,18 +504,27 @@ void SessionProgramManager::removePipeline(uint64_t seid) {
     // throw std::runtime_error("Session does Not Exist. It Cannot be Removed");
   }
 
+  try
+  {
   Logger::upf_app().debug(
       "Delete the SessionPrograms object. It will release the pipeline");
   // The key represent the pointer to the pipeline related to the session.
-  auto key = it->second->getKey();
-  it->second.reset();
-  mSessionProgramsMap.erase(seid);
+  // auto key = it->second->getKey();
+  // it->second.reset();
+  // mSessionProgramsMap.erase(seid);
 
-  Logger::upf_app().debug("Clean PDU Session from the entry program's map");
-  auto pPFCP_Session_LookupProgram =
-      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
-  pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->remove(key);
-  pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->remove(key);
+  // Logger::upf_app().debug("Clean PDU Session from the entry program's map");
+  // auto pPFCP_Session_LookupProgram =
+  //     UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+  //   pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->remove(key);
+  }
+  catch(const std::exception& e)
+  {
+    Logger::upf_app().error(
+        "Error: Failed to remove the key from the NextProgRuleIndexMap: %s", e.what());
+  }
+      
+  // pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->remove(key);
 }
 
 //---------------------------------------------------------------------------------------------------------------
@@ -521,8 +539,9 @@ void SessionProgramManager::create(uint64_t seid) {
         "the same "
         "key",
         seid);
-    throw std::runtime_error(
+        Logger::upf_n4().error(
         "Cannot Create a New eBPF program with Key (seid)");
+        return;
   }
 
   // Instantiate a new PFCP_Session_PDR_LookupProgram
@@ -557,8 +576,9 @@ void SessionProgramManager::remove(uint64_t seid) {
   auto sessionProgram = findSessionProgram(seid);
   if (!sessionProgram) {
     Logger::upf_app().error(
-        "The PDU session %d does not exist. Cannot be removed", seid);
-    throw std::runtime_error("The session does not exist. Cannot be removed");
+        "The PDU session %d does not exist. Cannot be removed", seid);     
+    Logger::upf_n4().error("The session does not exist. Cannot be removed");
+        return;
   }
   sessionProgram->tearDown();
   mSessionProgramMap.erase(seid);
@@ -617,6 +637,7 @@ int32_t SessionProgramManager::getEmptySlot() {
     return index;
   } else {
     Logger::upf_app().error("No Space Available");
-    throw std::runtime_error("No Space Available");
+    Logger::upf_n4().error("No Space Available");
+    return -1;
   }
 }

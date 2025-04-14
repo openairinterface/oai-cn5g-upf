@@ -94,22 +94,36 @@ bool SessionManager::extractForwardingParams(
 uint64_t SessionManager::findUplinkTeid(
     uint64_t seid,
     const std::vector<std::shared_ptr<pfcp::pfcp_session>>& sessions) {
+  Logger::upf_app().debug(
+      "Finding Uplink TEID for session %d", seid);
+
+  // Print the teids of all sessions
   for (const auto& session : sessions) {
+    Logger::upf_app().debug(
+        "Session %d TEID %d", session->get_up_seid(), session->teid_uplink.teid);
+  }
+
+  for (const auto& session : sessions) {
+    Logger::upf_app().debug(
+        "Checking session %d", session->get_up_seid());
     if (session->get_up_seid() != seid) {
       continue;  // Skip to the next session if not matching seid
     }
 
-    for (const auto& pdr : session->pdrs) {
-      pfcp::pdi pdi;
-      if (pdr->get(pdi)) {
-        pfcp::source_interface_t sourceInterface;
-        if (pdi.get(sourceInterface) &&
-            sourceInterface.interface_value == INTERFACE_VALUE_ACCESS) {
-          return session->teid_uplink.teid;
-        }
-      }
+    pfcp::fteid_t uplink_fteid = {};
+    if (!session->get(uplink_fteid)) {
+      // Set the uplink fteid in the response
+      Logger::pfcp_switch().info(
+          "Failed to get uplink_fteid from session %d", session->get_up_seid());
+      return 0;
+    } else {
+      Logger::upf_app().debug(
+          "Uplink TEID %d found in session %d", uplink_fteid.teid, seid);
+      return uplink_fteid.teid;
     }
   }
+  Logger::upf_app().debug(
+      "Uplink TEID not found for session %d", seid);
 
   return 0;  // Return 0 if teidToUpdate is not found
 }
@@ -211,11 +225,26 @@ void SessionManager::createBPFSession(
   auto& logger  = Logger::upf_n4();
   uint64_t seid = pSession_establishment->get_up_seid();
 
+  // Log the Tied
   sessions.push_back(pSession_establishment);
-
+  
+  
   logger.debug("Session %d Received", seid);
   logger.debug("Preparing the Datapath ...");
   logger.debug("Find the PDR with Highest Precedence");
+  
+  Logger::pfcp_switch().info(
+    "Number of PDRs in session: %u", pSession_establishment->pdrs.size());
+
+  pfcp::fteid_t fteid = {};
+  if (!pSession_establishment->get(fteid)) {
+    Logger::upf_app().debug("Missing Mandatory IE (TEID) within PFCP Session Establishment Request");
+  }
+
+  Logger::upf_app().debug(
+      "=== Session Uplink TEID: %d", fteid.teid);
+  Logger::upf_app().debug(
+        "=== Session Uplink TEID: %d", pSession_establishment->teid_uplink.teid);
 
   auto& pdrs_uplink   = pSession_establishment->pdrs_uplink;
   auto& pdrs_downlink = pSession_establishment->pdrs_downlink;
@@ -228,8 +257,9 @@ void SessionManager::createBPFSession(
 
   // Throw error if both uplink and downlink vectors are empty
   if (pdrs_uplink.empty() && pdrs_downlink.empty()) {
-    logger.error("No PDRs were found in session: %d", seid);
-    throw std::runtime_error("No PDRs were found in session");
+    Logger::upf_n4().error("No PDRs were found in session: %d", seid);
+    // throw std::runtime_error("No PDRs were found in session");
+    return;  // Return early if no PDRs found
   }
 
   // Sort uplink and downlink vectors
@@ -257,9 +287,10 @@ void SessionManager::processPDRs(
     pfcp::pdi pdi;
     pfcp::source_interface_t sourceInterface;
     if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
-      throw std::runtime_error(
+      Logger::upf_n4().error(
           "Missing Mandatory IE (PDI or Source Interface) within PDR: " +
           std::to_string(pdr->pdr_id.rule_id));
+      return;
     }
 
     uint64_t qer_id                     = pdr->qer_id.second.qer_id;
@@ -375,9 +406,10 @@ void SessionManager::processPDRDetails(
       pSession->get_up_seid());
 
   if (!(pdrHighPrecedence->get(pdi) && pdi.get(sourceInterface))) {
-    throw std::runtime_error(
+    Logger::upf_n4().error(
         "Missing Mandatory IE (PDI or Source Interface) within PDR: " +
         std::to_string(pdr_id));
+    return;
   }
 
   if (!pdi.get(fteid)) {
@@ -403,9 +435,10 @@ void SessionManager::processPDRDetails(
   std::shared_ptr<pfcp::pfcp_far> pFar;
 
   if (!extractFar(pdrHighPrecedence, pSession, pFar)) {
-    throw std::runtime_error(
+    Logger::upf_n4().error(
         "Failed to extract %s FAR for PDR " + direction + " " +
         std::to_string(pdr_id));
+    return;
   }
 
   std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer;
@@ -485,23 +518,11 @@ void SessionManager::updateBPFSession(
       return;
     }
 
-    if (pdrs_downlink_size != pSession->pdrs_downlink.size()) {
-      std::sort(
-          pSession->pdrs_downlink.begin(), pSession->pdrs_downlink.end(),
-          SessionManager::comparePDR);
-
-      auto pdrHighPrecedenceDl = pSession->pdrs_downlink[0];
-      Logger::upf_app().debug(
-          "The Downlink PDR %d has the Highest Precedence",
-          pdrHighPrecedenceDl->pdr_id.rule_id);
-
-      Logger::upf_app().debug(
-          "Extract PDI from the Downlink PDR %d",
-          pdrHighPrecedenceDl->pdr_id.rule_id);
-
-      updateBPFSessionDL(pSession, pdrHighPrecedenceDl);
-    }
-
+    /** NOTE: Start with UL PDRs. ETH-PDU session uses a single map (eth_pdu) for the for the PDRs
+     * with a key of UL TEID, and ethertype, and value of DL TEID. DL requires a different map with a key of
+     * MAC address with the DL TEID being fetch from eth_pdu during uplink. If we update the UL PDRs
+     * after the DL PDRs we will overwrite the DL TEID with 0. 
+     */
     if (pdrs_uplink_size != pSession->pdrs_uplink.size()) {
       std::sort(
           pSession->pdrs_uplink.begin(), pSession->pdrs_uplink.end(),
@@ -517,6 +538,23 @@ void SessionManager::updateBPFSession(
           pdrHighPrecedenceUl->pdr_id.rule_id);
 
       updateBPFSessionUL(pSession, pdrHighPrecedenceUl);
+    }
+
+    if (pdrs_downlink_size != pSession->pdrs_downlink.size()) {
+      std::sort(
+          pSession->pdrs_downlink.begin(), pSession->pdrs_downlink.end(),
+          SessionManager::comparePDR);
+
+      auto pdrHighPrecedenceDl = pSession->pdrs_downlink[0];
+      Logger::upf_app().debug(
+          "The Downlink PDR %d has the Highest Precedence",
+          pdrHighPrecedenceDl->pdr_id.rule_id);
+
+      Logger::upf_app().debug(
+          "Extract PDI from the Downlink PDR %d",
+          pdrHighPrecedenceDl->pdr_id.rule_id);
+
+      updateBPFSessionDL(pSession, pdrHighPrecedenceDl);
     }
   }
 
@@ -536,6 +574,7 @@ void SessionManager::updateBPFSessionUL(
   pfcp::ue_ip_address_t ueIpAddress;
   pfcp::source_interface_t sourceInterface;
   pfcp::ethernet_packet_filter ethernetPacketFilter;
+  pfcp::ethernet_pdu_session_information_t ethernetPduSessionInformation;
 
   Logger::upf_app().debug(
       "Update the Uplink Direction Datapath For Session %d",
@@ -543,32 +582,63 @@ void SessionManager::updateBPFSessionUL(
 
   if (!(extractPdi(pdrHighPrecedenceUl, pdi) &&
         extractSourceIface(pdi, sourceInterface))) {
-    throw std::runtime_error("No fields available For Uplink Update PDI Check");
+          Logger::upf_n4().error("No fields available For Uplink Update PDI Check");
+          return;
   }
-
-  // TODO [ETH-PDU]
-  // If IP PDU extract ueIP
-  // Else if ETH PDU extract ethernet_filter
-  // Else throw error
-  if (!(extractUeIpv4(pdi, ueIpAddress) ||
-      extractEthernetPacketFilter(pdi, ethernetPacketFilter))) {
-      throw std::runtime_error("PDI for UL must have either UE IP or ETH Packet Filter");
-  }
-
-  Logger::upf_app().debug(
-      "PDI extracted from Uplink PDR %d", pdrHighPrecedenceUl->pdr_id.rule_id);
-
-  Logger::upf_app().debug(
-      "Extract Uplink FAR from the highest precedence Uplink PDR");
 
   std::shared_ptr<pfcp::pfcp_far> pFar;
 
   if (!extractFar(pdrHighPrecedenceUl, pSession, pFar)) {
-    throw std::runtime_error("No fields available For Uplink Update FAR Check");
+    Logger::upf_n4().error("No fields available For Uplink Update FAR Check");
+    return;
   }
 
-  Logger::upf_app().info("Update Session For Uplink");
-  Logger::upf_app().warn("TODO: update Uplink PDRs ...");
+  if (!pdi.get(fteid)) {
+    if (fteid.ch) {
+    }
+    fteid.teid = -1;
+    Logger::upf_app().warn("FTEID is missing");
+    Logger::upf_app().warn(
+        "TODO: This IE shall not be present if Traffic Endpoint ID is present");
+    Logger::upf_app().warn(
+        "TODO: The CP function shall set the CHOOSE (CH) bit to 1 if the");
+    Logger::upf_app().warn(
+        "UP function supports the allocation of F-TEID and the CP function");
+    Logger::upf_app().warn(
+        "requests the UP function to assign a local F-TEID to the PDR.");
+  }
+
+  // IP PDU session
+  if (extractUeIpv4(pdi, ueIpAddress)) {
+    Logger::upf_app().debug(
+      "PDI extracted from Uplink PDR %d", pdrHighPrecedenceUl->pdr_id.rule_id);
+
+    Logger::upf_app().debug(
+        "Extract Uplink FAR from the highest precedence Uplink PDR");
+
+    Logger::upf_app().info("Update Session For Uplink");
+    Logger::upf_app().warn("TODO: update Uplink PDRs ...");
+  } else if (extractEthernetPacketFilter(pdi, ethernetPacketFilter) ||
+  extractEthernetPduSessionInformation(pdi, ethernetPduSessionInformation)) {
+
+    pfcp::ethertype_t ethertype;
+    if (!ethernetPacketFilter.get(ethertype)) {
+      ethertype.ethertype = 0;
+    }
+    Logger::upf_app().info(
+      "ETH-PDU: creating pipeline with ethertype: 0x%x",
+      ethertype.ethertype);
+    SessionProgramManager::getInstance().createPipeline(
+        pSession->get_up_seid(), fteid.teid, INTERFACE_VALUE_ACCESS,
+        ethertype.ethertype, pFar, pSession->qers, false, 0);
+    return;
+
+  } else {
+    Logger::upf_n4().error(
+        "No fields available For Uplink Update PDI Check");
+    return;
+  }
+
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -587,8 +657,9 @@ void SessionManager::updateBPFSessionDL(
 
   if (!(extractPdi(pdrHighPrecedenceDl, pdi) &&
         extractSourceIface(pdi, sourceInterface))) {
-    throw std::runtime_error(
+          Logger::upf_n4().error(
         "No fields available For Downlink Update PDI Check");
+          return;
   }
 
   // TODO [ETH-PDU]
@@ -598,7 +669,8 @@ void SessionManager::updateBPFSessionDL(
   if (!(extractUeIpv4(pdi, ueIpAddress) ||
       extractEthernetPacketFilter(pdi, ethernetPacketFilter) ||
       extractEthernetPduSessionInformation(pdi, ethernetPduSessionInformation))) {
-      throw std::runtime_error("PDI for DL must have either UE IP, ETH Packet Filter or ETH PDU Session Information");
+        Logger::upf_n4().error("PDI for DL must have either UE IP, ETH Packet Filter or ETH PDU Session Information");
+        return;
   }
 
   Logger::upf_app().debug(
@@ -612,8 +684,9 @@ void SessionManager::updateBPFSessionDL(
   std::shared_ptr<pfcp::pfcp_far> pFar;
 
   if (!extractFar(pdrHighPrecedenceDl, pSession, pFar)) {
-    throw std::runtime_error(
+    Logger::upf_n4().error(
         "No fields available For Downlink Update FAR Check");
+    return;
   }
 
   Logger::upf_app().debug("FAR ID %d", pFar->far_id.far_id);
@@ -625,24 +698,59 @@ void SessionManager::updateBPFSessionDL(
         "Forwarding parameters were not found for Downlink Update");
   }
 
+  // Get the teid_uplink for pSession
+  uint64_t teid_ul = 0;
+  pfcp::fteid_t uplink_fteid2 = {};
+  if (!pSession->get(uplink_fteid2)) {
+    // Set the uplink fteid in the response
+    Logger::pfcp_switch().info(
+        "call_datapath uplink_fteid not set, setting it to default");
+  } else {
+    Logger::pfcp_switch().info(
+        "call_datapath uplink_fteid set, setting it to %u", uplink_fteid2.teid);
+    teid_ul = uplink_fteid2.teid;
+  }
+
   fteid.teid       = forwardingParams.outer_header_creation.second.teid;
-  uint64_t teid_ul = findUplinkTeid(seidul, sessions);
+  uint64_t teid_ul2 = findUplinkTeid(seidul, sessions);
+  Logger::upf_app().debug(
+      "Uplink TEID found for session: 0x%x", teid_ul2);
 
   // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer =
   // pSession->qerIDsPerPDR.qers;
   // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer = pSession->qers;
 
-  // TODO [ETH-PDU] support downlink for eth pkt filters. Currently only using eth pdu session info for DL
+  // TODO [ETH-PDU] support uplink for eth pkt filters. Currently only using eth pdu session info for DL
 
-  if (teid_ul) {
+  // IP PDU session
+  if (extractUeIpv4(pdi, ueIpAddress)) {
+    Logger::upf_app().debug(
+        "IP PDU: PDI extracted from Downlink PDR %d", pdrHighPrecedenceDl->pdr_id.rule_id);
     SessionProgramManager::getInstance().createPipeline(
-        seidul, fteid.teid, INTERFACE_VALUE_CORE,
-        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, teid_ul);
-  } else {
-    Logger::upf_app().info("Uplink TEID not used for session: 0x%x", seidul);
+      seidul, fteid.teid, INTERFACE_VALUE_CORE,
+      ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, teid_ul);
+    return;
+  } else if (extractEthernetPacketFilter(pdi, ethernetPacketFilter) ||
+      extractEthernetPduSessionInformation(pdi, ethernetPduSessionInformation)) {
+    Logger::upf_app().debug(
+      "ETH-PDU: creating pipeline for ETH PDU session, Downlink PDR %d",
+      pdrHighPrecedenceDl->pdr_id.rule_id);
+    pfcp::ethertype_t ethertype;
+    if (!ethernetPacketFilter.get(ethertype)) {
+      ethertype.ethertype = 0;
+    }
+    Logger::upf_app().info(
+      "ETH-PDU: creating pipeline with ethertype: 0x%x",
+      ethertype.ethertype);
     SessionProgramManager::getInstance().createPipeline(
-        seidul, fteid.teid, INTERFACE_VALUE_CORE,
-        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, 0);
+        pSession->get_up_seid(), teid_ul, INTERFACE_VALUE_CORE,
+        ethertype.ethertype, pFar, pSession->qers, false, teid_ul);
+    return;
+  }
+  else {
+    Logger::upf_n4().error(
+        "No fields available For Downlink Update PDI Check");
+    return;
   }
 }
 
@@ -659,6 +767,15 @@ void SessionManager::removeBPFSession(
         "Session %d Does Not Exist. It Cannot be Removed", seid);
     // throw std::runtime_error("Session Does Not Exist. It Cannot be Removed");
   }
+
+  // Remove the session from the map session
+  sessions.erase(
+      std::remove_if(
+          sessions.begin(), sessions.end(),
+          [seid](const std::shared_ptr<pfcp::pfcp_session>& session) {
+            return session->get_up_seid() == seid;
+          }),
+      sessions.end());
 
   SessionProgramManager::getInstance().removePipeline(seid);
   Logger::upf_app().debug("Session 0x%x Has Been Removed Successfully", seid);
