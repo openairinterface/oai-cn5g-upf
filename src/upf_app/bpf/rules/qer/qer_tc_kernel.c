@@ -88,7 +88,7 @@ static __always_inline u32 egress_sdf_classifier(struct __sk_buff* skb) {
 
   skb->tc_classid =
       generate_minor_id(qos_class_metadata->seid, qos_class_metadata->qfi);
-  bpf_debug("TC: classid %x", skb->tc_classid);
+  bpf_debug("TC: classid %d", skb->tc_classid);
   return TC_ACT_OK;
 }
 
