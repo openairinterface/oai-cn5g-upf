@@ -29,9 +29,6 @@
 #include <linux/netdevice.h>
 #include <linux/pkt_sched.h>
 
-// #define GET_TC_CLASSID(seid, qfi)                                              \
-//   (((seid) << 16) | (((seid) *256) + ((qfi) *251 % 256)))
-
 //---------------------------------------------------------------------------------------------------------------
 static __always_inline u32 egress_sdf_classifier(struct __sk_buff* skb) {
   void* data      = (void*) (long) skb->data;
@@ -85,52 +82,54 @@ static __always_inline u32 egress_sdf_classifier(struct __sk_buff* skb) {
   bpf_debug(
       "TC: Received XDP Metadata - seid: %llu, qfi: %u",
       qos_class_metadata->seid, qos_class_metadata->qfi);
-
-  skb->tc_classid =
+  u16 minor_id =
       generate_minor_id(qos_class_metadata->seid, qos_class_metadata->qfi);
+  skb->tc_classid = minor_id;
+  skb->priority =
+      TC_H_MAKE(1, minor_id);  // 1 is the HTB root handle's major number
   bpf_debug("TC: classid %d", skb->tc_classid);
+  bpf_debug("TC: skb->priority set to 0x%x", skb->priority);
   return TC_ACT_OK;
 }
 
 //---------------------------------------------------------------------------------------------------------------
-static __always_inline u32 ipv4_sdf_filter(struct __sk_buff* skb) {
-  void* data     = (void*) (long) skb->data;
-  void* data_end = (void*) (long) skb->data_end;
+// static __always_inline u32 ipv4_sdf_filter(struct __sk_buff* skb) {
+//   void* data     = (void*) (long) skb->data;
+//   void* data_end = (void*) (long) skb->data_end;
 
-  struct ethhdr* ethh = data;
+//   struct ethhdr* ethh = data;
 
-  if ((void*) (ethh + 1) > data_end) {
-    bpf_debug("Error: Invalid Ethernet header");
-    return TC_ACT_SHOT;
-  }
+//   if ((void*) (ethh + 1) > data_end) {
+//     bpf_debug("Error: Invalid Ethernet header");
+//     return TC_ACT_SHOT;
+//   }
 
-  struct iphdr* iph = (struct iphdr*) (ethh + 1);
+//   struct iphdr* iph = (struct iphdr*) (ethh + 1);
 
-  if ((void*) (iph + 1) > data_end) {
-    bpf_debug("Error: Invalid IPv4 header");
-    return TC_ACT_SHOT;
-  }
+//   if ((void*) (iph + 1) > data_end) {
+//     bpf_debug("Error: Invalid IPv4 header");
+//     return TC_ACT_SHOT;
+//   }
 
-  if (iph->protocol == IPPROTO_UDP) {
-    struct udphdr* udph = (struct udphdr*) (iph + 1);
+//   if (iph->protocol == IPPROTO_UDP) {
+//     struct udphdr* udph = (struct udphdr*) (iph + 1);
 
-    if ((void*) (udph + 1) > data_end) {
-      bpf_debug("Error: Invalid UDP header");
-      return TC_ACT_SHOT;
-    }
+//     if ((void*) (udph + 1) > data_end) {
+//       bpf_debug("Error: Invalid UDP header");
+//       return TC_ACT_SHOT;
+//     }
 
-    if (htons(udph->dest) == GTP_UDP_PORT) {
-      bpf_debug("IPv4 SDF Filter: This is a GTP traffic");
-      return egress_sdf_classifier(skb);
-    }
-  }
+//     if (htons(udph->dest) == GTP_UDP_PORT) {
+//       bpf_debug("IPv4 SDF Filter: This is a GTP traffic");
+//       return egress_sdf_classifier(skb);
+//     }
+//   }
 
-  return TC_ACT_SHOT;
-}
+//   return TC_ACT_SHOT;
+// }
 
-//---------------------------------------------------------------------------------------------------------------
-
-SEC("tc/egress")
+// SEC("tc/egress")
+SEC("classifier")
 int tc_filter_traffic(struct __sk_buff* skb) {
   bpf_debug("==========< tc/egress: Filter Traffic >==========");
 
@@ -150,8 +149,66 @@ int tc_filter_traffic(struct __sk_buff* skb) {
   switch (l3_protocol) {
     case ETH_P_IP: {
       bpf_debug("SDF Filter: This is an IPv4 Packet");
-      return ipv4_sdf_filter(skb);
-      //  return TC_ACT_OK;
+      // return ipv4_sdf_filter(skb);
+
+      struct iphdr* iph = (struct iphdr*) (ethh + 1);
+
+      if ((void*) (iph + 1) > data_end) {
+        bpf_debug("Error: Invalid IPv4 header");
+        return TC_ACT_SHOT;
+      }
+
+      if (iph->protocol == IPPROTO_UDP) {
+        struct udphdr* udph = (struct udphdr*) (iph + 1);
+
+        if ((void*) (udph + 1) > data_end) {
+          bpf_debug("Error: Invalid UDP header");
+          return TC_ACT_SHOT;
+        }
+
+        if (htons(udph->dest) == GTP_UDP_PORT) {
+          bpf_debug("IPv4 SDF Filter: This is a GTP traffic");
+          // return egress_sdf_classifier(skb);
+
+          struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
+
+          if ((void*) (gtpuh + 1) > data_end) {
+            bpf_debug("Error: Invalid GTPU packet");
+            return TC_ACT_SHOT;
+          }
+
+          struct gtpu_extn_pdu_session_container* gtpu_ext_h =
+              (struct gtpu_extn_pdu_session_container*) ((void*) (gtpuh + 1));
+
+          if ((void*) (gtpu_ext_h + 1) > data_end) {
+            bpf_debug("Error: Invalid GTPU Extension packet");
+            return TC_ACT_SHOT;
+          }
+
+          void* data_meta = (void*) (long) skb->data_meta;
+          struct session_qfi* qos_class_metadata = data_meta;
+
+          /* Check XDP gave us some data_meta */
+          if ((void*) (qos_class_metadata + 1) > data) {
+            bpf_debug("Error: Failed to load metadata from XDP");
+            return TC_ACT_SHOT;
+          }
+
+          bpf_debug(
+              "TC: Received XDP Metadata - seid: %llu, qfi: %u",
+              qos_class_metadata->seid, qos_class_metadata->qfi);
+          u16 minor_id = generate_minor_id(
+              qos_class_metadata->seid, qos_class_metadata->qfi);
+          skb->tc_classid = minor_id;
+          skb->priority   = TC_H_MAKE(
+              1, minor_id);  // 1 is the HTB root handle's major number
+          bpf_debug("TC: classid %d", skb->tc_classid);
+          bpf_debug("TC: skb->priority set to 0x%x", skb->priority);
+          return TC_ACT_OK;
+        }
+      }
+
+      return TC_ACT_SHOT;
     }
     case ETH_P_IPV6:
     case ETH_P_8021Q:
@@ -162,6 +219,42 @@ int tc_filter_traffic(struct __sk_buff* skb) {
       return TC_ACT_OK;
   }
 }
+
+//---------------------------------------------------------------------------------------------------------------
+
+// // SEC("tc/egress")
+// SEC("classifier")
+// int tc_filter_traffic(struct __sk_buff* skb) {
+//   bpf_debug("==========< tc/egress: Filter Traffic >==========");
+
+//   void* data     = (void*) (long) skb->data;
+//   void* data_end = (void*) (long) skb->data_end;
+
+//   struct ethhdr* ethh = data;
+
+//   if ((void*) (ethh + 1) > data_end) {
+//     bpf_debug("Error: Invalid Ethernet header");
+//     return TC_ACT_SHOT;
+//   }
+
+//   u16 l3_protocol = htons(ethh->h_proto);
+//   bpf_debug("SDF FILTER: l3_protocol: 0x%x", l3_protocol);
+
+//   switch (l3_protocol) {
+//     case ETH_P_IP: {
+//       bpf_debug("SDF Filter: This is an IPv4 Packet");
+//       return ipv4_sdf_filter(skb);
+//       //  return TC_ACT_OK;
+//     }
+//     case ETH_P_IPV6:
+//     case ETH_P_8021Q:
+//     case ETH_P_8021AD:
+//     case ETH_P_ARP:
+//       return TC_ACT_OK;
+//     default:
+//       return TC_ACT_OK;
+//   }
+// }
 
 //---------------------------------------------------------------------------------------------------------------
 
