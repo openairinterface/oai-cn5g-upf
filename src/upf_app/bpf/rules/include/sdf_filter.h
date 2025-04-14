@@ -8,6 +8,20 @@
 //#include <linux/tcp.h>
 //#include <linux/udp.h>
 
+/*---------------------------------------------------------------------------------------------------------------*/
+
+static inline uint16_t generate_minor_id(uint64_t seid, uint8_t qfi) {
+  uint16_t hash = (seid ^ (seid >> 16) ^ (seid >> 32) ^ (seid >> 48));
+  uint16_t minor_id =
+      (hash + (qfi * 37)) & 0xFFFF;  // Avoid modulo, use bitmask
+
+  // Limit minor_id to a max of 9999
+  minor_id = (minor_id > 9999) ? 9999 : minor_id;
+
+  return minor_id ? minor_id : 1;  // Ensure nonzero
+}
+/*---------------------------------------------------------------------------------------------------------------*/
+
 struct ip_subnet {
   u8 type;
   /*
