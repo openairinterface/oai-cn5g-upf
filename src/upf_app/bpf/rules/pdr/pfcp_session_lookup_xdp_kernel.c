@@ -174,7 +174,7 @@ static __always_inline u32 match_sdf_filter_ipv4(
 /*---------------------------------------------------------------------------------------------------------------*/
 
 static __always_inline u32
-create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
+create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far, u8 qfi) {
   // Adjust space to the left.
   if (bpf_xdp_adjust_head(ctx, (int32_t) -GTP_ENCAPSULATED_SIZE)) {
     return DROP;
@@ -218,14 +218,14 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   */
   struct ethhdr* ethh = data;
   if ((void*) (ethh + 1) > data_end) {
-    bpf_debug("Error: Invalid Ethernet packet");
+    bpf_debug("Error: Invalid Ethernet header");
     return DROP;
   }
 
   struct ethhdr* ethh_orig = data + GTP_ENCAPSULATED_SIZE;
 
   if ((void*) (ethh_orig + 1) > data_end) {
-    bpf_debug("Error: Invalid Ethernet copy packet");
+    bpf_debug("Error: Invalid Ethernet copy header");
     return DROP;
   }
   __builtin_memcpy(ethh, ethh_orig, sizeof(*ethh));
@@ -324,7 +324,7 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   p_gtpu_ext_h->message_length = GTP_EXT_MSG_LEN;
   p_gtpu_ext_h->pdu_type       = GTP_EXT_PDU_TYPE;
   // p_gtpu_ext_h->qfi            = GTP_EXT_QFI;
-  p_gtpu_ext_h->qfi           = GTP_DEFAULT_QFI;
+  p_gtpu_ext_h->qfi           = qfi;  // GTP_DEFAULT_QFI;
   p_gtpu_ext_h->next_ext_type = GTP_EXT_NEXT_EXT_TYPE;
 
   /*
@@ -340,7 +340,7 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
   }
 
   bpf_debug(
-      "Pushes the GTP-Encapsulated Packet: Data/UDP/IP/EXT/GTP/UDP/IP/ETH");
+      "Pushes the GTP-Encapsulated packet: Data/UDP/IP/EXT/GTP/UDP/IP/ETH");
   return SUCCESS;
 }
 
@@ -353,7 +353,7 @@ remove_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* far) {
 
   struct ethhdr* ethh = data;
   if ((void*) (ethh + 1) > data_end) {
-    bpf_debug("Error: Invalid Ethernet packet");
+    bpf_debug("Error: Invalid Ethernet header");
     return DROP;
   }
 
@@ -366,7 +366,7 @@ remove_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* far) {
 
   struct ethhdr* new_ethh = data + GTP_ENCAPSULATED_SIZE;
   if ((void*) new_ethh + sizeof(*new_ethh) > data_end) {
-    bpf_debug("Error: Invalid Ethernet copy packet");
+    bpf_debug("Error: Invalid Ethernet copy header");
     return DROP;
   }
   __builtin_memcpy(new_ethh, ethh, sizeof(*ethh));
@@ -378,7 +378,7 @@ remove_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* far) {
       bpf_map_lookup_elem(&m_upf_interfaces, &n6_key);
 
   if (!map_element) {
-    bpf_debug("N6 interface is missing in UPF map, Drop the packet");
+    bpf_debug("N6 interface is missing in UPF map. Drop the packet");
     return FAILURE;
   }
 
@@ -388,7 +388,7 @@ remove_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* far) {
   map_entry = bpf_map_lookup_elem(&m_arp_table, &upf_n6_ip);
 
   if (!map_entry) {
-    bpf_debug("N6's Next Hop MAC address not found! Drop the packet");
+    bpf_debug("N6's Next Hop MAC address not found. Drop the packet");
     return FAILURE;
   }
 
@@ -425,13 +425,13 @@ static __always_inline struct session_id* pfcp_session_lookup_over_n3(
     case ETH_P_IP: {
       struct iphdr* iph = (struct iphdr*) (ethh + 1);
       if ((void*) (iph + 1) > data_end) {
-        bpf_debug("Error: Invalid IPv4 Packet");
+        bpf_debug("Error: Invalid IPv4 header");
         return NULL;
       }
 
       struct udphdr* udph = (struct udphdr*) (iph + 1);
       if ((void*) (udph + 1) > data_end) {
-        bpf_debug("Error: Invalid UDP packet");
+        bpf_debug("Error: Invalid UDP header");
         return NULL;
       }
 
@@ -444,7 +444,7 @@ static __always_inline struct session_id* pfcp_session_lookup_over_n3(
 
       struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
       if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
-        bpf_debug("Error: Invalid GTP-U packet");
+        bpf_debug("Error: Invalid GTP-U header");
         return NULL;
       }
 
@@ -459,13 +459,13 @@ static __always_inline struct session_id* pfcp_session_lookup_over_n3(
           (struct gtpu_extn_pdu_session_container*) (gtpuh + 1);
 
       if ((void*) (ext_gtpuh + 1) > data_end) {
-        bpf_debug("Error: Invalid GTPU Extension packet");
+        bpf_debug("Error: Invalid GTPU Extension header");
         return NULL;
       }
 
       struct iphdr* iph_inner = (struct iphdr*) (ext_gtpuh + 1);
       if ((void*) (iph_inner + 1) > data_end) {
-        bpf_debug("Error: Invalid Inner IP packet");
+        bpf_debug("Error: Invalid Inner IP header");
         return NULL;
       }
 
@@ -474,24 +474,24 @@ static __always_inline struct session_id* pfcp_session_lookup_over_n3(
       return bpf_map_lookup_elem(&m_session_mapping, ue_ip_out);
     }
     case ETH_P_IPV6: {
-      bpf_debug("Error: Unsupported IPv6 Packet");
+      bpf_debug("Error: Unsupported IPv6 packet");
       return NULL;
     }
     case ETH_P_ARP: {
-      bpf_debug("Info: This is an ARP Packet");
+      bpf_debug("Info: This is an ARP packet");
       return NULL;
     }
     case ETH_P_8021Q: {
-      bpf_debug("Info: This is a VLAN Packet");
+      bpf_debug("Info: This is a VLAN packet");
       return NULL;
     }
     case ETH_P_8021AD: {
-      bpf_debug("This is a VLAN Packet");
+      bpf_debug("This is a VLAN packet");
       return NULL;
     }
 
     default: {
-      bpf_debug("Error: Unknown L3 Packet");
+      bpf_debug("Error: Unknown L3 packet");
       return NULL;
     }
   }
@@ -554,8 +554,8 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
 static __always_inline u32 apply_rules_matching_pdr_over_n3(
     struct xdp_md* ctx, struct ethhdr* ethh,
     struct pdrs_per_session key_rules_matching_pdr) {
-  void* data                    = (void*) (long) ctx->data;
-  void* data_end                = (void*) (long) ctx->data_end;
+  // void* data                    = (void*) (long) ctx->data;
+  // void* data_end                = (void*) (long) ctx->data_end;
   struct rules_match_pdr* rules = {0};
   u64 seid                      = key_rules_matching_pdr.seid;
 
@@ -573,7 +573,7 @@ static __always_inline u32 apply_rules_matching_pdr_over_n3(
     int ret = remove_outer_header_gtpu_ipv4(ctx, far);
     switch (ret) {
       case SUCCESS: {
-        bpf_debug("Redirecting Packet to DN");
+        bpf_debug("Redirecting packet to DN");
         return REDIRECT;
       }
       case FAILURE: {
@@ -582,7 +582,7 @@ static __always_inline u32 apply_rules_matching_pdr_over_n3(
       }
       case DROP: {
         bpf_debug(
-            "DROP: remove_outer_header_gtpu_ipv4() fails for session %llu! "
+            "DROP: remove_outer_header_gtpu_ipv4() fails for session %llu. "
             "Drop packet",
             seid);
         return DROP;
@@ -604,7 +604,7 @@ static __always_inline u32 apply_rules_matching_pdr_over_n3(
 //--------------------------------------------------------------------------------------
 static __always_inline u32 apply_rules_matching_pdr_over_n6(
     struct xdp_md* ctx, struct ethhdr* ethh,
-    struct pdrs_per_session key_rules_matching_pdr) {
+    struct pdrs_per_session key_rules_matching_pdr, u8 qfi) {
   struct rules_match_pdr* rules = {0};
   u64 seid                      = key_rules_matching_pdr.seid;
 
@@ -619,7 +619,7 @@ static __always_inline u32 apply_rules_matching_pdr_over_n6(
   if (far) {
     bpf_debug("FAR ID = %d", far->far_id.far_id);
 
-    int ret = create_outer_header_gtpu_ipv4(ctx, far);
+    int ret = create_outer_header_gtpu_ipv4(ctx, far, qfi);
     switch (ret) {
       case SUCCESS: {
         u32* qos_enabling = bpf_map_lookup_elem(&m_qos_enabling, &seid);
@@ -639,7 +639,7 @@ static __always_inline u32 apply_rules_matching_pdr_over_n6(
       }
       case DROP: {
         bpf_debug(
-            "DROP: create_outer_header_gtpu_ipv4() fails for session %llu! "
+            "DROP: create_outer_header_gtpu_ipv4() fails for session %llu. "
             "Drop packet",
             seid);
         return DROP;
@@ -670,7 +670,7 @@ static __always_inline struct session_id* pfcp_session_lookup_over_n6(
     case ETH_P_IP: {
       struct iphdr* iph = (struct iphdr*) (ethh + 1);
       if ((void*) (iph + 1) > data_end) {
-        bpf_debug("Error: Invalid IPv4 Packet");
+        bpf_debug("Error: Invalid IPv4 header");
         return NULL;
       }
 
@@ -729,24 +729,24 @@ static __always_inline struct session_id* pfcp_session_lookup_over_n6(
       return session;
     }
     case ETH_P_IPV6: {
-      bpf_debug("Error: Unsupported IPv6 Packet");
+      bpf_debug("Error: Unsupported IPv6 packet");
       return NULL;
     }
     case ETH_P_ARP: {
-      bpf_debug("Info: This is an ARP Packet");
+      bpf_debug("Info: This is an ARP packet");
       return NULL;
     }
     case ETH_P_8021Q: {
-      bpf_debug("Info: This is a VLAN Packet");
+      bpf_debug("Info: This is a VLAN packet");
       return NULL;
     }
     case ETH_P_8021AD: {
-      bpf_debug("This is a VLAN Packet");
+      bpf_debug("This is a VLAN packet");
       return NULL;
     }
 
     default: {
-      bpf_debug("Error: Unknown L3 Packet");
+      bpf_debug("Error: Unknown L3 packet");
       return NULL;
     }
   }
@@ -1032,7 +1032,8 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
   key_rules_matching_pdr.pdr_id                  = pdr_id;
   key_rules_matching_pdr.seid                    = seid;
 
-  u32 ret = apply_rules_matching_pdr_over_n6(ctx, ethh, key_rules_matching_pdr);
+  u32 ret =
+      apply_rules_matching_pdr_over_n6(ctx, ethh, key_rules_matching_pdr, qfi);
 
   switch (ret) {
     case PASS: {
@@ -1124,7 +1125,8 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
   key_rules_matching_pdr.pdr_id                  = pdr_id;
   key_rules_matching_pdr.seid                    = seid;
 
-  u32 ret = apply_rules_matching_pdr_over_n6(ctx, ethh, key_rules_matching_pdr);
+  u32 ret =
+      apply_rules_matching_pdr_over_n6(ctx, ethh, key_rules_matching_pdr, qfi);
 
   switch (ret) {
     case REDIRECT: {
