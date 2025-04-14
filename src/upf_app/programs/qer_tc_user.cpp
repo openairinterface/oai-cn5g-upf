@@ -371,8 +371,8 @@ void QERProgram::setup(
     }
 
     // Logger::upf_app().info("Attach Section tc_filter_traffic to gtp
-    // interface");
-    // mpLifeCycle->tcAttachEgress("tc_filter_traffic", GTP_INTERFACE.c_str());
+    // interface"); mpLifeCycle->tcAttachEgress("tc_filter_traffic",
+    // GTP_INTERFACE.c_str());
     if (no_tc_filter_bpf(GTP_INTERFACE)) {
       Logger::upf_app().info(
           "Attach Section tc_filter_traffic to gtp interface");

@@ -30,67 +30,67 @@
 #include <linux/pkt_sched.h>
 
 //---------------------------------------------------------------------------------------------------------------
-static __always_inline u32 egress_sdf_classifier(struct __sk_buff* skb) {
-  void* data      = (void*) (long) skb->data;
-  void* data_end  = (void*) (long) skb->data_end;
-  void* data_meta = (void*) (long) skb->data_meta;
+// static __always_inline u32 egress_sdf_classifier(struct __sk_buff* skb) {
+//   void* data      = (void*) (long) skb->data;
+//   void* data_end  = (void*) (long) skb->data_end;
+//   void* data_meta = (void*) (long) skb->data_meta;
 
-  // struct packet_filter* filter = data_meta;
-  struct session_qfi* qos_class_metadata = data_meta;
-  struct ethhdr* ethh                    = data;
+//   // struct packet_filter* filter = data_meta;
+//   struct session_qfi* qos_class_metadata = data_meta;
+//   struct ethhdr* ethh                    = data;
 
-  if ((void*) (ethh + 1) > data_end) {
-    bpf_debug("Error: Invalid Ethernet header");
-    return TC_ACT_SHOT;
-  }
+//   if ((void*) (ethh + 1) > data_end) {
+//     bpf_debug("Error: Invalid Ethernet header");
+//     return TC_ACT_SHOT;
+//   }
 
-  struct iphdr* iph = (struct iphdr*) (ethh + 1);
+//   struct iphdr* iph = (struct iphdr*) (ethh + 1);
 
-  if ((void*) (iph + 1) > data_end) {
-    bpf_debug("Error: Invalid IPv4 header");
-    return TC_ACT_SHOT;
-  }
+//   if ((void*) (iph + 1) > data_end) {
+//     bpf_debug("Error: Invalid IPv4 header");
+//     return TC_ACT_SHOT;
+//   }
 
-  struct udphdr* udph = (struct udphdr*) (iph + 1);
+//   struct udphdr* udph = (struct udphdr*) (iph + 1);
 
-  if ((void*) (udph + 1) > data_end) {
-    bpf_debug("Error: Invalid UDP header");
-    return TC_ACT_SHOT;
-  }
+//   if ((void*) (udph + 1) > data_end) {
+//     bpf_debug("Error: Invalid UDP header");
+//     return TC_ACT_SHOT;
+//   }
 
-  struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
+//   struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
 
-  if ((void*) (gtpuh + 1) > data_end) {
-    bpf_debug("Error: Invalid GTPU packet");
-    return TC_ACT_SHOT;
-  }
+//   if ((void*) (gtpuh + 1) > data_end) {
+//     bpf_debug("Error: Invalid GTPU packet");
+//     return TC_ACT_SHOT;
+//   }
 
-  struct gtpu_extn_pdu_session_container* gtpu_ext_h =
-      (struct gtpu_extn_pdu_session_container*) ((void*) (gtpuh + 1));
+//   struct gtpu_extn_pdu_session_container* gtpu_ext_h =
+//       (struct gtpu_extn_pdu_session_container*) ((void*) (gtpuh + 1));
 
-  if ((void*) (gtpu_ext_h + 1) > data_end) {
-    bpf_debug("Error: Invalid GTPU Extension packet");
-    return TC_ACT_SHOT;
-  }
+//   if ((void*) (gtpu_ext_h + 1) > data_end) {
+//     bpf_debug("Error: Invalid GTPU Extension packet");
+//     return TC_ACT_SHOT;
+//   }
 
-  /* Check XDP gave us some data_meta */
-  if ((void*) (qos_class_metadata + 1) > data) {
-    bpf_debug("Error: Failed to load metadata from XDP");
-    return TC_ACT_SHOT;
-  }
+//   /* Check XDP gave us some data_meta */
+//   if ((void*) (qos_class_metadata + 1) > data) {
+//     bpf_debug("Error: Failed to load metadata from XDP");
+//     return TC_ACT_SHOT;
+//   }
 
-  bpf_debug(
-      "TC: Received XDP Metadata - seid: %llu, qfi: %u",
-      qos_class_metadata->seid, qos_class_metadata->qfi);
-  u16 minor_id =
-      generate_minor_id(qos_class_metadata->seid, qos_class_metadata->qfi);
-  skb->tc_classid = minor_id;
-  skb->priority =
-      TC_H_MAKE(1, minor_id);  // 1 is the HTB root handle's major number
-  bpf_debug("TC: classid %d", skb->tc_classid);
-  bpf_debug("TC: skb->priority set to 0x%x", skb->priority);
-  return TC_ACT_OK;
-}
+//   bpf_debug(
+//       "TC: Received XDP Metadata - seid: %llu, qfi: %u",
+//       qos_class_metadata->seid, qos_class_metadata->qfi);
+//   u16 minor_id =
+//       generate_minor_id(qos_class_metadata->seid, qos_class_metadata->qfi);
+//   skb->tc_classid = minor_id;
+//   skb->priority =
+//       TC_H_MAKE(1, minor_id);  // 1 is the HTB root handle's major number
+//   bpf_debug("TC: classid %d", skb->tc_classid);
+//   bpf_debug("TC: skb->priority set to 0x%x", skb->priority);
+//   return TC_ACT_OK;
+// }
 
 //---------------------------------------------------------------------------------------------------------------
 // static __always_inline u32 ipv4_sdf_filter(struct __sk_buff* skb) {
