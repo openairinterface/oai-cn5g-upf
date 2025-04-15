@@ -689,9 +689,12 @@ void pfcp_switch::call_datapath(
 
   if (!del_req) {
     obj->sessions.push_back(pSession);
-    Logger::pfcp_switch().info("call_datapath: obj->sessions.push_back(pSession);");
+    Logger::pfcp_switch().info(
+        "call_datapath: obj->sessions.push_back(pSession);");
     (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
-    Logger::pfcp_switch().info("call_datapath: (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);");
+    Logger::pfcp_switch().info(
+        "call_datapath: (obj.get()->*crud_func)(pSession, est_req, mod_req, "
+        "del_req);");
   } else {
     Logger::pfcp_switch().info("call_datapath: getting session details");
     uint64_t seid  = pSession->get_up_seid();

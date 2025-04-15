@@ -187,9 +187,8 @@ class PFCP_Session_LookupProgram {
    * @return std::shared_ptr<BPFMap> The egress interface map.
    */
   std::shared_ptr<BPFMap> getEgressInterfaceMap() const;
-  
+
   /*---------------------------------------------------------------------------------------------------------------*/
-  
 
  private:
   /**

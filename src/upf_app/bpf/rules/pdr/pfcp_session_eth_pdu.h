@@ -37,10 +37,11 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
   __builtin_memset(&map_key, 0, sizeof(struct next_rule_eth_prog_index_key));
   map_key.teid         = teid;
   map_key.source_value = source_value;
-  map_key.ethertype = 0; // bpf_ntohs(eth->h_proto);
+  map_key.ethertype    = 0;  // bpf_ntohs(eth->h_proto);
 
   // TODO [ETH-PDU] support other eth pkt filters
-  struct next_rule_eth_prog_index_value* index_value = bpf_map_lookup_elem(&m_next_rule_eth_prog_index, &map_key);
+  struct next_rule_eth_prog_index_value* index_value =
+      bpf_map_lookup_elem(&m_next_rule_eth_prog_index, &map_key);
 
   if (index_value) {
     // pdu sess info learn mac
@@ -53,20 +54,24 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
 
     u32 src_ip_out = iph_outer->saddr;
     struct mac_pdu_session_value pdu_session;
-    pdu_session.teid = index_value->teid_dl;
+    pdu_session.teid         = index_value->teid_dl;
     pdu_session.ipv4_address = src_ip_out;
-    bpf_map_update_elem(&m_mac_pdu_session, &eth->h_source, &pdu_session, BPF_NOEXIST);
+    bpf_map_update_elem(
+        &m_mac_pdu_session, &eth->h_source, &pdu_session, BPF_NOEXIST);
 
-    // If inner packet is Ethernet broadcast (ff:ff:ff:ff:ff:ff) pass packet to TC
+    // If inner packet is Ethernet broadcast (ff:ff:ff:ff:ff:ff) pass packet to
+    // TC
     if (eth->h_dest[0] == 0xff && eth->h_dest[1] == 0xff &&
-      eth->h_dest[2] == 0xff && eth->h_dest[3] == 0xff &&
-      eth->h_dest[4] == 0xff && eth->h_dest[5] == 0xff) {
+        eth->h_dest[2] == 0xff && eth->h_dest[3] == 0xff &&
+        eth->h_dest[4] == 0xff && eth->h_dest[5] == 0xff) {
       bpf_debug("Ethernet broadcast detected!\n");
       return XDP_PASS;
     }
 
     bpf_tail_call(ctx, &m_next_rule_prog, index_value->prog_id);
   }
+
+  bpf_debug("tail_call_next_prog__eth_pdu: No next prog found");
 
   return XDP_PASS;
 }
@@ -83,7 +88,7 @@ static __always_inline u32
 handle_uplink_traffic__eth_pdu(struct xdp_md* ctx, struct udphdr* udph) {
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
-  int action = XDP_PASS;
+  int action     = XDP_PASS;
 
   struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
 
@@ -107,37 +112,38 @@ handle_uplink_traffic__eth_pdu(struct xdp_md* ctx, struct udphdr* udph) {
     return XDP_DROP;
   }
 
-
-  action = tail_call_next_prog__eth_pdu(ctx, gtpuh->teid, INTERFACE_VALUE_ACCESS, eth);
+  action = tail_call_next_prog__eth_pdu(
+      ctx, gtpuh->teid, INTERFACE_VALUE_ACCESS, eth);
 
   return action;
-
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-static __always_inline u32 handle_downlink_traffic__eth_pdu(
-    struct xdp_md* ctx) {
+static __always_inline u32
+handle_downlink_traffic__eth_pdu(struct xdp_md* ctx) {
   bpf_debug("Handling downlink ETH PDU session traffic");
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
-  
+
   struct ethhdr* eth = data;
   if ((void*) eth + sizeof(*eth) > data_end) {
-      bpf_debug("Invalid ETH packet");
-      return XDP_DROP;
+    bpf_debug("Invalid ETH packet");
+    return XDP_DROP;
   }
 
-  struct mac_pdu_session_value* pdu_session = bpf_map_lookup_elem(&m_mac_pdu_session, &eth->h_dest);
+  struct mac_pdu_session_value* pdu_session =
+      bpf_map_lookup_elem(&m_mac_pdu_session, &eth->h_dest);
   if (pdu_session) {
-     create_outer_header_gtpu(ctx, pdu_session->teid, pdu_session->ipv4_address, 1);
-     return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+    create_outer_header_gtpu(
+        ctx, pdu_session->teid, pdu_session->ipv4_address, 1);
+    return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
   }
   // Broadcast packet reach this point. Pass them TC
   // Check if destination MAC address is a broadcast address
   for (int i = 0; i < ETH_ALEN; i++) {
-      if (eth->h_dest[i] != 0xFF) {
-          goto out; // Not a broadcast address
-      }
+    if (eth->h_dest[i] != 0xFF) {
+      goto out;  // Not a broadcast address
+    }
   }
 
   // This is a broadcast packet, prepare GTPU and send to TC layer
@@ -153,13 +159,13 @@ out:
 static __always_inline int entry_point_uplink__eth_pdu(struct xdp_md* ctx) {
   bpf_debug("===== ETH PDU UL =======");
   void* data_end = (void*) (long) ctx->data_end;
-  void* data = (void*) (long) ctx->data;
-  int action = XDP_PASS;
+  void* data     = (void*) (long) ctx->data;
+  int action     = XDP_PASS;
 
   struct iphdr* iph = (struct iphdr*) ((void*) data + sizeof(struct ethhdr));
   if ((void*) (iph + 1) > data_end) {
-      bpf_debug("xdp_entry_point__eth_pdu: Invalid IPv4 Packet");
-      goto out;
+    bpf_debug("xdp_entry_point__eth_pdu: Invalid IPv4 Packet");
+    goto out;
   }
 
   if (iph->protocol == IPPROTO_UDP) {
@@ -186,8 +192,8 @@ out:
 static __always_inline int entry_point_downlink__eth_pdu(struct xdp_md* ctx) {
   bpf_debug("===== ETH PDU DL =======");
   void* data_end = (void*) (long) ctx->data_end;
-  void* data = (void*) (long) ctx->data;
-  int action = XDP_PASS;
+  void* data     = (void*) (long) ctx->data;
+  int action     = XDP_PASS;
 
   action = handle_downlink_traffic__eth_pdu(ctx);
 

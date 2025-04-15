@@ -35,7 +35,8 @@ PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
 PFCP_Session_LookupProgram::~PFCP_Session_LookupProgram() {}
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void PFCP_Session_LookupProgram::create_upf_interface_map_entry(e_reference_point s) {
+void PFCP_Session_LookupProgram::create_upf_interface_map_entry(
+    e_reference_point s) {
   struct s_interface iface;
   __builtin_memset(&iface, 0, sizeof(s_interface));
 
@@ -185,7 +186,8 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getIfaceMap() const {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getEgressInterfaceMap() const {
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getEgressInterfaceMap()
+    const {
   return mpEgressInterfaceMap;
 }
 

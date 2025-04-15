@@ -62,7 +62,8 @@ void FARProgram::create_upf_interface_map_entry(e_reference_point s) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void FARProgram::setup(uint32_t far_id, uint32_t enforcing_qos, uint32_t pdu_type) {
+void FARProgram::setup(
+    uint32_t far_id, uint32_t enforcing_qos, uint32_t pdu_type) {
   spSkeleton = mpLifeCycle->open();
   initializeMaps();
   mpLifeCycle->getBPFSkeleton()->rodata->config.pdu_type = pdu_type;

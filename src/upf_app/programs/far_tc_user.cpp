@@ -64,10 +64,12 @@ void FARTCProgram::setup() {
   mpEgressInterfaceMap->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
 
   Logger::upf_app().info("Attach Section far_tc_kernel to gtp interface");
-  mpLifeCycle->tcAttachIngress("handle_broadcast", GTP_INTERFACE.c_str(), INGRESS_BROADCAST_PRIORITY);
+  mpLifeCycle->tcAttachIngress(
+      "handle_broadcast", GTP_INTERFACE.c_str(), INGRESS_BROADCAST_PRIORITY);
 
   Logger::upf_app().info("Attach Sesction far_tc_kernel to udp interface");
-  mpLifeCycle->tcAttachIngress("handle_broadcast", UDP_INTERFACE.c_str(), INGRESS_BROADCAST_PRIORITY);
+  mpLifeCycle->tcAttachIngress(
+      "handle_broadcast", UDP_INTERFACE.c_str(), INGRESS_BROADCAST_PRIORITY);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -82,8 +84,7 @@ void FARTCProgram::tearDown() {
   mpLifeCycle->tearDown();
 }
 
-std::shared_ptr<BPFMap> FARTCProgram::getMacPduSessionMap()
-    const {
+std::shared_ptr<BPFMap> FARTCProgram::getMacPduSessionMap() const {
   return mpMacPduSessionMap;
 }
 

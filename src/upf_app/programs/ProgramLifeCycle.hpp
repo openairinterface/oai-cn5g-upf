@@ -65,8 +65,12 @@ class ProgramLifeCycle {
   void load();
   void attach();
   void link(std::string sectionName, std::string interface);
-  void tcAttachIngress(std::string sectionName, std::string interface, __u32 priority = INGRESS_PRIORITY);
-  void tcAttachEgress(std::string sectionName, std::string interface, __u32 priority = EGRESS_PRIORITY);
+  void tcAttachIngress(
+      std::string sectionName, std::string interface,
+      __u32 priority = INGRESS_PRIORITY);
+  void tcAttachEgress(
+      std::string sectionName, std::string interface,
+      __u32 priority = EGRESS_PRIORITY);
   void destroy();
   void tearDown();
 

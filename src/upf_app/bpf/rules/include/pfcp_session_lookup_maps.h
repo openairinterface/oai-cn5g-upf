@@ -67,7 +67,8 @@ struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, MAX_LENGTH);  // 10,
   __type(key, struct next_rule_eth_prog_index_key);
-  __type(value, struct next_rule_eth_prog_index_value); // <prog_id, teid_dl, n3IpAddress>
+  __type(value, struct next_rule_eth_prog_index_value);  // <prog_id, teid_dl,
+                                                         // n3IpAddress>
   __uint(pinning, 1);
 } m_next_rule_eth_prog_index SEC(".maps");
 

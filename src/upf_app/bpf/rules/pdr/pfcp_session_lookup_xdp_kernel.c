@@ -68,14 +68,13 @@ static __always_inline u32
 handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
   bpf_debug("Handling downlink traffic");
   u32* teid_dl = bpf_map_lookup_elem(&m_session_mapping, &ue_ip_address);
-  u32 ret = XDP_PASS;
+  u32 ret      = XDP_PASS;
   if (teid_dl) {
     bpf_debug(
         "TEID downlink: 0x%x was found for UE IP: 0x%x", ue_ip_address,
         *teid_dl);
     tail_call_next_prog(ctx, *teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
   }
-
 
   bpf_debug("BPF tail call was not executed!");
 
@@ -234,7 +233,7 @@ SEC("xdp")
 int xdp_entry_point_uplink(struct xdp_md* ctx) {
   bpf_debug("================< PFCP PDR UL Sesction >================");
   struct ethhdr* ethh = (void*) (long) ctx->data;
-  int action = XDP_PASS;
+  int action          = XDP_PASS;
 
   if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
     bpf_debug("Invalid Ethernet header");
@@ -243,13 +242,14 @@ int xdp_entry_point_uplink(struct xdp_md* ctx) {
 
   action = eth_handle(ctx, ethh);
 
-  // When eth_handle returns XDP_PASS, this could be an ETH PDU PACKET (for DL and DL)
+  // When eth_handle returns XDP_PASS, this could be an ETH PDU PACKET (for DL
+  // and DL)
   if (action != XDP_PASS) {
     goto out;
   }
 
   action = entry_point_uplink__eth_pdu(ctx);
-  
+
 out:
   return action;
 }
@@ -259,8 +259,8 @@ SEC("xdp")
 int xdp_entry_point_downlink(struct xdp_md* ctx) {
   bpf_debug("================< PFCP PDR DL Sesction >================");
   struct ethhdr* ethh = (void*) (long) ctx->data;
-  void* data_end = (void*) (long) ctx->data_end;
-  int action = XDP_PASS;
+  void* data_end      = (void*) (long) ctx->data_end;
+  int action          = XDP_PASS;
 
   if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
     bpf_debug("Invalid Ethernet header");
@@ -268,24 +268,24 @@ int xdp_entry_point_downlink(struct xdp_md* ctx) {
   }
 
   if (bpf_htons(ethh->h_proto) == ETH_P_IP) {
-
     struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
 
     if ((void*) (iph + 1) > data_end) {
       bpf_debug("Invalid IPv4 Packet");
       return XDP_DROP;
     }
-    
+
     action = handle_downlink_traffic(ctx, iph->daddr);
   }
 
-  // When eth_handle returns XDP_PASS, this could be an ETH PDU PACKET (for DL and DL)
+  // When eth_handle returns XDP_PASS, this could be an ETH PDU PACKET (for DL
+  // and DL)
   if (action != XDP_PASS) {
     goto out;
   }
 
   action = entry_point_downlink__eth_pdu(ctx);
-  
+
 out:
   return action;
 }

@@ -105,7 +105,6 @@ class FARTCProgram : public BPFProgram {
 
   /*---------------------------------------------------------------------------------------------------------------*/
   std::shared_ptr<BPFMap> mpMacPduSessionMap;
-
 };
 
 #endif  // __FAR_TC_USER_H__

@@ -21,7 +21,7 @@
 #define __GTPU_PARSE_H__
 
 // clang-format off
-#include <types.h>
+ #include <types.h>
 // clang-format on
 
 #include <bpf_helpers.h>
@@ -39,7 +39,6 @@
 #include <interfaces.h>
 #include <stdbool.h>
 #include <string.h>  //Needed for memcpy
-
 
 /*****************************************************************************************************************/
 
@@ -73,13 +72,13 @@ static __always_inline bool update_dst_mac_address(
 }
 
 /*****************************************************************************************************************/
-static __always_inline u32
-create_outer_header_gtpu(struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, int pdu_type) {
+static __always_inline u32 create_outer_header_gtpu(
+    struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, int pdu_type) {
   // bpf_debug("Create Outer Header GTPU_IPv4");
   // bpf_debug("Original Packet: Data/UDP/IP/ETH");
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
-  int packet_len = (int)(data_end - data);
+  int packet_len = (int) (data_end - data);
 
   // Adjust space to the left.
   int roomlen = GTP_ENCAPSULATED_SIZE;
@@ -138,18 +137,60 @@ create_outer_header_gtpu(struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, int
     return XDP_DROP;
   }
 
-  iph->version = 4;
-  iph->ihl     = 5;  // No options
-  iph->tos     = 0;
-  iph->tot_len =
-      bpf_htons((data_end - data) - sizeof(struct ethhdr));
+  iph->version  = 4;
+  iph->ihl      = 5;  // No options
+  iph->tos      = 0;
+  iph->tot_len  = bpf_htons((data_end - data) - sizeof(struct ethhdr));
   iph->id       = 0;       // No fragmentation
   iph->frag_off = 0x0040;  // Don't fragment; Fragment offset = 0
   iph->ttl      = 64;
   iph->protocol = IPPROTO_UDP;
   iph->check    = 0;
   iph->saddr    = n3_ip;
-  iph->daddr = ipv4_address;
+  iph->daddr    = ipv4_address;
+
+  // Update the MAC address based on the tables
+  // TODO: put in a function to update the MAC address
+  struct bpf_fib_lookup fib_params = {};
+  __u16 h_proto;
+  h_proto = ethh->h_proto;
+  if (h_proto == bpf_htons(ETH_P_IP)) {
+    if (iph + 1 > data_end) {
+      return XDP_DROP;
+    }
+
+    fib_params.family      = AF_INET;
+    fib_params.tos         = iph->tos;
+    fib_params.l4_protocol = iph->protocol;
+    fib_params.sport       = 0;
+    fib_params.dport       = 0;
+    fib_params.tot_len     = bpf_ntohs(iph->tot_len);
+    fib_params.ipv4_src    = iph->saddr;
+    fib_params.ipv4_dst    = iph->daddr;
+  }
+
+  fib_params.ifindex = ctx->ingress_ifindex;
+
+  int rc = bpf_fib_lookup(ctx, &fib_params, sizeof(fib_params), 0);
+  bpf_debug("BPF_FIB_LKUP_RET_ -> %d", rc);
+  switch (rc) {
+    case BPF_FIB_LKUP_RET_SUCCESS: /* lookup successful */
+      bpf_debug("BPF_FIB_LKUP_RET_SUCCESS");
+
+      memcpy(ethh->h_dest, fib_params.dmac, ETH_ALEN);
+      memcpy(ethh->h_source, fib_params.smac, ETH_ALEN);
+      break;
+    case BPF_FIB_LKUP_RET_BLACKHOLE:   /* dest is blackholed; can be dropped */
+    case BPF_FIB_LKUP_RET_UNREACHABLE: /* dest is unreachable; can be dropped */
+    case BPF_FIB_LKUP_RET_PROHIBIT:    /* dest not allowed; can be dropped */
+    case BPF_FIB_LKUP_RET_NOT_FWDED:   /* packet is not forwarded */
+    case BPF_FIB_LKUP_RET_FWD_DISABLED: /* fwding is not enabled on ingress */
+    case BPF_FIB_LKUP_RET_UNSUPP_LWT:   /* fwd requires encapsulation */
+    case BPF_FIB_LKUP_RET_NO_NEIGH:     /* no neighbor entry for nh */
+    case BPF_FIB_LKUP_RET_FRAG_NEEDED:  /* fragmentation required to fwd */
+      /* PASS */
+      break;
+  }
 
   /*
   |----------------------------------------------------------------|
@@ -174,10 +215,11 @@ create_outer_header_gtpu(struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, int
   |-------------------------- Add GTP header ----------------------|
   |----------------------------------------------------------------|
   */
-  // Update destination mac address
-  if (!update_dst_mac_address(n3_ip, ethh)) {
-    bpf_debug("N3's Next Hop MAC address not found! Drop the packet");
-  }
+  // TODO: remove this
+  // // Update destination mac address
+  // if (!update_dst_mac_address(n3_ip, ethh)) {
+  //   bpf_debug("N3's Next Hop MAC address not found! Drop the packet");
+  // }
 
   struct gtpuhdr* p_gtpuh = (void*) (udph + 1);
   if ((void*) (p_gtpuh + 1) > data_end) {
@@ -188,10 +230,8 @@ create_outer_header_gtpu(struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, int
   __builtin_memcpy(p_gtpuh, &flags, sizeof(u8));
   p_gtpuh->message_type   = GTPU_G_PDU;
   p_gtpuh->message_length = bpf_htons(
-      packet_len +
-      sizeof(struct gtpu_extn_pdu_session_container) + 4);
-  p_gtpuh->teid =
-      bpf_htonl(teid);
+      packet_len + sizeof(struct gtpu_extn_pdu_session_container) + 4);
+  p_gtpuh->teid          = bpf_htonl(teid);
   p_gtpuh->sequence      = GTP_SEQ;
   p_gtpuh->pdu_number    = GTP_PDU_NUMBER;
   p_gtpuh->next_ext_type = GTP_NEXT_EXT_TYPE;

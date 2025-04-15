@@ -51,7 +51,6 @@ class FARProgram : public BPFProgram {
    */
   void setup(uint32_t far_id, uint32_t enforcing_qos, uint32_t pdu_type);
 
-
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the BPFMaps object.

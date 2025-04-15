@@ -48,6 +48,9 @@ class pfcp_session {
   bool remove(const pfcp::pdr_id_t& pdr_id, uint8_t& cause_value);
   bool remove(const pfcp::qer_id_t& qer_id, uint8_t& cause_value);
 
+  std::mutex teid_mutex;
+  void set(const pfcp::fteid_t& fteid);
+
  public:
   pfcp::fseid_t cp_fseid;
   uint64_t seid;  // User plane
@@ -87,7 +90,8 @@ class pfcp_session {
         seid(c.seid),
         pdrs(c.pdrs),
         fars(c.fars),
-        qers(c.qers) {}
+        qers(c.qers),
+        teid_uplink(c.teid_uplink) {}
 
   /*---------------------------------------------------------------------------------------------------------------*/
   virtual ~pfcp_session() {
@@ -137,6 +141,8 @@ class pfcp_session {
   bool remove(
       const pfcp::remove_qer& rm_qer, pfcp::cause_t& cause,
       uint16_t& offending_ie);
+
+  bool get(pfcp::fteid_t& fteid);
 };
 }  // namespace pfcp
 #endif

@@ -20,7 +20,7 @@ struct next_rule_eth_prog_index_key {
 struct next_rule_eth_prog_index_value {
   u32 prog_id;
   u32 teid_dl;
-  u32 ipv4_address; // To support multiple N3 interfaces
+  u32 ipv4_address;  // To support multiple N3 interfaces
 };
 
 #endif  // __NEXT_PROG_RULE_KEY_H__
