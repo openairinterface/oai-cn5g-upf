@@ -207,6 +207,36 @@ void SessionProgramManager::storeFarProgramIndexInNextProgEthRuleIndexMap(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+// Helper function to update the TEID in the LookupProgram
+void SessionProgramManager::updateTeidInNextProgEthRuleIndexMap(
+  const next_rule_eth_prog_index_key& key, uint32_t teid_dl,
+  std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
+  
+  // Check if entry exists in the map
+  next_rule_eth_prog_index_value value;
+  int ret = pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->lookup(
+      key, &value);
+  if (ret != 0) {
+    Logger::upf_app().error(
+        "Failed to find entry in NextProgEthRuleIndexMap for TEID: %u",
+        key.teid);
+    return;
+  }
+  
+  // teid_dl is straight from the FAR so it is in the same endianess as the system
+  // Update the TEID in the value
+  if (is_little_endian()) {
+    value.teid_dl = teid_dl;
+  } else {
+    value.teid_dl = htole32(teid_dl);
+  }
+
+  // Update the map with the modified value
+  pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->update(
+      key, value, BPF_ANY);
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 // Helper function to store Session mapping
 void SessionProgramManager::storeSessionMappingMap(
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
@@ -440,6 +470,20 @@ void SessionProgramManager::createPipeline(
 
   initializeNextRuleProgEthIndexKey(key, teid1, ethertype, sourceInterface);
 
+  std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram =
+      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+
+  // The DL path does not use a FAR program. So for downlink we should skip creation of far program
+  // and update any existing UL far program with the teid_dl value.
+  if (sourceInterface == INTERFACE_VALUE_CORE) {
+    // This is DL, change the key source interface so that we update the UL table with the new teid_dl
+    key.source_value = INTERFACE_VALUE_ACCESS;
+    updateTeidInNextProgEthRuleIndexMap(
+        key, teid_dl,
+        UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram());
+    return;
+  }
+
   
   if ((upf_cfg.enable_qos) && (!pQer.empty())) {
     enforcing_qos = 1;
@@ -457,12 +501,10 @@ void SessionProgramManager::createPipeline(
 
   pFARProgram->setup(far_id, enforcing_qos, 1);
 
-  std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram =
-      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
-
   Logger::upf_app().debug(
       "ETH-PDU: Store FAR program index in the NextProgEthRuleIndexMap. teid_dl: %u, teid_ul: %u",
       teid_dl, teid1);
+        
   storeFarProgramIndexInNextProgEthRuleIndexMap(
       pFARProgram, key, teid_dl, upfn3IP, pPFCP_Session_LookupProgram);
 
