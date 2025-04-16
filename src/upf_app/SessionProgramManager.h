@@ -152,6 +152,11 @@ class SessionProgramManager {
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
 
   /*---------------------------------------------------------------------------------------------------------------*/
+  void updateTeidInNextProgEthRuleIndexMap(
+      const next_rule_eth_prog_index_key& key, uint32_t teid_dl,
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
+
+  /*---------------------------------------------------------------------------------------------------------------*/
   void storeSessionMappingMap(
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
       uint32_t ue_ip_address, uint32_t teid_dl);

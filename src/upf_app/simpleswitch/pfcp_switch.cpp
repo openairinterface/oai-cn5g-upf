@@ -627,18 +627,18 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
     ue_ipv4_hbo2pfcp_pdr.insert(entry);
 
     /*
-// sort by precedence
-// const std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>&
-// spdrs = pit->second;
-std::vector<std::shared_ptr<pfcp::pfcp_pdr>>* pdrs = pit->second.get();
-for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it =
-       pdrs->begin();
-   it < pdrs->end(); ++it) {
-if (*(it->get()) < *(pdr.get())) {
-  pit->second->insert(it, pdr);
-  return;
-}
-}
+    // sort by precedence
+    // const std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>&
+    // spdrs = pit->second;
+    std::vector<std::shared_ptr<pfcp::pfcp_pdr>>* pdrs = pit->second.get();
+    for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it =
+             pdrs->begin();
+         it < pdrs->end(); ++it) {
+      if (*(it->get()) < *(pdr.get())) {
+        pit->second->insert(it, pdr);
+        return;
+      }
+    }
 
 */
   }
@@ -677,6 +677,19 @@ void pfcp_switch::call_datapath(
         itti_n4_session_modification_request* mod_req,
         itti_n4_session_deletion_request* del_req)) {
   Logger::pfcp_switch().info("Entering ebpf call_datapath");
+  pfcp::fteid_t uplink_fteid = {};
+  if (!s->get(uplink_fteid)) {
+    // Set the uplink fteid in the response
+    Logger::pfcp_switch().info(
+        "call_datapath uplink_fteid not set, setting it to default");
+  } else {
+    Logger::pfcp_switch().info(
+        "call_datapath uplink_fteid set, setting it to %u", uplink_fteid.teid);
+  }
+
+  Logger::pfcp_switch().info(
+      "call_datapath Number of PDRs in session: %u", s->pdrs.size());
+
   std::shared_ptr<pfcp::pfcp_session> pSession =
       std::make_shared<pfcp::pfcp_session>(*s);
   Logger::pfcp_switch().info("call_datapath: created pSession");
@@ -686,6 +699,19 @@ void pfcp_switch::call_datapath(
   itti_n4_session_establishment_request* est_req = establishment_request;
   itti_n4_session_modification_request* mod_req  = modification_request;
   itti_n4_session_deletion_request* del_req      = deletion_request;
+
+  pfcp::fteid_t uplink_fteid2 = {};
+  if (!pSession->get(uplink_fteid2)) {
+    // Set the uplink fteid in the response
+    Logger::pfcp_switch().info(
+        "call_datapath uplink_fteid not set, setting it to default");
+  } else {
+    Logger::pfcp_switch().info(
+        "call_datapath uplink_fteid set, setting it to %u", uplink_fteid2.teid);
+  }
+
+  Logger::pfcp_switch().info(
+      "call_datapath Number of PDRs in session: %u", pSession->pdrs.size());
 
   if (!del_req) {
     obj->sessions.push_back(pSession);
@@ -794,10 +820,12 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             resp->pfcp_ies.set(cause);
             break;
           }
-          pfcp::created_pdr created_pdr = {};
-          created_pdr.set(cr_pdr.pdr_id.second);
-          created_pdr.set(allocated_fteid);
-          resp->pfcp_ies.set(created_pdr);
+          if (allocated_fteid.v4 || allocated_fteid.v6) {
+            pfcp::created_pdr created_pdr = {};
+            created_pdr.set(cr_pdr.pdr_id.second);
+            created_pdr.set(allocated_fteid);
+            resp->pfcp_ies.set(created_pdr);
+          }
         }
       }
 
@@ -805,6 +833,20 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         Logger::pfcp_switch().info(
             "Establishing datapath: create PDRs + create FARs + create QERs "
             "(if any)");
+        // Check if the uplink_teid is set on the session
+        pfcp::fteid_t uplink_fteid = {};
+        if (!session->get(uplink_fteid)) {
+          // Set the uplink fteid in the response
+          Logger::pfcp_switch().info(
+              "uplink_fteid not set, setting it to default");
+        } else {
+          Logger::pfcp_switch().info(
+              "uplink_fteid set, setting it to %u", uplink_fteid.teid);
+        }
+
+        // Check length of pdrs vector in session
+        Logger::pfcp_switch().info(
+            "Number of PDRs in session: %u", session->pdrs.size());
         call_datapath(
             req, NULL, NULL, session, spSessionManager,
             &SessionManager::createBPFSession);
@@ -905,13 +947,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     resp->seid = session->cp_fseid.seid;
 
     for (auto it : req->pfcp_ies.remove_pdrs) {
-      if (upf_cfg.enable_bpf_datapath) {
-        Logger::pfcp_switch().info("Modifying datapath: remove PDRs");
-        call_datapath(
-            NULL, req, NULL, session, spSessionManager,
-            &SessionManager::updateBPFSession);
-      }
-
       remove_pdr& pdr = it;
 
       if (not session->remove(pdr, cause, offending_ie.offending_ie)) {
@@ -922,18 +957,17 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           resp->pfcp_ies.set(failed_rule);
           break;
         }
+        if (upf_cfg.enable_bpf_datapath) {
+          Logger::pfcp_switch().info("Modifying datapath: remove PDRs");
+          call_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::updateBPFSession);
+        }
       }
     }
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.remove_fars) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: remove FARs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
-
         remove_far& far = it;
 
         if (not session->remove(far, cause, offending_ie.offending_ie)) {
@@ -945,6 +979,13 @@ void pfcp_switch::handle_pfcp_session_modification_request(
             break;
           }
         }
+
+        if (upf_cfg.enable_bpf_datapath) {
+          Logger::pfcp_switch().info("Modifying datapath: remove FARs");
+          call_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::updateBPFSession);
+        }
       }
     }
     /*======================================================================*/
@@ -954,13 +995,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
      */
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.remove_qers) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: remove QERs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
-
         remove_qer& qer = it;
 
         if (not session->remove(qer, cause, offending_ie.offending_ie)) {
@@ -972,6 +1006,13 @@ void pfcp_switch::handle_pfcp_session_modification_request(
             break;
           }
         }
+
+        if (upf_cfg.enable_bpf_datapath) {
+          Logger::pfcp_switch().info("Modifying datapath: remove QERs");
+          call_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::updateBPFSession);
+        }
       }
     }
 
@@ -979,15 +1020,20 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.create_fars) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: create FARs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
         create_far& cr_far = it;
         if (not session->create(cr_far, cause, offending_ie.offending_ie)) {
           break;
+        }
+        if (upf_cfg.enable_bpf_datapath) {
+          Logger::pfcp_switch().info("Modifying datapath: create FARs");
+          try {
+            call_datapath(
+                NULL, req, NULL, session, spSessionManager,
+                &SessionManager::updateBPFSession);
+          } catch (const std::exception& e) {
+            Logger::pfcp_switch().error(
+                "Error while calling datapath: create FARs: %s", e.what());
+          }
         }
       }
     }

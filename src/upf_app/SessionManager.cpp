@@ -496,7 +496,7 @@ void SessionManager::updateBPFSession(
 
     if ((pSession->pdrs_uplink.empty()) && (pSession->pdrs_downlink.empty())) {
       Logger::upf_app().error("No PDR was found in session %d", pSession->seid);
-      throw std::runtime_error("No PDR was found in session");
+      return;
     }
 
     /** NOTE: Start with UL PDRs. ETH-PDU session uses a single map (eth_pdu)
@@ -556,6 +556,7 @@ void SessionManager::updateBPFSessionUL(
   pfcp::ue_ip_address_t ueIpAddress;
   pfcp::source_interface_t sourceInterface;
   pfcp::ethernet_packet_filter ethernetPacketFilter;
+  pfcp::ethernet_pdu_session_information_t ethernetPduSessionInformation;
 
   Logger::upf_app().debug(
       "Update the Uplink Direction Datapath For Session %d",
