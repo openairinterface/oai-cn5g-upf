@@ -197,10 +197,6 @@ void SessionProgramManager::storeFarProgramIndexInNextProgEthRuleIndexMap(
 
   // teid_dl is straight from the FAR so it is in the same endianess as the
   // system
-  Logger::upf_app().debug(
-      "storeFarProgramIndexInNextProgEthRuleIndexMap: teid_dl: %u, "
-      "htole32(teid_dl): %u, htobe32(teid_dl): %u",
-      teid_dl, htole32(teid_dl), htobe32(teid_dl));
   if (is_little_endian()) {
     value.ipv4_address = htole32(n3IpAddress);
     value.teid_dl      = teid_dl;
@@ -511,20 +507,11 @@ void SessionProgramManager::createPipeline(
 
   pFARProgram->setup(far_id, enforcing_qos, 1);
 
-  Logger::upf_app().debug(
-      "ETH-PDU: Store FAR program index in the NextProgEthRuleIndexMap. "
-      "teid_dl: %u, teid_ul: %u",
-      teid_dl, teid1);
-
   storeFarProgramIndexInNextProgEthRuleIndexMap(
       pFARProgram, key, teid_dl, upfn3IP, pPFCP_Session_LookupProgram);
 
   Logger::upf_app().debug("ETH-PDU: Store FAR in the FAR program");
   storeFARInFARMap(pFARProgram, pFar);
-
-  Logger::upf_app().warn(
-      "TODO: Try to extract the updateARPTableForN6 for the if and else to "
-      "run it only once");
 
   uint32_t gNodeBIP = getGnodebIp(pFar);
 

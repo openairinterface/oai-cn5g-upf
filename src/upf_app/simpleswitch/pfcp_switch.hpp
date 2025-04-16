@@ -177,16 +177,12 @@ class pfcp_switch {
   void pfcp_session_look_up_pack_in_access(
       struct ipv6hdr* const iph, const std::size_t num_bytes,
       const endpoint& r_endpoint){};
-  // TODO [ETH-PDU] add lookup for eth-type
-  // void pfcp_session_look_up(struct ethhdr* const ethh, const std::size_t
-  // num_bytes);
 
   void pfcp_session_look_up_pack_in_core(
       const char* buffer, const std::size_t num_bytes);
 
   bool no_internal_loop(struct iphdr* const iph, const std::size_t num_bytes);
   void send_to_core(char* const ip_packet, const ssize_t len);
-  // TODO [ETH-PDU] check if there is need for send to core for eth-type packets
 
   using itti_n4_session_request = std::variant<
       itti_n4_session_establishment_request*,

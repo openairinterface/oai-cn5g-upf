@@ -676,51 +676,21 @@ void pfcp_switch::call_datapath(
         itti_n4_session_establishment_request* est_req,
         itti_n4_session_modification_request* mod_req,
         itti_n4_session_deletion_request* del_req)) {
-  Logger::pfcp_switch().info("Entering ebpf call_datapath");
-  pfcp::fteid_t uplink_fteid = {};
-  if (!s->get(uplink_fteid)) {
-    // Set the uplink fteid in the response
-    Logger::pfcp_switch().info(
-        "call_datapath uplink_fteid not set, setting it to default");
-  } else {
-    Logger::pfcp_switch().info(
-        "call_datapath uplink_fteid set, setting it to %u", uplink_fteid.teid);
-  }
-
-  Logger::pfcp_switch().info(
-      "call_datapath Number of PDRs in session: %u", s->pdrs.size());
 
   std::shared_ptr<pfcp::pfcp_session> pSession =
       std::make_shared<pfcp::pfcp_session>(*s);
-  Logger::pfcp_switch().info("call_datapath: created pSession");
   obj = UserPlaneComponent::getInstance().getSessionManager();
-  Logger::pfcp_switch().info("call_datapath: got session manager object");
 
   itti_n4_session_establishment_request* est_req = establishment_request;
   itti_n4_session_modification_request* mod_req  = modification_request;
   itti_n4_session_deletion_request* del_req      = deletion_request;
-
-  pfcp::fteid_t uplink_fteid2 = {};
-  if (!pSession->get(uplink_fteid2)) {
-    // Set the uplink fteid in the response
-    Logger::pfcp_switch().info(
-        "call_datapath uplink_fteid not set, setting it to default");
-  } else {
-    Logger::pfcp_switch().info(
-        "call_datapath uplink_fteid set, setting it to %u", uplink_fteid2.teid);
-  }
 
   Logger::pfcp_switch().info(
       "call_datapath Number of PDRs in session: %u", pSession->pdrs.size());
 
   if (!del_req) {
     obj->sessions.push_back(pSession);
-    Logger::pfcp_switch().info(
-        "call_datapath: obj->sessions.push_back(pSession);");
     (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
-    Logger::pfcp_switch().info(
-        "call_datapath: (obj.get()->*crud_func)(pSession, est_req, mod_req, "
-        "del_req);");
   } else {
     Logger::pfcp_switch().info("call_datapath: getting session details");
     uint64_t seid  = pSession->get_up_seid();
@@ -731,7 +701,6 @@ void pfcp_switch::call_datapath(
     //     sessions.erase(it);
     //   }
     // }
-    Logger::pfcp_switch().info("call_datapath: calling crud_func");
     (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
   }
 }
@@ -740,7 +709,6 @@ void pfcp_switch::call_datapath(
 void pfcp_switch::handle_pfcp_session_establishment_request(
     std::shared_ptr<itti_n4_session_establishment_request> sreq,
     itti_n4_session_establishment_response* resp) {
-  Logger::pfcp_switch().info("HANDLE_PFCP_SESSION_ESTABLISHMENT_REQUEST");
   itti_n4_session_establishment_request* req = sreq.get();
   pfcp::fseid_t fseid                        = {};
   pfcp::cause_t cause = {.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED};
@@ -833,20 +801,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         Logger::pfcp_switch().info(
             "Establishing datapath: create PDRs + create FARs + create QERs "
             "(if any)");
-        // Check if the uplink_teid is set on the session
-        pfcp::fteid_t uplink_fteid = {};
-        if (!session->get(uplink_fteid)) {
-          // Set the uplink fteid in the response
-          Logger::pfcp_switch().info(
-              "uplink_fteid not set, setting it to default");
-        } else {
-          Logger::pfcp_switch().info(
-              "uplink_fteid set, setting it to %u", uplink_fteid.teid);
-        }
 
-        // Check length of pdrs vector in session
-        Logger::pfcp_switch().info(
-            "Number of PDRs in session: %u", session->pdrs.size());
         call_datapath(
             req, NULL, NULL, session, spSessionManager,
             &SessionManager::createBPFSession);

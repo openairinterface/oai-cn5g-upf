@@ -153,7 +153,6 @@ bool pfcp_session::remove(const pfcp::qer_id_t& qer_id, uint8_t& cause_value) {
 void pfcp_session::set(const pfcp::fteid_t& fteid) {
   Logger::upf_n4().info("pfcp_session::set(fteid) seid " SEID_FMT " ", seid);
   std::lock_guard<std::mutex> lock(teid_mutex);
-  Logger::upf_n4().info("pfcp_session::set(fteid) teid %u", fteid.teid);
   teid_uplink = fteid;
 }
 
@@ -162,7 +161,6 @@ bool pfcp_session::get(pfcp::fteid_t& fteid) {
   std::lock_guard<std::mutex> lock(teid_mutex);
   Logger::upf_n4().info("pfcp_session::get(fteid) seid " SEID_FMT " ", seid);
   fteid = teid_uplink;
-  Logger::upf_n4().info("pfcp_session::get(fteid) teid %u", fteid.teid);
   return true;
 }
 

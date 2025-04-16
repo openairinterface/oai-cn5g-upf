@@ -91,43 +91,6 @@ bool SessionManager::extractForwardingParams(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-// Helper function to find the Uplink TEID to update
-uint64_t SessionManager::findUplinkTeid(
-    uint64_t seid,
-    const std::vector<std::shared_ptr<pfcp::pfcp_session>>& sessions) {
-  Logger::upf_app().debug("Finding Uplink TEID for session %d", seid);
-
-  // Print the teids of all sessions
-  for (const auto& session : sessions) {
-    Logger::upf_app().debug(
-        "Session %d TEID %d", session->get_up_seid(),
-        session->teid_uplink.teid);
-  }
-
-  for (const auto& session : sessions) {
-    Logger::upf_app().debug("Checking session %d", session->get_up_seid());
-    if (session->get_up_seid() != seid) {
-      continue;  // Skip to the next session if not matching seid
-    }
-
-    pfcp::fteid_t uplink_fteid = {};
-    if (!session->get(uplink_fteid)) {
-      // Set the uplink fteid in the response
-      Logger::pfcp_switch().info(
-          "Failed to get uplink_fteid from session %d", session->get_up_seid());
-      return 0;
-    } else {
-      Logger::upf_app().debug(
-          "Uplink TEID %d found in session %d", uplink_fteid.teid, seid);
-      return uplink_fteid.teid;
-    }
-  }
-  Logger::upf_app().debug("Uplink TEID not found for session %d", seid);
-
-  return 0;  // Return 0 if teidToUpdate is not found
-}
-
-/*---------------------------------------------------------------------------------------------------------------*/
 void SessionManager::createSession(std::shared_ptr<SessionBpf> pSession) {
   SessionProgramManager::getInstance().create(pSession->getSeid());
   Logger::upf_app().debug(
@@ -223,8 +186,6 @@ void SessionManager::createBPFSession(
     itti_n4_session_deletion_request* del_req) {
   auto& logger  = Logger::upf_n4();
   uint64_t seid = pSession_establishment->get_up_seid();
-
-  sessions.push_back(pSession_establishment);
 
   logger.debug("Session %d Received", seid);
   logger.debug("Preparing the Datapath ...");
@@ -644,20 +605,6 @@ void SessionManager::updateBPFSessionDL(
     return;
   }
 
-  // TODO [ETH-PDU]
-  // If IP PDU extract ueIP
-  // Else if ETH PDU extract ethernet_filter
-  // Else throw error
-  if (!(extractUeIpv4(pdi, ueIpAddress) ||
-        extractEthernetPacketFilter(pdi, ethernetPacketFilter) ||
-        extractEthernetPduSessionInformation(
-            pdi, ethernetPduSessionInformation))) {
-    Logger::upf_n4().error(
-        "PDI for DL must have either UE IP, ETH Packet Filter or ETH PDU "
-        "Session Information");
-    return;
-  }
-
   Logger::upf_app().debug(
       "Create the Downlink Direction Datapath for Session 0x%x", seidul);
   Logger::upf_app().debug(
@@ -684,28 +631,13 @@ void SessionManager::updateBPFSessionDL(
 
   // Get the teid_uplink for pSession
   uint64_t teid_ul            = 0;
-  pfcp::fteid_t uplink_fteid2 = {};
-  if (!pSession->get(uplink_fteid2)) {
-    // Set the uplink fteid in the response
-    Logger::pfcp_switch().info(
-        "call_datapath uplink_fteid not set, setting it to default");
-  } else {
-    Logger::pfcp_switch().info(
-        "call_datapath uplink_fteid set, setting it to %u", uplink_fteid2.teid);
-    teid_ul = uplink_fteid2.teid;
+  pfcp::fteid_t uplink_fteid = {};
+  if (pSession->get(uplink_fteid)) {
+    teid_ul = uplink_fteid.teid;
   }
-
   fteid.teid        = forwardingParams.outer_header_creation.second.teid;
-  uint64_t teid_ul2 = findUplinkTeid(seidul, sessions);
-  Logger::upf_app().debug("Uplink TEID found for session: 0x%x", teid_ul2);
 
-  // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer =
-  // pSession->qerIDsPerPDR.qers;
-  // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer = pSession->qers;
-
-  // TODO [ETH-PDU] support uplink for eth pkt filters. Currently only using eth
-  // pdu session info for DL
-
+ 
   // IP PDU session
   if (extractUeIpv4(pdi, ueIpAddress)) {
     Logger::upf_app().debug(
@@ -718,7 +650,11 @@ void SessionManager::updateBPFSessionDL(
   } else if (
       extractEthernetPacketFilter(pdi, ethernetPacketFilter) ||
       extractEthernetPduSessionInformation(
-          pdi, ethernetPduSessionInformation)) {
+          pdi, ethernetPduSessionInformation)) { // ETH-PDU session
+    // TODO [ETH-PDU] handle UE MAC address
+    // TODO [ETH-PDU] handle ethernetPduSessionInformation (currently default set
+    // to 1)
+    // TODO [ETH-PDU] handle ethernetPacketFilter
     Logger::upf_app().debug(
         "ETH-PDU: creating pipeline for ETH PDU session, Downlink PDR %d",
         pdrHighPrecedenceDl->pdr_id.rule_id);
