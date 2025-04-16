@@ -19,12 +19,12 @@
  *   +--------------------------+---------------------------+
  */
 
-struct {
-  __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
-  __uint(max_entries, MAX_LENGTH);
-  __type(key, u32);
-  __type(value, s32);
-} m_next_rule_prog SEC(".maps");
+// struct {
+//   __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
+//   __uint(max_entries, MAX_LENGTH);
+//   __type(key, u32);
+//   __type(value, s32);
+// } m_next_rule_prog SEC(".maps");
 
 // BPF_ANNOTATE_KV_PAIR(m_next_rule_prog, u32, s32);
 

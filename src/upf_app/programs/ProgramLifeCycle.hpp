@@ -28,7 +28,8 @@
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
 
-#define EGRESS_HANDLE 0x1
+// #define EGRESS_HANDLE 0x1
+#define EGRESS_HANDLE 0x10000
 #define EGRESS_PRIORITY 0xC02F
 
 #define INGRESS_HANDLE 0x1

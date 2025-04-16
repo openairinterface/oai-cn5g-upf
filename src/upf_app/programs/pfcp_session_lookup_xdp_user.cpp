@@ -159,9 +159,10 @@ void PFCP_Session_LookupProgram::tearDown() {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void PFCP_Session_LookupProgram::updateProgramMap(uint32_t key, uint32_t fd) {
-  mpTeidSessionMap->update(key, fd, BPF_ANY);
-}
+// void PFCP_Session_LookupProgram::updateProgramMap(uint32_t key, uint32_t fd)
+// {
+//   mpTeidSessionMap->update(key, fd, BPF_ANY);
+// }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_LookupProgram::removeProgramMap(uint32_t key) {
@@ -173,25 +174,28 @@ void PFCP_Session_LookupProgram::removeProgramMap(uint32_t key) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getTeidSessionMap() const {
-  return mpTeidSessionMap;
-}
+// std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getTeidSessionMap() const
+// {
+//   return mpTeidSessionMap;
+//}
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getUeIpSessionMap() const {
-  return mpUeIpSessionMap;
-}
+// std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getUeIpSessionMap() const
+// {
+//   return mpUeIpSessionMap;
+// }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getNextProgRuleMap() const {
-  return mpNextProgRuleMap;
-}
+// std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getNextProgRuleMap()
+// const {
+//   return mpNextProgRuleMap;
+// }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getNextProgRuleIndexMap()
-    const {
-  return mpNextProgRuleIndexMap;
-}
+// std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getNextProgRuleIndexMap()
+//     const {
+//   return mpNextProgRuleIndexMap;
+// }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSessionMappingMap()
@@ -239,12 +243,14 @@ void PFCP_Session_LookupProgram::initializeMaps() {
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
 
   // Warning - The name of the map must be the same of the BPF program.
-  mpTeidSessionMap = std::make_shared<BPFMap>(mpMaps->getMap("m_teid_session"));
-  mpUeIpSessionMap = std::make_shared<BPFMap>(mpMaps->getMap("m_ueip_session"));
-  mpNextProgRuleMap =
-      std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_prog"));
-  mpNextProgRuleIndexMap =
-      std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_prog_index"));
+  // mpTeidSessionMap =
+  // std::make_shared<BPFMap>(mpMaps->getMap("m_teid_session"));
+  // mpUeIpSessionMap =
+  // std::make_shared<BPFMap>(mpMaps->getMap("m_ueip_session"));
+  // mpNextProgRuleMap =
+  //     std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_prog"));
+  // mpNextProgRuleIndexMap =
+  //     std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_prog_index"));
   mpSessionMappingMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_session_mapping"));
   mpArpTableMap = std::make_shared<BPFMap>(mpMaps->getMap("m_arp_table"));

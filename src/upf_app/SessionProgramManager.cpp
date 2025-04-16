@@ -270,14 +270,16 @@ void SessionProgramManager::initializeNextRuleProgIndexKey(
 }
 
 //---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::storeFarProgramIndexInNextProgRuleIndexMap(
-    std::shared_ptr<pfcp::pfcp_far> pFar, const next_rule_prog_index_key& key,
-    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
-  pfcp_far_t_ far = createFar(pFar);
-  pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->update(
-      key, far, BPF_ANY);
-  // pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(id, fd, BPF_ANY);
-}
+// void SessionProgramManager::storeFarProgramIndexInNextProgRuleIndexMap(
+//     std::shared_ptr<pfcp::pfcp_far> pFar, const next_rule_prog_index_key&
+//     key, std::shared_ptr<PFCP_Session_LookupProgram>
+//     pPFCP_Session_LookupProgram) {
+//   pfcp_far_t_ far = createFar(pFar);
+//   pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->update(
+//       key, far, BPF_ANY);
+//   // pPFCP_Session_LookupProgram->getNextProgRuleMap()->update(id, fd,
+//   BPF_ANY);
+// }
 
 //---------------------------------------------------------------------------------------------------------------
 // Helper function to store Session mapping
@@ -737,66 +739,6 @@ void SessionProgramManager::modifyPipeline(
 }
 
 //---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::createPipeline(
-    uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
-    uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
-    std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
-    std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs, bool isModification,
-    uint32_t teid2) {
-  uint32_t dnIP    = upf_cfg.remote_n6.s_addr;
-  uint32_t upfn3IP = upf_cfg.n3.addr4.s_addr;
-  uint32_t upfn6IP = upf_cfg.n6.addr4.s_addr;
-  uint32_t far_id  = pFar->far_id.far_id;
-
-  next_rule_prog_index_key key;
-
-  // for each PDR get the key and save the appropriate FAR
-  initializeNextRuleProgIndexKey(key, teid1, ueIpAddress, sourceInterface);
-
-  bool enforcing_qos                  = !pQer.empty();
-  const bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
-  const bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
-  if (isQosEnabled && enforcing_qos) {
-    Logger::upf_app().debug("Instantiate a new QERProgram ");
-    std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
-    Logger::upf_app().debug("PDRs Vector size %d", pdrs.size());
-    pQERProgram->setup(seid, pQer, pdrs);
-  }
-
-  auto pPFCP_Session_LookupProgram =
-      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
-  storeFarProgramIndexInNextProgRuleIndexMap(
-      pFar, key, pPFCP_Session_LookupProgram);
-
-  // until here the for loop over pdrs to save key and far
-
-  if (isModification) {
-    storePduSessionInMap(
-        pPFCP_Session_LookupProgram, ueIpAddress, 0, teid1, seid);
-
-    uint32_t gNodeBIP = getGnodebIp(pFar);
-
-    std::thread arpUpdateThread1([this, pPFCP_Session_LookupProgram, seid,
-                                  gNodeBIP, dnIP, upfn3IP, upfn6IP]() {
-      updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
-      updateARPTableForN3(pPFCP_Session_LookupProgram, gNodeBIP, upfn3IP, seid);
-    });
-
-    // Detach the thread since we don't need to join it
-    arpUpdateThread1.detach();
-  } else {
-    storePduSessionInMap(
-        pPFCP_Session_LookupProgram, ueIpAddress, teid1, 0, seid);
-    // Launch a separate thread to update ARP table map
-    std::thread arpUpdateThread2(
-        [this, pPFCP_Session_LookupProgram, dnIP, upfn6IP]() {
-          updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
-        });
-    arpUpdateThread2.detach();
-    saveSeidWithinFARProgram(seid, pPFCP_Session_LookupProgram, key);
-  }
-}
-
 // void SessionProgramManager::createPipeline(
 //     uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
 //     uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
@@ -816,12 +758,11 @@ void SessionProgramManager::createPipeline(
 //   bool enforcing_qos                  = !pQer.empty();
 //   const bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
 //   const bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
-
 //   if (isQosEnabled && enforcing_qos) {
 //     Logger::upf_app().debug("Instantiate a new QERProgram ");
-//     std::shared_ptr<QERProgram> pQERProgram =
-//     std::make_shared<QERProgram>(); Logger::upf_app().debug("PDRs Vector
-//     size %d", pdrs.size()); pQERProgram->setup(seid, pQer, pdrs);
+//     std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
+//     Logger::upf_app().debug("PDRs Vector size %d", pdrs.size());
+//     pQERProgram->setup(seid, pQer, pdrs);
 //   }
 
 //   auto pPFCP_Session_LookupProgram =
@@ -859,17 +800,82 @@ void SessionProgramManager::createPipeline(
 //   }
 // }
 
-// void SessionProgramManager::addPdrPipeline(pdr) {}
-// void SessionProgramManager::addFarPipeline(far) {}
-// void SessionProgramManager::addQerPipeline(qer) {}
+// // void SessionProgramManager::createPipeline(
+// //     uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
+// //     uint32_t ueIpAddress, std::shared_ptr<pfcp::pfcp_far> pFar,
+// //     std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
+// //     std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs, bool
+// isModification,
+// //     uint32_t teid2) {
+// //   uint32_t dnIP    = upf_cfg.remote_n6.s_addr;
+// //   uint32_t upfn3IP = upf_cfg.n3.addr4.s_addr;
+// //   uint32_t upfn6IP = upf_cfg.n6.addr4.s_addr;
+// //   uint32_t far_id  = pFar->far_id.far_id;
 
-// void SessionProgramManager::updatePdrPipeline(pdr) {}
-// void SessionProgramManager::updateFarPipeline(far) {}
-// void SessionProgramManager::updateQerPipeline(qer) {}
+// //   next_rule_prog_index_key key;
 
-// void SessionProgramManager::deletePdrPipeline(pdr) {}
-// void SessionProgramManager::deleteFarPipeline(far) {}
-// void SessionProgramManager::deleteQerPipeline(qer) {}
+// //   // for each PDR get the key and save the appropriate FAR
+// //   initializeNextRuleProgIndexKey(key, teid1, ueIpAddress,
+// sourceInterface);
+
+// //   bool enforcing_qos                  = !pQer.empty();
+// //   const bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
+// //   const bool isQosEnabled = isBpfAccelerationEnabled &&
+// upf_cfg.enable_qos;
+
+// //   if (isQosEnabled && enforcing_qos) {
+// //     Logger::upf_app().debug("Instantiate a new QERProgram ");
+// //     std::shared_ptr<QERProgram> pQERProgram =
+// //     std::make_shared<QERProgram>(); Logger::upf_app().debug("PDRs Vector
+// //     size %d", pdrs.size()); pQERProgram->setup(seid, pQer, pdrs);
+// //   }
+
+// //   auto pPFCP_Session_LookupProgram =
+// //       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+// //   storeFarProgramIndexInNextProgRuleIndexMap(
+// //       pFar, key, pPFCP_Session_LookupProgram);
+
+// //   // until here the for loop over pdrs to save key and far
+
+// //   if (isModification) {
+// //     storePduSessionInMap(
+// //         pPFCP_Session_LookupProgram, ueIpAddress, 0, teid1, seid);
+
+// //     uint32_t gNodeBIP = getGnodebIp(pFar);
+
+// //     std::thread arpUpdateThread1([this, pPFCP_Session_LookupProgram, seid,
+// //                                   gNodeBIP, dnIP, upfn3IP, upfn6IP]() {
+// //       updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
+// //       updateARPTableForN3(pPFCP_Session_LookupProgram, gNodeBIP, upfn3IP,
+// //       seid);
+// //     });
+
+// //     // Detach the thread since we don't need to join it
+// //     arpUpdateThread1.detach();
+// //   } else {
+// //     storePduSessionInMap(
+// //         pPFCP_Session_LookupProgram, ueIpAddress, teid1, 0, seid);
+// //     // Launch a separate thread to update ARP table map
+// //     std::thread arpUpdateThread2(
+// //         [this, pPFCP_Session_LookupProgram, dnIP, upfn6IP]() {
+// //           updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
+// //         });
+// //     arpUpdateThread2.detach();
+// //     saveSeidWithinFARProgram(seid, pPFCP_Session_LookupProgram, key);
+// //   }
+// // }
+
+// // void SessionProgramManager::addPdrPipeline(pdr) {}
+// // void SessionProgramManager::addFarPipeline(far) {}
+// // void SessionProgramManager::addQerPipeline(qer) {}
+
+// // void SessionProgramManager::updatePdrPipeline(pdr) {}
+// // void SessionProgramManager::updateFarPipeline(far) {}
+// // void SessionProgramManager::updateQerPipeline(qer) {}
+
+// // void SessionProgramManager::deletePdrPipeline(pdr) {}
+// // void SessionProgramManager::deleteFarPipeline(far) {}
+// // void SessionProgramManager::deleteQerPipeline(qer) {}
 
 //---------------------------------------------------------------------------------------------------------------
 void SessionProgramManager::removePipeline(uint64_t seid) {

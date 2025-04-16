@@ -47,7 +47,7 @@ std::string UserPlaneComponent::getUDPInterface() const {
 //---------------------------------------------------------------------------------------------------------------
 void UserPlaneComponent::onNewSessionProgram(
     u_int32_t programId, u_int32_t fileDescriptor) {
-  mpPFCP_Session_LookupProgram->updateProgramMap(programId, fileDescriptor);
+  // mpPFCP_Session_LookupProgram->updateProgramMap(programId, fileDescriptor);
 }
 
 //---------------------------------------------------------------------------------------------------------------

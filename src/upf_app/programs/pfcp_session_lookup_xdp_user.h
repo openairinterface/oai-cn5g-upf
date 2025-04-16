@@ -35,7 +35,7 @@ class PFCP_Session_LookupProgram {
 
   void tearDown();
 
-  void updateProgramMap(uint32_t key, uint32_t fd);
+  // void updateProgramMap(uint32_t key, uint32_t fd);
 
   void create_upf_interface_map_entry(e_reference_point s);
 
@@ -44,10 +44,10 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> getEgressInterfaceMap() const;
   std::shared_ptr<BPFMap> getArpTableMap() const;
   std::shared_ptr<BPFMap> getIfaceMap() const;
-  std::shared_ptr<BPFMap> getTeidSessionMap() const;
-  std::shared_ptr<BPFMap> getUeIpSessionMap() const;
-  std::shared_ptr<BPFMap> getNextProgRuleMap() const;
-  std::shared_ptr<BPFMap> getNextProgRuleIndexMap() const;
+  // std::shared_ptr<BPFMap> getTeidSessionMap() const;
+  // std::shared_ptr<BPFMap> getUeIpSessionMap() const;
+  // std::shared_ptr<BPFMap> getNextProgRuleMap() const;
+  // std::shared_ptr<BPFMap> getNextProgRuleIndexMap() const;
   std::shared_ptr<BPFMap> getTrafficMap() const;
   std::shared_ptr<BPFMap> getSessionMappingMap() const;
   std::shared_ptr<BPFMap> getRulesMatchPdrMap() const;
@@ -55,7 +55,7 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> getSdfFilterMap() const;
   std::shared_ptr<BPFMap> getQosEnablingMap() const;
   std::shared_ptr<BPFMap> getUeQfiTeidMap() const;
-  std::shared_ptr<BPFMap> getQosFlowMap() const;
+  // std::shared_ptr<BPFMap> getQosFlowMap() const;
 
  private:
   void initializeMaps();
@@ -66,9 +66,9 @@ class PFCP_Session_LookupProgram {
   std::string mUDPInterface;
   std::shared_ptr<BPFMaps> mpMaps;
   std::shared_ptr<BPFMap> mpTeidSessionMap;
-  std::shared_ptr<BPFMap> mpUeIpSessionMap;
-  std::shared_ptr<BPFMap> mpNextProgRuleIndexMap;
-  std::shared_ptr<BPFMap> mpNextProgRuleMap;
+  // std::shared_ptr<BPFMap> mpUeIpSessionMap;
+  //   std::shared_ptr<BPFMap> mpNextProgRuleIndexMap;
+  //   std::shared_ptr<BPFMap> mpNextProgRuleMap;
   std::shared_ptr<BPFMap> mpSessionMappingMap;
   std::shared_ptr<BPFMap> mpEgressInterfaceMap;
   std::shared_ptr<BPFMap> mpArpTableMap;

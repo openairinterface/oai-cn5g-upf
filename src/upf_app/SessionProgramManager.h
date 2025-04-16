@@ -83,9 +83,10 @@ class SessionProgramManager {
       uint64_t seid,
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
 
-  void storeFarProgramIndexInNextProgRuleIndexMap(
-      std::shared_ptr<pfcp::pfcp_far> pFar, const next_rule_prog_index_key& key,
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
+  //   void storeFarProgramIndexInNextProgRuleIndexMap(
+  //       std::shared_ptr<pfcp::pfcp_far> pFar, const next_rule_prog_index_key&
+  //       key, std::shared_ptr<PFCP_Session_LookupProgram>
+  //       pPFCP_Session_LookupProgram);
 
   void storePduSessionInMap(
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
@@ -140,7 +141,7 @@ class SessionProgramManager {
   int32_t getEmptySlot();
 
   std::shared_ptr<BPFMap> mpTeidSessionMap;
-  std::shared_ptr<BPFMap> mpUeIpSessionMap;
+  // std::shared_ptr<BPFMap> mpUeIpSessionMap;
 
   // The observer which will be notified when a PFCP_Session_PDR_LookupProgram
   // is created.

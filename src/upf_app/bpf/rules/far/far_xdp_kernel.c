@@ -212,8 +212,8 @@ int far_entry_point(struct xdp_md* ctx) {
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
 
-  u32 key            = 0;
-  pfcp_far_t_* p_far = bpf_map_lookup_elem(&m_far, &key);
+  u32 key = 0;
+  pfcp_far_t_* p_far;  //= bpf_map_lookup_elem(&m_far, &key);
 
   if (p_far) {
     struct ethhdr* ethh = data;

@@ -443,184 +443,189 @@ uint32_t SessionManager::retrieveTeid(
   return ret;
 }
 
-void SessionManager::updateBpfSession(
-    std::shared_ptr<pfcp::pfcp_session> pSession,
-    itti_n4_session_establishment_request* est_req,
-    itti_n4_session_modification_request* mod_req,
-    itti_n4_session_deletion_request* del_req) {
-  Logger::upf_app().debug(
-      "Session %d Will be updated", pSession->get_up_seid());
+// void SessionManager::updateBpfSession(
+//     std::shared_ptr<pfcp::pfcp_session> pSession,
+//     itti_n4_session_establishment_request* est_req,
+//     itti_n4_session_modification_request* mod_req,
+//     itti_n4_session_deletion_request* del_req) {
+//   Logger::upf_app().debug(
+//       "Session %d Will be updated", pSession->get_up_seid());
 
-  if (!mod_req->pfcp_ies.create_pdrs.empty()) {
-    // create_pdr& cr_pdr            = it;
-    pfcp::fteid_t allocated_fteid = {};
+//   if (!mod_req->pfcp_ies.create_pdrs.empty()) {
+//     // create_pdr& cr_pdr            = it;
+//     pfcp::fteid_t allocated_fteid = {};
 
-    pfcp::far_id_t far_id = {};
+//     pfcp::far_id_t far_id = {};
 
-    Logger::upf_app().debug("Find the PDR with Highest Precedence:");
+//     Logger::upf_app().debug("Find the PDR with Highest Precedence:");
 
-    uint32_t pdrs_downlink_size = pSession->pdrs_downlink.size();
-    uint32_t pdrs_uplink_size   = pSession->pdrs_uplink.size();
+//     uint32_t pdrs_downlink_size = pSession->pdrs_downlink.size();
+//     uint32_t pdrs_uplink_size   = pSession->pdrs_uplink.size();
 
-    for (int i = 0; i < pSession->pdrs.size(); i++) {
-      pfcp::pdi pdi;
-      pfcp::source_interface_t sourceInterface;
-      pSession->pdrs[i]->get(pdi);
-      pdi.get(sourceInterface);
+//     for (int i = 0; i < pSession->pdrs.size(); i++) {
+//       pfcp::pdi pdi;
+//       pfcp::source_interface_t sourceInterface;
+//       pSession->pdrs[i]->get(pdi);
+//       pdi.get(sourceInterface);
 
-      if (sourceInterface.interface_value == INTERFACE_VALUE_CORE) {
-        pSession->pdrs_downlink.push_back(pSession->pdrs[i]);
-      }
+//       if (sourceInterface.interface_value == INTERFACE_VALUE_CORE) {
+//         pSession->pdrs_downlink.push_back(pSession->pdrs[i]);
+//       }
 
-      if (sourceInterface.interface_value == INTERFACE_VALUE_ACCESS) {
-        pSession->pdrs_uplink.push_back(pSession->pdrs[i]);
-      }
-    }
+//       if (sourceInterface.interface_value == INTERFACE_VALUE_ACCESS) {
+//         pSession->pdrs_uplink.push_back(pSession->pdrs[i]);
+//       }
+//     }
 
-    if ((pSession->pdrs_uplink.empty()) && (pSession->pdrs_downlink.empty())) {
-      Logger::upf_app().error("No PDR was found in session %d", pSession->seid);
-      throw std::runtime_error("No PDR was found in session");
-    }
+//     if ((pSession->pdrs_uplink.empty()) && (pSession->pdrs_downlink.empty()))
+//     {
+//       Logger::upf_app().error("No PDR was found in session %d",
+//       pSession->seid); throw std::runtime_error("No PDR was found in
+//       session");
+//     }
 
-    if (pdrs_downlink_size != pSession->pdrs_downlink.size()) {
-      std::sort(
-          pSession->pdrs_downlink.begin(), pSession->pdrs_downlink.end(),
-          SessionManager::comparePDR);
+//     if (pdrs_downlink_size != pSession->pdrs_downlink.size()) {
+//       std::sort(
+//           pSession->pdrs_downlink.begin(), pSession->pdrs_downlink.end(),
+//           SessionManager::comparePDR);
 
-      auto pdrHighPrecedenceDl = pSession->pdrs_downlink[0];
-      Logger::upf_app().debug(
-          "The Downlink PDR %d has the Highest Precedence",
-          pdrHighPrecedenceDl->pdr_id.rule_id);
+//       auto pdrHighPrecedenceDl = pSession->pdrs_downlink[0];
+//       Logger::upf_app().debug(
+//           "The Downlink PDR %d has the Highest Precedence",
+//           pdrHighPrecedenceDl->pdr_id.rule_id);
 
-      Logger::upf_app().debug(
-          "Extract PDI from the Downlink PDR %d",
-          pdrHighPrecedenceDl->pdr_id.rule_id);
+//       Logger::upf_app().debug(
+//           "Extract PDI from the Downlink PDR %d",
+//           pdrHighPrecedenceDl->pdr_id.rule_id);
 
-      updateBPFSessionDL(pSession, pdrHighPrecedenceDl);
-    }
+//       updateBPFSessionDL(pSession, pdrHighPrecedenceDl);
+//     }
 
-    if (pdrs_uplink_size != pSession->pdrs_uplink.size()) {
-      std::sort(
-          pSession->pdrs_uplink.begin(), pSession->pdrs_uplink.end(),
-          SessionManager::comparePDR);
+//     if (pdrs_uplink_size != pSession->pdrs_uplink.size()) {
+//       std::sort(
+//           pSession->pdrs_uplink.begin(), pSession->pdrs_uplink.end(),
+//           SessionManager::comparePDR);
 
-      auto pdrHighPrecedenceUl = pSession->pdrs_uplink[0];
-      Logger::upf_app().debug(
-          "The Uplink PDR %d has the Highest Precedence",
-          pdrHighPrecedenceUl->pdr_id.rule_id);
+//       auto pdrHighPrecedenceUl = pSession->pdrs_uplink[0];
+//       Logger::upf_app().debug(
+//           "The Uplink PDR %d has the Highest Precedence",
+//           pdrHighPrecedenceUl->pdr_id.rule_id);
 
-      Logger::upf_app().debug(
-          "Extract PDI from the Uplink PDR %d",
-          pdrHighPrecedenceUl->pdr_id.rule_id);
+//       Logger::upf_app().debug(
+//           "Extract PDI from the Uplink PDR %d",
+//           pdrHighPrecedenceUl->pdr_id.rule_id);
 
-      updateBPFSessionUL(pSession, pdrHighPrecedenceUl);
-    }
-  }
+//       updateBPFSessionUL(pSession, pdrHighPrecedenceUl);
+//     }
+//   }
 
-  for (auto it : mod_req->pfcp_ies.remove_pdrs) {
-    Logger::upf_app().debug("Delete PDRs");
-    Logger::upf_app().debug(
-        "PDRs and FARs map entries are obsolete and need to be deleted");
-  }
-}
+//   for (auto it : mod_req->pfcp_ies.remove_pdrs) {
+//     Logger::upf_app().debug("Delete PDRs");
+//     Logger::upf_app().debug(
+//         "PDRs and FARs map entries are obsolete and need to be deleted");
+//   }
+// }
 
-//---------------------------------------------------------------------------------------------------------------
-void SessionManager::updateBPFSessionUL(
-    std::shared_ptr<pfcp::pfcp_session> pSession,
-    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl) {
-  pfcp::pdi pdi;
-  pfcp::fteid_t fteid;
-  pfcp::ue_ip_address_t ueIpAddress;
-  pfcp::source_interface_t sourceInterface;
+// //---------------------------------------------------------------------------------------------------------------
+// void SessionManager::updateBPFSessionUL(
+//     std::shared_ptr<pfcp::pfcp_session> pSession,
+//     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceUl) {
+//   pfcp::pdi pdi;
+//   pfcp::fteid_t fteid;
+//   pfcp::ue_ip_address_t ueIpAddress;
+//   pfcp::source_interface_t sourceInterface;
 
-  Logger::upf_app().debug(
-      "Update the Uplink Direction Datapath For Session %d",
-      pSession->get_up_seid());
+//   Logger::upf_app().debug(
+//       "Update the Uplink Direction Datapath For Session %d",
+//       pSession->get_up_seid());
 
-  if (!(extractPdi(pdrHighPrecedenceUl, pdi) &&
-        extractSourceIface(pdi, sourceInterface) &&
-        extractUeIpv4(pdi, ueIpAddress))) {
-    throw std::runtime_error("No fields available For Uplink Update PDI Check");
-  }
+//   if (!(extractPdi(pdrHighPrecedenceUl, pdi) &&
+//         extractSourceIface(pdi, sourceInterface) &&
+//         extractUeIpv4(pdi, ueIpAddress))) {
+//     throw std::runtime_error("No fields available For Uplink Update PDI
+//     Check");
+//   }
 
-  Logger::upf_app().debug(
-      "PDI extracted from Uplink PDR %d", pdrHighPrecedenceUl->pdr_id.rule_id);
+//   Logger::upf_app().debug(
+//       "PDI extracted from Uplink PDR %d",
+//       pdrHighPrecedenceUl->pdr_id.rule_id);
 
-  Logger::upf_app().debug(
-      "Extract Uplink FAR from the highest precedence Uplink PDR");
+//   Logger::upf_app().debug(
+//       "Extract Uplink FAR from the highest precedence Uplink PDR");
 
-  std::shared_ptr<pfcp::pfcp_far> pFar;
+//   std::shared_ptr<pfcp::pfcp_far> pFar;
 
-  if (!getFar(pSession, pdrHighPrecedenceUl, pFar)) {
-    throw std::runtime_error("No fields available For Uplink Update FAR Check");
-  }
+//   if (!getFar(pSession, pdrHighPrecedenceUl, pFar)) {
+//     throw std::runtime_error("No fields available For Uplink Update FAR
+//     Check");
+//   }
 
-  Logger::upf_app().info("Update Session For Uplink");
-  Logger::upf_app().warn("TODO: update Uplink PDRs ...");
-}
+//   Logger::upf_app().info("Update Session For Uplink");
+//   Logger::upf_app().warn("TODO: update Uplink PDRs ...");
+// }
 
-//---------------------------------------------------------------------------------------------------------------
+// //---------------------------------------------------------------------------------------------------------------
 
-// Function to update the Downlink Direction of a session
-void SessionManager::updateBPFSessionDL(
-    std::shared_ptr<pfcp::pfcp_session> pSession,
-    std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl) {
-  uint64_t seidul = pSession->get_up_seid();
-  pfcp::pdi pdi;
-  pfcp::fteid_t fteid;
-  pfcp::ue_ip_address_t ueIpAddress;
-  pfcp::source_interface_t sourceInterface;
+// // Function to update the Downlink Direction of a session
+// void SessionManager::updateBPFSessionDL(
+//     std::shared_ptr<pfcp::pfcp_session> pSession,
+//     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl) {
+//   uint64_t seidul = pSession->get_up_seid();
+//   pfcp::pdi pdi;
+//   pfcp::fteid_t fteid;
+//   pfcp::ue_ip_address_t ueIpAddress;
+//   pfcp::source_interface_t sourceInterface;
 
-  if (!(extractPdi(pdrHighPrecedenceDl, pdi) &&
-        extractSourceIface(pdi, sourceInterface) &&
-        extractUeIpv4(pdi, ueIpAddress))) {
-    throw std::runtime_error(
-        "No fields available For Downlink Update PDI Check");
-  }
+//   if (!(extractPdi(pdrHighPrecedenceDl, pdi) &&
+//         extractSourceIface(pdi, sourceInterface) &&
+//         extractUeIpv4(pdi, ueIpAddress))) {
+//     throw std::runtime_error(
+//         "No fields available For Downlink Update PDI Check");
+//   }
 
-  Logger::upf_app().debug(
-      "Create the Downlink Direction Datapath for Session 0x%x", seidul);
-  Logger::upf_app().debug(
-      "PDI extracted from Downlink PDR %d",
-      pdrHighPrecedenceDl->pdr_id.rule_id);
-  Logger::upf_app().debug(
-      "Extract FAR from the highest Precedence Downlink PDR");
+//   Logger::upf_app().debug(
+//       "Create the Downlink Direction Datapath for Session 0x%x", seidul);
+//   Logger::upf_app().debug(
+//       "PDI extracted from Downlink PDR %d",
+//       pdrHighPrecedenceDl->pdr_id.rule_id);
+//   Logger::upf_app().debug(
+//       "Extract FAR from the highest Precedence Downlink PDR");
 
-  std::shared_ptr<pfcp::pfcp_far> pFar;
+//   std::shared_ptr<pfcp::pfcp_far> pFar;
 
-  if (!getFar(pSession, pdrHighPrecedenceDl, pFar)) {
-    throw std::runtime_error(
-        "No fields available For Downlink Update FAR Check");
-  }
+//   if (!getFar(pSession, pdrHighPrecedenceDl, pFar)) {
+//     throw std::runtime_error(
+//         "No fields available For Downlink Update FAR Check");
+//   }
 
-  Logger::upf_app().debug("FAR ID %d", pFar->far_id.far_id);
+//   Logger::upf_app().debug("FAR ID %d", pFar->far_id.far_id);
 
-  pfcp::forwarding_parameters forwardingParams;
+//   pfcp::forwarding_parameters forwardingParams;
 
-  if (!extractForwardingParams(pFar, forwardingParams)) {
-    Logger::upf_app().error(
-        "Forwarding parameters were not found for Downlink Update");
-  }
+//   if (!extractForwardingParams(pFar, forwardingParams)) {
+//     Logger::upf_app().error(
+//         "Forwarding parameters were not found for Downlink Update");
+//   }
 
-  fteid.teid       = forwardingParams.outer_header_creation.second.teid;
-  uint64_t teid_ul = findUplinkTeid(seidul, sessions);
+//   fteid.teid       = forwardingParams.outer_header_creation.second.teid;
+//   uint64_t teid_ul = findUplinkTeid(seidul, sessions);
 
-  // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer =
-  // pSession->qerIDsPerPDR.qers;
-  // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer = pSession->qers;
+//   // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer =
+//   // pSession->qerIDsPerPDR.qers;
+//   // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer = pSession->qers;
 
-  if (teid_ul) {
-    SessionProgramManager::getInstance().createPipeline(
-        seidul, fteid.teid, INTERFACE_VALUE_CORE,
-        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers_downlink,
-        pSession->pdrs_downlink, true, teid_ul);
-  } else {
-    SessionProgramManager::getInstance().createPipeline(
-        seidul, fteid.teid, INTERFACE_VALUE_CORE,
-        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers_downlink,
-        pSession->pdrs_downlink, true, 0);
-  }
-}
+//   if (teid_ul) {
+//     SessionProgramManager::getInstance().createPipeline(
+//         seidul, fteid.teid, INTERFACE_VALUE_CORE,
+//         ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers_downlink,
+//         pSession->pdrs_downlink, true, teid_ul);
+//   } else {
+//     SessionProgramManager::getInstance().createPipeline(
+//         seidul, fteid.teid, INTERFACE_VALUE_CORE,
+//         ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers_downlink,
+//         pSession->pdrs_downlink, true, 0);
+//   }
+// }
 
 //---------------------------------------------------------------------------------------------------------------
 void SessionManager::removeBpfSession(

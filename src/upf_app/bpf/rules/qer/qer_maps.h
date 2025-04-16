@@ -13,20 +13,20 @@
 #define MAX_INTERFACES 10
 
 /*---------------------------------------------------------------------------------------------------------------*/
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, QOS_FLOWS_MAX_ENTRIES);
-  __type(key, u32);
-  __type(value, struct s_fiveQosFlow);
-} m_qos_flow SEC(".maps");
+// struct {
+//   __uint(type, BPF_MAP_TYPE_HASH);
+//   __uint(max_entries, QOS_FLOWS_MAX_ENTRIES);
+//   __type(key, u32);
+//   __type(value, struct s_fiveQosFlow);
+// } m_qos_flow SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
-struct {
-  __uint(type, BPF_MAP_TYPE_ARRAY);
-  __uint(max_entries, 1);
-  __type(key, u32);
-  __type(value, u8);
-} m_default_qfi SEC(".maps");
+// struct {
+//   __uint(type, BPF_MAP_TYPE_ARRAY);
+//   __uint(max_entries, 1);
+//   __type(key, u32);
+//   __type(value, u8);
+// } m_default_qfi SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
