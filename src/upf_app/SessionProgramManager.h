@@ -169,6 +169,11 @@ class SessionProgramManager {
       const next_rule_prog_index_key& key);
 
   /*---------------------------------------------------------------------------------------------------------------*/
+  void saveSeidWithinFARProgram(
+      uint64_t seid, std::shared_ptr<FARProgram> pFARProgram,
+      const next_rule_eth_prog_index_key& key);
+
+  /*---------------------------------------------------------------------------------------------------------------*/
   template<typename T>
   void updateARPTableForN6(
       std::shared_ptr<T> pFARProgram, uint32_t dnIP, uint32_t upfn6IP);

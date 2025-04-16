@@ -366,6 +366,16 @@ void SessionProgramManager::saveSeidWithinFARProgram(
   addFarProgram(seid, pFARProgram);
 }
 
+void SessionProgramManager::saveSeidWithinFARProgram(
+    uint64_t seid, std::shared_ptr<FARProgram> pFARProgram,
+    const next_rule_eth_prog_index_key& key) {
+  // Map the deployed pipeline to the seid.
+  // The seid will be used to destroy the pipeline.
+  mSessionProgramsMap[seid] =
+      std::make_shared<SessionPrograms>(key, pFARProgram);
+  addFarProgram(seid, pFARProgram);
+}
+
 //---------------------------------------------------------------------------------------------------------------
 uint32_t SessionProgramManager::getGnodebIp(
     std::shared_ptr<pfcp::pfcp_far> pFar) {
@@ -532,6 +542,7 @@ void SessionProgramManager::createPipeline(
       updateARPTableForN3(pPFCP_Session_LookupProgram, gNodeBIP, upfn3IP, seid);
     });
     arpUpdateThread2.detach();
+    saveSeidWithinFARProgram(seid, pFARProgram, key);
   }
 }
 
@@ -545,27 +556,42 @@ void SessionProgramManager::removePipeline(uint64_t seid) {
     Logger::upf_app().error(
         "Session %d Does Not Exist. It Cannot be Removed", seid);
     // throw std::runtime_error("Session does Not Exist. It Cannot be Removed");
+    return;
   }
 
   try {
-    Logger::upf_app().debug(
-        "Delete the SessionPrograms object. It will release the pipeline");
-    // The key represent the pointer to the pipeline related to the session.
-    // auto key = it->second->getKey();
-    // it->second.reset();
-    // mSessionProgramsMap.erase(seid);
+    if (it->second->getPdnType() == PDN_TYPE_E_IPV4) {
+      // The key represent the pointer to the pipeline related to the session.
+      auto key = it->second->getKey();
+      it->second.reset();
+      mSessionProgramsMap.erase(seid);
 
-    // Logger::upf_app().debug("Clean PDU Session from the entry program's
-    // map"); auto pPFCP_Session_LookupProgram =
-    //     UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
-    //   pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->remove(key);
+      Logger::upf_app().debug(
+          "Clean IP PDU Session from the entry program's map");
+      auto pPFCP_Session_LookupProgram =
+          UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+      pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->remove(key);
+
+    } else if (it->second->getPdnType() == PDN_TYPE_E_ETHERNET) {
+      auto key = it->second->getKeyEth();
+      it->second.reset();
+      mSessionProgramsMap.erase(seid);
+
+      Logger::upf_app().debug(
+          "Clean ETH PDU Session from the entry program's map");
+      auto pPFCP_Session_LookupProgram =
+          UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+      pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->remove(key);
+    } else {
+      Logger::upf_app().error(
+          "Unknown PDN type. Cannot remove the session %d", seid);
+      return;
+    }
   } catch (const std::exception& e) {
     Logger::upf_app().error(
-        "Error: Failed to remove the key from the NextProgRuleIndexMap: %s",
+        "Error: Failed to remove the key from the NextProg IndexMap: %s",
         e.what());
   }
-
-  // pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->remove(key);
 }
 
 //---------------------------------------------------------------------------------------------------------------
