@@ -64,11 +64,7 @@ class SessionProgramManager {
   void create(uint64_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  /**
-   * @brief Remove program session context.
-   *
-   * @param seid The session identifier.
-   */
+
   void remove(uint64_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
@@ -159,7 +155,8 @@ class SessionProgramManager {
   /*---------------------------------------------------------------------------------------------------------------*/
   void storeSessionMappingMap(
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-      uint32_t ue_ip_address, uint32_t teid_dl);
+      uint32_t ue_ip_address, uint32_t teid_dl, uint32_t teid_ul,
+      uint32_t seid);
 
   /*---------------------------------------------------------------------------------------------------------------*/
   void storeFARInFARMap(
@@ -190,17 +187,6 @@ class SessionProgramManager {
       uint64_t seid, uint32_t teid, uint32_t gNBIpAddress, bool isModification);
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  //   void storeUeQfiTeidMap(
-  //       std::shared_ptr<PFCP_Session_LookupProgram>
-  //       pPFCP_Session_LookupProgram, uint32_t ue_ip_address, uint8_t qfi,
-  //       uint32_t teid_ul);
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  // void updateMap(std::shared_ptr<PFCP_Session_LookupProgram>
-  // pPFCP_Session_LookupProgram,
-  //   uint64_t seid, uint32_t teid_ul, uint32_t src_ip, uint32_t teid_dl);
-
-  /*---------------------------------------------------------------------------------------------------------------*/
   void removePipeline(uint64_t seid);
   std::shared_ptr<SessionPrograms> findSessionPrograms(uint64_t seid);
 
@@ -216,10 +202,7 @@ class SessionProgramManager {
   SessionProgramManager();
   int32_t getEmptySlot();
 
-  // The program eBPF map.
   std::shared_ptr<BPFMap> mpTeidSessionMap;
-
-  // The program eBPF map.
   std::shared_ptr<BPFMap> mpUeIpSessionMap;
 
   // TODO [ETH-PDU] downlink map ETH PDU session info (always recorded)
@@ -231,9 +214,6 @@ class SessionProgramManager {
   // The Maps to store the instance of the programs.
   std::map<uint32_t, std::shared_ptr<PFCP_Session_PDR_LookupProgram>>
       mSessionProgramMap;
-
-  // The Maps to store the instance of the FARs programs.
-  // std::map<uint32_t, std::shared_ptr<FARProgram>> mFARProgramMap;
 
   // The Maps to store the PFCP session deployed in datapath.
   std::map<uint32_t, std::shared_ptr<SessionPrograms>> mSessionProgramsMap;

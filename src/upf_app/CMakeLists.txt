@@ -9,7 +9,7 @@ include_directories(${SRC_TOP_DIR}/common/utils)
 include_directories(${SRC_TOP_DIR}/gtpv1u)
 include_directories(${SRC_TOP_DIR}/itti)
 include_directories(${SRC_TOP_DIR}/pfcp)
-include_directories(${SRC_TOP_DIR}/udp)
+include_directories(${SRC_TOP_DIR}/udp)  
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/common)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/config)
@@ -65,7 +65,7 @@ target_link_libraries(UPF_XDP
   # PUBLIC upfutils
   # PRIVATE spdlog
   PRIVATE elf
-  PRIVATE z
+  PRIVATE z qer_tc
 )
 
 target_include_directories(UPF_XDP PUBLIC

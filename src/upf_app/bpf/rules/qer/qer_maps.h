@@ -7,9 +7,9 @@
 #include "filter_key.h"
 #include "qos_flow.h"
 
-#define QFI_MAX_ENTRIES 5000
+#define QFI_MAX_ENTRIES 10000
 #define FIVE_QI_MAX_ENTRIES 100
-#define QOS_FLOWS_MAX_ENTRIES 100
+#define QOS_FLOWS_MAX_ENTRIES 10000
 #define MAX_INTERFACES 10
 
 /*---------------------------------------------------------------------------------------------------------------*/
