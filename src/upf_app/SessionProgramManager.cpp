@@ -506,12 +506,6 @@ void SessionProgramManager::createPipeline(
     pQERProgram->setup(seid, pQer);
   }
 
-  // Add TC program to handle ETH PDU session broadcast packets
-  Logger::upf_app().debug("ETH-PDU: Instantiate a new FARTCProgram");
-  std::shared_ptr<FARTCProgram> pFARTCProgram =
-      std::make_shared<FARTCProgram>();
-  pFARTCProgram->setup();
-
   Logger::upf_app().debug("ETH-PDU: Instantiate a new FARProgram");
   std::shared_ptr<FARProgram> pFARProgram = std::make_shared<FARProgram>();
 

@@ -9,6 +9,7 @@
 class SessionManager;
 class PFCP_Session_LookupProgram;
 class PFCP_Session_PDR_LookupProgram;
+class FARTCProgram;
 
 /**
  * @brief User Plane component class to abstract the BPF Service Function Chain
@@ -78,6 +79,15 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
       const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
+    /**
+     * @brief Get mpFARTCProgram object.
+     *
+     * @return std::shared_ptr<mpFARTCProgram> The
+     * mpFARTCProgram reference.
+     */
+  std::shared_ptr<FARTCProgram> getFARTCProgram() const;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Getter
    *        Get the GTP interface.
@@ -131,6 +141,9 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
 
   // The PFCP_Session_LookupProgram (BPF program entry point) reference.
   std::shared_ptr<PFCP_Session_LookupProgram> mpPFCP_Session_LookupProgram;
+
+  // The FARTCProgram reference (for handling ETH PDU broadcast packets).
+  std::shared_ptr<FARTCProgram> mpFARTCProgram;
 
   // The PFCP_Session_PDR_LookupProgram (BPF program for PFCP Session)
   // reference.
