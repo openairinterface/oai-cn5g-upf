@@ -62,22 +62,29 @@ static long broadcast_callback_fn(
    * the UPF should forward the traffic to the N6 interface and downlink to
    * every PDU session (except toward the one of the incoming traffic)
    * */
-  // int v;
-  // bpf_for(v, 0, MAX_PDU_SESSIONS) {
-  //   if (ctx->pdu_sessions[v] == bpf_htonl(pdu_session->teid_dl)) break;
-  //   if (v == ctx->size) {
-  //     ctx->pdu_sessions[v] = bpf_htonl(pdu_session->teid_dl);
-  //     ctx->size += 1;
-  //     gtpuh->teid = bpf_htonl(pdu_session->teid_dl);
-  //     iph->daddr  = pdu_session->ipv4_address;
-  //     int ret     = bpf_clone_redirect(skb, *ctx->ifindex, 0);
-  //     if (ret < 0) {
-  //       bpf_debug("broadcast_callback_fn: failed to redirect clone\n");
-  //       return 1;
-  //     }
-  //     break;
-  //   }
-  // }
+
+  /* Within this callback function pdu_sessions keeps track of the PDU sessions 
+   * (teid) that are already broadcasted. The size of the array is limited to 
+   * MAX_PDU_SESSIONS. Return 0 if the PDU session is already in the array, will 
+   * cause the calling MAP iterator (bpf_for_each_map_elem) to move to the next
+   * element (PDU session) in the map. When the map iterator reaches the end, it
+   * will stop calling this callback function.
+   * */
+  for (int v = 0; v < MAX_PDU_SESSIONS; v++) {
+    if (ctx->pdu_sessions[v] == bpf_htonl(pdu_session->teid_dl)) break;
+    if (v == ctx->size) {
+      ctx->pdu_sessions[v] = bpf_htonl(pdu_session->teid_dl);
+      ctx->size += 1;
+      gtpuh->teid = bpf_htonl(pdu_session->teid_dl);
+      iph->daddr  = pdu_session->ipv4_address;
+      int ret     = bpf_clone_redirect(skb, *ctx->ifindex, 0);
+      if (ret < 0) {
+        bpf_debug("broadcast_callback_fn: failed to redirect clone\n");
+        return 1;
+      }
+      break;
+    }
+  }
 
   return 0;
 }

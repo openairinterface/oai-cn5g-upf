@@ -51,6 +51,18 @@ int handle_broadcast(struct __sk_buff* skb) {
     // bpf_debug("handle_broadcast: This is not a GTP packet\n");
     goto out;
   }
+
+  int key = DOWNLINK, *ifindex;
+
+  ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
+  if (!ifindex) {
+    bpf_debug("handle_broadcast: failed to find downlink ifindex\n");
+    goto out;
+  }
+
+  /* The packet from N3 interface and we are sending it back to N3 interface
+   * so we need to swap the source and destination MAC address, IPv4 address
+   */
   swap_src_dst_mac(eth);
   swap_src_dst_ipv4(iph);
 
@@ -69,18 +81,6 @@ int handle_broadcast(struct __sk_buff* skb) {
   }
   __builtin_memcpy(&eth_cpy, eth, sizeof(struct ethhdr));
 
-  int key = DOWNLINK, *ifindex;
-
-  ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
-  if (!ifindex) {
-    bpf_debug("handle_broadcast: failed to find downlink ifindex\n");
-    goto out;
-  }
-
-  if (eth->h_proto != bpf_htons(ETH_P_ARP)) {
-    bpf_debug("handle_broadcast: Inner packet not a broadcast packet\n");
-    goto out;
-  }
 
   struct callback_ctx callback_ctx = {
       .skb = skb, .ifindex = ifindex, .size = 0};

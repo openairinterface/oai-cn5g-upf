@@ -149,48 +149,7 @@ static __always_inline u32 create_outer_header_gtpu(
   iph->saddr    = n3_ip;
   iph->daddr    = ipv4_address;
 
-  // Update the MAC address based on the tables
-  // TODO: put in a function to update the MAC address
-  struct bpf_fib_lookup fib_params = {};
-  __u16 h_proto;
-  h_proto = ethh->h_proto;
-  if (h_proto == bpf_htons(ETH_P_IP)) {
-    if (iph + 1 > data_end) {
-      return XDP_DROP;
-    }
-
-    fib_params.family      = AF_INET;
-    fib_params.tos         = iph->tos;
-    fib_params.l4_protocol = iph->protocol;
-    fib_params.sport       = 0;
-    fib_params.dport       = 0;
-    fib_params.tot_len     = bpf_ntohs(iph->tot_len);
-    fib_params.ipv4_src    = iph->saddr;
-    fib_params.ipv4_dst    = iph->daddr;
-  }
-
-  fib_params.ifindex = ctx->ingress_ifindex;
-
-  int rc = bpf_fib_lookup(ctx, &fib_params, sizeof(fib_params), 0);
-  bpf_debug("BPF_FIB_LKUP_RET_ -> %d", rc);
-  switch (rc) {
-    case BPF_FIB_LKUP_RET_SUCCESS: /* lookup successful */
-      bpf_debug("BPF_FIB_LKUP_RET_SUCCESS");
-
-      memcpy(ethh->h_dest, fib_params.dmac, ETH_ALEN);
-      memcpy(ethh->h_source, fib_params.smac, ETH_ALEN);
-      break;
-    case BPF_FIB_LKUP_RET_BLACKHOLE:   /* dest is blackholed; can be dropped */
-    case BPF_FIB_LKUP_RET_UNREACHABLE: /* dest is unreachable; can be dropped */
-    case BPF_FIB_LKUP_RET_PROHIBIT:    /* dest not allowed; can be dropped */
-    case BPF_FIB_LKUP_RET_NOT_FWDED:   /* packet is not forwarded */
-    case BPF_FIB_LKUP_RET_FWD_DISABLED: /* fwding is not enabled on ingress */
-    case BPF_FIB_LKUP_RET_UNSUPP_LWT:   /* fwd requires encapsulation */
-    case BPF_FIB_LKUP_RET_NO_NEIGH:     /* no neighbor entry for nh */
-    case BPF_FIB_LKUP_RET_FRAG_NEEDED:  /* fragmentation required to fwd */
-      /* PASS */
-      break;
-  }
+  update_mac_address(ctx, ethh, iph);
 
   /*
   |----------------------------------------------------------------|

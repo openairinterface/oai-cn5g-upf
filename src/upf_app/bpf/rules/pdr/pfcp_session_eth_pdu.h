@@ -138,16 +138,13 @@ handle_downlink_traffic__eth_pdu(struct xdp_md* ctx) {
         ctx, pdu_session->teid, pdu_session->ipv4_address, 1);
     return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
   }
-  // Broadcast packet reach this point. Pass them TC
-  // Check if destination MAC address is a broadcast address
-  for (int i = 0; i < ETH_ALEN; i++) {
-    if (eth->h_dest[i] != 0xFF) {
-      goto out;  // Not a broadcast address
-    }
-  }
-
-  // This is a broadcast packet, prepare GTPU and send to TC layer
-  // TODO: handle extension header not needed
+  
+  /* Packet is coming from N6 and dest mac is not in the map, so we need to
+   * to forward it to all PDU sessions. We have a single N3 interface, so we
+   * can use the same interface for all PDU sessions. Put IP address of the
+   * N3 interface in the GTP header. The sending to all PDU sessions is
+   * handled by the TC program.
+   * */
   create_outer_header_gtpu(ctx, 0, 0, 1);
   return XDP_PASS;
 
