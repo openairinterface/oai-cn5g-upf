@@ -59,15 +59,6 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
     bpf_map_update_elem(
         &m_mac_pdu_session, &eth->h_source, &pdu_session, BPF_NOEXIST);
 
-    // If inner packet is Ethernet broadcast (ff:ff:ff:ff:ff:ff) pass packet to
-    // TC
-    if (eth->h_dest[0] == 0xff && eth->h_dest[1] == 0xff &&
-        eth->h_dest[2] == 0xff && eth->h_dest[3] == 0xff &&
-        eth->h_dest[4] == 0xff && eth->h_dest[5] == 0xff) {
-      bpf_debug("Ethernet broadcast detected!\n");
-      return XDP_PASS;
-    }
-
     bpf_tail_call(ctx, &m_next_rule_prog, index_value->prog_id);
   }
 
@@ -138,7 +129,7 @@ handle_downlink_traffic__eth_pdu(struct xdp_md* ctx) {
         ctx, pdu_session->teid, pdu_session->ipv4_address, 1);
     return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
   }
-  
+
   /* Packet is coming from N6 and dest mac is not in the map, so we need to
    * to forward it to all PDU sessions. We have a single N3 interface, so we
    * can use the same interface for all PDU sessions. Put IP address of the
@@ -148,7 +139,6 @@ handle_downlink_traffic__eth_pdu(struct xdp_md* ctx) {
   create_outer_header_gtpu(ctx, 0, 0, 1);
   return XDP_PASS;
 
-out:
   bpf_debug("Could not find the ETH PDU session");
   return XDP_PASS;
 }
@@ -188,13 +178,10 @@ out:
 
 static __always_inline int entry_point_downlink__eth_pdu(struct xdp_md* ctx) {
   bpf_debug("===== ETH PDU DL =======");
-  void* data_end = (void*) (long) ctx->data_end;
-  void* data     = (void*) (long) ctx->data;
-  int action     = XDP_PASS;
+  int action = XDP_PASS;
 
   action = handle_downlink_traffic__eth_pdu(ctx);
 
-out:
   return action;
 }
 

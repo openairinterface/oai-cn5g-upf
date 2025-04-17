@@ -81,7 +81,10 @@ std::shared_ptr<BPFMaps> FARTCProgram::getMaps() {
 // TODO: Check when kill when running.
 // It was noted the infinity loop.
 void FARTCProgram::tearDown() {
-  mpLifeCycle->tearDown();
+  mpLifeCycle->tcDetachIngress(
+      GTP_INTERFACE.c_str(), INGRESS_BROADCAST_PRIORITY);
+  mpLifeCycle->tcDetachIngress(
+      UDP_INTERFACE.c_str(), INGRESS_BROADCAST_PRIORITY);
 }
 
 std::shared_ptr<BPFMap> FARTCProgram::getMacPduSessionMap() const {

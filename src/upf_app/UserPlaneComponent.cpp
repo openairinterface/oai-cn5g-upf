@@ -107,5 +107,6 @@ void UserPlaneComponent::setup(
 /*---------------------------------------------------------------------------------------------------------------*/
 void UserPlaneComponent::tearDown() {
   mpPFCP_Session_LookupProgram->tearDown();
+  mpFARTCProgram->tearDown();
   SessionProgramManager::getInstance().removeAll();
 }
