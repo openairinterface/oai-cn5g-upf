@@ -678,23 +678,19 @@ void SessionManager::updateBPFSessionDL(
     Logger::upf_app().debug(
         "IP PDU: PDI extracted from Downlink PDR %d",
         pdrHighPrecedenceDl->pdr_id.rule_id);
-  // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer =
-  // pSession->qerIDsPerPDR.qers;
-  // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer = pSession->qers;
 
-  if (upf_cfg.enable_fr) {
-    if (ueIpAddress.v4) {
-      std::vector<pfcp::framed_route_t> framedRoutes;
-      if (pdi.get(framedRoutes)) {
-        SessionProgramManager::getInstance().addFramedRoutes(
-            ueIpAddress.ipv4_address.s_addr, framedRoutes);
+    if (upf_cfg.enable_fr) {
+      if (ueIpAddress.v4) {
+        std::vector<pfcp::framed_route_t> framedRoutes;
+        if (pdi.get(framedRoutes)) {
+          SessionProgramManager::getInstance().addFramedRoutes(
+              ueIpAddress.ipv4_address.s_addr, framedRoutes);
+        }
+      } else {
+        Logger::upf_app().warn("Framed Route is not yet supported for Ipv6");
       }
-    } else {
-      Logger::upf_app().warn("Framed Route is not yet supported for Ipv6");
     }
-  }
-
-  if (teid_ul) {
+      
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
         ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, teid_ul);
