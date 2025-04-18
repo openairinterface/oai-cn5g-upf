@@ -217,14 +217,6 @@ void SessionProgramManager::updateTeidInNextProgEthRuleIndexMap(
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
   // Check if entry exists in the map
   next_rule_eth_prog_index_value value;
-  int ret = pPFCP_Session_LookupProgram->getNextProgEthRuleIndexMap()->lookup(
-      key, &value);
-  if (ret != 0) {
-    Logger::upf_app().error(
-        "Failed to find entry in NextProgEthRuleIndexMap for TEID: %u",
-        key.teid);
-    return;
-  }
 
   // teid_dl is straight from the FAR so it is in the same endianess as the
   // system Update the TEID in the value
