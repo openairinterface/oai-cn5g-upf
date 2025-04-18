@@ -297,7 +297,7 @@ void SessionManager::createSessionDirection(
   if (!pdrs.empty()) {
     auto pdrHighPrecedence = pdrs.front();
     logger.debug(
-        "The PDR %d has the Highest Precedence", direction,
+        "The %s PDR %u has the Highest Precedence", direction,
         pdrHighPrecedence->pdr_id.rule_id);
     if (direction == "Uplink") {
       createBPFSessionUL(pSession_establishment, pdrHighPrecedence);
@@ -383,6 +383,18 @@ void SessionManager::processPDRDetails(
   }
 
   std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer;
+
+  if (upf_cfg.enable_fr && direction == "Downlink") {
+    if (ueIpAddress.v4) {
+      std::vector<pfcp::framed_route_t> framedRoutes;
+      if (pdi.get(framedRoutes)) {
+        SessionProgramManager::getInstance().addFramedRoutes(
+            ueIpAddress.ipv4_address.s_addr, framedRoutes);
+      }
+    } else {
+      Logger::upf_app().warn("Framed Route is not yet supported for Ipv6");
+    }
+  }
 
   if (upf_cfg.enable_qos) {
     pQer = (direction == "Uplink") ? pSession->qers_uplink :
@@ -492,7 +504,7 @@ void SessionManager::updateBPFSession(
 
       auto pdrHighPrecedenceDl = pSession->pdrs_downlink[0];
       Logger::upf_app().debug(
-          "The Downlink PDR %d has the Highest Precedence",
+          "The Downlink PDR %u has the Highest Precedence",
           pdrHighPrecedenceDl->pdr_id.rule_id);
 
       Logger::upf_app().debug(
@@ -503,10 +515,33 @@ void SessionManager::updateBPFSession(
     }
   }
 
+  // TODO: Update_pdrs (update Framed Routes Map)
+
   for (auto it : mod_req->pfcp_ies.remove_pdrs) {
     Logger::upf_app().debug("Delete PDRs");
     Logger::upf_app().debug(
         "PDRs and FARs map entries are obsolete and need to be deleted");
+
+    pfcp::pdr_id_t pdr_id;
+    if (it.get(pdr_id)) {
+      Logger::upf_app().debug("Remove PDR with id %u", pdr_id.rule_id);
+      for (auto pdr : pSession->pdrs) {
+        if (pdr_id.rule_id == pdr->pdr_id.rule_id) {
+          Logger::upf_app().debug(
+              "Found PDR with id %u in list 'pdrs'", pdr_id.rule_id);
+          if (upf_cfg.enable_fr) {
+            pfcp::pdi pdi;
+            if (pdr->get(pdi)) {
+              std::vector<pfcp::framed_route_t> framedRoutes;
+              if (pdi.get(framedRoutes)) {
+                SessionProgramManager::getInstance().removeFramedRoutes(
+                    framedRoutes);
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
 
@@ -643,6 +678,23 @@ void SessionManager::updateBPFSessionDL(
     Logger::upf_app().debug(
         "IP PDU: PDI extracted from Downlink PDR %d",
         pdrHighPrecedenceDl->pdr_id.rule_id);
+  // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer =
+  // pSession->qerIDsPerPDR.qers;
+  // std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer = pSession->qers;
+
+  if (upf_cfg.enable_fr) {
+    if (ueIpAddress.v4) {
+      std::vector<pfcp::framed_route_t> framedRoutes;
+      if (pdi.get(framedRoutes)) {
+        SessionProgramManager::getInstance().addFramedRoutes(
+            ueIpAddress.ipv4_address.s_addr, framedRoutes);
+      }
+    } else {
+      Logger::upf_app().warn("Framed Route is not yet supported for Ipv6");
+    }
+  }
+
+  if (teid_ul) {
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
         ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, teid_ul);
@@ -686,6 +738,19 @@ void SessionManager::removeBPFSession(
     Logger::upf_app().error(
         "Session %d Does Not Exist. It Cannot be Removed", seid);
     // throw std::runtime_error("Session Does Not Exist. It Cannot be Removed");
+  }
+
+  if (upf_cfg.enable_fr) {
+    // Remove framed route to ue_ip mapping
+    for (auto pdr : pSession->pdrs) {
+      pfcp::pdi pdi;
+      if (pdr->get(pdi)) {
+        std::vector<pfcp::framed_route_t> framedRoutes;
+        if (pdi.get(framedRoutes)) {
+          SessionProgramManager::getInstance().removeFramedRoutes(framedRoutes);
+        }
+      }
+    }
   }
 
   SessionProgramManager::getInstance().removePipeline(seid);

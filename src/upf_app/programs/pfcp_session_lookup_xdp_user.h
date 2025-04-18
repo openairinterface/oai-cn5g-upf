@@ -11,6 +11,7 @@
 #include <wrappers/BPFMap.hpp>
 #include "interfaces.h"
 // #include "qfi_flow_mapping_table.h"
+#include <framed_routing_bpf.h>
 
 class BPFMaps;
 class BPFMap;
@@ -190,6 +191,14 @@ class PFCP_Session_LookupProgram {
 
   /*---------------------------------------------------------------------------------------------------------------*/
 
+  std::shared_ptr<BPFMap> getFramedRouteMappingMap();
+
+  void updateFramedRouteMappingMap(uint32_t ue_ip, FramedRoutingKeyBPF key);
+
+  void removeFramedRoute(FramedRoutingKeyBPF key);
+
+  void setFramedRouting(bool enable);
+
  private:
   /**
    * @brief Initialize BPF wrappers maps.
@@ -274,6 +283,9 @@ class PFCP_Session_LookupProgram {
   /*---------------------------------------------------------------------------------------------------------------*/
   // The egress interface map.
   std::shared_ptr<BPFMap> mpEgressInterfaceMap;
+  // Framed route ue_ip mapping map.
+  std::shared_ptr<BPFMap> mpFramedRouteMappingMap;
+  std::shared_ptr<BPFMap> mpFramedRouteFlagMap;
 };
 
 #endif  // __PFCP_SESSION_LOOKUP_XDP_USER_H__

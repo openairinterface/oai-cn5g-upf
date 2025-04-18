@@ -22,6 +22,7 @@
 #include <next_prog_rule_key.h>
 #include <mac_pdu_session_key.h>
 #include <pfcp_session_eth_pdu.h>
+#include <framed_routing_bpf.h>
 
 #ifdef KERNEL_SPACE
 #include <linux/in.h>
@@ -57,6 +58,33 @@ static __always_inline u32 tail_call_next_prog(
     bpf_tail_call(ctx, &m_next_rule_prog, *index_prog);
   }
 
+  // Framed Routing
+  u8 key                     = 0;  // Key is 0 since we only have one flag
+  u8* framed_routing_enabled = bpf_map_lookup_elem(&framed_routing_flag, &key);
+  if (framed_routing_enabled && *framed_routing_enabled) {
+    // check if it is a framed route address, and if yes try again the lookup
+    // with the mapped address
+    uint32_t big_endian_ue_ip = __builtin_bswap32(ipv4_address);
+#pragma clang loop unroll(full)
+    for (uint32_t i = 32; i > 0; i--) {
+      struct FramedRoutingKeyBPF key =
+          framed_routing_key_for_ip_cidr(big_endian_ue_ip, i);
+      uint32_t fr_key = hash_framed_routing_key(&key);
+      uint32_t* fr_ue_ip =
+          bpf_map_lookup_elem(&m_framed_route_mapping, &fr_key);
+      if (fr_ue_ip) {
+        bpf_debug("Uplink: found ip  0x%x", fr_ue_ip);
+        map_key.ipv4_address = (u32) *fr_ue_ip;
+        index_prog = bpf_map_lookup_elem(&m_next_rule_prog_index, &map_key);
+        if (index_prog) {
+          bpf_debug(
+              "Value of the eBPF tail call, index_prog = %d", *index_prog);
+          bpf_tail_call(ctx, &m_next_rule_prog, *index_prog);
+        }
+      }
+    }
+  }
+
   bpf_debug("BPF tail call was not executed!");
   bpf_debug("Check your key and its endianess");
 
@@ -75,6 +103,32 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
         "TEID downlink: 0x%x was found for UE IP: 0x%x", teid_dl,
         ue_ip_address);
     tail_call_next_prog(ctx, teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
+  }
+
+  // Framed Routing
+  u8 key                     = 0;  // Key is 0 since we only have one flag
+  u8* framed_routing_enabled = bpf_map_lookup_elem(&framed_routing_flag, &key);
+  if (framed_routing_enabled && *framed_routing_enabled) {
+    // check if it is a framed route address, and if yes try again the lookup
+    // with the mapped address
+    uint32_t big_endian_ue_ip = __builtin_bswap32(ue_ip_address);
+    for (uint32_t i = 32; i > 0; i--) {
+      struct FramedRoutingKeyBPF key =
+          framed_routing_key_for_ip_cidr(big_endian_ue_ip, i);
+      uint32_t fr_key = hash_framed_routing_key(&key);
+      uint32_t* fr_ue_ip =
+          bpf_map_lookup_elem(&m_framed_route_mapping, &fr_key);
+      if (fr_ue_ip) {
+        session = bpf_map_lookup_elem(&m_session_mapping, fr_ue_ip);
+        if (session) {
+          u32 teid_dl = session->teid_dl;
+          bpf_debug(
+              "TEID downlink: 0x%x was found for Framed Route IP: 0x%x",
+              teid_dl, big_endian_ue_ip);
+          tail_call_next_prog(ctx, teid_dl, INTERFACE_VALUE_CORE, *fr_ue_ip);
+        }
+      }
+    }
   }
 
   bpf_debug("BPF tail call was not executed!");
