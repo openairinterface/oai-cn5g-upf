@@ -85,6 +85,7 @@ void FARTCProgram::tearDown() {
       GTP_INTERFACE.c_str(), INGRESS_BROADCAST_PRIORITY);
   mpLifeCycle->tcDetachIngress(
       UDP_INTERFACE.c_str(), INGRESS_BROADCAST_PRIORITY);
+  mpLifeCycle->unpin_maps();
 }
 
 std::shared_ptr<BPFMap> FARTCProgram::getMacPduSessionMap() const {

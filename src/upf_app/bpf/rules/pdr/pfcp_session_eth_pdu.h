@@ -28,6 +28,7 @@
 /*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline u32 tail_call_next_prog__eth_pdu(
     struct xdp_md* ctx, teid_t_ teid, u8 source_value, struct ethhdr* eth) {
+  bpf_debug("Tail call to next prog for ETH PDU session");
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
 
@@ -48,7 +49,7 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
     struct iphdr* iph_outer = (void*) (data + sizeof(struct ethhdr));
 
     if ((void*) iph_outer + sizeof(*iph_outer) > data_end) {
-      bpf_debug("Invalid Outer IP packet");
+      bpf_debug("ETH PDU: Invalid Outer IP packet");
       return XDP_DROP;
     }
 
@@ -62,9 +63,9 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
     bpf_tail_call(ctx, &m_next_rule_prog, index_value->prog_id);
   }
 
-  bpf_debug("tail_call_next_prog__eth_pdu: No next prog found");
+  bpf_debug("ETH PDU: No next prog found");
 
-  return XDP_PASS;
+  return XDP_DROP;
 }
 
 /**
@@ -77,6 +78,7 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
 
 static __always_inline u32
 handle_uplink_traffic__eth_pdu(struct xdp_md* ctx, struct udphdr* udph) {
+  bpf_debug("Handling uplink ETH PDU session traffic");
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
   int action     = XDP_PASS;
@@ -85,7 +87,7 @@ handle_uplink_traffic__eth_pdu(struct xdp_md* ctx, struct udphdr* udph) {
 
   // Check if the GTP header extends beyond the data end.
   if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
-    bpf_debug("handle_uplink_traffic__eth_pdu: Invalid GTPU packet");
+    bpf_debug("ETH PDU: Invalid GTPU packet");
     return XDP_DROP;
   }
 
@@ -99,7 +101,7 @@ handle_uplink_traffic__eth_pdu(struct xdp_md* ctx, struct udphdr* udph) {
   struct ethhdr* eth = data + GTP_ENCAPSULATED_SIZE + sizeof(struct ethhdr);
 
   if ((void*) eth + sizeof(*eth) > data_end) {
-    bpf_debug("handle_uplink_traffic__eth_pdu: Invalid Ethernet packet");
+    bpf_debug("ETH PDU: Invalid Ethernet packet");
     return XDP_DROP;
   }
 
@@ -118,7 +120,7 @@ handle_downlink_traffic__eth_pdu(struct xdp_md* ctx) {
 
   struct ethhdr* eth = data;
   if ((void*) eth + sizeof(*eth) > data_end) {
-    bpf_debug("Invalid ETH packet");
+    bpf_debug("ETH PDU: Invalid ETH packet");
     return XDP_DROP;
   }
 
@@ -138,9 +140,6 @@ handle_downlink_traffic__eth_pdu(struct xdp_md* ctx) {
    * */
   create_outer_header_gtpu(ctx, 0, 0, 1);
   return XDP_PASS;
-
-  bpf_debug("Could not find the ETH PDU session");
-  return XDP_PASS;
 }
 
 static __always_inline int entry_point_uplink__eth_pdu(struct xdp_md* ctx) {
@@ -151,7 +150,7 @@ static __always_inline int entry_point_uplink__eth_pdu(struct xdp_md* ctx) {
 
   struct iphdr* iph = (struct iphdr*) ((void*) data + sizeof(struct ethhdr));
   if ((void*) (iph + 1) > data_end) {
-    bpf_debug("xdp_entry_point__eth_pdu: Invalid IPv4 Packet");
+    bpf_debug("ETH PDU: Invalid IPv4 Packet");
     goto out;
   }
 
@@ -160,13 +159,13 @@ static __always_inline int entry_point_uplink__eth_pdu(struct xdp_md* ctx) {
 
     // Check if the UDP header extends beyond the data end.
     if ((void*) (udph + 1) > data_end) {
-      bpf_debug("xdp_entry_point__eth_pdu: Invalid UDP packet");
+      bpf_debug("ETH PDU: Invalid UDP packet");
       action = XDP_DROP;
       goto out;
     }
 
     if (bpf_htons(udph->dest) == GTP_UDP_PORT) {
-      bpf_debug("xdp_entry_point__eth_pdu: This is a GTP traffic");
+      bpf_debug("ETH PDU: This is a GTP traffic");
       action = handle_uplink_traffic__eth_pdu(ctx, udph);
       goto out;
     }

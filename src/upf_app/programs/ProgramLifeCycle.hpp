@@ -443,7 +443,6 @@ void ProgramLifeCycle<BPFSkeletonType>::tearDown() {
     } else {
       Logger::upf_app().debug("There are not any program in LINKED state.");
     }
-    unpin_maps();
     destroy();
 
   } else {
@@ -518,13 +517,14 @@ void ProgramLifeCycle<BPFSkeletonType>::tcDetachIngress(
         "BPF program %s unhooked from %s TC interface", prog_name.c_str(),
         interface.c_str());
   }
-  unpin_maps();
 }
 
 //-------------------------------------------------------------------------------------------------------------
 // Try to unpin map after the program is destroyed.
 template<class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::unpin_maps() {
+  Logger::upf_app().debug(
+      "================== Unpinning maps for object %s\n", bpf_object__name(mpSkeleton->obj));
   try {
     int err = bpf_object__unpin_maps(mpSkeleton->obj, NULL);
     if (err) {
