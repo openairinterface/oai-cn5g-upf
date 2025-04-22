@@ -704,6 +704,7 @@ void pfcp_switch::call_datapath(
         itti_n4_session_establishment_request* est_req,
         itti_n4_session_modification_request* mod_req,
         itti_n4_session_deletion_request* del_req)) {
+
   std::shared_ptr<pfcp::pfcp_session> pSession =
       std::make_shared<pfcp::pfcp_session>(*s);
   obj = UserPlaneComponent::getInstance().getSessionManager();
@@ -712,10 +713,14 @@ void pfcp_switch::call_datapath(
   itti_n4_session_modification_request* mod_req  = modification_request;
   itti_n4_session_deletion_request* del_req      = deletion_request;
 
+  Logger::pfcp_switch().info(
+      "call_datapath Number of PDRs in session: %u", pSession->pdrs.size());
+
   if (!del_req) {
     obj->sessions.push_back(pSession);
     (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
   } else {
+    Logger::pfcp_switch().info("call_datapath: getting session details");
     uint64_t seid  = pSession->get_up_seid();
     auto& sessions = obj->sessions;
 
@@ -824,6 +829,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         Logger::pfcp_switch().info(
             "Establishing datapath: create PDRs + create FARs + create QERs "
             "(if any)");
+
         call_datapath(
             req, NULL, NULL, session, spSessionManager,
             &SessionManager::createBPFSession);
@@ -860,6 +866,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
     resp->pfcp_ies.set(offending_ie);
   }
 
+  // TODO [ETH-PDU] update logs to print the MAC access
   if (Logger::should_log(spdlog::level::debug)) {
     std::cout << "\n+----------------------------------------------------------"
                  "--------"
@@ -923,13 +930,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     resp->seid = session->cp_fseid.seid;
 
     for (auto it : req->pfcp_ies.remove_pdrs) {
-      if (upf_cfg.enable_bpf_datapath) {
-        Logger::pfcp_switch().info("Modifying datapath: remove PDRs");
-        call_datapath(
-            NULL, req, NULL, session, spSessionManager,
-            &SessionManager::updateBPFSession);
-      }
-
       remove_pdr& pdr = it;
 
       if (not session->remove(pdr, cause, offending_ie.offending_ie)) {
@@ -940,18 +940,17 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           resp->pfcp_ies.set(failed_rule);
           break;
         }
+        if (upf_cfg.enable_bpf_datapath) {
+          Logger::pfcp_switch().info("Modifying datapath: remove PDRs");
+          call_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::updateBPFSession);
+        }
       }
     }
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.remove_fars) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: remove FARs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
-
         remove_far& far = it;
 
         if (not session->remove(far, cause, offending_ie.offending_ie)) {
@@ -963,6 +962,13 @@ void pfcp_switch::handle_pfcp_session_modification_request(
             break;
           }
         }
+
+        if (upf_cfg.enable_bpf_datapath) {
+          Logger::pfcp_switch().info("Modifying datapath: remove FARs");
+          call_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::updateBPFSession);
+        }
       }
     }
     /*======================================================================*/
@@ -972,13 +978,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
      */
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.remove_qers) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: remove QERs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
-
         remove_qer& qer = it;
 
         if (not session->remove(qer, cause, offending_ie.offending_ie)) {
@@ -990,6 +989,13 @@ void pfcp_switch::handle_pfcp_session_modification_request(
             break;
           }
         }
+
+        if (upf_cfg.enable_bpf_datapath) {
+          Logger::pfcp_switch().info("Modifying datapath: remove QERs");
+          call_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::updateBPFSession);
+        }
       }
     }
 
@@ -997,15 +1003,20 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.create_fars) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: create FARs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
         create_far& cr_far = it;
         if (not session->create(cr_far, cause, offending_ie.offending_ie)) {
           break;
+        }
+        if (upf_cfg.enable_bpf_datapath) {
+          Logger::pfcp_switch().info("Modifying datapath: create FARs");
+          try {
+            call_datapath(
+                NULL, req, NULL, session, spSessionManager,
+                &SessionManager::updateBPFSession);
+          } catch (const std::exception& e) {
+            Logger::pfcp_switch().error(
+                "Error while calling datapath: create FARs: %s", e.what());
+          }
         }
       }
     }

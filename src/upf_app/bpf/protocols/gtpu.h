@@ -2,12 +2,14 @@
 #define PROTOCOLS_GTP_H
 
 #include <types.h>
+#include <linux/if_ether.h>
 #include <linux/bpf.h>
 #include <stdint.h>
 
 #define GTP_ENCAPSULATED_SIZE                                                  \
   (sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct gtpuhdr) +     \
    sizeof(struct gtpu_extn_pdu_session_container))
+
 
 #define GTP_UDP_PORT 2152u  //!< TS 29 281
 #define GTP_FLAGS 0x30      //!< Version: GTPv1, Protocol Type: GTP, Others: 0
@@ -19,7 +21,7 @@
 #define GTP_EXT_MSG_LEN 0x01
 #define GTP_EXT_PDU_TYPE 0x00
 #define GTP_EXT_QFI 0x05
-#define GTP_DEFAULT_QFI 0x08
+#define GTP_DEFAULT_QFI 0x01
 #define GTP_EXT_NEXT_EXT_TYPE 0x00
 
 // TS 29 281 - Section 6 GTP-U Message Formats

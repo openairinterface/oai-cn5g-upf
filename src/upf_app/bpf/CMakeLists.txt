@@ -21,7 +21,7 @@ if(DEFINED BPF_DEBUG)
 endif()
 
 add_custom_target(upf_xdp_all DEPENDS pfcp_session_lookup_xdp pfcp_session_pdr_lookup_xdp far_xdp)
-add_custom_target(upf_tc_all DEPENDS qer_tc)
+add_custom_target(upf_tc_all DEPENDS qer_tc far_tc)
 
 
 
@@ -58,7 +58,14 @@ xdp(far)
 #                       GENERATE eBPF TC Skeletons                        #
 ###########################################################################
 function(tc arg)
+  if (${arg} STREQUAL "qer")
   set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/rules/qer")
+  elseif (${arg} STREQUAL "far")
+    set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/rules/far")
+  else()
+    message(FATAL_ERROR "Invalid arg: ${arg}")
+  endif()
+  
   add_library(${arg}_tc STATIC ${source_dir}/${arg}_tc_kernel.c)
   add_custom_command(
     TARGET ${arg}_tc
@@ -71,3 +78,4 @@ function(tc arg)
 endfunction()
 
 tc(qer)
+tc(far)

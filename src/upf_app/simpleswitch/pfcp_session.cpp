@@ -149,6 +149,21 @@ bool pfcp_session::remove(const pfcp::qer_id_t& qer_id, uint8_t& cause_value) {
   return false;
 }
 
+// ------------------------------------------------------------------------------
+void pfcp_session::set(const pfcp::fteid_t& fteid) {
+  Logger::upf_n4().info("pfcp_session::set(fteid) seid " SEID_FMT " ", seid);
+  std::lock_guard<std::mutex> lock(teid_mutex);
+  teid_uplink = fteid;
+}
+
+//------------------------------------------------------------------------------
+bool pfcp_session::get(pfcp::fteid_t& fteid) {
+  std::lock_guard<std::mutex> lock(teid_mutex);
+  Logger::upf_n4().info("pfcp_session::get(fteid) seid " SEID_FMT " ", seid);
+  fteid = teid_uplink;
+  return true;
+}
+
 //------------------------------------------------------------------------------
 bool pfcp_session::update(
     const pfcp::update_far& update, uint8_t& cause_value) {
@@ -306,6 +321,16 @@ bool pfcp_session::create(
       pdr->pdi.second.set(allocated_fteid);
     }
 
+    set(allocated_fteid);
+
+    // Check if s_allocated_fteid is set
+    pfcp::fteid_t fteid;
+    if (!get(fteid)) {
+      cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
+      Logger::upf_n4().info("TEID is not set in pfcp_session::create");
+      return false;
+    }
+
     std::shared_ptr<pfcp_pdr> spdr = std::shared_ptr<pfcp_pdr>(pdr);
     if (pfcp_switch_inst->create_packet_in_access(
             spdr, allocated_fteid, cause.cause_value)) {
@@ -326,6 +351,10 @@ bool pfcp_session::create(
     if ((pdi.ue_ip_address.first) && (pdi.ue_ip_address.second.v4)) {
       pfcp_switch_inst->add_pfcp_dl_pdr_by_ue_ip(
           be32toh(pdi.ue_ip_address.second.ipv4_address.s_addr), spdr);
+    } else if (pdi.ethernet_pdu_session_information.first) {
+      Logger::upf_n4().info(
+          "ETH-PDU: Do not support IE ethernet_pdu_session_information yet!");
+      // TODO [ETH-PDU] add downlink by UE MAC
     } else {
       cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
       Logger::upf_n4().info(
@@ -673,6 +702,7 @@ std::string pfcp_session::to_string() const {
         ip.resize(INET_ADDRSTRLEN, ' ');
         s.append(ip);
         // TODO IPv6
+        // TODO [ETH-PDU] MAC address
       }
     } else {
       std::string ip = {};

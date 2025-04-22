@@ -107,6 +107,7 @@ install(
   SessionManager.cpp
   SessionPrograms.cpp
   programs/qer_tc_user.cpp
+  programs/far_tc_user.cpp
   programs/BPFProgram.cpp
   wrappers/BPFMaps.cpp
   wrappers/BPFMap.cpp

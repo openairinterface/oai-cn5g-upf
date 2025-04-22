@@ -184,8 +184,6 @@ class pfcp_switch {
   void pfcp_session_look_up_pack_in_access(
       struct ipv6hdr* const iph, const std::size_t num_bytes,
       const endpoint& r_endpoint){};
-  // void pfcp_session_look_up(struct ethhdr* const ethh, const std::size_t
-  // num_bytes);
 
   void pfcp_session_look_up_pack_in_core(
       const char* buffer, const std::size_t num_bytes);

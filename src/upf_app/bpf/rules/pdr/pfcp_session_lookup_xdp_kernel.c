@@ -18,7 +18,10 @@
 #include <pfcp_session_lookup_maps.h>
 #include <utils/logger.h>
 #include <utils/utils.h>
+#include <utils/gtpu_parse.h>
 #include <next_prog_rule_key.h>
+#include <mac_pdu_session_key.h>
+#include <pfcp_session_eth_pdu.h>
 #include <framed_routing_bpf.h>
 
 #ifdef KERNEL_SPACE
@@ -89,7 +92,6 @@ static __always_inline u32 tail_call_next_prog(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-
 static __always_inline u32
 handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
   struct session_id* session =
@@ -174,6 +176,7 @@ handle_uplink_traffic(struct xdp_md* ctx, struct udphdr* udph) {
     return XDP_DROP;
   }
 
+  bpf_debug("IP packet, attempting IP PDU");
   u32 src_ip_in = iph_inner->saddr;
 
   if (gtpuh->message_type != GTPU_G_PDU) {
@@ -282,16 +285,64 @@ static __always_inline u32 eth_handle(struct xdp_md* ctx, struct ethhdr* ethh) {
 
 /*---------------------------------------------------------------------------------------------------------------*/
 SEC("xdp")
-int xdp_entry_point(struct xdp_md* ctx) {
-  bpf_debug("================< PFCP PDR Sesction >================");
+int xdp_entry_point_uplink(struct xdp_md* ctx) {
+  bpf_debug("================< PFCP PDR UL Sesction >================");
   struct ethhdr* ethh = (void*) (long) ctx->data;
+  int action          = XDP_PASS;
 
   if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
     bpf_debug("Invalid Ethernet header");
     return XDP_DROP;
   }
 
-  return eth_handle(ctx, ethh);
+  action = eth_handle(ctx, ethh);
+
+  // When eth_handle returns XDP_PASS, this could be an ETH PDU PACKET (for DL
+  // and DL)
+  if (action != XDP_PASS) {
+    goto out;
+  }
+
+  action = entry_point_uplink__eth_pdu(ctx);
+
+out:
+  return action;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+SEC("xdp")
+int xdp_entry_point_downlink(struct xdp_md* ctx) {
+  bpf_debug("================< PFCP PDR DL Sesction >================");
+  struct ethhdr* ethh = (void*) (long) ctx->data;
+  void* data_end      = (void*) (long) ctx->data_end;
+  int action          = XDP_PASS;
+
+  if ((void*) (ethh + 1) > (void*) (long) ctx->data_end) {
+    bpf_debug("Invalid Ethernet header");
+    return XDP_DROP;
+  }
+
+  if (bpf_htons(ethh->h_proto) == ETH_P_IP) {
+    struct iphdr* iph = (struct iphdr*) ((void*) ethh + sizeof(*ethh));
+
+    if ((void*) (iph + 1) > data_end) {
+      bpf_debug("Invalid IPv4 Packet");
+      return XDP_DROP;
+    }
+
+    action = handle_downlink_traffic(ctx, iph->daddr);
+  }
+
+  // When eth_handle returns XDP_PASS, this could be an ETH PDU PACKET (for DL
+  // and DL)
+  if (action != XDP_PASS) {
+    goto out;
+  }
+
+  action = entry_point_downlink__eth_pdu(ctx);
+
+out:
+  return action;
 }
 
 char _license[] SEC("license") = "GPL";
