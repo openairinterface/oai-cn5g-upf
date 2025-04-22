@@ -101,6 +101,8 @@ handle_downlink_traffic(struct xdp_md* ctx, u32 ue_ip_address) {
         "TEID downlink: 0x%x was found for UE IP: 0x%x", teid_dl,
         ue_ip_address);
     tail_call_next_prog(ctx, teid_dl, INTERFACE_VALUE_CORE, ue_ip_address);
+    tail_call_next_prog(
+        ctx, teid_dl, INTERFACE_VALUE_CP_FUNCTION, ue_ip_address);
   }
 
   // Framed Routing

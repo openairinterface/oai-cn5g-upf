@@ -279,7 +279,13 @@ void SessionManager::processPDRs(
         break;
       }
       case INTERFACE_VALUE_SGI_LAN_N6_LAN:
-      case INTERFACE_VALUE_CP_FUNCTION:
+      case INTERFACE_VALUE_CP_FUNCTION: {
+        pdrs_downlink.push_back(pdr);
+        if (qer) {
+          qers_downlink.push_back(qer);
+        }
+        break;
+      }
       case INTERFACE_VALUE_LI_FUNCTION:
         // TODO: if needed, handle these cases
         break;
@@ -336,9 +342,29 @@ void SessionManager::createBPFSessionDL(
     std::shared_ptr<pfcp::pfcp_pdr> pdrHighPrecedenceDl) {
   auto& logger = Logger::upf_app();
 
-  // Common PDR processing
-  processPDRDetails(
-      pSession, pdrHighPrecedenceDl, INTERFACE_VALUE_CORE, "Downlink");
+  pfcp::pdi pdi;
+  pfcp::fteid_t fteid;
+  pfcp::source_interface_t sourceInterface;
+  uint16_t pdr_id = pdrHighPrecedenceDl->pdr_id.rule_id;
+
+  if (!(pdrHighPrecedenceDl->get(pdi) && pdi.get(sourceInterface))) {
+    throw std::runtime_error(
+        "Missing Mandatory IE (PDI or Source Interface) within PDR: " +
+        std::to_string(pdr_id));
+  }
+  switch (sourceInterface.interface_value) {
+    case INTERFACE_VALUE_CORE: {
+      processPDRDetails(
+          pSession, pdrHighPrecedenceDl, INTERFACE_VALUE_CORE, "Downlink");
+      break;
+    }
+    case INTERFACE_VALUE_CP_FUNCTION: {
+      processPDRDetails(
+          pSession, pdrHighPrecedenceDl, INTERFACE_VALUE_CP_FUNCTION,
+          "Downlink");
+      break;
+    }
+  }
 }
 
 //---------------------------------------------------------------------------------------------------------------
@@ -449,7 +475,8 @@ void SessionManager::updateBPFSession(
       pSession->pdrs[i]->get(pdi);
       pdi.get(sourceInterface);
 
-      if (sourceInterface.interface_value == INTERFACE_VALUE_CORE) {
+      if ((sourceInterface.interface_value == INTERFACE_VALUE_CORE) ||
+          (sourceInterface.interface_value == INTERFACE_VALUE_CP_FUNCTION)) {
         pSession->pdrs_downlink.push_back(pSession->pdrs[i]);
       }
 
@@ -626,14 +653,38 @@ void SessionManager::updateBPFSessionDL(
   }
 
   if (teid_ul) {
-    SessionProgramManager::getInstance().createPipeline(
-        seidul, fteid.teid, INTERFACE_VALUE_CORE,
-        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, teid_ul);
+    switch (sourceInterface.interface_value) {
+      case INTERFACE_VALUE_CORE: {
+        SessionProgramManager::getInstance().createPipeline(
+            seidul, fteid.teid, INTERFACE_VALUE_CORE,
+            ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true,
+            teid_ul);
+        break;
+      }
+      case INTERFACE_VALUE_CP_FUNCTION: {
+        SessionProgramManager::getInstance().createPipeline(
+            seidul, fteid.teid, INTERFACE_VALUE_CP_FUNCTION,
+            ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true,
+            teid_ul);
+        break;
+      }
+    }
   } else {
     Logger::upf_app().info("Uplink TEID not used for session: 0x%x", seidul);
-    SessionProgramManager::getInstance().createPipeline(
-        seidul, fteid.teid, INTERFACE_VALUE_CORE,
-        ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, 0);
+    switch (sourceInterface.interface_value) {
+      case INTERFACE_VALUE_CORE: {
+        SessionProgramManager::getInstance().createPipeline(
+            seidul, fteid.teid, INTERFACE_VALUE_CORE,
+            ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, 0);
+        break;
+      }
+      case INTERFACE_VALUE_CP_FUNCTION: {
+        SessionProgramManager::getInstance().createPipeline(
+            seidul, fteid.teid, INTERFACE_VALUE_CP_FUNCTION,
+            ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, 0);
+        break;
+      }
+    }
   }
 }
 
@@ -648,7 +699,8 @@ void SessionManager::removeBPFSession(
   if (mSeidToSession.find(seid) == mSeidToSession.end()) {
     Logger::upf_app().error(
         "Session %d Does Not Exist. It Cannot be Removed", seid);
-    // throw std::runtime_error("Session Does Not Exist. It Cannot be Removed");
+    // throw std::runtime_error("Session Does Not Exist. It Cannot be
+    // Removed");
   }
 
   if (upf_cfg.enable_fr) {
