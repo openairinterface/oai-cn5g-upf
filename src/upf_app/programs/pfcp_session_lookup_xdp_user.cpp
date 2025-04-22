@@ -189,6 +189,9 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getIfaceMap() const {
 std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getEgressInterfaceMap()
     const {
   return mpEgressInterfaceMap;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getFramedRouteMappingMap() {
   return mpFramedRouteMappingMap;
 }

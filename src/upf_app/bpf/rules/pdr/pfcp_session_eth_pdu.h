@@ -39,7 +39,7 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
   map_key.teid         = teid;
   map_key.source_value = source_value;
   map_key.ethertype    = 0;  // bpf_ntohs(eth->h_proto);
-
+  
   // TODO [ETH-PDU] support other eth pkt filters
   struct next_rule_eth_prog_index_value* index_value =
       bpf_map_lookup_elem(&m_next_rule_eth_prog_index, &map_key);
@@ -60,7 +60,11 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
     bpf_map_update_elem(
         &m_mac_pdu_session, &eth->h_source, &pdu_session, BPF_NOEXIST);
 
+    bpf_debug(
+        "ETH PDU: Found next prog, DL teid %u, prog_id %u",
+        index_value->teid_dl, index_value->prog_id);
     bpf_tail_call(ctx, &m_next_rule_prog, index_value->prog_id);
+    return XDP_PASS;
   }
 
   bpf_debug("ETH PDU: No next prog found");
