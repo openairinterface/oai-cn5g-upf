@@ -60,6 +60,9 @@ Namespace = 'oaicicd-core'
 // Openshift server URL
 server = 'https://api.oai.cs.eurecom.fr:6443'
 
+// Docker build options
+dockerBuildOptions = '--no-cache '
+
 //-------------------------------------------------------------------------------
 // Pipeline start
 pipeline {

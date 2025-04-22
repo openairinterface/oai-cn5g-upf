@@ -84,12 +84,6 @@ class SessionManager {
   void prepareEbpfSession(
       std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
       std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs);
-  bool extractPdi(std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi);
-
-  bool extractSourceIface(
-      pfcp::pdi& pdi, pfcp::source_interface_t& sourceInterface);
-
-  bool extractUeIpv4(pfcp::pdi& pdi, pfcp::ue_ip_address_t& ueIpAddress);
 
   bool getFar(
       std::shared_ptr<pfcp::pfcp_session> session,
@@ -100,10 +94,6 @@ class SessionManager {
       std::shared_ptr<pfcp::pfcp_session> session,
       std::shared_ptr<pfcp::pfcp_pdr> pdr,
       std::shared_ptr<pfcp::pfcp_qer>& outQer);
-
-  bool extractForwardingParams(
-      std::shared_ptr<pfcp::pfcp_far> far,
-      pfcp::forwarding_parameters& forwardingParams);
 
   uint32_t retrieveTeid(std::shared_ptr<pfcp::pfcp_session> session);
 

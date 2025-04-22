@@ -26,6 +26,7 @@
 #include <utils/logger.h>
 #include <utils/utils.h>
 #include <next_prog_rule_key.h>
+#include <framed_routing_bpf.h>
 
 #include "xdp_stats_kern.h"
 #include <linux/bpf.h>
@@ -90,10 +91,8 @@ static __always_inline bool update_dst_mac_address(
     memcpy(p_eth->h_dest, map_entry->mac_address, sizeof(p_eth->h_dest));
     return true;
   }
-
   return false;
 }
-
 /*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline u32 match_sdf_filter_ipv4(
     const struct packet_filter* filter, const struct sdf_filtr* sdf) {
@@ -108,16 +107,19 @@ static __always_inline u32 match_sdf_filter_ipv4(
 
   /*
   * TODO:
-  * Currently we are only working with Ipv4 packets but the struct are designed
+  * Currently we are only working with Ipv4 packets but the struct are
+  designed
   * to support both Ipv4 and Ipv6
   * For now we only treat IPv4 packets over the datapath/PFCP
     }
  */
 
-  u32 sdf_src_mask = bpf_htonl((
-      u32) (sdf->src_addr.mask >> 96));  // get the top 32 bits of 128-bits mask
-  u32 sdf_dst_mask = bpf_htonl((
-      u32) (sdf->dst_addr.mask >> 96));  // get the top 32 bits of 128-bits mask
+  u32 sdf_src_mask =
+      bpf_htonl((u32) (sdf->src_addr.mask >> 96));  // get the top 32 bits of
+                                                    // 128-bits mask
+  u32 sdf_dst_mask =
+      bpf_htonl((u32) (sdf->dst_addr.mask >> 96));  // get the top 32 bits of
+                                                    // 128-bits mask
 
   bpf_debug(" Standard IANA-assigned IP protocol numbers:");
 
@@ -136,11 +138,13 @@ static __always_inline u32 match_sdf_filter_ipv4(
       &sdf_dst_mask, &packet_dst_ip);
 
   bpf_debug(
-      "( (sdf_sport_lower, sdf_sport_upper), packet_sport ) : ( (%u, %u), %u )",
+      "( (sdf_sport_lower, sdf_sport_upper), packet_sport ) : ( (%u, %u), %u "
+      ")",
       sdf->src_port.lower_bound, sdf->src_port.upper_bound, packet_src_port);
 
   bpf_debug(
-      "( (sdf_dport_lower, sdf_dport_upper), packet_dport ) : ( (%u, %u), %u )",
+      "( (sdf_dport_lower, sdf_dport_upper), packet_dport ) : ( (%u, %u), %u "
+      ")",
       sdf->dst_port.lower_bound, sdf->dst_port.upper_bound, packet_dst_port);
 
   /*
@@ -554,8 +558,6 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
 static __always_inline u32 apply_rules_matching_pdr_over_n3(
     struct xdp_md* ctx, struct ethhdr* ethh,
     struct pdrs_per_session key_rules_matching_pdr) {
-  // void* data                    = (void*) (long) ctx->data;
-  // void* data_end                = (void*) (long) ctx->data_end;
   struct rules_match_pdr* rules = {0};
   u64 seid                      = key_rules_matching_pdr.seid;
 
@@ -911,7 +913,7 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
 
   /*
     |-----------------------------------------------------------------------|
-    |--------------------- Apply RUles in Matching PDR ---------------------|
+    |--------------------- Apply Rules in Matching PDR ---------------------|
     |----------------------------- (FARs, QERs) ----------------------------|
     |-----------------------------------------------------------------------|
     */
@@ -1015,7 +1017,7 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
 
   /*
     |-----------------------------------------------------------------------|
-    |--------------------- Apply RUles in Matching PDR ---------------------|
+    |--------------------- Apply Rules in Matching PDR ---------------------|
     |----------------------------- (FARs, QERs) ----------------------------|
     |-----------------------------------------------------------------------|
     */
@@ -1120,7 +1122,7 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
 
   /*
     |-----------------------------------------------------------------------|
-    |--------------------- Apply RUles in Matching PDR ---------------------|
+    |--------------------- Apply Rules in Matching PDR ---------------------|
     |----------------------------- (FARs, QERs) ----------------------------|
     |-----------------------------------------------------------------------|
     */

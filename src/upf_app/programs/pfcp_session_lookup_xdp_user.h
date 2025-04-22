@@ -10,6 +10,7 @@
 #include <pfcp_session_lookup_xdp_kernel_skel.h>
 #include <wrappers/BPFMap.hpp>
 #include "interfaces.h"
+#include <framed_routing_bpf.h>
 
 class BPFMaps;
 class BPFMap;
@@ -26,28 +27,19 @@ class PFCP_Session_LookupProgram {
  public:
   explicit PFCP_Session_LookupProgram(
       const std::string& gtpInterface, const std::string& udpInterface);
-
   virtual ~PFCP_Session_LookupProgram();
-
   void setup(bool isQosEnabled);
-
   std::shared_ptr<BPFMaps> getMaps();
-
   void tearDown();
-
-  // void updateProgramMap(uint32_t key, uint32_t fd);
-
   void create_upf_interface_map_entry(e_reference_point s);
-
   void removeProgramMap(uint32_t key);
-
+  std::shared_ptr<BPFMap> getFramedRouteMappingMap();
+  void updateFramedRouteMappingMap(uint32_t ue_ip, FramedRoutingKeyBPF key);
+  void removeFramedRoute(FramedRoutingKeyBPF key);
+  void setFramedRouting(bool enable);
   std::shared_ptr<BPFMap> getEgressInterfaceMap() const;
   std::shared_ptr<BPFMap> getArpTableMap() const;
   std::shared_ptr<BPFMap> getIfaceMap() const;
-  // std::shared_ptr<BPFMap> getTeidSessionMap() const;
-  // std::shared_ptr<BPFMap> getUeIpSessionMap() const;
-  // std::shared_ptr<BPFMap> getNextProgRuleMap() const;
-  // std::shared_ptr<BPFMap> getNextProgRuleIndexMap() const;
   std::shared_ptr<BPFMap> getTrafficMap() const;
   std::shared_ptr<BPFMap> getSessionMappingMap() const;
   std::shared_ptr<BPFMap> getRulesMatchPdrMap() const;
@@ -55,7 +47,6 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> getSdfFilterMap() const;
   std::shared_ptr<BPFMap> getQosEnablingMap() const;
   std::shared_ptr<BPFMap> getUeQfiTeidMap() const;
-  // std::shared_ptr<BPFMap> getQosFlowMap() const;
 
  private:
   void initializeMaps();
@@ -66,9 +57,6 @@ class PFCP_Session_LookupProgram {
   std::string mUDPInterface;
   std::shared_ptr<BPFMaps> mpMaps;
   std::shared_ptr<BPFMap> mpTeidSessionMap;
-  // std::shared_ptr<BPFMap> mpUeIpSessionMap;
-  //   std::shared_ptr<BPFMap> mpNextProgRuleIndexMap;
-  //   std::shared_ptr<BPFMap> mpNextProgRuleMap;
   std::shared_ptr<BPFMap> mpSessionMappingMap;
   std::shared_ptr<BPFMap> mpEgressInterfaceMap;
   std::shared_ptr<BPFMap> mpArpTableMap;
@@ -77,7 +65,8 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> mpSessionPdrsMap;
   std::shared_ptr<BPFMap> mpSdfFilterMap;
   std::shared_ptr<BPFMap> mpQosEnablingMap;
-  /*---------------------------------------------------------------------------------------------------------------*/
+  std::shared_ptr<BPFMap> mpFramedRouteMappingMap;
+  std::shared_ptr<BPFMap> mpFramedRouteFlagMap;
 };
 
 #endif  // __PFCP_SESSION_LOOKUP_XDP_USER_H__

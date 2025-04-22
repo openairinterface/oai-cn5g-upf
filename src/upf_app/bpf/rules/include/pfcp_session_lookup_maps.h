@@ -18,62 +18,14 @@
 #define INTERFACE_ENTRIES_MAX 12
 #define MAX_UEs 10000
 #define MAX_PDRS_PER_SESSION 32
-
-// struct next_rule_prog_index_key {
-//   teid_t_ teid;
-//   u8 source_value;
-//   u32 ipv4_address;
-// };
-
 #define MAX_SDF_FITLER_ENTRIES 1000
 
-/*---------------------------------------------------------------------------------------------------------------*/
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, MAX_SDF_FITLER_ENTRIES);
   __type(key, struct session_qfi);  // <qfi, seid>
   __type(value, struct sdf_filtr);
 } m_sdf_filter SEC(".maps");
-
-/*---------------------------------------------------------------------------------------------------------------*/
-// struct {
-//   __uint(
-//       type,
-//       BPF_MAP_TYPE_PROG_ARRAY);  //!< Must have the key and value with 4
-//       bytes
-//   __type(key, teid_t_);          //!< program identifier.
-//   __type(value, s32);            //!< program which represents the session.
-//   // TODO: Check how the management works. The size should be equal
-//   // to the maximum number of sessions.
-//   __uint(max_entries, MAX_LENGTH);  // 10000,  //!< TODO: Is it enought?
-// } m_teid_session SEC(".maps");
-
-/*---------------------------------------------------------------------------------------------------------------*/
-// struct {
-//   __uint(
-//       type,
-//       BPF_MAP_TYPE_PROG_ARRAY);  //!< Must have the key and value with 4
-//       bytes
-//   __type(key, u32);              //!< program identifier.
-//   __type(value, s32);            //!< program which represents the session.
-//   // TODO Check how the management works. The size should be equal
-//   // to the maximum number of sessions.
-//   __uint(max_entries, MAX_UEs);  //!< TODO: Is it enought?
-// } m_ueip_session SEC(".maps");
-
-// struct {
-//   __uint(type, BPF_MAP_TYPE_HASH);
-//   __uint(max_entries, MAX_UEs);
-//   __type(key, u32);    //!< UE IP
-//   __type(value, u32);  //!< PDR
-// } m_ue_ip_pdr SEC(".maps");
-
-// struct {
-//   __uint(type, BPF_MAP_TYPE_HASH);
-//   __uint(max_entries, MAX_LENGTH);  // 10,
-//   __type(key, struct next_rule_prog_index_key);
-//   __type(value, pfcp_far_t_);  //
-// } m_next_rule_prog_index SEC(".maps");
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
@@ -111,5 +63,19 @@ struct {
   __type(key, u64);                 // seid
   __type(value, u32);               // Value type (0 for false, 1 for true)
 } m_qos_enabling SEC(".maps");
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, MAX_UEs);
+  __type(key, u32);    // hash_framed_routing_key
+  __type(value, u32);  // ue_ip
+} m_framed_route_mapping SEC(".maps");
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, 1);  // Single entry for the flag
+  __type(key, u8);         // Key is a constant, e.g., 0
+  __type(value, u8);       // Value indicates if framed routing is enabled
+} framed_routing_flag SEC(".maps");
 
 #endif  // __PFCP_SESSION_LOOKUP_MAPS_H__

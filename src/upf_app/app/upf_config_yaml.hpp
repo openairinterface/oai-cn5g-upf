@@ -37,6 +37,7 @@ constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF = "enable_bpf_datapath";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF_LABEL =
     "Enable BPF Datapath";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT       = "enable_snat";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR         = "enable_fr";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT_LABEL = "Enable SNAT";
 
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS       = "enable_qos";
@@ -57,10 +58,12 @@ class upf_support_features : public config_type {
   option_config_value m_enable_bpf_datapath{};
   option_config_value m_enable_qos{};
   option_config_value m_enable_snat{};
+  option_config_value m_enable_fr{};
 
  public:
   explicit upf_support_features(
-      bool enable_bpf_datapath, bool enable_qos, bool enable_snat);
+      bool enable_bpf_datapath, bool enable_qos, bool enable_snat,
+      bool enable_fr);
 
   void from_yaml(const YAML::Node& node) override;
 
@@ -68,6 +71,7 @@ class upf_support_features : public config_type {
   [[nodiscard]] bool get_option_enable_bpf_datapath() const;
   [[nodiscard]] bool get_option_enable_qos() const;
   [[nodiscard]] bool get_option_enable_snat() const;
+  [[nodiscard]] bool get_option_enable_fr() const;
 };
 
 class upf_interface_config : public local_interface {

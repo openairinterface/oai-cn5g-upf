@@ -32,7 +32,8 @@ namespace oai::config {
 
 //------------------------------------------------------------------------------
 upf_support_features::upf_support_features(
-    bool enable_bpf_datapath, bool enable_qos, bool enable_snat) {
+    bool enable_bpf_datapath, bool enable_qos, bool enable_snat,
+    bool enable_fr) {
   m_config_name = "Supported Features";
 
   m_enable_bpf_datapath = option_config_value(
@@ -43,6 +44,8 @@ upf_support_features::upf_support_features(
 
   m_enable_snat = option_config_value(
       UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT_LABEL, enable_snat);
+  m_enable_fr =
+      option_config_value(UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR, enable_fr);
 }
 
 //------------------------------------------------------------------------------
@@ -59,6 +62,8 @@ void upf_support_features::from_yaml(const YAML::Node& node) {
   if (node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT]) {
     m_enable_snat.from_yaml(node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT]);
   }
+  if (node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR])
+    m_enable_fr.from_yaml(node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR]);
 }
 
 //------------------------------------------------------------------------------
@@ -90,6 +95,13 @@ std::string upf_support_features::to_string(const std::string& indent) const {
   out.append(indent).append(fmt::format(
       BASE_FORMATTER, INNER_LIST_ELEM,
       UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT_LABEL, inner_width, enable_snat));
+
+  std::string enable_fr = m_enable_fr.get_value() ? UPF_CONFIG_OPTION_YES_STR :
+                                                    UPF_CONFIG_OPTION_NO_STR;
+
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, INNER_LIST_ELEM, UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR,
+      inner_width, enable_fr));
   return out;
 }
 
@@ -98,7 +110,7 @@ upf::upf(
     const std::string& name, const std::string& host, const sbi_interface& sbi,
     const std::map<std::string, upf_interface_config>& interfaces)
     : nf(name, host, sbi),
-      m_upf_support_features(false, false, false),
+      m_upf_support_features(false, false, false, false),
       m_interfaces(interfaces) {
   model::nrf::SnssaiUpfInfoItem item;
   item.setSNssai(DEFAULT_SNSSAI);
@@ -207,6 +219,11 @@ bool upf_support_features::get_option_enable_qos() const {
 //------------------------------------------------------------------------------
 bool upf_support_features::get_option_enable_snat() const {
   return m_enable_snat.get_value();
+}
+
+//------------------------------------------------------------------------------
+bool upf_support_features::get_option_enable_fr() const {
+  return m_enable_fr.get_value();
 }
 
 //------------------------------------------------------------------------------
@@ -387,6 +404,7 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
       upf_local->get_support_features().get_option_enable_bpf_datapath();
   cfg.enable_qos  = upf_local->get_support_features().get_option_enable_qos();
   cfg.enable_snat = upf_local->get_support_features().get_option_enable_snat();
+  cfg.enable_fr   = upf_local->get_support_features().get_option_enable_fr();
 
   auto snssai_upf_list = upf_local->get_upf_info().getSNssaiUpfInfoList();
   for (const auto& snssai : snssai_upf_list) {

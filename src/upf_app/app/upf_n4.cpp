@@ -237,7 +237,7 @@ upf_n4::upf_n4()
   up_function_features.udbc  = 0;
   up_function_features.quoac = 0;
   up_function_features.trace = 0;
-  up_function_features.frrt  = 0;
+  up_function_features.frrt  = static_cast<uint16_t>(upf_cfg.enable_fr);
 
   enterprise_specific.enterprise_id    = OAI_PRIVATE_ENTERPRISE_NUMBER;
   enterprise_specific.proprietary_data = "OAI UPF";

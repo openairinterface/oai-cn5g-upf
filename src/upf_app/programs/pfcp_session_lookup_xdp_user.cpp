@@ -31,24 +31,6 @@ int is_little_endian2() {
 PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
     const std::string& gtpInterface, const std::string& udpInterface)
     : mGTPInterface(gtpInterface), mUDPInterface(udpInterface) {
-  // Open the eBPF skeleton
-  // auto skel = pfcp_session_lookup_xdp_kernel_c__open();
-  // if (!skel) {
-  //   std::cerr << "Failed to open eBPF skeleton" << std::endl;
-  //   return;
-  // }
-  // // Resize the map BEFORE loading
-  // struct bpf_map* arp_table_map =
-  //     bpf_object__find_map_by_name(skel->obj, "m_arp_table");
-  // if (!arp_table_map) {
-  //   std::cerr << "Failed to find map: m_arp_table" << std::endl;
-  // } else {
-  //   int max_entries = 55;  // Set your new desired size
-  //   if (bpf_map__set_max_entries(arp_table_map, max_entries)) {
-  //     std::cerr << "Failed to resize map: m_arp_table" << std::endl;
-  //   }
-  // }
-
   mpLifeCycle = std::make_shared<PFCP_Session_LookupProgramLifeCycle>(
       pfcp_session_lookup_xdp_kernel_c__open,
       pfcp_session_lookup_xdp_kernel_c__load,
@@ -159,12 +141,6 @@ void PFCP_Session_LookupProgram::tearDown() {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-// void PFCP_Session_LookupProgram::updateProgramMap(uint32_t key, uint32_t fd)
-// {
-//   mpTeidSessionMap->update(key, fd, BPF_ANY);
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_LookupProgram::removeProgramMap(uint32_t key) {
   s32 fd;
   // Remove only if exists.
@@ -172,30 +148,6 @@ void PFCP_Session_LookupProgram::removeProgramMap(uint32_t key) {
     mpTeidSessionMap->remove(key);
   }
 }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-// std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getTeidSessionMap() const
-// {
-//   return mpTeidSessionMap;
-//}
-
-/*---------------------------------------------------------------------------------------------------------------*/
-// std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getUeIpSessionMap() const
-// {
-//   return mpUeIpSessionMap;
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-// std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getNextProgRuleMap()
-// const {
-//   return mpNextProgRuleMap;
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-// std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getNextProgRuleIndexMap()
-//     const {
-//   return mpNextProgRuleIndexMap;
-// }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSessionMappingMap()
@@ -225,16 +177,49 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getRulesMatchPdrMap()
   return mpRulesMatchPdrMap;
 }
 
+/*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSessionPdrsMap() const {
   return mpSessionPdrsMap;
 }
+
+/*---------------------------------------------------------------------------------------------------------------*/
 
 std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSdfFilterMap() const {
   return mpSdfFilterMap;
 }
 
+/*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getQosEnablingMap() const {
   return mpQosEnablingMap;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getFramedRouteMappingMap() {
+  return mpFramedRouteMappingMap;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+void PFCP_Session_LookupProgram::updateFramedRouteMappingMap(
+    uint32_t ue_ip, FramedRoutingKeyBPF key) {
+  uint32_t hash_key = hash_framed_routing_key(&key);
+  Logger::upf_app().debug(
+      "Update framed routing map with key: %u, value: %u", hash_key, ue_ip);
+  mpFramedRouteMappingMap->update(hash_key, ue_ip, BPF_ANY);
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+void PFCP_Session_LookupProgram::removeFramedRoute(FramedRoutingKeyBPF key) {
+  uint32_t hash_key = hash_framed_routing_key(&key);
+  uint32_t ueip;
+  if (mpFramedRouteMappingMap->lookup(hash_key, &ueip) == 0) {
+    mpFramedRouteMappingMap->remove(hash_key);
+  }
+}
+
+void PFCP_Session_LookupProgram::setFramedRouting(bool enable) {
+  uint8_t value = (enable) ? 1 : 0;
+  uint8_t key   = 0;
+  mpFramedRouteFlagMap->update(key, value, BPF_ANY);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -242,15 +227,6 @@ void PFCP_Session_LookupProgram::initializeMaps() {
   // Store all maps available in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
 
-  // Warning - The name of the map must be the same of the BPF program.
-  // mpTeidSessionMap =
-  // std::make_shared<BPFMap>(mpMaps->getMap("m_teid_session"));
-  // mpUeIpSessionMap =
-  // std::make_shared<BPFMap>(mpMaps->getMap("m_ueip_session"));
-  // mpNextProgRuleMap =
-  //     std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_prog"));
-  // mpNextProgRuleIndexMap =
-  //     std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_prog_index"));
   mpSessionMappingMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_session_mapping"));
   mpArpTableMap = std::make_shared<BPFMap>(mpMaps->getMap("m_arp_table"));
@@ -264,6 +240,10 @@ void PFCP_Session_LookupProgram::initializeMaps() {
   mpSdfFilterMap = std::make_shared<BPFMap>(mpMaps->getMap("m_sdf_filter"));
 
   mpQosEnablingMap = std::make_shared<BPFMap>(mpMaps->getMap("m_qos_enabling"));
+  mpFramedRouteMappingMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_framed_route_mapping"));
+  mpFramedRouteFlagMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("framed_routing_flag"));
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

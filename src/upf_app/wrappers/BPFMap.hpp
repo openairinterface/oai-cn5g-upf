@@ -2,6 +2,7 @@
 #define __BPFMAP_H__
 
 #include <bpf/bpf.h>
+#include <cerrno>
 #include <bpf/libbpf.h>
 #include "logger.hpp"
 
@@ -110,7 +111,9 @@ int BPFMap::update(KeyType& key, ValueType& value, int flags) {
 
   if (updateReturn != 0) {
     // FIXME: Maybe Key is not support by fmt.
-    Logger::upf_app().error("The key cannot be updated in map");
+    Logger::upf_app().error(
+        "The key cannot be updated in map: %s (errno: %d, %s)", mName.c_str(),
+        errno, strerror(errno));
     throw std::runtime_error("The BPF map cannot be updated");
   } else {
     Logger::upf_app().debug("The key is updated in the map: %s", mName.c_str());
