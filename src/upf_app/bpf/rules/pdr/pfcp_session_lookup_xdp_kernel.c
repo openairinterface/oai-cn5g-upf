@@ -797,12 +797,14 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
           bpf_debug(
               "pdi.source_interface.interface_value: %d",
               pdi.source_interface.interface_value);
+          *qfi_out = pdi.qfi.qfi;
           // Check if the QoS enforcement is enabled:
           u32* enabling_qos = bpf_map_lookup_elem(&m_qos_enabling, &seid);
+
           if (!enabling_qos) {
             bpf_debug("Qos enforcement not ebabled for Session %llu", seid);
+            return pdr_high_prec;
           } else {
-            *qfi_out                   = pdi.qfi.qfi;
             struct session_qfi sdf_key = {0};
             sdf_key.seid               = seid;
             sdf_key.qfi                = *qfi_out;
@@ -937,8 +939,6 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
     }
   }
 }
-
-/*---------------------------------------------------------------------------------------------------------------*/
 
 /*---------------------------------------------------------------------------------------------------------------*/
 SEC("xdp")
@@ -1086,29 +1086,32 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
       pfcp_session_lookup_over_n6(data, data_end, ethh, &ue_ip, &packet_filter);
 
   if (!session) {
-    bpf_debug("Session lookup failed");
+    bpf_debug(
+        "PFCP Session Lookup (Find PFCP session with matching PDRs) failed");
     return XDP_PASS;
   }
 
   u64 seid    = session->seid;
-  u32 teid_ul = session->teid_ul;
-  bpf_debug("Session found, SEID = %llu", seid);
-  bpf_debug("TEID_UL = %x", teid_ul);
-  bpf_debug("TEID_DL = %x", session->teid_dl);
-  bpf_debug("UE = %pI4", ue_ip);
+  u32 teid_ul = bpf_htonl(session->teid_ul);
+  u32 teid_dl = bpf_htonl(session->teid_dl);
+  bpf_debug(
+      "Session found ( seid, teid_ul, teid_dl ) : ( %llu, %u, %u )", seid,
+      teid_ul, teid_dl);
 
   /*
-    |-----------------------------------------------------------------------|
-    |------------------------ PFCP Session's Lookup ------------------------|
-    |--- (Find matching PDR of the PFCP session with highest precedence) ---|
-    |-----------------------------------------------------------------------|
-    */
+     |-----------------------------------------------------------------------|
+     |------------------------ PFCP Session's Lookup ------------------------|
+     |--- (Find matching PDR of the PFCP session with highest precedence) ---|
+     |-----------------------------------------------------------------------|
+     */
   u8 qfi                           = 0;
   pfcp_pdr_t_* pdr_high_precedence = pfcp_session_s_lookup_precedence_over_n6(
       seid, ue_ip, &qfi, &packet_filter);
 
   if (!pdr_high_precedence) {
-    bpf_debug("Session lookup failed");
+    bpf_debug(
+        "PFCP Session's Lookup (Find matching PDR of the PFCP session with "
+        "highest precedence) failed");
     return XDP_PASS;
   }
 

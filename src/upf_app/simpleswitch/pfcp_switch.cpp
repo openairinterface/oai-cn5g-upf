@@ -706,7 +706,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
     std::shared_ptr<itti_n4_session_establishment_request> sreq,
     itti_n4_session_establishment_response* resp) {
   bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
-  bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
+  // bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
 
   itti_n4_session_establishment_request* req = sreq.get();
   pfcp::fseid_t fseid                        = {};
@@ -759,7 +759,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
           /*
            *  Add create_qers
            */
-          if (isQosEnabled) {
+          if (isBpfAccelerationEnabled) {
             pfcp::qer_id_t qer_id = {};
             if (cr_pdr.get(qer_id)) {
               pfcp::create_qer cr_qer = {};
@@ -878,7 +878,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     std::shared_ptr<itti_n4_session_modification_request> sreq,
     itti_n4_session_modification_response* resp) {
   bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
-  bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
+  // bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
 
   itti_n4_session_modification_request* req = sreq.get();
 
@@ -950,7 +950,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     /*
      *  Add remove_qers
      */
-    if (isQosEnabled) {
+    if (isBpfAccelerationEnabled) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.remove_qers) {
           Logger::upf_app().info("Modify datapath: remove(qer)");
@@ -1040,7 +1040,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     /*
      *  Add create_qers
      */
-    if (isQosEnabled) {
+    if (isBpfAccelerationEnabled) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.create_qers) {
           create_qer& cr_qer = it;
@@ -1100,7 +1100,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       /*
        *  Add update_qers
        */
-      if (isQosEnabled) {
+      if (isBpfAccelerationEnabled) {
         for (auto it : req->pfcp_ies.update_qers) {
           update_qer& qer     = it;
           uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;

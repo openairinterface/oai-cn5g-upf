@@ -556,7 +556,7 @@ void SessionProgramManager::createPipeline(
      */
     std::shared_ptr<pfcp::pfcp_qer> qer;
     if (!getQer(session, pdr, qer)) {
-      logger.debug("Missing qer for pdr %d", pdr_id);
+      logger.debug("Missing vvqer for pdr %d", pdr_id);
     }
 
     struct rules_match_pdr rules = {0};
