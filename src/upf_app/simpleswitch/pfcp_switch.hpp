@@ -50,6 +50,8 @@
 #include <variant>
 
 #include <pthread.h>
+#include "framed_routing/FramedRouting.hpp"
+#include "framed_routing/LocalRouting.hpp"
 
 namespace oai {
 namespace upf {
@@ -93,6 +95,11 @@ class pfcp_switch {
 #define PFCP_SWITCH_MIN_COMMIT_INTERVAL_MILLISECONDS 50
 
   // switching_data_per_cpu_socket             switching_data[];
+
+  const std::shared_ptr<fr::LocalRouting> local_routing =
+      std::make_shared<fr::LocalRouting>();
+  const std::shared_ptr<fr::FramedRouting> fr =
+      std::make_shared<fr::FramedRouting>(local_routing);
   std::unordered_map<pfcp::fseid_t, std::shared_ptr<pfcp::pfcp_session>>
       cp_fseid2pfcp_sessions;
   folly::AtomicHashMap<uint64_t, std::shared_ptr<pfcp::pfcp_session>>

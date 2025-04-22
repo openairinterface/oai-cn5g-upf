@@ -6,6 +6,8 @@
 #include <pfcp_session_lookup_xdp_user.h>
 #include <UserPlaneComponent.h>
 #include <net/if.h>  // if_nametoindex
+#include <framed_routing/FramedRouting.hpp>
+#include <framed_routing_bpf.h>
 
 #include <observer/OnStateChangeSessionProgramObserver.h>
 #include <spdlog/fmt/ostr.h>
@@ -301,7 +303,48 @@ uint32_t SessionProgramManager::getGnodebIp(
   return gNBIpAddress.ipv4_address.s_addr;
 }
 
-//---------------------------------------------------------------------------------------------------------------
+void SessionProgramManager::addFramedRoutes(
+    uint32_t ueIpAddress,
+    const std::vector<pfcp::framed_route_t>& framedRoutes) {
+  auto pPFCP_Session_LookupProgram =
+      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+
+  for (const auto& framedRoute : framedRoutes) {
+    Logger::upf_app().info(
+        "Add framed route to ue_ip mapping %s to UE IP 0x%x",
+        framedRoute.framed_route, ueIpAddress);
+    std::stringstream ss(framedRoute.framed_route);
+    std::string ipsubnetmask;
+    while (std::getline(ss, ipsubnetmask, ' ')) {
+      std::pair<uint32_t, uint32_t> ipCidr =
+          fr::FramedRouting::extractIPCidr(ipsubnetmask);
+      auto key = framed_routing_key_for_ip_cidr(ipCidr.first, ipCidr.second);
+      pPFCP_Session_LookupProgram->updateFramedRouteMappingMap(
+          ueIpAddress, key);
+    }
+  }
+}
+
+void SessionProgramManager::removeFramedRoutes(
+    const std::vector<pfcp::framed_route_t>& framedRoutes) {
+  auto pPFCP_Session_LookupProgram =
+      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+  for (const auto& framedRoute : framedRoutes) {
+    std::stringstream ss(framedRoute.framed_route);
+    std::string ipsubnetmask;
+    Logger::upf_app().info(
+        "Remove framed route to ue_ip mapping for %s",
+        framedRoute.framed_route);
+    while (std::getline(ss, ipsubnetmask, ' ')) {
+      std::pair<uint32_t, uint32_t> ipCidr =
+          fr::FramedRouting::extractIPCidr(ipsubnetmask);
+      auto key = framed_routing_key_for_ip_cidr(ipCidr.first, ipCidr.second);
+      pPFCP_Session_LookupProgram->removeFramedRoute(key);
+    }
+  }
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 // Function to create a pipeline for a given session and FAR
 void SessionProgramManager::createPipeline(
     uint64_t seid, uint32_t teid1, uint8_t sourceInterface,

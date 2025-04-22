@@ -106,6 +106,35 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSessionMappingMap()
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getFramedRouteMappingMap() {
+  return mpFramedRouteMappingMap;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+void PFCP_Session_LookupProgram::updateFramedRouteMappingMap(
+    uint32_t ue_ip, FramedRoutingKeyBPF key) {
+  uint32_t hash_key = hash_framed_routing_key(&key);
+  Logger::upf_app().debug(
+      "Update framed routing map with key: %u, value: %u", hash_key, ue_ip);
+  mpFramedRouteMappingMap->update(hash_key, ue_ip, BPF_ANY);
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+void PFCP_Session_LookupProgram::removeFramedRoute(FramedRoutingKeyBPF key) {
+  uint32_t hash_key = hash_framed_routing_key(&key);
+  uint32_t ueip;
+  if (mpFramedRouteMappingMap->lookup(hash_key, &ueip) == 0) {
+    mpFramedRouteMappingMap->remove(hash_key);
+  }
+}
+
+void PFCP_Session_LookupProgram::setFramedRouting(bool enable) {
+  uint8_t value = (enable) ? 1 : 0;
+  uint8_t key   = 0;
+  mpFramedRouteFlagMap->update(key, value, BPF_ANY);
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_LookupProgram::initializeMaps() {
   // Store all maps available in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
@@ -119,6 +148,10 @@ void PFCP_Session_LookupProgram::initializeMaps() {
       std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_prog_index"));
   mpSessionMappingMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_session_mapping"));
+  mpFramedRouteMappingMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_framed_route_mapping"));
+  mpFramedRouteFlagMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("framed_routing_flag"));
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

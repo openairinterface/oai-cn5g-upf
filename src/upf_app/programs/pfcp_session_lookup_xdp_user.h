@@ -9,7 +9,7 @@
 #include <signal.h>  // signals
 #include <pfcp_session_lookup_xdp_kernel_skel.h>
 #include <wrappers/BPFMap.hpp>
-// #include "qfi_flow_mapping_table.h"
+#include <framed_routing_bpf.h>
 
 class BPFMaps;
 class BPFMap;
@@ -141,6 +141,14 @@ class PFCP_Session_LookupProgram {
 
   /*---------------------------------------------------------------------------------------------------------------*/
 
+  std::shared_ptr<BPFMap> getFramedRouteMappingMap();
+
+  void updateFramedRouteMappingMap(uint32_t ue_ip, FramedRoutingKeyBPF key);
+
+  void removeFramedRoute(FramedRoutingKeyBPF key);
+
+  void setFramedRouting(bool enable);
+
  private:
   /**
    * @brief Initialize BPF wrappers maps.
@@ -206,6 +214,11 @@ class PFCP_Session_LookupProgram {
   // The UDP interface.
   std::string mUDPInterface;
   /*---------------------------------------------------------------------------------------------------------------*/
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  // Framed route ue_ip mapping map.
+  std::shared_ptr<BPFMap> mpFramedRouteMappingMap;
+  std::shared_ptr<BPFMap> mpFramedRouteFlagMap;
 };
 
 #endif  // __PFCP_SESSION_LOOKUP_XDP_USER_H__

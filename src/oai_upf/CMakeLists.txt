@@ -285,6 +285,8 @@ ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/simpleswitch ${CMAKE_CURRENT_BINARY_DIR}
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/gtpv1u ${CMAKE_CURRENT_BINARY_DIR}/gtpv1u)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/udp ${CMAKE_CURRENT_BINARY_DIR}/udp)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/interfaces ${CMAKE_CURRENT_BINARY_DIR}/interfaces)
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/framed_routing ${CMAKE_CURRENT_BINARY_DIR}/framed_routing)
+
 ################################################################################
 # Specific part for oai_upf folder
 
@@ -300,17 +302,23 @@ include_directories(${SRC_TOP_DIR}/pfcp)
 include_directories(${SRC_TOP_DIR}/udp)
 include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
+include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/include)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 include_directories(${SRC_TOP_DIR}/upf_app/interfaces)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
+include_directories(${SRC_TOP_DIR}/upf_app/framed_routing)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/common)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/nas)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/nas/common)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/nas/utils)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/pfcp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/bstr)
+
 
 include_directories(${SRC_TOP_DIR}/../build/ext/libbpf)
 link_directories(${SRC_TOP_DIR}/../build/ext/libbpf/src)
@@ -342,7 +350,7 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
 # folly glog dl double-conversion for FB folly library
 target_link_libraries (upf 
   ${ASAN}  -Wl,--start-group CN_UTILS
-  ${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so 
+  ${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so
   APP
   SIMPLE_SWITCH
   interfaces
@@ -356,7 +364,7 @@ target_link_libraries (upf
   UPF_XDP
   UPF_TC
   gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group
-  pthread m rt config++ 
+  pthread m rt config++
   event boost_system curl yaml-cpp cpr::cpr
 )
 
