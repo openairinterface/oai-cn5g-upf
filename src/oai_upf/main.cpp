@@ -44,6 +44,8 @@
 #include <SessionProgramManager.h>
 #include <UserPlaneComponent.h>
 
+#include "helpers/ConfigLoader.hpp"
+
 using namespace oai::upf::app;
 using namespace oai::config;
 using namespace oai::utils;
@@ -126,10 +128,22 @@ void setup_bpf() {
 //------------------------------------------------------------------------------
 int main(int argc, char** argv) {
   // Command line options
+
+  // std::string configPath =
+  //     "/home/messaoudi/workspace/project-oai-qos/oai-cn5g-upf/etc/"
+  //     "ebpf_maps.conf";
+
   if (!Options::parse(argc, argv)) {
     std::cout << "Options::parse() failed" << std::endl;
     return 1;
   }
+
+  // if (!ConfigLoader::getInstance().loadConfig(configPath)) {
+  //   std::cerr << "Failed to load ebpf map sizes config file" << std::endl;
+  //   return 1;  // Exit if config fails
+  // }
+
+  // printFileContents(configPath);
 
   // Logger
   // Config
