@@ -716,6 +716,13 @@ void pfcp_switch::call_datapath(
   Logger::pfcp_switch().info(
       "call_datapath Number of PDRs in session: %u", pSession->pdrs.size());
 
+  // Check if the itti arguments are null
+  if (obj == nullptr) {
+    Logger::pfcp_switch().error("call_datapath: Session Manager not defined, the UPF may still be setting up");
+    // TODO: Handle this case to return appropriate error to SMF/N4
+    return;
+  }
+
   if (!del_req) {
     obj->sessions.push_back(pSession);
     (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);

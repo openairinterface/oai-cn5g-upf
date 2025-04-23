@@ -1,5 +1,6 @@
 #include "SignalHandler.h"
 #include <UserPlaneComponent.h>
+#include "logger.hpp"
 
 void my_app_signal_handler(int s);
 
@@ -21,6 +22,7 @@ void SignalHandler::enable() {
 
 /**************************************************************************************************/
 void SignalHandler::tearDown(int signal) {
+  Logger::upf_app().info("Signal %d received. Shutting down...", signal);
   UserPlaneComponent::getInstance().tearDown();
   // calling the other tear down routine
   my_app_signal_handler(signal);
