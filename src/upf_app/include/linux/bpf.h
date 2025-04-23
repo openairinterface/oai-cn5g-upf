@@ -4289,8 +4289,8 @@ union bpf_attr {
  *		valid address but requiring a major memory fault. If reading
  *kernel memory fails, the string for **%s** will be an empty string, and the ip
  *		address for **%p{i,I}{4,6}** will be 0. Not returning error to
- *		bpf program is consistent with what **bpf_trace_printk**\ () does
- *for now. Return 0 on success, or a negative error in case of failure:
+ *		bpf program is consistent with what **bpf_trace_printk**\ ()
+ *does for now. Return 0 on success, or a negative error in case of failure:
  *
  *		**-EBUSY** if per-CPU memory copy buffer is busy, can try again
  *		by returning 1 from bpf program.
@@ -4956,7 +4956,8 @@ union bpf_attr {
  *		BPF_MAP_TYPE_LRU_HASH, BPF_MAP_TYPE_LRU_PERCPU_HASH,
  *		BPF_MAP_TYPE_ARRAY, BPF_MAP_TYPE_PERCPU_ARRAY
  *
- *		long (\*callback_fn)(struct bpf_map \*map, const void \*key, void
+ *		long (\*callback_fn)(struct bpf_map \*map, const void \*key,
+ *void
  *\*value, void \*ctx);
  *
  *		For per_cpu maps, the map_value is the value on the cpu where
@@ -5222,8 +5223,8 @@ union bpf_attr {
  *
  * long bpf_get_func_arg(void *ctx, u32 n, u64 *value)
  *	Description
- *		Get **n**-th argument register (zero based) of the traced function
- *(for tracing programs) returned in **value**.
+ *		Get **n**-th argument register (zero based) of the traced
+ *function (for tracing programs) returned in **value**.
  *
  *	Return
  *		0 on success.
@@ -5236,8 +5237,8 @@ union bpf_attr {
  *
  *	Return
  *		0 on success.
- *		**-EOPNOTSUPP** for tracing programs other than BPF_TRACE_FEXIT or
- *BPF_MODIFY_RETURN.
+ *		**-EOPNOTSUPP** for tracing programs other than BPF_TRACE_FEXIT
+ *or BPF_MODIFY_RETURN.
  *
  * long bpf_get_func_arg_cnt(void *ctx)
  *	Description
@@ -5252,8 +5253,8 @@ union bpf_attr {
  *		Get the BPF program's return value that will be returned to the
  *upper layers.
  *
- *		This helper is currently supported by cgroup programs and only by
- *the hooks where BPF program's return value is returned to the userspace via
+ *		This helper is currently supported by cgroup programs and only
+ *by the hooks where BPF program's return value is returned to the userspace via
  *errno. Return The BPF program's return value.
  *
  * int bpf_set_retval(int retval)
@@ -5261,8 +5262,8 @@ union bpf_attr {
  *		Set the BPF program's return value that will be returned to the
  *upper layers.
  *
- *		This helper is currently supported by cgroup programs and only by
- *the hooks where BPF program's return value is returned to the userspace via
+ *		This helper is currently supported by cgroup programs and only
+ *by the hooks where BPF program's return value is returned to the userspace via
  *errno.
  *
  *		Note that there is the following corner case where the program
@@ -5578,8 +5579,8 @@ union bpf_attr {
  *		helper enforces the key must be a cgroup struct and the map must
  *also be a **BPF_MAP_TYPE_CGRP_STORAGE**.
  *
- *		In reality, the local-storage value is embedded directly inside of
- *the *cgroup* object itself, rather than being located in the
+ *		In reality, the local-storage value is embedded directly inside
+ *of the *cgroup* object itself, rather than being located in the
  *		**BPF_MAP_TYPE_CGRP_STORAGE** map. When the local-storage value
  *is queried for some *map* on a *cgroup* object, the kernel will perform an
  *		O(n) iteration over all of the live local-storage values for
