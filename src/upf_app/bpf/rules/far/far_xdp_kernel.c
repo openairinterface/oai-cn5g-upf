@@ -266,7 +266,7 @@ int far_entry_point(struct xdp_md* ctx) {
         if ((void*) (iph + 1) > data_end) {
           return XDP_DROP;
         }
-  
+
         update_mac_address(ctx, ethh, iph);
       }
 

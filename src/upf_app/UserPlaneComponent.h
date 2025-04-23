@@ -79,12 +79,12 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
       const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
-    /**
-     * @brief Get mpFARTCProgram object.
-     *
-     * @return std::shared_ptr<mpFARTCProgram> The
-     * mpFARTCProgram reference.
-     */
+  /**
+   * @brief Get mpFARTCProgram object.
+   *
+   * @return std::shared_ptr<mpFARTCProgram> The
+   * mpFARTCProgram reference.
+   */
   std::shared_ptr<FARTCProgram> getFARTCProgram() const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
