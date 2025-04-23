@@ -327,9 +327,8 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far, u8 qfi) {
 
   p_gtpu_ext_h->message_length = GTP_EXT_MSG_LEN;
   p_gtpu_ext_h->pdu_type       = GTP_EXT_PDU_TYPE;
-  // p_gtpu_ext_h->qfi            = GTP_EXT_QFI;
-  p_gtpu_ext_h->qfi           = qfi;  // GTP_DEFAULT_QFI;
-  p_gtpu_ext_h->next_ext_type = GTP_EXT_NEXT_EXT_TYPE;
+  p_gtpu_ext_h->qfi            = qfi;  // GTP_DEFAULT_QFI;
+  p_gtpu_ext_h->next_ext_type  = GTP_EXT_NEXT_EXT_TYPE;
 
   /*
   |----------------------------------------------------------------|
@@ -1043,7 +1042,7 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
       return XDP_PASS;
     }
     case REDIRECT: {
-      return bpf_redirect_map(&m_redirect_interfaces, UPLINK, 0);
+      return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
       bpf_debug("Redirect: failed to redirect traffic to N3");
       return XDP_DROP;
     }
@@ -1135,7 +1134,7 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
 
   switch (ret) {
     case REDIRECT: {
-      return bpf_redirect_map(&m_redirect_interfaces, UPLINK, 0);
+      return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
       bpf_debug("Redirect: failed to redirect traffic to N6");
       break;
     }
