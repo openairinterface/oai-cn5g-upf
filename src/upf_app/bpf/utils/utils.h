@@ -80,8 +80,8 @@ static __always_inline int update_mac_address(
     case BPF_FIB_LKUP_RET_SUCCESS: /* lookup successful */
       bpf_debug("BPF_FIB_LKUP_RET_SUCCESS");
 
-      memcpy(ethh->h_dest, fib_params.dmac, ETH_ALEN);
-      memcpy(ethh->h_source, fib_params.smac, ETH_ALEN);
+      __builtin_memcpy(ethh->h_dest, fib_params.dmac, ETH_ALEN);
+      __builtin_memcpy(ethh->h_source, fib_params.smac, ETH_ALEN);
       break;
     case BPF_FIB_LKUP_RET_BLACKHOLE:    /* dest is blackholed; can be dropped
                                          */
