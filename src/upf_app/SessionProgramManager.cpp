@@ -205,9 +205,11 @@ pfcp_pdr_t_ SessionProgramManager::createPdr(
   // pdr.pdi.application_id      = pPdr->pdi.second.application_id;
   // pdr.pdi.ethernet_pdu_session_information =
   //   pPdr->pdi.second.ethernet_packet_filter;
-  pdr.pdi.qfi.qfi        = pPdr->pdi.second.qfi.second.qfi;
-  pdr.pdi.framed_route   = pPdr->pdi.second.framed_route;
-  pdr.pdi.framed_routing = pPdr->pdi.second.framed_routing;
+  pdr.pdi.qfi.qfi = pPdr->pdi.second.qfi.second.qfi;
+
+  // pdr.pdi.framed_route.framed_route = pPdr->pdi.second.framed_route.second;
+  // pdr.pdi.framed_routing.framed_routing =
+  //     pPdr->pdi.second.framed_routing.second;
   // pdr.pdi.framed_ipv6_route = pPdr->pdi.second.framed_ipv6_route;
 
   memcpy(
@@ -222,31 +224,74 @@ pfcp_pdr_t_ SessionProgramManager::createPdr(
 }
 
 //---------------------------------------------------------------------------------------------------------------
+void SessionProgramManager::addFramedRoutes(
+    uint32_t ueIpAddress,
+    const std::vector<pfcp::framed_route_t>& framedRoutes) {
+  auto pPFCP_Session_LookupProgram =
+      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+
+  for (const auto& framedRoute : framedRoutes) {
+    Logger::upf_app().info(
+        "Add framed route to ue_ip mapping %s to UE IP 0x%x",
+        framedRoute.framed_route, ueIpAddress);
+    std::stringstream ss(framedRoute.framed_route);
+    std::string ipsubnetmask;
+    while (std::getline(ss, ipsubnetmask, ' ')) {
+      std::pair<uint32_t, uint32_t> ipCidr =
+          fr::FramedRouting::extractIPCidr(ipsubnetmask);
+      auto key = framed_routing_key_for_ip_cidr(ipCidr.first, ipCidr.second);
+      pPFCP_Session_LookupProgram->updateFramedRouteMappingMap(
+          ueIpAddress, key);
+    }
+  }
+}
+
+//---------------------------------------------------------------------------------------------------------------
+void SessionProgramManager::removeFramedRoutes(
+    const std::vector<pfcp::framed_route_t>& framedRoutes) {
+  auto pPFCP_Session_LookupProgram =
+      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+  for (const auto& framedRoute : framedRoutes) {
+    std::stringstream ss(framedRoute.framed_route);
+    std::string ipsubnetmask;
+    Logger::upf_app().info(
+        "Remove framed route to ue_ip mapping for %s",
+        framedRoute.framed_route);
+    while (std::getline(ss, ipsubnetmask, ' ')) {
+      std::pair<uint32_t, uint32_t> ipCidr =
+          fr::FramedRouting::extractIPCidr(ipsubnetmask);
+      auto key = framed_routing_key_for_ip_cidr(ipCidr.first, ipCidr.second);
+      pPFCP_Session_LookupProgram->removeFramedRoute(key);
+    }
+  }
+}
+
+//---------------------------------------------------------------------------------------------------------------
 pfcp_qer_t_ SessionProgramManager::createQer(
     std::shared_ptr<pfcp::pfcp_qer> pQer) {
-  pfcp_qer_t_ qer;
+  pfcp_qer_t_ qer = {};
+  if (pQer) {
+    qer.qer_id.qer_id = pQer->qer_id.second.qer_id;
 
-  qer.qer_id.qer_id = pQer->qer_id.second.qer_id;
+    qer.qer_correlation_id.qer_correlation_id =
+        pQer->qer_correlation_id.second.qer_correlation_id;
 
-  qer.qer_correlation_id.qer_correlation_id =
-      pQer->qer_correlation_id.second.qer_correlation_id;
+    qer.gate_status.ul_gate = pQer->gate_status.second.ul_gate;
+    qer.gate_status.dl_gate = pQer->gate_status.second.dl_gate;
 
-  qer.gate_status.ul_gate = pQer->gate_status.second.ul_gate;
-  qer.gate_status.dl_gate = pQer->gate_status.second.dl_gate;
+    qer.maximum_bitrate.ul_mbr = pQer->mbr.second.ul_mbr;
+    qer.maximum_bitrate.dl_mbr = pQer->mbr.second.dl_mbr;
 
-  qer.maximum_bitrate.ul_mbr = pQer->mbr.second.ul_mbr;
-  qer.maximum_bitrate.dl_mbr = pQer->mbr.second.dl_mbr;
+    qer.guaranteed_bitrate.ul_gbr = pQer->gbr.second.ul_gbr;
+    qer.guaranteed_bitrate.dl_gbr = pQer->gbr.second.dl_gbr;
 
-  qer.guaranteed_bitrate.ul_gbr = pQer->gbr.second.ul_gbr;
-  qer.guaranteed_bitrate.dl_gbr = pQer->gbr.second.dl_gbr;
+    // qer.packet_rate.dlpr = pQer->
 
-  // qer.packet_rate.dlpr = pQer->
+    // qer.dl_flow_level_marking.sci = pQer->
+    qer.qos_flow_identifier.qfi = pQer->qfi.second.qfi;
 
-  // qer.dl_flow_level_marking.sci = pQer->
-  qer.qos_flow_identifier.qfi = pQer->qfi.second.qfi;
-
-  qer.reflective_qos.rqi = pQer->rqi.second.rqi;
-
+    qer.reflective_qos.rqi = pQer->rqi.second.rqi;
+  }
   return qer;
 }
 
@@ -469,49 +514,6 @@ bool SessionProgramManager::getQer(
 }
 
 //---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::addFramedRoutes(
-    uint32_t ueIpAddress,
-    const std::vector<pfcp::framed_route_t>& framedRoutes) {
-  auto pPFCP_Session_LookupProgram =
-      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
-
-  for (const auto& framedRoute : framedRoutes) {
-    Logger::upf_app().info(
-        "Add framed route to ue_ip mapping %s to UE IP 0x%x",
-        framedRoute.framed_route, ueIpAddress);
-    std::stringstream ss(framedRoute.framed_route);
-    std::string ipsubnetmask;
-    while (std::getline(ss, ipsubnetmask, ' ')) {
-      std::pair<uint32_t, uint32_t> ipCidr =
-          fr::FramedRouting::extractIPCidr(ipsubnetmask);
-      auto key = framed_routing_key_for_ip_cidr(ipCidr.first, ipCidr.second);
-      pPFCP_Session_LookupProgram->updateFramedRouteMappingMap(
-          ueIpAddress, key);
-    }
-  }
-}
-
-//---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::removeFramedRoutes(
-    const std::vector<pfcp::framed_route_t>& framedRoutes) {
-  auto pPFCP_Session_LookupProgram =
-      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
-  for (const auto& framedRoute : framedRoutes) {
-    std::stringstream ss(framedRoute.framed_route);
-    std::string ipsubnetmask;
-    Logger::upf_app().info(
-        "Remove framed route to ue_ip mapping for %s",
-        framedRoute.framed_route);
-    while (std::getline(ss, ipsubnetmask, ' ')) {
-      std::pair<uint32_t, uint32_t> ipCidr =
-          fr::FramedRouting::extractIPCidr(ipsubnetmask);
-      auto key = framed_routing_key_for_ip_cidr(ipCidr.first, ipCidr.second);
-      pPFCP_Session_LookupProgram->removeFramedRoute(key);
-    }
-  }
-}
-
-//---------------------------------------------------------------------------------------------------------------
 void SessionProgramManager::createPipeline(
     std::shared_ptr<pfcp::pfcp_session> session) {
   auto& logger     = Logger::upf_app();
@@ -587,9 +589,9 @@ void SessionProgramManager::createPipeline(
     /*
      * On the Uplink see if there is QER applied for downlink
      */
-    std::shared_ptr<pfcp::pfcp_qer> qer;
+    std::shared_ptr<pfcp::pfcp_qer> qer = nullptr;
     if (!getQer(session, pdr, qer)) {
-      logger.debug("Missing vvqer for pdr %d", pdr_id);
+      logger.debug("Missing qer for pdr %d", pdr_id);
     }
 
     struct rules_match_pdr rules = {0};
