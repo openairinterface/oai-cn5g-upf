@@ -33,43 +33,12 @@
 #include <utils/logger.h>
 #include <utils/utils.h>
 #include <utils/csum.h>
-#include <far_maps.h>
-#include <pfcp_session_lookup_maps.h>
+// #include <far_maps.h>
+// #include <pfcp_session_lookup_maps.h>
 #include <mac_pdu_session_key.h>
 #include <interfaces.h>
 #include <stdbool.h>
 #include <string.h>  //Needed for memcpy
-
-/*****************************************************************************************************************/
-
-static __always_inline bool retrieve_upf_iface_from_map(
-    e_reference_point key, u32* iface_ip) {
-  struct s_interface* map_element =
-      bpf_map_lookup_elem(&m_upf_interfaces, &key);
-
-  if (map_element) {
-    *iface_ip = map_element->ipv4_address;
-    return true;
-  }
-
-  return false;
-}
-
-/*****************************************************************************************************************/
-static __always_inline bool update_dst_mac_address(
-    u32 ip, struct ethhdr* p_eth) {
-  struct s_arp_mapping* map_entry = {0};
-  // memset(&map_entry, 0, sizeof(struct s_arp_mapping));
-
-  map_entry = bpf_map_lookup_elem(&m_arp_table, &ip);
-
-  if (map_entry) {
-    memcpy(p_eth->h_dest, map_entry->mac_address, sizeof(p_eth->h_dest));
-    return true;
-  }
-
-  return false;
-}
 
 /*****************************************************************************************************************/
 static __always_inline u32 create_outer_header_gtpu(
@@ -149,7 +118,7 @@ static __always_inline u32 create_outer_header_gtpu(
   iph->saddr    = n3_ip;
   iph->daddr    = ipv4_address;
 
-  update_mac_address(ctx, ethh, iph);
+  update_mac_address(ctx, ethh, iph, N3_INTERFACE);
 
   /*
   |----------------------------------------------------------------|

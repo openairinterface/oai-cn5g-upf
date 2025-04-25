@@ -16,10 +16,26 @@
 #include <pfcp_session_pdr_lookup_maps.h>
 #include <utils/csum.h>
 #include <utils/logger.h>
-#include <utils/utils.h>
+// #include <utils/utils.h>
 #include <interfaces.h>
 #include <pfcp_session_lookup_maps.h>
 #include <string.h>  //Needed for memcpy
+
+#ifndef htons
+#define htons(x) __constant_htons((x))
+#endif
+
+#ifndef htonl
+#define htonl(x) __constant_htonl((x))
+#endif
+
+#ifndef ntohs
+#define ntohs(x) __constant_ntohs((x))
+#endif
+
+#ifndef ntohl
+#define ntohl(x) __constant_ntohl((x))
+#endif
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
