@@ -100,7 +100,7 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far) {
 
   // bpf_debug("IP SRC: 0x%x, IP DST: 0x%x", iph->saddr, iph->daddr);
 
-  update_mac_address(ctx, ethh, iph);
+  update_mac_address(ctx, ethh, iph, N3_INTERFACE);
 
   /*
   |----------------------------------------------------------------|
@@ -266,8 +266,8 @@ int far_entry_point(struct xdp_md* ctx) {
         if ((void*) (iph + 1) > data_end) {
           return XDP_DROP;
         }
-  
-        update_mac_address(ctx, ethh, iph);
+
+        update_mac_address(ctx, ethh, iph, N6_INTERFACE);
       }
 
       bpf_debug("The Packet is redirected for transmission to DN ...");

@@ -81,7 +81,6 @@ int handle_broadcast(struct __sk_buff* skb) {
   }
   __builtin_memcpy(&eth_cpy, eth, sizeof(struct ethhdr));
 
-
   struct callback_ctx callback_ctx = {
       .skb = skb, .ifindex = ifindex, .size = 0};
 

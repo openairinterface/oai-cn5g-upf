@@ -25,6 +25,20 @@
 #include <pfcp_session_lookup_maps.h>
 #include <far_maps.h>
 
+/*----------------------------------------------------------------------------------------------------------------*/
+struct arphdr {
+	__be16		ar_hrd;		/* format of hardware address	*/
+	__be16		ar_pro;		/* format of protocol address	*/
+	unsigned char	ar_hln;		/* length of hardware address	*/
+	unsigned char	ar_pln;		/* length of protocol address	*/
+	__be16		ar_op;		/* ARP opcode (command)		*/
+
+	unsigned char		ar_sha[ETH_ALEN];	/* sender hardware address	*/
+	__be32			ar_sip;		/* sender IP address		*/
+	unsigned char		ar_tha[ETH_ALEN];	/* target hardware address	*/
+	__be32			ar_tip;		/* sender IP address		*/
+} __attribute__((packed));
+
 /*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline u32 tail_call_next_prog__eth_pdu(
     struct xdp_md* ctx, teid_t_ teid, u8 source_value, struct ethhdr* eth) {
@@ -39,7 +53,7 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
   map_key.teid         = teid;
   map_key.source_value = source_value;
   map_key.ethertype    = 0;  // bpf_ntohs(eth->h_proto);
-  
+
   // TODO [ETH-PDU] support other eth pkt filters
   struct next_rule_eth_prog_index_value* index_value =
       bpf_map_lookup_elem(&m_next_rule_eth_prog_index, &map_key);
@@ -136,6 +150,49 @@ handle_downlink_traffic__eth_pdu(struct xdp_md* ctx) {
     return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
   }
 
+  // For IP packet with dest IP equal to N6 interface IP address, we don't
+  // need to do anything. Pass it up the network stack.
+  e_reference_point n6_key = N6_INTERFACE;
+  u32 n6_ip = 0;
+  if (!retrieve_upf_iface_from_map(n6_key, &n6_ip)) {
+    bpf_debug("N6 interface is missing in UPF map, Doing nothing");
+  }
+
+
+  if (bpf_htons(eth->h_proto) == ETH_P_IP) {
+    struct iphdr* iph = (struct iphdr*) (eth + 1);
+    if ((void*) iph + sizeof(*iph) > data_end) {
+      bpf_debug("ETH PDU: Invalid IPv4 Packet");
+      return XDP_DROP;
+    }
+
+    if (iph->daddr == n6_ip) {
+      bpf_debug("ETH PDU: This is a N6 traffic");
+      return XDP_PASS;
+    }
+  } else if (bpf_htons(eth->h_proto) == ETH_P_ARP) {
+    struct arphdr* arp = (struct arphdr_ipv4*) (eth + 1);
+    if ((void*) (arp + 1) > data_end) {
+      bpf_debug("ETH PDU: Invalid ARP Packet");
+      return XDP_DROP;
+    }
+
+    bpf_debug(
+        "ETH PDU: ARP packet, src_ip %pi4, dest_ip %pi4",
+        &arp->ar_sip, &arp->ar_tip);
+
+    if (arp->ar_tip == n6_ip) {
+      bpf_debug("ETH PDU: This is a N6 traffic");
+      return XDP_PASS;
+    }
+  } else if (bpf_htons(eth->h_proto) == 0xC0A8) {
+    bpf_debug("ETH PDU: This is a Unknown traffic");
+    return XDP_PASS;
+  }
+
+  // Print protocol type
+  bpf_debug(
+      "ETH PDU: No PDU session found, passing to TC to send to all PDU sessions");
   /* Packet is coming from N6 and dest mac is not in the map, so we need to
    * to forward it to all PDU sessions. We have a single N3 interface, so we
    * can use the same interface for all PDU sessions. Put IP address of the

@@ -665,14 +665,13 @@ void SessionManager::updateBPFSessionDL(
   }
 
   // Get the teid_uplink for pSession
-  uint64_t teid_ul            = 0;
+  uint64_t teid_ul           = 0;
   pfcp::fteid_t uplink_fteid = {};
   if (pSession->get(uplink_fteid)) {
     teid_ul = uplink_fteid.teid;
   }
-  fteid.teid        = forwardingParams.outer_header_creation.second.teid;
+  fteid.teid = forwardingParams.outer_header_creation.second.teid;
 
- 
   // IP PDU session
   if (extractUeIpv4(pdi, ueIpAddress)) {
     Logger::upf_app().debug(
@@ -690,7 +689,7 @@ void SessionManager::updateBPFSessionDL(
         Logger::upf_app().warn("Framed Route is not yet supported for Ipv6");
       }
     }
-      
+
     SessionProgramManager::getInstance().createPipeline(
         seidul, fteid.teid, INTERFACE_VALUE_CORE,
         ueIpAddress.ipv4_address.s_addr, pFar, pSession->qers, true, teid_ul);
@@ -698,10 +697,10 @@ void SessionManager::updateBPFSessionDL(
   } else if (
       extractEthernetPacketFilter(pdi, ethernetPacketFilter) ||
       extractEthernetPduSessionInformation(
-          pdi, ethernetPduSessionInformation)) { // ETH-PDU session
+          pdi, ethernetPduSessionInformation)) {  // ETH-PDU session
     // TODO [ETH-PDU] handle UE MAC address
-    // TODO [ETH-PDU] handle ethernetPduSessionInformation (currently default set
-    // to 1)
+    // TODO [ETH-PDU] handle ethernetPduSessionInformation (currently default
+    // set to 1)
     // TODO [ETH-PDU] handle ethernetPacketFilter
     Logger::upf_app().debug(
         "ETH-PDU: creating pipeline for ETH PDU session, Downlink PDR %d",

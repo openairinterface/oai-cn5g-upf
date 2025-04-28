@@ -7,6 +7,11 @@
 #include <sys/socket.h>
 #include <bpf_helpers.h>
 #include <bpf_endian.h>
+#include <stdbool.h>
+#include <interfaces.h>
+// #include <arp_table_maps.h>
+#include <far_maps.h>
+#include <pfcp_session_lookup_maps.h>
 
 // Dictionary
 // htons() - host to network short
@@ -39,6 +44,37 @@ static void swap_src_dst_mac(struct ethhdr* eth) {
   __builtin_memcpy(eth->h_dest, h_tmp, ETH_ALEN);
 }
 
+/*****************************************************************************************************************/
+
+static __always_inline bool retrieve_upf_iface_from_map(
+    e_reference_point key, u32* iface_ip) {
+  struct s_interface* map_element =
+      bpf_map_lookup_elem(&m_upf_interfaces, &key);
+
+  if (map_element) {
+    *iface_ip = map_element->ipv4_address;
+    return true;
+  }
+
+  return false;
+}
+
+/*****************************************************************************************************************/
+static __always_inline bool update_dst_mac_address(
+    u32 ip, struct ethhdr* p_eth) {
+  struct s_arp_mapping* map_entry = {0};
+  // memset(&map_entry, 0, sizeof(struct s_arp_mapping));
+
+  map_entry = bpf_map_lookup_elem(&m_arp_table, &ip);
+
+  if (map_entry) {
+    __builtin_memcpy(p_eth->h_dest, map_entry->mac_address, sizeof(p_eth->h_dest));
+    return true;
+  }
+
+  return false;
+}
+
 /*
  * Swaps destination and source IPv4 addresses inside an IPv4 header
  */
@@ -53,7 +89,7 @@ static void swap_src_dst_ipv4(struct iphdr* iphdr) {
  * Update the MAC address based on the FIB lookup
  */
 static __always_inline int update_mac_address(
-    struct xdp_md* ctx, struct ethhdr* ethh, struct iphdr* iph) {
+    struct xdp_md* ctx, struct ethhdr* ethh, struct iphdr* iph, e_reference_point direction ) {
   void* data_end = (void*) (long) ctx->data_end;
 
   struct bpf_fib_lookup fib_params = {};
@@ -80,8 +116,8 @@ static __always_inline int update_mac_address(
     case BPF_FIB_LKUP_RET_SUCCESS: /* lookup successful */
       bpf_debug("BPF_FIB_LKUP_RET_SUCCESS");
 
-      memcpy(ethh->h_dest, fib_params.dmac, ETH_ALEN);
-      memcpy(ethh->h_source, fib_params.smac, ETH_ALEN);
+      __builtin_memcpy(ethh->h_dest, fib_params.dmac, ETH_ALEN);
+      __builtin_memcpy(ethh->h_source, fib_params.smac, ETH_ALEN);
       break;
     case BPF_FIB_LKUP_RET_BLACKHOLE:    /* dest is blackholed; can be dropped
                                          */
@@ -95,7 +131,17 @@ static __always_inline int update_mac_address(
     case BPF_FIB_LKUP_RET_NO_NEIGH:     /* no neighbor entry for nh */
     case BPF_FIB_LKUP_RET_FRAG_NEEDED:  /* fragmentation required to fwd */
       /* PASS */
-      bpf_debug("BPF_FIB_LKUP_RET_ -> %d", rc);
+      bpf_debug("BPF_FIB_LOOKUP Failed, rc: %d, try the UPF arp table", rc);
+
+      // Retrieve the N6 Interface IP address:
+      e_reference_point nx_key = direction;
+      u32 nx_ip;
+      if (retrieve_upf_iface_from_map(nx_key, &nx_ip)) {
+        if (!update_dst_mac_address(nx_ip, ethh)) {
+          bpf_debug("N6's Next Hop MAC address not found! Do nothing");
+        }      
+      }
+
       break;
   }
   return rc;

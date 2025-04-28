@@ -704,7 +704,6 @@ void pfcp_switch::call_datapath(
         itti_n4_session_establishment_request* est_req,
         itti_n4_session_modification_request* mod_req,
         itti_n4_session_deletion_request* del_req)) {
-
   std::shared_ptr<pfcp::pfcp_session> pSession =
       std::make_shared<pfcp::pfcp_session>(*s);
   obj = UserPlaneComponent::getInstance().getSessionManager();
@@ -715,6 +714,15 @@ void pfcp_switch::call_datapath(
 
   Logger::pfcp_switch().info(
       "call_datapath Number of PDRs in session: %u", pSession->pdrs.size());
+
+  // Check if the itti arguments are null
+  if (obj == nullptr) {
+    Logger::pfcp_switch().error(
+        "call_datapath: Session Manager not defined, the UPF may still be "
+        "setting up");
+    // TODO: Handle this case to return appropriate error to SMF/N4
+    return;
+  }
 
   if (!del_req) {
     obj->sessions.push_back(pSession);

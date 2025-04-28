@@ -63,9 +63,9 @@ static long broadcast_callback_fn(
    * every PDU session (except toward the one of the incoming traffic)
    * */
 
-  /* Within this callback function pdu_sessions keeps track of the PDU sessions 
-   * (teid) that are already broadcasted. The size of the array is limited to 
-   * MAX_PDU_SESSIONS. Return 0 if the PDU session is already in the array, will 
+  /* Within this callback function pdu_sessions keeps track of the PDU sessions
+   * (teid) that are already broadcasted. The size of the array is limited to
+   * MAX_PDU_SESSIONS. Return 0 if the PDU session is already in the array, will
    * cause the calling MAP iterator (bpf_for_each_map_elem) to move to the next
    * element (PDU session) in the map. When the map iterator reaches the end, it
    * will stop calling this callback function.

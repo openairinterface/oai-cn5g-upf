@@ -524,7 +524,8 @@ void ProgramLifeCycle<BPFSkeletonType>::tcDetachIngress(
 template<class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::unpin_maps() {
   Logger::upf_app().debug(
-      "================== Unpinning maps for object %s\n", bpf_object__name(mpSkeleton->obj));
+      "================== Unpinning maps for object %s\n",
+      bpf_object__name(mpSkeleton->obj));
   try {
     int err = bpf_object__unpin_maps(mpSkeleton->obj, NULL);
     if (err) {
