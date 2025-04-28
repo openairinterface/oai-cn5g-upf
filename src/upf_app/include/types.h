@@ -3,7 +3,7 @@
 
 #include <linux/types.h>
 
-#pragma once
+//#pragma once
 typedef unsigned __int128 __u128;
 
 typedef __u128 u128;
