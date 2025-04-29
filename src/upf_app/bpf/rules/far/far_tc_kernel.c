@@ -60,12 +60,6 @@ int handle_broadcast(struct __sk_buff* skb) {
     goto out;
   }
 
-  /* The packet from N3 interface and we are sending it back to N3 interface
-   * so we need to swap the source and destination MAC address, IPv4 address
-   */
-  swap_src_dst_mac(eth);
-  swap_src_dst_ipv4(iph);
-
   struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
   if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
     bpf_debug("handle_broadcast: Invalid GTPU packet\n");
@@ -84,8 +78,16 @@ int handle_broadcast(struct __sk_buff* skb) {
   struct callback_ctx callback_ctx = {
       .skb = skb, .ifindex = ifindex, .size = 0};
 
-  // For UL PDU session (except toward the one of the incoming traffic)
+  // For UL PDU session
   if (*ifindex == skb->ingress_ifindex) {
+    /* The packet from N3 interface and we are sending it back to N3 interface
+     * so we need to swap the source and destination MAC address, IPv4 address.
+     */
+    swap_src_dst_mac(eth);
+    swap_src_dst_ipv4(iph);
+
+    // Don't send to source PDU session, add it to the list of PDU sessions
+    // that are already broadcasted to.
     callback_ctx.pdu_sessions[0] = gtpuh->teid;
     callback_ctx.size += 1;
   }

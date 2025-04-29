@@ -82,13 +82,6 @@ static __always_inline u32 create_outer_header_gtpu(
     return XDP_DROP;
   }
 
-  struct ethhdr* ethh_orig = data + roomlen;
-
-  if ((void*) (ethh_orig + 1) > data_end) {
-    bpf_debug("Invalid Pointer");
-    return XDP_DROP;
-  }
-  __builtin_memcpy(ethh, ethh_orig, sizeof(*ethh));
   ethh->h_proto = bpf_htons(ETH_P_IP);
 
   /*
@@ -98,11 +91,6 @@ static __always_inline u32 create_outer_header_gtpu(
   */
   struct iphdr* iph = (void*) (ethh + 1);
   if ((void*) (iph + 1) > data_end) {
-    return XDP_DROP;
-  }
-
-  struct iphdr* p_inner_ip = (void*) iph + roomlen;
-  if ((void*) (p_inner_ip + 1) > data_end) {
     return XDP_DROP;
   }
 
