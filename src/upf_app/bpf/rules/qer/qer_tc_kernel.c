@@ -29,7 +29,7 @@
 #include <linux/netdevice.h>
 #include <linux/pkt_sched.h>
 
-#define TC_H_MAKE(major, minor) (((major) << 16) | (minor))
+//#define __TC_H_MAKE(major, minor) (((major) << 16) | (minor))
 
 //---------------------------------------------------------------------------------------------------------------
 // SEC("tc/egress")
