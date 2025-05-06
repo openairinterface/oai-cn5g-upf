@@ -31,7 +31,7 @@ include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr)
 #                          FAR                               #
 ##############################################################
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/far)
-include_directories(${LibNL_INCLUDE_DIR})
+# include_directories(${LibNL_INCLUDE_DIR})
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 
 set(GTP_INTERFACE $ENV{GTP_INTERFACE})
@@ -89,7 +89,7 @@ install(
 ##############################################################
 #                          QER                               #
 ##############################################################
-  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindLibNL.cmake)
+  # include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindLibNL.cmake)
   include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/qer)
   
   add_library(UPF_TC STATIC
@@ -126,7 +126,7 @@ install(
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/programs>
   )
 
-  add_dependencies(UPF_TC upf_tc_all)
+  add_dependencies(UPF_TC upf_xdp_all)
 
   install(
       TARGETS UPF_TC

@@ -13,7 +13,7 @@ add_definitions(-DKERNEL_SPACE)
 
 
 add_custom_target(upf_xdp_all DEPENDS pfcp_session_lookup_xdp)
-add_custom_target(upf_tc_all DEPENDS qer_tc)
+# add_custom_target(upf_tc_all DEPENDS qer_tc)
 
 
 
