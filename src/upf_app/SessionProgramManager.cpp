@@ -100,7 +100,7 @@ void SessionProgramManager::addPFCPProgram(
 uint32_t SessionProgramManager::getRemoteIP(uint32_t upfIP, uint32_t remoteIP) {
   uint32_t ipnexthop = 0;
   if (not NextHopFinder::sameSubnet(upfIP, remoteIP)) {
-    Logger::upf_app().debug("Not in the same subnet");
+    Logger::upf_app().debug(" same subnet");
     ipnexthop = NextHopFinder::retrieveNextHopIP(remoteIP);
   } else {
     Logger::upf_app().debug("The same subnet");
@@ -374,6 +374,7 @@ void SessionProgramManager::updateARPTableForN6(
     uint32_t ipnexremoteN6hop = (likely(is_little_endian())) ?
                                     htole32(getRemoteIP(upfn6IP, dnIP)) :
                                     getRemoteIP(upfn6IP, dnIP);
+
     auto remoteN6MAC = NextHopFinder::retrieveNextHopMAC(ipnexremoteN6hop);
 
     struct s_arp_mapping map_table;
@@ -473,16 +474,25 @@ uint32_t SessionProgramManager::getGnodebIp(
 //---------------------------------------------------------------------------------------------------------------
 uint32_t SessionProgramManager::retrieveGnbIp(
     std::shared_ptr<pfcp::pfcp_session> session) {
-  pfcp::forwarding_parameters foward_param;
-  u32 gnbIp = 0;
+  pfcp::forwarding_parameters forward_param;
 
   for (const auto& far : session->fars) {
-    if ((far->get(foward_param)) && foward_param.outer_header_creation.first) {
-      gnbIp = foward_param.outer_header_creation.second.ipv4_address.s_addr;
+    if (!far->get(forward_param)) {
+      continue;
+    }
+
+    const auto& dest_iface = forward_param.destination_interface;
+    const auto& ohc        = forward_param.outer_header_creation;
+
+    if (dest_iface.first &&
+        dest_iface.second.interface_value == INTERFACE_VALUE_ACCESS &&
+        ohc.first) {
+      return ohc.second.ipv4_address.s_addr;
     }
   }
 
-  return gnbIp;
+  // Return 0 if no matching FAR was found
+  return 0;
 }
 
 //---------------------------------------------------------------------------------------------------------------
@@ -621,7 +631,20 @@ void SessionProgramManager::createPipeline(
     //     far, key, pPFCP_Session_LookupProgram);
 
     std::thread arpUpdateThread(
-        [this, pPFCP_Session_LookupProgram, dnIP, upfn6IP]() {
+        [this, pPFCP_Session_LookupProgram, dnIP, upfn6IP, pdr_id]() {
+          char buf_upfn6IP[INET_ADDRSTRLEN];
+          char buf_dnIP[INET_ADDRSTRLEN];
+
+          struct in_addr addr_upfn6IP = {.s_addr = upfn6IP};
+          struct in_addr addr_dnIP    = {.s_addr = dnIP};
+
+          inet_ntop(AF_INET, &addr_upfn6IP, buf_upfn6IP, INET_ADDRSTRLEN);
+          inet_ntop(AF_INET, &addr_dnIP, buf_dnIP, INET_ADDRSTRLEN);
+
+          Logger::upf_app().debug(
+              "(upf_n6_ip, dn_ip ) : (%s, %s) For PDR %d", buf_upfn6IP,
+              buf_dnIP, pdr_id);
+
           updateARPTableForN6(pPFCP_Session_LookupProgram, dnIP, upfn6IP);
         });
     arpUpdateThread.detach();
@@ -715,19 +738,6 @@ void SessionProgramManager::modifyPipeline(
 
   storePduSessionInMap(
       pPFCP_Session_LookupProgram, ueIp, teid_ul, teid_dl, seid);
-  std::thread arpUpdateThread([this, pPFCP_Session_LookupProgram, seid, gnbIp,
-                               dnIp, upfn3Ip, upfn6Ip]() {
-    try {
-      updateARPTableForN6(pPFCP_Session_LookupProgram, dnIp, upfn6Ip);
-      updateARPTableForN3(pPFCP_Session_LookupProgram, gnbIp, upfn3Ip, seid);
-    } catch (const std::exception& e) {
-      Logger::upf_app().error("ARP update thread exception: {}", e.what());
-    } catch (...) {
-      Logger::upf_app().error("Unknown exception in ARP update thread");
-    }
-  });
-
-  arpUpdateThread.detach();
 
   pfcp_pdr_t_ pdrs[MAX_PDRS_SESSION] = {0};
   int i                              = 0;
@@ -737,6 +747,43 @@ void SessionProgramManager::modifyPipeline(
     logger.debug("Processing PDR %d on Modification", pdr_id);
     std::shared_ptr<pfcp::pfcp_far> far;
     std::shared_ptr<pfcp::pfcp_qer> qer;
+
+    std::thread arpUpdateThread([this, pPFCP_Session_LookupProgram, seid, gnbIp,
+                                 dnIp, upfn3Ip, upfn6Ip, pdr_id]() {
+      try {
+        char buf_upfn6Ip[INET_ADDRSTRLEN];
+        char buf_upfn3Ip[INET_ADDRSTRLEN];
+        char buf_dnIp[INET_ADDRSTRLEN];
+        char buf_gnbIp[INET_ADDRSTRLEN];
+
+        struct in_addr addr_upfn6Ip = {.s_addr = upfn6Ip};
+        struct in_addr addr_upfn3Ip = {.s_addr = upfn3Ip};
+        struct in_addr addr_dnIp    = {.s_addr = dnIp};
+        struct in_addr addr_gnbIp   = {.s_addr = gnbIp};
+
+        inet_ntop(AF_INET, &addr_upfn6Ip, buf_upfn6Ip, INET_ADDRSTRLEN);
+        inet_ntop(AF_INET, &addr_upfn3Ip, buf_upfn3Ip, INET_ADDRSTRLEN);
+        inet_ntop(AF_INET, &addr_dnIp, buf_dnIp, INET_ADDRSTRLEN);
+        inet_ntop(AF_INET, &addr_gnbIp, buf_gnbIp, INET_ADDRSTRLEN);
+
+        Logger::upf_app().debug(
+            "(upf_n6_ip, dn_ip ) : (%s, %s) For PDR %d", buf_upfn6Ip, buf_dnIp,
+            pdr_id);
+        Logger::upf_app().debug(
+            "(upf_n3_ip, gnb_ip ) : (%s, %s) For PDR %d", buf_upfn3Ip,
+            buf_gnbIp, pdr_id);
+
+        updateARPTableForN6(pPFCP_Session_LookupProgram, dnIp, upfn6Ip);
+
+        updateARPTableForN3(pPFCP_Session_LookupProgram, gnbIp, upfn3Ip, seid);
+      } catch (const std::exception& e) {
+        Logger::upf_app().error("ARP update thread exception: {}", e.what());
+      } catch (...) {
+        Logger::upf_app().error("Unknown exception in ARP update thread");
+      }
+    });
+
+    arpUpdateThread.detach();
 
     if (!getFar(session, pdr, far)) {
       throw std::runtime_error(
