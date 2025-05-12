@@ -338,12 +338,20 @@ void SessionProgramManager::storePduSessionInMap(
 
   // If the session exists, update the relevant fields
   if (ret == 0) {
-    if ((session.teid_ul == 0) && (teid_ul != 0)) {
-      session.teid_ul = teid_ul;
+    if (session.teid_ul == 0) {
+      if (teid_ul != 0) {
+        session.teid_ul = teid_ul;
+      } else if (teid_dl != 0) {
+        session.teid_ul = teid_dl;
+      }
     }
 
-    if ((session.teid_dl == 0) && (teid_dl != 0)) {
-      session.teid_dl = teid_dl;
+    if (session.teid_dl == 0) {
+      if (teid_dl != 0) {
+        session.teid_dl = teid_dl;
+      } else if (teid_ul != 0) {
+        session.teid_dl = teid_ul;
+      }
     }
   } else {
     // If no session is found, initialize it with the provided values
@@ -558,7 +566,7 @@ void SessionProgramManager::createPipeline(
     }
 
     if (!pdi.get(fteid)) {
-      fteid.teid = -1;
+      fteid.teid = 0;
       logger.warn(
           "FTEID is missing for PDR %d. CH bit: %s", pdr_id,
           fteid.ch ? "Set" : "Not Set");
@@ -707,11 +715,16 @@ void SessionProgramManager::modifyPipeline(
 
   storePduSessionInMap(
       pPFCP_Session_LookupProgram, ueIp, teid_ul, teid_dl, seid);
-
   std::thread arpUpdateThread([this, pPFCP_Session_LookupProgram, seid, gnbIp,
                                dnIp, upfn3Ip, upfn6Ip]() {
-    updateARPTableForN6(pPFCP_Session_LookupProgram, dnIp, upfn6Ip);
-    updateARPTableForN3(pPFCP_Session_LookupProgram, gnbIp, upfn3Ip, seid);
+    try {
+      updateARPTableForN6(pPFCP_Session_LookupProgram, dnIp, upfn6Ip);
+      updateARPTableForN3(pPFCP_Session_LookupProgram, gnbIp, upfn3Ip, seid);
+    } catch (const std::exception& e) {
+      Logger::upf_app().error("ARP update thread exception: {}", e.what());
+    } catch (...) {
+      Logger::upf_app().error("Unknown exception in ARP update thread");
+    }
   });
 
   arpUpdateThread.detach();

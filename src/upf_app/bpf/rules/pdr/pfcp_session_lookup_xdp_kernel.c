@@ -645,6 +645,13 @@ static __always_inline u32 apply_rules_matching_pdr_over_n6(
             seid);
         return DROP;
       }
+      case FAILURE: {
+        bpf_debug(
+            "FAILURE: create_outer_header_gtpu_ipv4() fails for session %llu. "
+            "Drop packet",
+            seid);
+        return DROP;
+      }
       default: {
         bpf_debug(
             "Unknown return code from create_outer_header_gtpu_ipv4() fails "

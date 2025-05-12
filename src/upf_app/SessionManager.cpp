@@ -344,6 +344,40 @@ void SessionManager::modifyBpfSession(
        *    1. Update Maching rules map
        *    2. Anything else ?
        */
+      pfcp::fteid_t allocated_fteid = {};
+      pfcp::far_id_t far_id         = {};
+
+      categorizePDRs(session);
+
+      if (session->pdrs_uplink.empty() && session->pdrs_downlink.empty()) {
+        logger.error("No pdr found in session seid " SEID_FMT " ", seid);
+        throw std::runtime_error("Session modification failed: No pdr found.");
+      }
+
+      sortPDRs(session->pdrs_uplink);
+      sortPDRs(session->pdrs_downlink);
+
+      pfcp::pdi pdi;
+      pfcp::fteid_t fteid;
+      pfcp::ue_ip_address_t ueIpAddress;
+      pfcp::source_interface_t sourceInterface;
+
+      uint32_t teid_dl = retrieveTeid(session);
+      uint32_t teid_ul = findUplinkTeid(
+          seid, sessions);  // should be saved in ebpf_session at establishment
+      if (teid_dl) {
+        if (teid_ul) {
+          SessionProgramManager::getInstance().modifyPipeline(
+              session, teid_ul, teid_dl);
+        } else {
+          SessionProgramManager::getInstance().modifyPipeline(
+              session, 0, teid_dl);
+        }
+      } else {
+        Logger::upf_app().warn(
+            "No valid teid found for session seid " SEID_FMT " ", seid);
+        // Ethernet PDU Session
+      }
     }
   }
 
