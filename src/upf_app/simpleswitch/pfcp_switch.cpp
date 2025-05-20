@@ -1147,11 +1147,13 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       }
     }
 
-    Logger::upf_app().info("Modify datapath");
-    call_datapath(
-        NULL, req, NULL, session, spSessionManager,
-        &SessionManager::
-            modifyBpfSession /*&SessionManager::updateBpfSession*/);
+    if (isBpfAccelerationEnabled) {
+      Logger::upf_app().info("Modify datapath");
+      call_datapath(
+          NULL, req, NULL, session, spSessionManager,
+          &SessionManager::
+              modifyBpfSession /*&SessionManager::updateBpfSession*/);
+    }
   }
   resp->pfcp_ies.set(cause);
   if ((cause.cause_value == CAUSE_VALUE_MANDATORY_IE_MISSING) ||
