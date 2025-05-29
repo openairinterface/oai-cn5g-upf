@@ -70,7 +70,7 @@ static int verbose = 1;
 #define DEFAULT_CLASS_HANDLE 65535
 #define DEFAULT_CLASS_RATE 1024 /*kbit*/
 #define DEFAULT_CLASS_CEIL 2048 /*kbit*/
-#define R2Q_ROOT 5
+#define R2Q_ROOT 40             // 5
 /*---------------------------------------------------------------------------------------------------------------*/
 QERProgram::QERProgram() : BPFProgram() {
   mpLifeCycle = std::make_shared<QERProgramLifeCycle>(
