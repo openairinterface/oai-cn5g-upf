@@ -705,8 +705,8 @@ static __always_inline struct session_id* pfcp_session_lookup_over_n6(
                 return NULL;
               }
 
-              packet_filter_out->src_port = udph->source;
-              packet_filter_out->dst_port = udph->dest;
+              packet_filter_out->src_port = bpf_htons(udph->source);
+              packet_filter_out->dst_port = bpf_htons(udph->dest);
               break;
             }
             case IPPROTO_TCP: {
@@ -717,8 +717,8 @@ static __always_inline struct session_id* pfcp_session_lookup_over_n6(
                 return NULL;
               }
 
-              packet_filter_out->src_port = tcph->source;
-              packet_filter_out->dst_port = tcph->dest;
+              packet_filter_out->src_port = bpf_htons(tcph->source);
+              packet_filter_out->dst_port = bpf_htons(tcph->dest);
               break;
             }
             case IPPROTO_ICMP: {
