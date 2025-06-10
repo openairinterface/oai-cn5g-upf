@@ -161,7 +161,7 @@ static __always_inline u32 match_sdf_filter_ipv4(
            return 1;
      }
   */
-  if ((packet_protocol == sdf->protocol) &&
+  if (((sdf->protocol == 0) || (packet_protocol == sdf->protocol)) &&
       ((packet_src_ip & sdf_src_mask) == sdf_src_ip) &&
       ((packet_dst_ip & sdf_dst_mask) == sdf_dst_ip) &&
       ((packet_src_port >= sdf->src_port.lower_bound) &&
