@@ -13,12 +13,12 @@
 #define MAX_FAR_PROGRAMS 10000
 
 /*---------------------------------------------------------------------------------------------------------------*/
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, FAR_TAILS_MAX);
-  __type(key, u8);
-  __type(value, pfcp_far_t_);
-} m_far SEC(".maps");
+// struct {
+//   __uint(type, BPF_MAP_TYPE_HASH);
+//   __uint(max_entries, FAR_TAILS_MAX);
+//   __type(key, u8);
+//   __type(value, pfcp_far_t_);
+// } m_far SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
@@ -37,12 +37,12 @@ struct {
 } m_arp_table SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, MAX_FAR_PROGRAMS);
-  __type(key, u32);
-  __type(value, u32);
-} m_enforcing_qos SEC(".maps");
+// struct {
+//   __uint(type, BPF_MAP_TYPE_HASH);
+//   __uint(max_entries, MAX_FAR_PROGRAMS);
+//   __type(key, u32);
+//   __type(value, u32);
+// } m_enforcing_qos SEC(".maps");
 
 /*---------------------------------------------------------------------------------------------------------------*/
 

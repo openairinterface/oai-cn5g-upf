@@ -12,8 +12,8 @@
 #include <BPFProgram.h>
 #include "interfaces.h"
 
-#include <netlink/netlink.h>
-#include <netlink/route/qdisc.h>
+// #include <netlink/netlink.h>
+// #include <netlink/route/qdisc.h>
 #include <qos_flow.h>
 #include <pfcp_session.hpp>
 class BPFMaps;
@@ -59,7 +59,9 @@ class QERProgram : public BPFProgram {
    * @param uint64_t
    * @param struct gtpUTunnel*
    */
-  void setup(uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer);
+  void setup(
+      uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
+      std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs);
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the BPFMaps object.
@@ -95,7 +97,8 @@ class QERProgram : public BPFProgram {
 
   /*---------------------------------------------------------------------------------------------------------------*/
 
-  std::shared_ptr<BPFMap> getQoSFlowMap() const;
+  // std::shared_ptr<BPFMap> getQoSFlowMap() const;
+  //   std::shared_ptr<BPFMap> getDefaultQfiMap() const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
 
@@ -108,7 +111,13 @@ class QERProgram : public BPFProgram {
   //       int ifindex, struct qer_tc_kernel_c* obj, const char* section_name);
   //   int add_clsact_qdisc(int ifindex, enum bpf_tc_attach_point attach_point);
 
-  bool no_htb_root_qdisc(std::string interface);
+  bool no_htb_root_qdisc(const std::string interface);
+
+  bool no_htb_default_class(const std::string interface);
+  bool no_tc_filter_bpf(const std::string interface);
+  /*---------------------------------------------------------------------------------------------------------------*/
+  std::shared_ptr<pfcp::pfcp_qer> retrive_default_qer_with_default_qfi(
+      std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer);
   /*---------------------------------------------------------------------------------------------------------------*/
  private:
   /**
@@ -117,7 +126,12 @@ class QERProgram : public BPFProgram {
    */
   void initializeMaps();
 
-  void storeQosFlow(std::shared_ptr<pfcp::pfcp_qer> pQer);
+  void build_pdr_map(const std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs);
+  std::shared_ptr<pfcp::pfcp_pdr> get_pdr_by_qer_id(uint32_t qer_id) const;
+
+  std::unordered_map<uint32_t, std::shared_ptr<pfcp::pfcp_pdr>> pdr_map;
+
+  //   void storeQosFlow(std::shared_ptr<pfcp::pfcp_qer> pQer);
   /*---------------------------------------------------------------------------------------------------------------*/
   // The reference of the bpf maps.
   std::shared_ptr<BPFMaps> mpMaps;
@@ -136,8 +150,6 @@ class QERProgram : public BPFProgram {
   std::shared_ptr<QERProgramLifeCycle> mpLifeCycle;
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  // The SDF Filter map.
-  std::shared_ptr<BPFMap> mpSdfFilterMap;
 
   /*---------------------------------------------------------------------------------------------------------------*/
   // The 5G QoS Flow Parameters map.
@@ -145,8 +157,9 @@ class QERProgram : public BPFProgram {
 
   /*---------------------------------------------------------------------------------------------------------------*/
   // The 5G QoS Flow.
-  std::shared_ptr<BPFMap> mpQoSFlowMap;
+  // std::shared_ptr<BPFMap> mpQoSFlowMap;
 
+  // std::shared_ptr<BPFMap> mpDefaultQfiMap;
   /*---------------------------------------------------------------------------------------------------------------*/
   std::vector<struct s_fiveQosFlow> qosFlowsQfis;
 };

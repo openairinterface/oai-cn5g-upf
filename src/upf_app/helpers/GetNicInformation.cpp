@@ -48,7 +48,7 @@ uint64_t NicInformationGetter::retrieveRate(std::string interface) {
   std::istringstream iss(speed);
   iss >> rate;
 
-  return rate * 1000;
+  return (rate * 1000);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -63,7 +63,7 @@ uint64_t NicInformationGetter::retrieveCeil(std::string interface) {
   std::istringstream iss(speed);
   iss >> ceil;
 
-  return ceil * 1000;
+  return (ceil * 1000);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

@@ -3,6 +3,11 @@
 
 #include <linux/types.h>
 
+//#pragma once
+typedef unsigned __int128 __u128;
+
+typedef __u128 u128;
+
 typedef __u64 u64;
 typedef __s64 s64;
 

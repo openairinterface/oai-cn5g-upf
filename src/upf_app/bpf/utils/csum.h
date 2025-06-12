@@ -192,8 +192,8 @@ static int pcn_l4_csum_replace(
   }
 
   ptr = (__sum16*) ((void*) (long) ctx->data + csum_offset);
-  bpf_debug("Here the value of csum_offset %x", (__sum16*) TCP_CSUM_OFFSET);
-  bpf_debug("Here the value of ptr %x", *ptr);
+  // bpf_debug("Here the value of csum_offset %x", (__sum16*) TCP_CSUM_OFFSET);
+  // bpf_debug("Here the value of ptr %x", *ptr);
 
   if (is_mmzero && !do_mforce && !*ptr) return 0;
 
