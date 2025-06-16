@@ -285,6 +285,13 @@ void SessionProgramManager::storeFARInFARMap(
   pFARProgram->getFARMap()->update(index, far, BPF_ANY);
 }
 
+void SessionProgramManager::storeFARinFAREthMap(
+    std::shared_ptr<FARProgram> pFARProgram, std::shared_ptr<pfcp::pfcp_far> pFar,
+    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram) {
+  u32 prog_id = pFARProgram->getId();
+  pfcp_far_t_ far = createFar(pFar);
+  pPFCP_Session_LookupProgram->getFAREthMap()->update(prog_id, far, BPF_ANY);
+}
 //---------------------------------------------------------------------------------------------------------------
 // Function to update ARP table with remoteN6 IP and MAC address
 
@@ -551,6 +558,8 @@ void SessionProgramManager::createPipeline(
 
   Logger::upf_app().debug("ETH-PDU: Store FAR in the FAR program");
   storeFARInFARMap(pFARProgram, pFar);
+  storeFARinFAREthMap(
+      pFARProgram, pFar, pPFCP_Session_LookupProgram);
 
   uint32_t gNodeBIP = getGnodebIp(pFar);
 

@@ -24,6 +24,8 @@ add_custom_target(upf_tc_all DEPENDS qer_tc far_tc)
 ###########################################################################
 function(xdp arg)
   if (${arg} STREQUAL "pfcp_session_lookup" OR ${arg} STREQUAL "pfcp_session_pdr_lookup")
+    # TODO [ETH PDU] attend to me
+    set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/rules/far")
     set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/rules/pdr")
   elseif (${arg} STREQUAL "far")
     set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/rules/far")

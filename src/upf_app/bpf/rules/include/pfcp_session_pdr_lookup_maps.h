@@ -12,6 +12,7 @@
 #define PDR_ENTRIES_MAX_SIZE 10000
 #define FAR_ENTRIES_MAX_SIZE 10000
 #define ARP_ENTRIES_MAX_SIZE 12
+#define MAX_INTERFACES 10
 
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
@@ -24,7 +25,7 @@ struct {
 /*---------------------------------------------------------------------------------------------------------------*/
 struct {
   __uint(type, BPF_MAP_TYPE_DEVMAP);
-  __uint(max_entries, MAX_LENGTH);
+  __uint(max_entries, MAX_INTERFACES);
   __type(key, u32);    // id
   __type(value, u32);  // tx port
 } m_redirect_interfaces SEC(".maps");

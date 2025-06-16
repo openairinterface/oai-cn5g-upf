@@ -192,6 +192,11 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getEgressInterfaceMap()
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getFAREthMap() const {
+  return mpFAREthMap;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
 std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getFramedRouteMappingMap() {
   return mpFramedRouteMappingMap;
 }
@@ -248,6 +253,10 @@ void PFCP_Session_LookupProgram::initializeMaps() {
       std::make_shared<BPFMap>(mpMaps->getMap("m_framed_route_mapping"));
   mpFramedRouteFlagMap =
       std::make_shared<BPFMap>(mpMaps->getMap("framed_routing_flag"));
+
+  // ETH PDU UL single FAR map
+  mpFAREthMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_far_eth"));
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

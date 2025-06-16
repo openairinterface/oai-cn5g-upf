@@ -173,6 +173,11 @@ class SessionProgramManager {
       std::shared_ptr<pfcp::pfcp_far> pFar);
 
   /*---------------------------------------------------------------------------------------------------------------*/
+  void storeFARinFAREthMap(
+      std::shared_ptr<FARProgram> pFARProgram, std::shared_ptr<pfcp::pfcp_far> pFar,
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
+
+  /*---------------------------------------------------------------------------------------------------------------*/
   void saveSeidWithinFARProgram(
       uint64_t seid, std::shared_ptr<FARProgram> pFARProgram,
       const next_rule_prog_index_key& key);

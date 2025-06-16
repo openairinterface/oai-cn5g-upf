@@ -127,6 +127,14 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> getNextProgEthRuleIndexMap() const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
+    /**
+     * @brief Get the FAREth Map object.
+     *
+     * @return std::shared_ptr<BPFMap> The map to the FARs.
+     */
+  std::shared_ptr<BPFMap> getFAREthMap() const;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
   /**
    * @brief Get the MacPduSession Map object for ETH PDU sessions.
    *
@@ -248,6 +256,10 @@ class PFCP_Session_LookupProgram {
   /*---------------------------------------------------------------------------------------------------------------*/
   // The session mapping map.
   std::shared_ptr<BPFMap> mpSessionMappingMap;
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  // The FAREth map.
+  std::shared_ptr<BPFMap> mpFAREthMap;
 
   /*---------------------------------------------------------------------------------------------------------------*/
 
