@@ -83,20 +83,6 @@ enum ret_code {
 };
 
 /*---------------------------------------------------------------------------------------------------------------*/
-static __always_inline bool update_dst_mac_address(
-    u32 ip, struct ethhdr* p_eth) {
-  struct s_arp_mapping* map_entry = {0};
-  // memset(&map_entry, 0, sizeof(struct s_arp_mapping));
-
-  map_entry = bpf_map_lookup_elem(&m_arp_table, &ip);
-
-  if (map_entry) {
-    memcpy(p_eth->h_dest, map_entry->mac_address, sizeof(p_eth->h_dest));
-    return true;
-  }
-  return false;
-}
-/*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline u32 match_sdf_filter_ipv4(
     const struct packet_filter* filter, const struct sdf_filtr* sdf) {
   u8 packet_protocol  = filter->protocol;

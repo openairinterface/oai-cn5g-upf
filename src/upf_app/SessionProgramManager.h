@@ -68,44 +68,6 @@ class SessionProgramManager {
       std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
       std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs,
       bool isModification = false, uint32_t teid2 = 0);
-
-  void createPipeline(
-      uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
-      uint16_t ethertype,
-      std::shared_ptr<pfcp::pfcp_far>
-          pFar,  // TODO [ETH-PDU] include MAC Address
-      std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
-      bool isModification = false, uint32_t teid2 = 0);
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  void initializeNextRuleProgIndexKey(
-      next_rule_prog_index_key& key, uint32_t teid, uint32_t ueIpAddress,
-      uint8_t sourceInterface);
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  void initializeNextRuleProgEthIndexKey(
-      next_rule_eth_prog_index_key& key, uint32_t teid, uint16_t ethertype,
-      uint8_t sourceInterface);
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  void storeFarProgramIndexInNextProgRuleIndexMap(
-      std::shared_ptr<FARProgram> pFARProgram,
-      const next_rule_prog_index_key& key,
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
-
-  void storeFarProgramIndexInNextProgEthRuleIndexMap(
-      std::shared_ptr<FARProgram> pFARProgram,
-      const next_rule_eth_prog_index_key& key, uint32_t teid_dl,
-      uint32_t n3IpAddress,
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  void updateTeidInNextProgEthRuleIndexMap(
-      const next_rule_eth_prog_index_key& key, uint32_t teid_dl,
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  void storeSessionMappingMap(
   void initializeNextRuleProgIndexKey(
       next_rule_prog_index_key& key, uint32_t teid, uint32_t ueIpAddress,
       uint8_t sourceInterface);

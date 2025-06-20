@@ -713,23 +713,10 @@ void pfcp_switch::call_datapath(
   itti_n4_session_modification_request* mod_req  = modification_request;
   itti_n4_session_deletion_request* del_req      = deletion_request;
 
-  Logger::pfcp_switch().info(
-      "call_datapath Number of PDRs in session: %u", pSession->pdrs.size());
-
-  // Check if the itti arguments are null
-  if (obj == nullptr) {
-    Logger::pfcp_switch().error(
-        "call_datapath: Session Manager not defined, the UPF may still be "
-        "setting up");
-    // TODO: Handle this case to return appropriate error to SMF/N4
-    return;
-  }
-
   if (!del_req) {
     obj->sessions.push_back(pSession);
     (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
   } else {
-    Logger::pfcp_switch().info("call_datapath: getting session details");
     uint64_t seid  = pSession->get_up_seid();
     auto& sessions = obj->sessions;
 
@@ -877,7 +864,6 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
     resp->pfcp_ies.set(offending_ie);
   }
 
-  // TODO [ETH-PDU] update logs to print the MAC access
   if (Logger::should_log(spdlog::level::debug)) {
     std::cout << "\n+----------------------------------------------------------"
                  "--------"
@@ -962,12 +948,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           resp->pfcp_ies.set(failed_rule);
           break;
         }
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: remove PDRs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
       }
     }
 
@@ -991,13 +971,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
             resp->pfcp_ies.set(failed_rule);
             break;
           }
-        }
-
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: remove FARs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
         }
       }
     }
@@ -1026,13 +999,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
             }
           }
         }
-
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: remove QERs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
       }
     }
 
@@ -1041,17 +1007,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         create_far& cr_far = it;
         if (not session->create(cr_far, cause, offending_ie.offending_ie)) {
           break;
-        }
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: create FARs");
-          try {
-            call_datapath(
-                NULL, req, NULL, session, spSessionManager,
-                &SessionManager::updateBPFSession);
-          } catch (const std::exception& e) {
-            Logger::pfcp_switch().error(
-                "Error while calling datapath: create FARs: %s", e.what());
-          }
         }
       }
 

@@ -7,7 +7,6 @@
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
 #include "interfaces.h"
-#include "upf_config.hpp"
 #include "logger.hpp"
 #include "upf_config.hpp"
 
@@ -20,9 +19,6 @@ class XDPSection {
   static constexpr const char* Downlink = "xdp_handle_downlink";
   static constexpr const char* Shaping  = "xdp_handle_shaping";
 };
-
-using namespace oai::config;
-extern upf_config upf_cfg;
 
 /*---------------------------------------------------------------------------------------------------------------*/
 int is_little_endian2() {
@@ -113,23 +109,6 @@ void PFCP_Session_LookupProgram::setup(bool isQosEnabled) {
     Logger::upf_app().error("GTP or UDP interface not defined!");
     throw std::runtime_error("GTP or UDP interface not defined!");
   }
-
-  Logger::upf_app().debug("Configure redirect interface");
-  auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
-  auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
-
-  uint32_t udpInterfaceIndex = if_nametoindex(udpInterface.c_str());
-  uint32_t gtpInterfaceIndex = if_nametoindex(gtpInterface.c_str());
-  uint32_t uplinkId          = static_cast<uint32_t>(FlowDirection::UPLINK);
-  uint32_t downlinkId        = static_cast<uint32_t>(FlowDirection::DOWNLINK);
-
-  mpEgressInterfaceMap->update(uplinkId, udpInterfaceIndex, BPF_ANY);
-  mpEgressInterfaceMap->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
-
-  // ETH PDU DL uses map
-  create_upf_interface_map_entry(N3_INTERFACE);
-  create_upf_interface_map_entry(N6_INTERFACE);
-  create_upf_interface_map_entry(N4_INTERFACE);
 
   Logger::upf_app().debug(
       "Link GTP XDP Section to interface %s", mGTPInterface.c_str());
@@ -250,16 +229,6 @@ void PFCP_Session_LookupProgram::initializeMaps() {
 
   mpSessionMappingMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_session_mapping"));
-  mpNextProgEthRuleIndexMap =
-      std::make_shared<BPFMap>(mpMaps->getMap("m_next_rule_eth_prog_index"));
-  mpMacPduSessionMap =
-      std::make_shared<BPFMap>(mpMaps->getMap("m_mac_pdu_session"));
-
-  // ETH PDU DL uses the maps below
-  mpEgressInterfaceMap =
-      std::make_shared<BPFMap>(mpMaps->getMap("m_redirect_interfaces"));
-  mpUPFIfaceMap = std::make_shared<BPFMap>(mpMaps->getMap("m_upf_interfaces"));
-  mpArpTableMap = std::make_shared<BPFMap>(mpMaps->getMap("m_arp_table"));
   mpArpTableMap = std::make_shared<BPFMap>(mpMaps->getMap("m_arp_table"));
   mpEgressInterfaceMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_redirect_interfaces"));
