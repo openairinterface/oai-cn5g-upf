@@ -65,8 +65,11 @@ static __always_inline u32 handle_far__uplink(
   struct mac_pdu_session_value pdu_session;
   pdu_session.teid         = index_value->teid_dl;
   pdu_session.ipv4_address = src_ip_out;
+  // TODO [ETH-PDU] use BPF_NOEXIST to avoid multiple write requests
+  // For now will update every time an UL packet is received
+  // This is to ensure that the latest PDU session info is always available
   bpf_map_update_elem(
-      &m_mac_pdu_session, &eth->h_source, &pdu_session, BPF_NOEXIST);
+      &m_mac_pdu_session, &eth->h_source, &pdu_session, BPF_ANY);
 
   
   bpf_debug(
