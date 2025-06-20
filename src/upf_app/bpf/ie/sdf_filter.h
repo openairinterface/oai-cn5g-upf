@@ -4,6 +4,8 @@
 #include <types.h>
 #include <ie/ie_base.h>
 
+#define MAX_FLOW_DESC_LEN 256  // Set a reasonable max length
+
 //-------------------------------------
 // 8.2.5 SDF Filter
 typedef struct sdf_filter {
@@ -16,10 +18,10 @@ typedef struct sdf_filter {
   u8 fd : 1;
   u16 length_of_flow_description;
   // TODO It is a string based on length_of_flow_description. How to solve this?
-  u8 flow_description;
-  u8 tos_traffic_class[2];         // 2 octets
-  u8 security_parameter_index[4];  // 4 octets
-  u8 flow_label[3];                // 3 octets
+  char flow_description[MAX_FLOW_DESC_LEN];
+  char tos_traffic_class[2];         // 2 octets
+  char security_parameter_index[4];  // 4 octets
+  char flow_label[3];                // 3 octets
   u32 sdf_filter_id;
 } sdf_filter_t_;
 

@@ -45,6 +45,8 @@
 #include <SessionProgramManager.h>
 #include <UserPlaneComponent.h>
 
+#include "helpers/ConfigLoader.hpp"
+
 using namespace oai::upf::app;
 using namespace oai::config;
 using namespace oai::utils;
@@ -116,13 +118,10 @@ void my_app_signal_handler(int s) {
 
 //------------------------------------------------------------------------------
 void setup_bpf() {
-  // std::shared_ptr<RulesUtilities> mpRulesFactory;
-  // mpRulesFactory = std::make_shared<RulesUtilitiesImpl>();
-
   std::string sGTPInterface = N3_IF_NAME;
   std::string sUDPInterface = N6_IF_NAME;
   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
-  Logger::upf_app().info("UDP interface: %s", sUDPInterface.c_str());
+  Logger::upf_app().info("Non-GTP interface: %s", sUDPInterface.c_str());
 
   UserPlaneComponent::getInstance().setup(sGTPInterface, sUDPInterface);
 
@@ -134,10 +133,22 @@ void setup_bpf() {
 //------------------------------------------------------------------------------
 int main(int argc, char** argv) {
   // Command line options
+
+  // std::string configPath =
+  //     "/home/messaoudi/workspace/project-oai-qos/oai-cn5g-upf/etc/"
+  //     "ebpf_maps.conf";
+
   if (!Options::parse(argc, argv)) {
     std::cout << "Options::parse() failed" << std::endl;
     return 1;
   }
+
+  // if (!ConfigLoader::getInstance().loadConfig(configPath)) {
+  //   std::cerr << "Failed to load ebpf map sizes config file" << std::endl;
+  //   return 1;  // Exit if config fails
+  // }
+
+  // printFileContents(configPath);
 
   // Logger
   // Config
@@ -213,7 +224,9 @@ int main(int argc, char** argv) {
   fflush(fp);
   fclose(fp);
 
-  if (upf_cfg.enable_bpf_datapath) {
+  const bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
+
+  if (isBpfAccelerationEnabled) {
     setup_bpf();
   }
   // once all udp servers initialized

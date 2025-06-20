@@ -6,16 +6,15 @@ include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/include)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/far)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/qer)
-#include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/urr)
-#include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/bar)
-#include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/mar)
 include_directories(${SRC_TOP_DIR}/upf_app/include)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 
 add_definitions(-DKERNEL_SPACE)
 
-add_custom_target(upf_xdp_all DEPENDS pfcp_session_lookup_xdp pfcp_session_pdr_lookup_xdp far_xdp)
-add_custom_target(upf_tc_all DEPENDS qer_tc far_tc)
+
+add_custom_target(upf_xdp_all DEPENDS pfcp_session_lookup_xdp)
+add_custom_target(far_tc)
+# add_custom_target(upf_tc_all DEPENDS qer_tc)
 
 
 
@@ -23,7 +22,7 @@ add_custom_target(upf_tc_all DEPENDS qer_tc far_tc)
 #                       GENERATE eBPF XDP Skeletons                       #
 ###########################################################################
 function(xdp arg)
-  if (${arg} STREQUAL "pfcp_session_lookup" OR ${arg} STREQUAL "pfcp_session_pdr_lookup")
+  if (${arg} STREQUAL "pfcp_session_lookup")
     set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/rules/pdr")
   elseif (${arg} STREQUAL "far")
     set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/rules/far")
@@ -43,8 +42,7 @@ function(xdp arg)
 endfunction()
 
 xdp(pfcp_session_lookup)
-xdp(pfcp_session_pdr_lookup)
-xdp(far)
+#xdp(far)
 
 
 

@@ -26,15 +26,12 @@ include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model.cmake)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/include)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr)
-#include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/urr)
-#include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/bar)
-#include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/mar)
 
 ##############################################################
 #                          FAR                               #
 ##############################################################
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/far)
-include_directories(${LibNL_INCLUDE_DIR})
+# include_directories(${LibNL_INCLUDE_DIR})
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 
 set(GTP_INTERFACE $ENV{GTP_INTERFACE})
@@ -47,12 +44,12 @@ add_library(UPF_XDP STATIC
   SignalHandler.cpp
   helpers/NextHopFinder.cpp
   helpers/CmdRunner.cpp
+  helpers/SdfFilterParser.cpp
   SessionProgramManager.cpp
   SessionManager.cpp
   SessionPrograms.cpp
-  programs/pfcp_session_pdr_lookup_xdp_user.cpp
   programs/pfcp_session_lookup_xdp_user.cpp
-  programs/far_xdp_user.cpp
+  #programs/far_xdp_user.cpp
   programs/BPFProgram.cpp
   wrappers/BPFMaps.cpp
   wrappers/BPFMap.cpp
@@ -92,17 +89,16 @@ install(
 ##############################################################
 #                          QER                               #
 ##############################################################
-  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindLibNL.cmake)
+  # include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindLibNL.cmake)
   include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/qer)
   
   add_library(UPF_TC STATIC
-  #NetlinkManager.cpp
   UserPlaneComponent.cpp
   Configuration.cpp
   SignalHandler.cpp
   helpers/NextHopFinder.cpp
+  helpers/SdfFilterParser.cpp
   helpers/GetNicInformation.cpp
-  #helpers/QdiscHelpers.cpp
   SessionProgramManager.cpp
   SessionManager.cpp
   SessionPrograms.cpp
@@ -116,13 +112,9 @@ install(
   target_link_libraries(UPF_TC
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.a
   ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.so.1
-  # PUBLIC upfutils
-  # PRIVATE spdlog
   PRIVATE elf
   PRIVATE z
-  #/usr/lib/x86_64-linux-gnu/libnl-3.so
   libnl-3.so
-  #/usr/lib/x86_64-linux-gnu/libnl-route-3.so
   libnl-route-3.so
 )
 
@@ -135,7 +127,7 @@ install(
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/programs>
   )
 
-  add_dependencies(UPF_TC upf_tc_all)
+  add_dependencies(UPF_TC upf_xdp_all)
 
   install(
       TARGETS UPF_TC
@@ -146,12 +138,3 @@ install(
       INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
   )
 
-
-
-# Headers:
-#   * ./*.h -> <prefix>/include/*.h
-# install(
-#     DIRECTORY "./"
-#     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
-#     FILES_MATCHING PATTERN "*.h"
-# )

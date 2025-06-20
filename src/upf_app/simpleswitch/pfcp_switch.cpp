@@ -424,6 +424,7 @@ pfcp_switch::pfcp_switch()
       ul_n3_teid2pfcp_pdr(PFCP_SWITCH_MAX_PDRS),
       up_seid2pfcp_sessions(PFCP_SWITCH_MAX_SESSIONS),
       sock_w(0) {
+  bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
   num_threads_   = upf_cfg.n6.thread_rd_sched_params.thread_pool_size;
   int num_blocks = num_threads_ * 16;
   free_pool_     = new folly::MPMCQueue<iovec_q_item_t*>(num_blocks);
@@ -445,7 +446,7 @@ pfcp_switch::pfcp_switch()
     v->msg.msg_controllen = 0;
     free_pool_->blockingWrite(v);
   }
-  if (!upf_cfg.enable_bpf_datapath) {
+  if (!isBpfAccelerationEnabled) {
     // num_threads_ is currently fixed to 1
     for (int i = 0; i < num_threads_; i++) {
       pwThread_ = std::thread(
@@ -745,6 +746,9 @@ void pfcp_switch::call_datapath(
 void pfcp_switch::handle_pfcp_session_establishment_request(
     std::shared_ptr<itti_n4_session_establishment_request> sreq,
     itti_n4_session_establishment_response* resp) {
+  bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
+  // bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
+
   itti_n4_session_establishment_request* req = sreq.get();
   pfcp::fseid_t fseid                        = {};
   pfcp::cause_t cause = {.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED};
@@ -796,22 +800,24 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
           /*
            *  Add create_qers
            */
-          pfcp::qer_id_t qer_id = {};
-          if (cr_pdr.get(qer_id)) {
-            pfcp::create_qer cr_qer = {};
-            if (not req->pfcp_ies.get(qer_id, cr_qer)) {
-              cause.cause_value         = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
-              offending_ie.offending_ie = PFCP_IE_CREATE_QER;
+          if (isBpfAccelerationEnabled) {
+            pfcp::qer_id_t qer_id = {};
+            if (cr_pdr.get(qer_id)) {
+              pfcp::create_qer cr_qer = {};
+              if (not req->pfcp_ies.get(qer_id, cr_qer)) {
+                cause.cause_value         = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
+                offending_ie.offending_ie = PFCP_IE_CREATE_QER;
+              }
+
+              // if (not session->create(cr_qer, cause,
+              // offending_ie.offending_ie)) {
+              //   session->cleanup();
+              //   delete session;
+              //   break;
+              // }
+
+              session->create(cr_qer, cause, offending_ie.offending_ie);
             }
-
-            // if (not session->create(cr_qer, cause,
-            // offending_ie.offending_ie)) {
-            //   session->cleanup();
-            //   delete session;
-            //   break;
-            // }
-
-            session->create(cr_qer, cause, offending_ie.offending_ie);
           }
 
           if (not session->create(
@@ -833,14 +839,11 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         }
       }
 
-      if (upf_cfg.enable_bpf_datapath) {
-        Logger::pfcp_switch().info(
-            "Establishing datapath: create PDRs + create FARs + create QERs "
-            "(if any)");
-
+      if (isBpfAccelerationEnabled) {
+        Logger::upf_app().info("Establish datapath: create(pdr(s) & far(s))");
         call_datapath(
             req, NULL, NULL, session, spSessionManager,
-            &SessionManager::createBPFSession);
+            &SessionManager::createBpfSession);
       }
 
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
@@ -916,6 +919,9 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
 void pfcp_switch::handle_pfcp_session_modification_request(
     std::shared_ptr<itti_n4_session_modification_request> sreq,
     itti_n4_session_modification_response* resp) {
+  bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
+  // bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
+
   itti_n4_session_modification_request* req = sreq.get();
 
   std::shared_ptr<pfcp::pfcp_session> s = {};
@@ -938,6 +944,14 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     resp->seid = session->cp_fseid.seid;
 
     for (auto it : req->pfcp_ies.remove_pdrs) {
+      if (isBpfAccelerationEnabled) {
+        Logger::upf_app().info("Modify datapath:remove(pdr)");
+        call_datapath(
+            NULL, req, NULL, session, spSessionManager,
+            &SessionManager::SessionManager::
+                modifyBpfSession /*&SessionManager::updateBpfSession*/);
+      }
+
       remove_pdr& pdr = it;
 
       if (not session->remove(pdr, cause, offending_ie.offending_ie)) {
@@ -959,6 +973,14 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.remove_fars) {
+        if (isBpfAccelerationEnabled) {
+          Logger::upf_app().info("Modify datapath: remove(far)");
+          call_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::
+                  modifyBpfSession /*&SessionManager::updateBpfSession*/);
+        }
+
         remove_far& far = it;
 
         if (not session->remove(far, cause, offending_ie.offending_ie)) {
@@ -979,22 +1001,29 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
     }
-    /*======================================================================*/
 
     /*
      *  Add remove_qers
      */
-    if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
-      for (auto it : req->pfcp_ies.remove_qers) {
-        remove_qer& qer = it;
+    if (isBpfAccelerationEnabled) {
+      if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+        for (auto it : req->pfcp_ies.remove_qers) {
+          Logger::upf_app().info("Modify datapath: remove(qer)");
+          call_datapath(
+              NULL, req, NULL, session, spSessionManager,
+              &SessionManager::
+                  modifyBpfSession /*&SessionManager::updateBpfSession*/);
 
-        if (not session->remove(qer, cause, offending_ie.offending_ie)) {
-          if (cause.cause_value ==
-              CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
-            failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_QER;
-            failed_rule.rule_id_value = qer.qer_id.second.qer_id;
-            resp->pfcp_ies.set(failed_rule);
-            break;
+          remove_qer& qer = it;
+
+          if (not session->remove(qer, cause, offending_ie.offending_ie)) {
+            if (cause.cause_value ==
+                CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
+              failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_QER;
+              failed_rule.rule_id_value = qer.qer_id.second.qer_id;
+              resp->pfcp_ies.set(failed_rule);
+              break;
+            }
           }
         }
 
@@ -1006,8 +1035,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
     }
-
-    /*======================================================================*/
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.create_fars) {
@@ -1026,6 +1053,14 @@ void pfcp_switch::handle_pfcp_session_modification_request(
                 "Error while calling datapath: create FARs: %s", e.what());
           }
         }
+      }
+
+      if (isBpfAccelerationEnabled) {
+        // Logger::upf_app().info("Modify datapath: add(far)");
+        // call_datapath(
+        //     NULL, req, NULL, session, spSessionManager,
+        //     &SessionManager::
+        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
       }
     }
 
@@ -1066,47 +1101,37 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         resp->pfcp_ies.set(created_pdr);
       }
 
-      if (upf_cfg.enable_bpf_datapath) {
-        Logger::pfcp_switch().info(
-            "Modifying datapath: create PDRs + create FARs");
-        call_datapath(
-            NULL, req, NULL, session, spSessionManager,
-            &SessionManager::updateBPFSession);
+      if (isBpfAccelerationEnabled) {
+        // Logger::upf_app().info("Modify datapath: add(pdr)");
+        // call_datapath(
+        //     NULL, req, NULL, session, spSessionManager,
+        //     &SessionManager::
+        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
       }
     }
-
-    /*======================================================================*/
 
     /*
      *  Add create_qers
      */
+    if (isBpfAccelerationEnabled) {
+      if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+        for (auto it : req->pfcp_ies.create_qers) {
+          create_qer& cr_qer = it;
+          if (not session->create(cr_qer, cause, offending_ie.offending_ie)) {
+            break;
+          }
+        }
 
-    if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
-      for (auto it : req->pfcp_ies.create_qers) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: create QERs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
-        create_qer& cr_qer = it;
-        if (not session->create(cr_qer, cause, offending_ie.offending_ie)) {
-          break;
-        }
+        // Logger::upf_app().info("Modify datapath: add(qer)");
+        // call_datapath(
+        //     NULL, req, NULL, session, spSessionManager,
+        //     &SessionManager::
+        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
       }
     }
 
-    /*======================================================================*/
-
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.update_pdrs) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: update PDRs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
-
         update_pdr& pdr     = it;
         uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
         if (not session->update(pdr, cause_value)) {
@@ -1117,14 +1142,15 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
 
-      for (auto it : req->pfcp_ies.update_fars) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: update FARs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
+      if (isBpfAccelerationEnabled) {
+        // Logger::upf_app().info("Modify datapath: update(pdr)");
+        // call_datapath(
+        //     NULL, req, NULL, session, spSessionManager,
+        //     &SessionManager::
+        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
+      }
 
+      for (auto it : req->pfcp_ies.update_fars) {
         update_far& far     = it;
         uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
         if (not session->update(far, cause_value)) {
@@ -1136,30 +1162,42 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
 
-      /*======================================================================*/
+      if (isBpfAccelerationEnabled) {
+        // Logger::upf_app().info("Modify datapath: update(far)");
+        // call_datapath(
+        //     NULL, req, NULL, session, spSessionManager,
+        //     &SessionManager::
+        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
+      }
 
       /*
        *  Add update_qers
        */
-      for (auto it : req->pfcp_ies.update_qers) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: update QERs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
+      if (isBpfAccelerationEnabled) {
+        for (auto it : req->pfcp_ies.update_qers) {
+          update_qer& qer     = it;
+          uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+          if (not session->update(qer, cause_value)) {
+            failed_rule_id_t failed_rule = {};
+            failed_rule.rule_id_type     = FAILED_RULE_ID_TYPE_QER;
+            failed_rule.rule_id_value    = qer.qer_id.second.qer_id;
+            resp->pfcp_ies.set(failed_rule);
+          }
         }
-
-        update_qer& qer     = it;
-        uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
-        if (not session->update(qer, cause_value)) {
-          failed_rule_id_t failed_rule = {};
-          failed_rule.rule_id_type     = FAILED_RULE_ID_TYPE_QER;
-          failed_rule.rule_id_value    = qer.qer_id.second.qer_id;
-          resp->pfcp_ies.set(failed_rule);
-        }
+        // Logger::upf_app().info("Modify datapath: update(qer)");
+        // call_datapath(
+        //     NULL, req, NULL, session, spSessionManager,
+        //     &SessionManager::
+        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
       }
+    }
 
-      /*======================================================================*/
+    if (isBpfAccelerationEnabled) {
+      Logger::upf_app().info("Modify datapath");
+      call_datapath(
+          NULL, req, NULL, session, spSessionManager,
+          &SessionManager::
+              modifyBpfSession /*&SessionManager::updateBpfSession*/);
     }
   }
   resp->pfcp_ies.set(cause);
@@ -1209,6 +1247,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 void pfcp_switch::handle_pfcp_session_deletion_request(
     std::shared_ptr<itti_n4_session_deletion_request> sreq,
     itti_n4_session_deletion_response* resp) {
+  bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
+
   itti_n4_session_deletion_request* req = sreq.get();
 
   std::shared_ptr<pfcp::pfcp_session> s = {};
@@ -1223,12 +1263,11 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
     pfcp::pfcp_session* session = s.get();
     resp->seid                  = s->cp_fseid.seid;
 
-    if (upf_cfg.enable_bpf_datapath) {
-      Logger::pfcp_switch().info(
-          "Deleting datapath: delete PDRs + delete FARs");
+    if (isBpfAccelerationEnabled) {
+      Logger::upf_app().info("Delete datapath");
       call_datapath(
           NULL, NULL, req, session, spSessionManager,
-          &SessionManager::removeBPFSession);
+          &SessionManager::removeBpfSession);
     }
 
     remove_pfcp_session(s);
