@@ -55,6 +55,7 @@ class pfcp_session {
  public:
   pfcp::fseid_t cp_fseid;
   uint64_t seid;  // User plane
+  pfcp::pdn_type_value_e pdn_type;  // PDN type, default is 0 (undefined) 
   uint8_t qfi =
       0x05;  // Set to default qfi if first ue packet is originated from DN
 
@@ -144,6 +145,17 @@ class pfcp_session {
       uint16_t& offending_ie);
 
   bool get(pfcp::fteid_t& fteid);
+
+  /*---------------------------------------------------------------------------------------------------------------*/
+  // PDN Type
+  void set_pdn_type(pfcp::pdn_type_value_e type) {
+    pdn_type = type;
+  }
+
+  pfcp::pdn_type_value_e get_pdn_type() const {
+    return pdn_type;
+  }
+
 };
 }  // namespace pfcp
 #endif

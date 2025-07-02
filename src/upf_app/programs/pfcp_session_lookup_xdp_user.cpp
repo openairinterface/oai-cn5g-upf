@@ -222,6 +222,27 @@ void PFCP_Session_LookupProgram::setFramedRouting(bool enable) {
   mpFramedRouteFlagMap->update(key, value, BPF_ANY);
 }
 
+// ---------------------------------------------------------------------------------------------------------------*/
+// For ETH PDU session
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getETHMacPduSessionMap() const {
+  return mpETHMacPduSessionMap;
+}
+
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getETHSessionMappingMap()
+    const {
+  return mpETHSessionMappingMap;
+}
+
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getETHRulesMatchPdrMap()
+    const {
+  return mpETHRulesMatchPdrMap;
+}
+
+std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getETHSessionPdrsMap()
+    const {
+  return mpETHSessionPdrsMap;
+}
+
 /*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_LookupProgram::initializeMaps() {
   // Store all maps available in the program.
@@ -244,6 +265,16 @@ void PFCP_Session_LookupProgram::initializeMaps() {
       std::make_shared<BPFMap>(mpMaps->getMap("m_framed_route_mapping"));
   mpFramedRouteFlagMap =
       std::make_shared<BPFMap>(mpMaps->getMap("framed_routing_flag"));
+
+  // Maps for ETH PDU session
+  mpETHMacPduSessionMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_mac_pdu_session"));
+  mpETHSessionMappingMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_eth__session_mapping"));
+  mpETHRulesMatchPdrMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_eth__rules_match_pdr"));
+  mpETHSessionPdrsMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_eth__session_pdrs"));
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/

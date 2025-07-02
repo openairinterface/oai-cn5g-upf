@@ -22,7 +22,7 @@
 #include <utils/gtpu_parse.h>
 
 #include <mac_pdu_session_key.h>
-#include <pfcp_session_lookup_maps.h>
+#include <pfcp_session_eth__lookup_maps.h>
 #include <far_maps.h>
 
 /*----------------------------------------------------------------------------------------------------------------*/
@@ -40,12 +40,63 @@ struct arphdr {
 } __attribute__((packed));
 
 /*---------------------------------------------------------------------------------------------------------------*/
-static __always_inline u32 tail_call_next_prog__eth_pdu(
-    struct xdp_md* ctx, teid_t_ teid, u8 source_value, struct ethhdr* eth) {
-  bpf_debug("Tail call to next prog for ETH PDU session");
+static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence__uplink(
+    u64 seid, u32 packet_teid, u8 packet_qfi) {
+  pfcp_pdr_t_(*pdrs)[MAX_PDRS_PER_SESSION] =
+      bpf_map_lookup_elem(&m_eth__session_pdrs, &seid);
+
+  if (!pdrs) {
+    bpf_debug("No PDRs found for SEID: %llu", seid);
+    return NULL;
+  }
+
+  /*
+   * The pragma unrol will be replace with:
+   *
+   *      int i;
+   *      bpf_for(i, 0, MAX_PDRS_PER_SESSION) {
+   *
+   * This is supported on newer kernels (v6.3+), Clang >= 17, libbpf >= 1.3 or
+   * so, Linux kernel headers >= 6.3
+   */
+
+#pragma clang loop unroll(full)
+  for (int i = 0; i < MAX_PDRS_PER_SESSION; i++) {
+    pfcp_pdr_t_* pdr_high_prec = &(*pdrs)[i];
+    pdi_t_ pdi                 = pdr_high_prec->pdi;
+
+    // TODO [ETH-PDU] support filtering by ethernet packet filters
+
+    if ((bpf_htonl(pdi.source_interface.interface_value) ==
+         INTERFACE_VALUE_ACCESS)) {
+      // After uplink/downlink separation, we can remove the source_interface
+      // check
+
+      bpf_debug(
+          "( packet_teid,   pdi.fteid.teid    ) : ( %d  , %d )", packet_teid,
+          pdi.fteid.teid);
+      bpf_debug(
+          "( packet_qfi,    pdi.qfi.qfi       ) : ( %u  , %u )", packet_qfi,
+          pdi.qfi.qfi);
+      if ((packet_teid == pdi.fteid.teid) && (packet_qfi == pdi.qfi.qfi)) {
+        return pdr_high_prec;  // Maybe continue here directly is better
+      }
+    }
+  }
+
+  // No match found
+  return NULL;
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+static __always_inline u32 handle_far__uplink(
+  struct xdp_md* ctx, teid_t_ teid, u8 qfi, u8 source_value, struct ethhdr* eth) {
+  bpf_debug("Handling uplink FAR ETH PDU session traffic");
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
+  int action     = XDP_PASS;
 
+  // Check for the FAR entry in the map
   struct next_rule_eth_prog_index_key map_key;
 
   // Check types of maps and the keys that have to be included
@@ -55,36 +106,183 @@ static __always_inline u32 tail_call_next_prog__eth_pdu(
   map_key.ethertype    = 0;  // bpf_ntohs(eth->h_proto);
 
   // TODO [ETH-PDU] support other eth pkt filters
-  // struct next_rule_eth_prog_index_value* index_value =
-  //     bpf_map_lookup_elem(&m_next_rule_eth_prog_index, &map_key);
+  struct session_id* session =
+      bpf_map_lookup_elem(&m_eth__session_mapping, &teid);
 
-  // if (index_value) {
-  //   // pdu sess info learn mac
-  //   struct iphdr* iph_outer = (void*) (data + sizeof(struct ethhdr));
+  if (!session) {
+    bpf_debug("ETH DPU: No next prog found for TEID %u, source_value %u", teid, source_value);
+    return XDP_DROP;
+  }
 
-  //   if ((void*) iph_outer + sizeof(*iph_outer) > data_end) {
-  //     bpf_debug("ETH PDU: Invalid Outer IP packet");
-  //     return XDP_DROP;
-  //   }
+  u64 seid    = session->seid;
+  u32 teid_ul = bpf_htonl(session->teid_ul);
+  u32 teid_dl = bpf_htonl(session->teid_dl);
+  bpf_debug(
+      "Session found ( seid, teid_ul, teid_dl ) : ( %llu, %u, %u )", seid,
+      teid_ul, teid_dl);
 
-  //   u32 src_ip_out = iph_outer->saddr;
-  //   struct mac_pdu_session_value pdu_session;
-  //   pdu_session.teid         = index_value->teid_dl;
-  //   pdu_session.ipv4_address = src_ip_out;
-  //   bpf_map_update_elem(
-  //       &m_mac_pdu_session, &eth->h_source, &pdu_session, BPF_NOEXIST);
+  // pdu sess info learn mac
+  struct iphdr* iph_outer = (void*) (data + sizeof(struct ethhdr));
 
-  //   bpf_debug(
-  //       "ETH PDU: Found next prog, DL teid %u, prog_id %u",
-  //       index_value->teid_dl, index_value->prog_id);
-  //   bpf_tail_call(ctx, &m_next_rule_prog, index_value->prog_id);
-  //   return XDP_PASS;
-  // }
+  if ((void*) iph_outer + sizeof(*iph_outer) > data_end) {
+    bpf_debug("ETH PDU: Invalid Outer IP packet");
+    return XDP_DROP;
+  }
+  
+  u32 src_ip_out = iph_outer->saddr;
+  struct mac_pdu_session_value pdu_session;
+  pdu_session.teid         = session->teid_dl;
+  pdu_session.ipv4_address = src_ip_out;
+  // TODO [ETH-PDU] use BPF_NOEXIST to avoid multiple write requests
+  // For now will update every time an UL packet is received
+  // This is to ensure that the latest PDU session info is always available
+  bpf_map_update_elem(
+      &m_mac_pdu_session, &eth->h_source, &pdu_session, BPF_ANY);
 
-  bpf_debug("ETH PDU: No next prog found");
+  
+  bpf_debug(
+      "Inner Eth: %02x:%02x:%02x",
+      eth->h_dest[0], eth->h_dest[1], eth->h_dest[2]);
 
-  return XDP_DROP;
+  struct ethhdr inner_eth_copy = {0};
+  // Init inner eth
+  __builtin_memcpy(&inner_eth_copy, eth, sizeof(*eth));
+
+  bpf_debug(
+      "Inner Eth Copy: %02x:%02x:%02x",
+      inner_eth_copy.h_dest[0], inner_eth_copy.h_dest[1], inner_eth_copy.h_dest[2]);
+
+  bpf_debug(
+      "ETH PDU: Found next prog, DL teid %u, seid %u",
+      session->teid_dl, session->seid);
+
+    
+  // Make a copy of the 
+  // TODO [ETH-PDU] move this logic inside if (p_far) block after fixing prog not found issue
+  if ((void*) (data + sizeof(*eth)) > data_end) {
+    return XDP_DROP;
+  }
+
+  __builtin_memcpy(data, eth, sizeof(*eth));
+   // Print the first 3 bytes of data
+  struct ethhdr* ethhx = data;
+  if ((void*) (ethhx + 1) > data_end) {
+    bpf_debug("Invalid pointer after GTP header removal");
+    return XDP_DROP;
+  }
+  bpf_debug(
+      "Adjusted head for GTP encapsulation, new ETH header: %02x:%02x:%02x",
+      ethhx->h_dest[0], ethhx->h_dest[1], ethhx->h_dest[2]);
+
+
+  pfcp_pdr_t_* pdr_high_precedence =
+      pfcp_session_s_lookup_precedence__uplink(seid, teid_ul, qfi);
+
+  if (!pdr_high_precedence) {
+    bpf_debug(
+        "PFCP Session's Lookup (Find matching PDR of the PFCP session with "
+        "highest precedence) failed");
+    return XDP_PASS;
+  }
+
+  u32 pdr_id = pdr_high_precedence->pdr_id.rule_id;
+  bpf_debug("Highest precedence PDR found %x", pdr_id);
+
+  /*
+    |-----------------------------------------------------------------------|
+    |--------------------- Apply Rules in Matching PDR ---------------------|
+    |----------------------------- (FARs, QERs) ----------------------------|
+    |-----------------------------------------------------------------------|
+    */
+  struct pdrs_per_session key_rules_matching_pdr = {0};
+  key_rules_matching_pdr.pdr_id                  = pdr_id;
+  key_rules_matching_pdr.seid                    = seid;
+
+  // TODO [ETH-PDU] support other eth pkt filters
+  struct pfcp_far_t_* p_far;
+  struct rules_match_pdr* rules = {0};
+  rules = bpf_map_lookup_elem(&m_eth__rules_match_pdr, &key_rules_matching_pdr);
+
+  if (!rules) {
+    bpf_debug("No rule was found for the PDR");
+    return XDP_PASS;
+  }
+  
+  pfcp_far_t_* far = &rules->far;
+
+  if (p_far) {
+
+    // TODO [ETH-PDU] support other destinations and actions on the packet
+    // Redirect to data network.
+    
+    // Remove the GTP header
+    bpf_debug("Removing GTP header for TEID %u", teid);
+
+    int roomlen = GTP_ENCAPSULATED_SIZE + sizeof(struct ethhdr);
+    if (bpf_xdp_adjust_head(ctx, (int32_t) roomlen)) {
+      bpf_debug("Failed to adjust head for GTP encapsulation");
+      return XDP_DROP;
+    }
+    data     = (void*) (long) ctx->data;
+    data_end = (void*) (long) ctx->data_end;
+    bpf_debug("Adjusted head for GTP encapsulation");
+
+    struct ethhdr* ethh = data;
+    if ((void*) (ethh + 1) > data_end) {
+      bpf_debug("Invalid pointer after GTP header removal");
+      return XDP_DROP;
+    }
+    bpf_debug(
+        "Adjusted head for GTP encapsulation, new ETH header: %02x:%02x:%02x",
+        ethh->h_dest[0], ethh->h_dest[1], ethh->h_dest[2]);
+
+    // Copy inner eth
+    __builtin_memcpy(ethh, &inner_eth_copy, sizeof(struct ethhdr));
+
+    bpf_debug(
+        "-- After Adjusted head for GTP encapsulation, new ETH header: %02x:%02x:%02x",
+        ethh->h_dest[0], ethh->h_dest[1], ethh->h_dest[2]);
+
+    bpf_debug("The Packet is redirected for transmission to DN ...");
+
+    return bpf_redirect_map(&m_redirect_interfaces, UPLINK, 0);
+
+  } else {
+    bpf_debug("ETH PDU: No FAR entry found for TEID %u", teid);
+
+    // TODO [ETH-PDU] handle the case when no FAR entry is found
+
+    bpf_debug("Removing GTP header for TEID %u", teid);
+
+    int roomlen = GTP_ENCAPSULATED_SIZE + sizeof(struct ethhdr);
+    if (bpf_xdp_adjust_head(ctx, (int32_t) roomlen)) {
+      bpf_debug("Failed to adjust head for GTP encapsulation");
+      return XDP_DROP;
+    }
+    data     = (void*) (long) ctx->data;
+    data_end = (void*) (long) ctx->data_end;
+
+    // Print first bytes of mac address
+    struct ethhdr* ethh = data;
+    if ((void*) (ethh + 1) > data_end) {
+      bpf_debug("Invalid pointer after GTP header removal");
+      return XDP_DROP;
+    }
+    bpf_debug(
+        "Adjusted head for GTP encapsulation, new ETH header: %02x:%02x:%02x",
+        ethh->h_dest[0], ethh->h_dest[1], ethh->h_dest[2]);
+
+    __builtin_memcpy(ethh, &inner_eth_copy, sizeof(struct ethhdr));
+
+    bpf_debug(
+        "-- After Adjusted head for GTP encapsulation, new ETH header: %02x:%02x:%02x",
+        ethh->h_dest[0], ethh->h_dest[1], ethh->h_dest[2]);
+
+    return bpf_redirect_map(&m_redirect_interfaces, UPLINK, 0);
+    // return XDP_PASS;
+  }
 }
+
 
 /**
  * @brief Handle UDP header.
@@ -116,6 +314,15 @@ handle_uplink_traffic__eth_pdu(struct xdp_md* ctx, struct udphdr* udph) {
     return XDP_PASS;
   }
 
+  struct gtpu_extn_pdu_session_container* pdu_container =
+      (struct gtpu_extn_pdu_session_container*) (gtpuh + 1);
+
+  // Check if the PDU session container extends beyond the data end.
+  if ((void*) pdu_container + sizeof(*pdu_container) > data_end) {
+    bpf_debug("ETH PDU: Invalid PDU session container");
+    return XDP_DROP;
+  }
+
   struct ethhdr* eth = data + GTP_ENCAPSULATED_SIZE + sizeof(struct ethhdr);
 
   if ((void*) eth + sizeof(*eth) > data_end) {
@@ -123,8 +330,12 @@ handle_uplink_traffic__eth_pdu(struct xdp_md* ctx, struct udphdr* udph) {
     return XDP_DROP;
   }
 
-  action = tail_call_next_prog__eth_pdu(
-      ctx, gtpuh->teid, INTERFACE_VALUE_ACCESS, eth);
+  // action = tail_call_next_prog__eth_pdu(
+  //     ctx, gtpuh->teid, INTERFACE_VALUE_ACCESS, eth);
+
+  action = handle_far__uplink(
+      ctx, gtpuh->teid, pdu_container->qfi, INTERFACE_VALUE_ACCESS, eth);
+
 
   return action;
 }

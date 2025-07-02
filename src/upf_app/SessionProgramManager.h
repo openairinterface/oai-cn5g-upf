@@ -61,6 +61,9 @@ class SessionProgramManager {
       const std::vector<pfcp::framed_route_t>& framedRoutes);
   void removeFramedRoutes(
       const std::vector<pfcp::framed_route_t>& framedRoutes);
+  void modifyETHPipeline(
+      std::shared_ptr<pfcp::pfcp_session> session, uint32_t teid_ul,
+      uint32_t teid_dl);
 
   void createPipeline(
       uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
@@ -77,6 +80,10 @@ class SessionProgramManager {
   void storePduSessionInMap(
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
       uint32_t ue_ip_address, uint32_t teid_dl, uint32_t teid_ul,
+      uint64_t seid);
+  void storeETHPduSessionInMap(
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+      uint32_t teid_ul, uint32_t teid_dl,
       uint64_t seid);
   void storeFARInFARMap(
       std::shared_ptr<FARProgram> pFARProgram,

@@ -844,8 +844,8 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
 
 //--------------------------------------------------------------------------------------
 
-SEC("xdp")
-int xdp_handle_uplink(struct xdp_md* ctx) {
+static __always_inline int
+entry_point_uplink__ip_pdu(struct xdp_md* ctx) {
   bpf_debug("================< XDP: Handle Uplink >================");
   /*
     |-----------------------------------------------------------------------|
@@ -935,6 +935,30 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
     }
   }
 }
+
+
+
+/*---------------------------------------------------------------------------------------------------------------*/
+SEC("xdp")
+int xdp_handle_uplink(struct xdp_md* ctx) {
+  bpf_debug("================< PFCP PDR UL Sesction >================");
+  struct ethhdr* ethh = (void*) (long) ctx->data;
+  int action          = XDP_PASS;
+
+  action = entry_point_uplink__ip_pdu(ctx);
+
+  // When entry_point_uplink__ip_pdu returns XDP_PASS, this could be an ETH PDU PACKET (for DL
+  // and DL)
+  if (action != XDP_PASS) {
+    goto out;
+  }
+
+  action = entry_point_uplink__eth_pdu(ctx);
+
+out:
+  return action;
+}
+
 
 /*---------------------------------------------------------------------------------------------------------------*/
 SEC("xdp")
@@ -1053,8 +1077,8 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-SEC("xdp")
-int xdp_handle_downlink(struct xdp_md* ctx) {
+static __always_inline int
+entry_point_downlink__ip_pdu(struct xdp_md* ctx) {
   bpf_debug("================< XDP: Handle Downlink >================");
   /*
    |-----------------------------------------------------------------------|
@@ -1143,5 +1167,28 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
     }
   }
 }
+
+/*---------------------------------------------------------------------------------------------------------------*/
+SEC("xdp")
+int xdp_handle_downlink(struct xdp_md* ctx) {
+  bpf_debug("================< PFCP PDR DL Sesction >================");
+  struct ethhdr* ethh = (void*) (long) ctx->data;
+  void* data_end      = (void*) (long) ctx->data_end;
+  int action          = XDP_PASS;
+
+  action = entry_point_downlink__ip_pdu(ctx);
+
+  // When eth_handle returns XDP_PASS, this could be an ETH PDU PACKET (for DL
+  // and DL)
+  if (action != XDP_PASS) {
+    goto out;
+  }
+
+  action = entry_point_downlink__eth_pdu(ctx);
+
+out:
+  return action;
+}
+
 
 char _license[] SEC("license") = "GPL";
