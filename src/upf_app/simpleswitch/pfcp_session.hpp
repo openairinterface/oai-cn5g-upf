@@ -52,6 +52,9 @@ class pfcp_session {
   std::mutex teid_mutex;
   void set(const pfcp::fteid_t& fteid);
 
+  std::mutex pdn_type_mutex;
+  void set(pfcp::pdn_type_value_e type);
+  
  public:
   pfcp::fseid_t cp_fseid;
   uint64_t seid;  // User plane
@@ -93,7 +96,8 @@ class pfcp_session {
         pdrs(c.pdrs),
         fars(c.fars),
         qers(c.qers),
-        teid_uplink(c.teid_uplink) {}
+        teid_uplink(c.teid_uplink),
+        pdn_type(c.pdn_type) {}
 
   /*---------------------------------------------------------------------------------------------------------------*/
   virtual ~pfcp_session() {
@@ -146,16 +150,7 @@ class pfcp_session {
 
   bool get(pfcp::fteid_t& fteid);
 
-  /*---------------------------------------------------------------------------------------------------------------*/
-  // PDN Type
-  void set_pdn_type(pfcp::pdn_type_value_e type) {
-    pdn_type = type;
-  }
-
-  pfcp::pdn_type_value_e get_pdn_type() const {
-    return pdn_type;
-  }
-
+  pfcp::pdn_type_value_e get_pdn_type();
 };
 }  // namespace pfcp
 #endif

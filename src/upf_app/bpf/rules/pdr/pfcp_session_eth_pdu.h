@@ -96,15 +96,6 @@ static __always_inline u32 handle_far__uplink(
   void* data_end = (void*) (long) ctx->data_end;
   int action     = XDP_PASS;
 
-  // Check for the FAR entry in the map
-  struct next_rule_eth_prog_index_key map_key;
-
-  // Check types of maps and the keys that have to be included
-  __builtin_memset(&map_key, 0, sizeof(struct next_rule_eth_prog_index_key));
-  map_key.teid         = teid;
-  map_key.source_value = source_value;
-  map_key.ethertype    = 0;  // bpf_ntohs(eth->h_proto);
-
   // TODO [ETH-PDU] support other eth pkt filters
   struct session_id* session =
       bpf_map_lookup_elem(&m_eth__session_mapping, &teid);
@@ -238,6 +229,15 @@ static __always_inline u32 handle_far__uplink(
 
     // Copy inner eth
     __builtin_memcpy(ethh, &inner_eth_copy, sizeof(struct ethhdr));
+
+    // If inner packet is Ethernet broadcast (ff:ff:ff:ff:ff:ff) pass packet to
+    // TC
+    if (eth->h_dest[0] == 0xff && eth->h_dest[1] == 0xff &&
+        eth->h_dest[2] == 0xff && eth->h_dest[3] == 0xff &&
+        eth->h_dest[4] == 0xff && eth->h_dest[5] == 0xff) {
+      bpf_debug("Ethernet broadcast detected!\n");
+      return XDP_PASS;
+    }    
 
     bpf_debug(
         "-- After Adjusted head for GTP encapsulation, new ETH header: %02x:%02x:%02x",

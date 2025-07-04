@@ -635,7 +635,6 @@ void SessionProgramManager::createPipeline(
     }
     pfcp::pdn_type_value_e pdn_type = {};
     if (pdi.get(ueIpAddress)) {    
-      session->set_pdn_type(pfcp::pdn_type_value_e::IPV4); // TODO [ETH-PDU] this should come from PFCP session
       if (unlikely(!ueIpAddress.v4)) {
         logger.error(
             "IPv6 UE IP Address is not supported yet for PDR %d", pdr_id);
@@ -652,7 +651,6 @@ void SessionProgramManager::createPipeline(
     } else if (sourceInterface.interface_value == INTERFACE_VALUE_ACCESS &&
         pdi.get(ethernetPacketFilter)) {  // UL only. For DL we will used the
                                           // learned MAC
-      session->set_pdn_type(pfcp::pdn_type_value_e::ETHERNET); // TODO [ETH-PDU] this should come from PFCP session
       logger.debug("ETH-PDU: creating pipeline for ETH PDU session");
       pfcp::ethertype_t ethertype;
       if (!ethernetPacketFilter.get(ethertype)) {

@@ -164,6 +164,17 @@ bool pfcp_session::get(pfcp::fteid_t& fteid) {
   return true;
 }
 
+/*---------------------------------------------------------------------------------------------------------------*/
+// PDN Type
+void pfcp_session::set(pfcp::pdn_type_value_e type) {
+  std::lock_guard<std::mutex> lock(pdn_type_mutex);
+  pdn_type = type;
+}
+
+pfcp::pdn_type_value_e pfcp_session::get_pdn_type() {
+  return pdn_type;
+}
+
 //------------------------------------------------------------------------------
 bool pfcp_session::update(
     const pfcp::update_far& update, uint8_t& cause_value) {
@@ -370,6 +381,15 @@ bool pfcp_session::create(
         "in PFCP_XXX_REQUEST! Rejecting PFCP_XXX_REQUEST");
     return false;
   }
+
+  // TODO [ETH-PDU] set pdn type based on PFCP PDN Type IE
+  // If there is ethernet packet filter, then set PDN type to ETHERNET
+  if (pdi.ethernet_pdu_session_information.first ||
+      pdi.ethernet_packet_filter.first) {
+    Logger::upf_n4().info(
+        "ETH-PDU: Senting PDN type to ETHERNET based on ethernet_pdu_session_information or ethernet_packet_filter");
+    set(pfcp::pdn_type_value_e::ETHERNET);
+  } 
   return true;
 }
 
