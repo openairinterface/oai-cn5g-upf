@@ -104,8 +104,15 @@ bool pfcp_pdr::look_up_pack_in_core(
       // cause ue_ip_address not present ", pdr_id.rule_id);
       return false;
     }
+
+    in_addr _addr4{};
+    unsigned char buf_in_addr[sizeof(struct in_addr)];
+    if (inet_pton(AF_INET, "10.0.0.2", buf_in_addr) == 1) {
+      memcpy(&_addr4, buf_in_addr, sizeof(struct in_addr));
+    }
+
     if (!upf_cfg.enable_fr &&
-        pdi.second.ue_ip_address.second.ipv4_address.s_addr != iph->daddr) {
+        pdi.second.ue_ip_address.second.ipv4_address.s_addr != _addr4.s_addr) {
       // Logger::pfcp_switch().info( "look_up_pack_in_core failed PDR id %4x,
       // cause PDR ue_ip_address %8X do not match IP dest %8X of packet ",
       //    pdr_id.rule_id, pdi.second.ue_ip_address.second.ipv4_address.s_addr,

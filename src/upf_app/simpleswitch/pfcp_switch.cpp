@@ -1356,7 +1356,15 @@ void pfcp_switch::pfcp_session_look_up_pack_in_core(
   struct iphdr* iph = (struct iphdr*) buffer;
   std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs;
   if (iph->version == 4) {
-    uint32_t ue_ip    = be32toh(iph->daddr);
+    uint32_t ue_ip = be32toh(iph->daddr);
+    // Set UE IP addr to the adress of the Relay
+    in_addr _addr4{};
+    unsigned char buf_in_addr[sizeof(struct in_addr)];
+    if (inet_pton(AF_INET, "10.0.0.2", buf_in_addr) == 1) {
+      memcpy(&_addr4, buf_in_addr, sizeof(struct in_addr));
+    }
+    ue_ip = ntohl(_addr4.s_addr);
+
     bool is_pdr_ue_ip = get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs);
     if (!is_pdr_ue_ip && upf_cfg.enable_fr) {
       uint32_t fr_ip = fr->retrieveUEIp(ue_ip);
