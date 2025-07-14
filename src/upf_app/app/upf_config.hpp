@@ -152,7 +152,7 @@ class upf_config {
         pdns(),
         smfs(),
         max_pfcp_sessions(100),
-        nsf(),
+        nsf(true),
         enable_snat(false),
         enable_fr(false),
         nrf_addr() {
