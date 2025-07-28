@@ -36,14 +36,6 @@
 #define ntohl(x) __constant_ntohl((x))
 #endif
 
-static void swap_src_dst_mac(struct ethhdr* eth) {
-  __u8 h_tmp[ETH_ALEN];
-
-  __builtin_memcpy(h_tmp, eth->h_source, ETH_ALEN);
-  __builtin_memcpy(eth->h_source, eth->h_dest, ETH_ALEN);
-  __builtin_memcpy(eth->h_dest, h_tmp, ETH_ALEN);
-}
-
 /*****************************************************************************************************************/
 
 static __always_inline bool retrieve_upf_iface_from_map(
@@ -73,16 +65,6 @@ static __always_inline bool update_dst_mac_address(
   }
 
   return false;
-}
-
-/*
- * Swaps destination and source IPv4 addresses inside an IPv4 header
- */
-static void swap_src_dst_ipv4(struct iphdr* iphdr) {
-  __be32 tmp = iphdr->saddr;
-
-  iphdr->saddr = iphdr->daddr;
-  iphdr->daddr = tmp;
 }
 
 /*

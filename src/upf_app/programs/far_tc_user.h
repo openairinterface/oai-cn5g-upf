@@ -67,7 +67,7 @@ class FARTCProgram : public BPFProgram {
    *
    * @return std::shared_ptr<BPFMap> The pdi to index map.
    */
-  std::shared_ptr<BPFMap> getMacPduSessionMap() const;
+  std::shared_ptr<BPFMap> getETHSessionMappingMap() const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -104,7 +104,7 @@ class FARTCProgram : public BPFProgram {
   std::shared_ptr<BPFMap> mpEgressInterfaceMap;
 
   /*---------------------------------------------------------------------------------------------------------------*/
-  std::shared_ptr<BPFMap> mpMacPduSessionMap;
+  std::shared_ptr<BPFMap> mpETHSessionMappingMap;
 };
 
 #endif  // __FAR_TC_USER_H__

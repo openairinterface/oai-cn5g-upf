@@ -8,7 +8,6 @@
 #include <linux/udp.h>
 #include <protocols/gtpu.h>
 #include <utils/logger.h>
-#include <utils/utils.h>
 
 #include <linux/pkt_cls.h>
 
@@ -20,9 +19,29 @@
 #include <eth_pdu_session_maps.h>
 #include <mac_pdu_session_key.h>
 
+static void swap_src_dst_mac(struct ethhdr* eth) {
+  __u8 h_tmp[ETH_ALEN];
+
+  __builtin_memcpy(h_tmp, eth->h_source, ETH_ALEN);
+  __builtin_memcpy(eth->h_source, eth->h_dest, ETH_ALEN);
+  __builtin_memcpy(eth->h_dest, h_tmp, ETH_ALEN);
+}
+
+/*
+ * Swaps destination and source IPv4 addresses inside an IPv4 header
+ */
+static void swap_src_dst_ipv4(struct iphdr* iphdr) {
+  __be32 tmp = iphdr->saddr;
+
+  iphdr->saddr = iphdr->daddr;
+  iphdr->daddr = tmp;
+}
+
+
 // TODO [ETH-PDU] seperate UL and DL logic
 SEC("tc/ingress")
 int handle_broadcast(struct __sk_buff* skb) {
+  bpf_debug("handle_broadcast: Entering broadcast handler");
   void* data            = (void*) (long) skb->data;
   void* data_end        = (void*) (long) skb->data_end;
   struct ethhdr* eth    = data;
@@ -30,25 +49,25 @@ int handle_broadcast(struct __sk_buff* skb) {
   struct ethhdr eth_cpy = {};
 
   if ((void*) (eth + 1) > data_end) {
-    // bpf_debug("handle_broadcast: Invalid Ethernet Packet\n");
+    bpf_debug("handle_broadcast: Invalid Ethernet Packet\n");
     goto out;
   }
 
   struct iphdr* iph = (struct iphdr*) ((void*) data + sizeof(*eth));
   if ((void*) (iph + 1) > data_end) {
-    // bpf_debug("handle_broadcast: Invalid IPv4 Packet\n");
+    bpf_debug("handle_broadcast: Invalid IPv4 Packet\n");
     goto out;
   }
 
   struct udphdr* udph = (struct udphdr*) (iph + 1);
   // Check if the UDP header extends beyond the data end.
   if ((void*) (udph + 1) > data_end) {
-    // bpf_debug("handle_broadcast: Invalid UDP packet\n");
+    bpf_debug("handle_broadcast: Invalid UDP packet\n");
     goto out;
   }
 
   if (bpf_htons(udph->dest) != GTP_UDP_PORT) {
-    // bpf_debug("handle_broadcast: This is not a GTP packet\n");
+    bpf_debug("handle_broadcast: This is not a GTP packet\n");
     goto out;
   }
 
@@ -95,7 +114,7 @@ int handle_broadcast(struct __sk_buff* skb) {
   // Broadcast should be sent to all existing PDU session. Use
   // m_next_rule_eth_prog_index map
   long n = bpf_for_each_map_elem(
-      &m_next_rule_eth_prog_index, broadcast_callback_fn, &callback_ctx, 0);
+      &m_eth__session_mapping, broadcast_callback_fn, &callback_ctx, 0);
   action = TC_ACT_SHOT;
 
   // For UL also send to N6 after removing the Header
@@ -130,6 +149,9 @@ int handle_broadcast(struct __sk_buff* skb) {
     }
     __builtin_memcpy(eth, &eth_cpy, sizeof(struct ethhdr));
 
+    bpf_debug(
+        "handle_broadcast: Redirecting packet to N6 interface, ifindex = %d",
+        *ifindex);
     return bpf_redirect(*ifindex, 0);
   }
 

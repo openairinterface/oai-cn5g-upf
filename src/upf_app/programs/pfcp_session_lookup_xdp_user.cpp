@@ -137,6 +137,7 @@ std::shared_ptr<BPFMaps> PFCP_Session_LookupProgram::getMaps() {
 // TODO: Check when kill when running.
 // It was noted the infinity loop.
 void PFCP_Session_LookupProgram::tearDown() {
+  mpLifeCycle->unpin_maps();
   mpLifeCycle->tearDown();
 }
 

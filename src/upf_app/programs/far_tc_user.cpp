@@ -88,8 +88,8 @@ void FARTCProgram::tearDown() {
   mpLifeCycle->unpin_maps();
 }
 
-std::shared_ptr<BPFMap> FARTCProgram::getMacPduSessionMap() const {
-  return mpMacPduSessionMap;
+std::shared_ptr<BPFMap> FARTCProgram::getETHSessionMappingMap() const {
+  return mpETHSessionMappingMap;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -103,8 +103,8 @@ void FARTCProgram::initializeMaps() {
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
 
   // Warning - The name of the map must be the same of the BPF program.
-  mpMacPduSessionMap =
-      std::make_shared<BPFMap>(mpMaps->getMap("m_mac_pdu_session"));
+  mpETHSessionMappingMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("m_eth__session_mapping"));
   mpEgressInterfaceMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_egress_ifindex"));
 }

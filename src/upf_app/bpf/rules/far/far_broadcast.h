@@ -19,8 +19,7 @@
 #include <utils/logger.h>
 #include <eth_pdu_session_maps.h>
 #include <mac_pdu_session_key.h>
-#include <next_prog_rule_key.h>
-#include <pfcp_session_lookup_maps.h>
+#include <pfcp_session_eth__lookup_maps.h>
 
 #define MAX_PDU_SESSIONS 50
 struct callback_ctx {
@@ -32,8 +31,8 @@ struct callback_ctx {
 
 static long broadcast_callback_fn(
     struct bpf_map* map, void* key, void* value, struct callback_ctx* ctx) {
-  struct next_rule_eth_prog_index_value* pdu_session =
-      (struct next_rule_eth_prog_index_value*) value;
+  struct eth__session_id* pdu_session =
+      (struct eth__session_id*) value;
 
   struct __sk_buff* skb = (struct __sk_buff*) ctx->skb;
   void* data            = (void*) (long) skb->data;
@@ -70,21 +69,26 @@ static long broadcast_callback_fn(
    * element (PDU session) in the map. When the map iterator reaches the end, it
    * will stop calling this callback function.
    * */
-  for (int v = 0; v < MAX_PDU_SESSIONS; v++) {
-    if (ctx->pdu_sessions[v] == bpf_htonl(pdu_session->teid_dl)) break;
-    if (v == ctx->size) {
-      ctx->pdu_sessions[v] = bpf_htonl(pdu_session->teid_dl);
-      ctx->size += 1;
-      gtpuh->teid = bpf_htonl(pdu_session->teid_dl);
-      iph->daddr  = pdu_session->ipv4_address;
-      int ret     = bpf_clone_redirect(skb, *ctx->ifindex, 0);
-      if (ret < 0) {
-        bpf_debug("broadcast_callback_fn: failed to redirect clone\n");
-        return 1;
+  #pragma clang loop unroll(full)
+    for (int v = 0; v < MAX_PDU_SESSIONS; v++) {
+      if (ctx->pdu_sessions[v] == bpf_htonl(pdu_session->teid_dl)) break;
+      if (v == ctx->size) {
+        ctx->pdu_sessions[v] = bpf_htonl(pdu_session->teid_dl);
+        ctx->size += 1;
+        gtpuh->teid = bpf_htonl(pdu_session->teid_dl);
+        iph->daddr  = pdu_session->ipv4_address;
+        int ret     = bpf_clone_redirect(skb, *ctx->ifindex, 0);
+        if (ret < 0) {
+          bpf_debug("broadcast_callback_fn: failed to redirect clone\n");
+          return 1;
+        }
+        bpf_debug(
+            "broadcast_callback_fn: Redirected packet to PDU session TEID %u",
+            pdu_session->teid_dl);
+        break;
       }
-      break;
     }
-  }
+
 
   return 0;
 }

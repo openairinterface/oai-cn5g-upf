@@ -42,7 +42,7 @@
 
 /*****************************************************************************************************************/
 static __always_inline u32 create_outer_header_gtpu(
-    struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, int pdu_type) {
+    struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, u32 qfi) {
   // bpf_debug("Create Outer Header GTPU_IPv4");
   // bpf_debug("Original Packet: Data/UDP/IP/ETH");
   void* data     = (void*) (long) ctx->data;
@@ -51,6 +51,7 @@ static __always_inline u32 create_outer_header_gtpu(
 
   // Adjust space to the left.
   int roomlen = GTP_ENCAPSULATED_SIZE;
+  int pdu_type = 1;
   if (pdu_type) {
     roomlen += sizeof(struct ethhdr);
   } else {
@@ -147,7 +148,7 @@ static __always_inline u32 create_outer_header_gtpu(
   p_gtpuh->message_type   = GTPU_G_PDU;
   p_gtpuh->message_length = bpf_htons(
       packet_len + sizeof(struct gtpu_extn_pdu_session_container) + 4);
-  p_gtpuh->teid          = bpf_htonl(teid);
+  p_gtpuh->teid          = teid;
   p_gtpuh->sequence      = GTP_SEQ;
   p_gtpuh->pdu_number    = GTP_PDU_NUMBER;
   p_gtpuh->next_ext_type = GTP_NEXT_EXT_TYPE;
@@ -165,7 +166,7 @@ static __always_inline u32 create_outer_header_gtpu(
   p_gtpu_ext_h->message_length = GTP_EXT_MSG_LEN;
   p_gtpu_ext_h->pdu_type       = GTP_EXT_PDU_TYPE;
   // p_gtpu_ext_h->qfi            = GTP_EXT_QFI;
-  p_gtpu_ext_h->qfi           = GTP_DEFAULT_QFI;
+  p_gtpu_ext_h->qfi           = qfi;
   p_gtpu_ext_h->next_ext_type = GTP_EXT_NEXT_EXT_TYPE;
 
   /*

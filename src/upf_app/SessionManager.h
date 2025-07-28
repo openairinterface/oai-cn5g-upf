@@ -120,6 +120,8 @@ class SessionManager {
   uint64_t findUplinkTeid(
       uint64_t seid,
       const std::vector<std::shared_ptr<pfcp::pfcp_session>>& sessions);
+  uint64_t findUplinkTeid(
+    const std::shared_ptr<pfcp::pfcp_session> session);
 
   static bool comparePDR(
       const std::shared_ptr<pfcp::pfcp_pdr>& first,

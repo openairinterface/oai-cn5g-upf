@@ -369,16 +369,17 @@ void SessionProgramManager::storePduSessionInMap(
 // Helper function to store ETH PDU Session mapping
 void SessionProgramManager::storeETHPduSessionInMap(
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-    uint32_t teid_ul, uint32_t teid_dl,
+    uint32_t teid_ul, uint32_t teid_dl, uint32_t n3IpAddress,
     uint64_t seid) {
   // Normalize TEIDs and SEID for little-endian systems
   if (likely(is_little_endian())) {
-    teid_ul = htonl(teid_ul);
-    teid_dl = htonl(teid_dl);
+    teid_ul    = htonl(teid_ul);
+    teid_dl    = htonl(teid_dl);
+    n3IpAddress = htole32(n3IpAddress);
     seid    = seid;  // TODO: verify if correct
   }
 
-  struct session_id eth_pdu_session = {0};
+  struct eth__session_id eth_pdu_session = {0};
   uint32_t key = teid_ul;  // Use teid_ul as the key for ETH PDU session
   // Perform the lookup
   int ret = pPFCP_Session_LookupProgram->getETHSessionMappingMap()->lookup(
@@ -404,13 +405,14 @@ void SessionProgramManager::storeETHPduSessionInMap(
     // Update the map with the session data
     eth_pdu_session.teid_ul = teid_ul; // TODO [ETH-PDU] remove this as not used, we reusing the value struct for IP PDU
     eth_pdu_session.teid_dl = teid_dl;
+    eth_pdu_session.ipv4_address = n3IpAddress; // To support multiple N3 interfaces
     eth_pdu_session.seid    = seid;
   }
   pPFCP_Session_LookupProgram->getETHSessionMappingMap()->update(
       key, eth_pdu_session, BPF_ANY);
   Logger::upf_app().debug(
-      "Stored ETH PDU session in map with TEID_UL: {}, TEID_DL: {}, SEID: {}",
-      teid_ul, teid_dl, seid);
+      "Stored ETH PDU session in map with TEID_UL: %u, TEID_DL: %u, SEID: %llu, IP Address: %u", 
+      teid_ul, teid_dl, seid, n3IpAddress);
 }
 
 //---------------------------------------------------------------------------------------------------------------
@@ -633,8 +635,9 @@ void SessionProgramManager::createPipeline(
        * TODO: Implement the logic when fteid is not present
        */
     }
-    pfcp::pdn_type_value_e pdn_type = {};
-    if (pdi.get(ueIpAddress)) {    
+    
+    if (session->get_pdn_type() != pfcp::pdn_type_value_e::ETHERNET
+      && pdi.get(ueIpAddress)) {    
       if (unlikely(!ueIpAddress.v4)) {
         logger.error(
             "IPv6 UE IP Address is not supported yet for PDR %d", pdr_id);
@@ -661,8 +664,10 @@ void SessionProgramManager::createPipeline(
           "ETH-PDU: Only considering Ethertype from the Ethernet Packet Filter "
           "IE");
       // TODO [ETH-PDU] store in the session map
+      logger.info("ETH PDU: Storing ETH PDU session in map with TEID %u",
+          fteid.teid);
       storeETHPduSessionInMap(
-          pPFCP_Session_LookupProgram, fteid.teid, 0, seid);
+          pPFCP_Session_LookupProgram, fteid.teid, 0, upfn3IP, seid);
     } else {
       ueIpAddress.ipv4_address.s_addr = 0;
       logger.warn("UE IP Address is missing for PDR %d", pdr_id);
@@ -760,6 +765,10 @@ void SessionProgramManager::modifyETHPipeline(
     uint32_t teid_dl) {
   auto& logger = Logger::upf_app();
 
+  uint32_t upfn3Ip = upf_cfg.n3.addr4.s_addr;
+
+  logger.debug(
+      "ETH-PDU: modifying pipeline for ETH PDU session \n %s", session->to_string());
   uint64_t seid   = session->get_up_seid();
   uint32_t pdr_id = 0;
 
@@ -777,9 +786,12 @@ void SessionProgramManager::modifyETHPipeline(
   auto pPFCP_Session_LookupProgram =
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
+  logger.debug(
+      "ETH-PDU: Storing ETH PDU session in map with TEID_UL: %u, TEID_DL: %u, SEID: %llu",
+      teid_ul, teid_dl, seid);
   storeETHPduSessionInMap(
       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram(),
-      teid_ul, teid_dl, session->get_up_seid());
+      teid_ul, teid_dl, upfn3Ip, session->get_up_seid());
 
   
   pfcp_pdr_t_ pdrs[MAX_PDRS_SESSION] = {0};
@@ -1016,7 +1028,7 @@ void SessionProgramManager::removePipeline(uint64_t seid) {
   Logger::upf_app().debug(
       "Delete the SessionPrograms object. It will release the pipeline");
 
-  auto key = it->second->getKey();
+  // auto key = it->second->getKey();
 
   // it->second.reset();
 

@@ -99,6 +99,8 @@ void UserPlaneComponent::setup(
 
   mpPFCP_Session_LookupProgram->setup(isQosEnabled);
 
+  mpFARTCProgram->setup();
+
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();
 }
