@@ -14,6 +14,11 @@ add_definitions(-DKERNEL_SPACE)
 
 add_custom_target(upf_xdp_all DEPENDS pfcp_session_lookup_xdp)
 add_custom_target(upf_tc_all DEPENDS far_tc)
+if(DEFINED BPF_DEBUG)
+  if(BPF_DEBUG)
+    add_definitions(-DBPF_DEBUG)
+  endif()
+endif()
 
 
 
