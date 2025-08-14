@@ -30,7 +30,7 @@
 # BASE IMAGE
 #---------------------------------------------------------------------
 ARG BASE_IMAGE=ubuntu:jammy
-FROM $BASE_IMAGE as oai-upf-base
+FROM $BASE_IMAGE AS oai-upf-base
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Paris
@@ -61,7 +61,7 @@ RUN ./build_upf --install-deps --force
 #---------------------------------------------------------------------
 # BUILDER IMAGE
 #---------------------------------------------------------------------
-FROM oai-upf-base as oai-upf-builder
+FROM oai-upf-base AS oai-upf-builder
 # Copy the rest of source code
 COPY . /openair-upf
 # Building UPF
@@ -85,7 +85,7 @@ RUN  if [ "$ENABLE_LTTNG" = "true" ]; then apt-get update && \
 #---------------------------------------------------------------------
 # TARGET IMAGE
 #---------------------------------------------------------------------
-FROM $BASE_IMAGE as oai-upf
+FROM $BASE_IMAGE AS oai-upf
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Paris
 ARG ENABLE_LTTNG=false
@@ -165,6 +165,15 @@ WORKDIR /openair-upf
 # use these labels for CI purpose
 LABEL support-multi-sgwu-instances="true"
 LABEL support-nrf-fdqn="true"
+
+ARG GIT_COMMIT
+
+LABEL org.opencontainers.image.authors="OpenAirInterface <contact@openairinterface.org>" \
+      org.opencontainers.image.vendor="OpenAirInterface Software Alliance" \
+      org.opencontainers.image.licenses="OAI Public License, Version 1.1" \
+      org.opencontainers.image.title="OAI UPF" \
+      org.opencontainers.image.description="OpenAirInterface User Plane Function" \
+      org.opencontainers.image.revision="commit:${GIT_COMMIT}"
 
 # expose ports
 EXPOSE 2152/udp 8805/udp 5342 5343 5344
