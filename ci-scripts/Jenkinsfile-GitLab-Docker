@@ -40,6 +40,15 @@ cppcheckResource = params.CppCheckResource
 formatCheckNode = params.FormatCheckNode
 formatCheckResource = params.FormatCheckResource
 
+// Its main purpose is the ARM Neoverse-v2 Build
+armBuildResource = params.armBuildResource
+
+// Boolean param to control trivy scan
+runTrivyScan = params.runTrivyScan
+
+// Boolean param to control the run of "Pushing Image to Official Registry" stage (keep it false by default)
+runDockerHubPushStage = false // Please set it to true when replaying a "PUSH" event Pipeline
+
 // Tags/Branches to use
 def upf_tag = "develop"
 def upf_branch = "develop"
@@ -76,7 +85,7 @@ pipeline {
     gitLabConnection('OAI GitLab')
     // Minimal checks
     gitlabBuilds(builds: [
-      "Build Ubuntu UPF Image",
+      "Build Ubuntu ARM Neoverse V2 (Grace) Image",
       "Build Ubuntu UPF Image with LTTNG",
       "Build RHEL UPF Image",
       "Static Code Analysis",
@@ -153,12 +162,13 @@ pipeline {
     }
     stage('Build Core Network Function') {
       parallel {
-        stage ('Build Ubuntu UPF Image') {
+        stage ('Build Ubuntu ARM Neoverse V2 (Grace) Image') {
           steps {
             // Now it is only locked during this build stage and not for the whole pipeline
             lock(ubuntuBuildResource) {
+              lock(armBuildResource) {
               script {
-                gitlabCommitStatus(name: "Build Ubuntu UPF Image") {
+                gitlabCommitStatus(name: "Build Ubuntu ARM Neoverse V2 (Grace) Image") {
                   sh "docker image rm oai-upf:${upf_tag} || true"
                   sh "docker image prune --force"
                   if ("PUSH".equals(env.gitlabActionType)) {
@@ -168,20 +178,34 @@ pipeline {
                     dockerBuildOptions = ''
                     sh "date --rfc-email > src/common-src/date.txt"
                   }
-                  sh "docker buildx build ${dockerBuildOptions} --target oai-upf --tag oai-upf:${upf_tag} --file docker/Dockerfile.upf.ubuntu . > archives/upf_ubuntu_image_build.log 2>&1"
-                  // Putting a place holder to try out on the flattening of image.
-                  // If not satisfactory, we can remove it.
-                  sh "python3 ./ci-scripts/flatten_image.py --tag oai-upf:${upf_tag}"
-                  sh "docker image prune --force"
-                  sh "docker image ls | egrep --color=never 'upf|REPOSITORY' >> archives/upf_ubuntu_image_build.log"
-                  // Pushing to local private registry for testing purpose
                   sh "docker login -u oaicicd -p oaicicd ${PrivateRegistryURL}"
-                  sh "docker image tag oai-upf:${upf_tag} ${PrivateRegistryURL}/oai-upf:${upf_tag}"
-                  sh "docker push ${PrivateRegistryURL}/oai-upf:${upf_tag}"
-                  // Remove all images locally
-                  sh "docker rmi oai-upf:${upf_tag} ${PrivateRegistryURL}/oai-upf:${upf_tag}"
+                  sh "docker buildx build ${dockerBuildOptions} \
+                    --target oai-upf \
+                    --tag ${PrivateRegistryURL}/oai-upf:${upf_tag} \
+                    --platform linux/amd64,linux/arm64 \
+                    --build-arg GIT_COMMIT=\"${shortenShaOne}\" \
+                    --file docker/Dockerfile.upf.ubuntu \
+                    --builder multiarch-localremote-builder \
+                    --progress=plain \
+                    --push . > archives/upf_ubuntu_image_build.log 2>&1"
+
+                  sh "docker image prune --force"
+                  sh "docker rmi ${PrivateRegistryURL}/oai-upf:${upf_tag} || true"
+                  sh "docker pull ${PrivateRegistryURL}/oai-upf:${upf_tag}"
+                  sh "docker image inspect ${PrivateRegistryURL}/oai-upf:${upf_tag} | jq '.[0] | {RepoTags, Labels: .Config.Labels, DockerVersion}' >> archives/upf_ubuntu_image_build.log 2>&1"
+                  sh "docker images ${PrivateRegistryURL}/oai-upf:${upf_tag} >> archives/upf_ubuntu_image_build.log 2>&1"
+                  // Run the trivy scan only if the boolean variable runTrivyScan is True
+                  if (runTrivyScan) {
+                       sh "docker rmi oai-upf:${shortenShaOne} || true"
+                       sh "docker image tag ${PrivateRegistryURL}/oai-upf:${upf_tag} oai-upf:${shortenShaOne}"
+                       sh "trivy image --exit-code 1 --severity MEDIUM,HIGH,CRITICAL --no-progress --format=template --template @./ci-scripts/common/html-templates/trivy_html.tpl --output archives/upf_multiarch_image_trivy_report.html oai-upf:${shortenShaOne} > /dev/null || true"
+                       sh "docker rmi oai-upf:${shortenShaOne} || true"
+                    }
+                  sh "docker rmi ${PrivateRegistryURL}/oai-upf:${upf_tag} || true"
                   sh "docker logout ${PrivateRegistryURL}"
+                  sh "bash ./ci-scripts/common/bash/extract_arm_amd_logs.sh archives/upf_ubuntu_image_build.log"
                 }
+              }
               }
             }
           }
@@ -521,17 +545,16 @@ pipeline {
         lock(ubuntuBuildResource) {
           script {
             // Only in case of push to target branch!
-            if ("PUSH".equals(env.gitlabActionType)) {
+            if ("PUSH".equals(env.gitlabActionType) || runDockerHubPushStage) {
               withCredentials([
                 [$class: 'UsernamePasswordMultiBinding', credentialsId: "${params.DockerHubCredentials}", usernameVariable: 'DH_Username', passwordVariable: 'DH_Password']
               ]) {
                 sh "echo ${DH_Password} | docker login --username ${DH_Username} --password-stdin"
               }
               sh "docker login -u oaicicd -p oaicicd ${PrivateRegistryURL}"
-              sh "docker pull ${PrivateRegistryURL}/oai-upf:${upf_tag}"
-              sh "docker image tag ${PrivateRegistryURL}/oai-upf:${upf_tag} ${DH_Account}/oai-upf:develop"
-              sh "docker push ${DH_Account}/oai-upf:develop"
-              sh "docker rmi ${DH_Account}/oai-upf:develop ${PrivateRegistryURL}/oai-upf:${upf_tag}"
+              sh "docker rmi ${PrivateRegistryURL}/oai-upf:${upf_tag} || true"
+              sh "docker buildx imagetools create -t ${DH_Account}/oai-upf:develop ${PrivateRegistryURL}/oai-upf:${upf_tag}"
+              sh "docker rmi ${DH_Account}/oai-upf:develop ${PrivateRegistryURL}/oai-upf:${upf_tag} || true"
               sh "docker logout ${PrivateRegistryURL}"
               sh "docker logout"
             }
@@ -579,7 +602,11 @@ pipeline {
         }
 
         // Zipping all archived log files
-        sh "zip -r -qq docker_logs.zip archives"
+         if (fileExists('archives/upf_multiarch_image_trivy_report.html')) 
+          {
+              archiveArtifacts artifacts: 'archives/upf_multiarch_image_trivy_report.html'
+          }
+        sh "zip -r -qq docker_logs.zip archives -x archives/upf_multiarch_image_trivy_report.html"
         if (fileExists('docker_logs.zip')) {
           archiveArtifacts artifacts: 'docker_logs.zip'
         }

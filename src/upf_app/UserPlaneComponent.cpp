@@ -1,14 +1,16 @@
 #include "UserPlaneComponent.h"
-//#include <RulesUtilities.h>
 #include <SessionManager.h>
-#include <pfcp_session_pdr_lookup_xdp_user.h>
 #include <SessionProgramManager.h>
 #include <SignalHandler.h>
 #include <pfcp_session_lookup_xdp_user.h>
 #include "logger.hpp"
 #include <helpers/GetNicInformation.hpp>
 
-/*---------------------------------------------------------------------------------------------------------------*/
+#include "upf_config.hpp"
+using namespace oai::config;
+extern upf_config upf_cfg;
+
+//---------------------------------------------------------------------------------------------------------------
 UserPlaneComponent::UserPlaneComponent() {
 // Set new handlers for libbpf.
 #ifdef DEBUG_LIBBPF
@@ -16,56 +18,56 @@ UserPlaneComponent::UserPlaneComponent() {
 #endif
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 UserPlaneComponent::~UserPlaneComponent() {
   tearDown();
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 std::shared_ptr<SessionManager> UserPlaneComponent::getSessionManager() const {
   return mpSessionManager;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 std::shared_ptr<PFCP_Session_LookupProgram>
 UserPlaneComponent::getPFCP_Session_LookupProgram() const {
   return mpPFCP_Session_LookupProgram;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 std::string UserPlaneComponent::getGTPInterface() const {
   return mGTPInterface;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 std::string UserPlaneComponent::getUDPInterface() const {
   return mUDPInterface;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 void UserPlaneComponent::onNewSessionProgram(
     u_int32_t programId, u_int32_t fileDescriptor) {
-  mpPFCP_Session_LookupProgram->updateProgramMap(programId, fileDescriptor);
+  // mpPFCP_Session_LookupProgram->updateProgramMap(programId, fileDescriptor);
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 void UserPlaneComponent::onDestroySessionProgram(u_int32_t programId) {
   mpPFCP_Session_LookupProgram->removeProgramMap(programId);
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 int UserPlaneComponent::printLibbpfLog(
     enum libbpf_print_level lvl, const char* fmt, va_list args) {
   return vfprintf(stderr, fmt, args);
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 UserPlaneComponent& UserPlaneComponent::getInstance() {
   static UserPlaneComponent sInstance;
   return sInstance;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 void UserPlaneComponent::setMembers(
     const std::string& gtpInterface, const std::string& udpInterface) {
   mGTPInterface = gtpInterface;
@@ -80,18 +82,21 @@ void UserPlaneComponent::setMembers(
   }
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 void UserPlaneComponent::setup(
     const std::string& gtpInterface, const std::string& udpInterface) {
+  const bool isQosEnabled = upf_cfg.enable_bpf_datapath && upf_cfg.enable_qos;
+
   setMembers(gtpInterface, udpInterface);
   SignalHandler::getInstance().enable();
-  mpPFCP_Session_LookupProgram->setup();
+
+  mpPFCP_Session_LookupProgram->setup(isQosEnabled);
 
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 void UserPlaneComponent::tearDown() {
   mpPFCP_Session_LookupProgram->tearDown();
   SessionProgramManager::getInstance().removeAll();

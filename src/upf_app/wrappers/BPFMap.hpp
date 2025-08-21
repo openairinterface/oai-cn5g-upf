@@ -75,6 +75,8 @@ class BPFMap {
   template<class KeyType>
   int remove(KeyType& key);
 
+  // Resize function (newly added)
+  int resize(uint32_t max_entries);
   //---------------------------------------------------------------------------------------------------------------
   /**
    * @brief Get the Name of the BPF Map.
