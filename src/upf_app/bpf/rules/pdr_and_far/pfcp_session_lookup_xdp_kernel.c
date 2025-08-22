@@ -65,10 +65,12 @@ struct vlan_hdr {
 static u32 upf_n3_ip = 0;
 static u32 upf_n6_ip = 0;
 
-static u8 next_hop_n3_mac_address[6] = {0};
+static u8 next_hop_n3_dst_mac_address[6] = {0};
+static u8 next_hop_n3_src_mac_address[6] = {0};
 // static u8 next_hop_n6_mac_address[6] = {0};
 
 static bool cached_n3 = false;
+static bool cached_n3_mac = false;
 // static bool cached_n6 = false;
 
 //#define MAX_PDRS_PER_SESSION 32
@@ -182,18 +184,6 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far, u8 qfi) {
     cached_n3 = true;
   }
 
-  struct s_arp_mapping* map_entry = {0};
-  map_entry = bpf_map_lookup_elem(&m_arp_table, &upf_n3_ip);
-
-  if (!map_entry) {
-    bpf_debug("N3's Next Hop MAC address not found! Drop the packet");
-    return FAILURE;
-  }
-
-  memcpy(
-      next_hop_n3_mac_address, map_entry->mac_address,
-      sizeof(next_hop_n3_mac_address));
-
   /*
   |----------------------------------------------------------------|
   |----------------------- Update ETH header ----------------------|
@@ -246,6 +236,28 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far, u8 qfi) {
       "outer IP header ( ip_saddr, ip_daddr ) : ( %pI4, %pI4 )", &iph->saddr,
       &iph->daddr);
 
+
+  /*
+  |----------------------------------------------------------------|
+  |----------------- Update Dest MAC Using FIB --------------------|
+  |----------------------------------------------------------------|
+  */
+  if (!cached_n3_mac) {
+    update_mac_address(ctx, ethh, iph, N3_INTERFACE);
+    // Copy to local src and dest MAC addresses for future use
+    memcpy(
+        next_hop_n3_dst_mac_address, ethh->h_dest,
+        sizeof(next_hop_n3_dst_mac_address));
+    memcpy(
+        next_hop_n3_src_mac_address, ethh->h_source,
+        sizeof(next_hop_n3_src_mac_address));
+
+    cached_n3_mac = true;
+  } else {
+    // Use the cached MAC addresses
+    memcpy(ethh->h_dest, next_hop_n3_dst_mac_address, sizeof(ethh->h_dest));
+    memcpy(ethh->h_source, next_hop_n3_src_mac_address, sizeof(ethh->h_source));
+  }
   /*
   |----------------------------------------------------------------|
   |-------------------------- Add UDP header ----------------------|
@@ -269,8 +281,6 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far, u8 qfi) {
   |-------------------------- Add GTP header ----------------------|
   |----------------------------------------------------------------|
   */
-  // Update destination mac address
-  memcpy(ethh->h_dest, next_hop_n3_mac_address, sizeof(ethh->h_dest));
 
   bpf_debug(
       "Destination MAC:%x:%x:%x:", ethh->h_dest[0], ethh->h_dest[1],
