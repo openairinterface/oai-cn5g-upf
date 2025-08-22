@@ -36,6 +36,25 @@
 #define ntohl(x) __constant_ntohl((x))
 #endif
 
+
+static void swap_src_dst_mac(void* data) {
+  bpf_debug("Swapping MAC address...\n");
+  unsigned short* p = data;
+  unsigned short dst[3];
+
+static __always_inline bool retrieve_upf_iface_from_map(
+    e_reference_point key, u32* iface_ip) {
+  struct s_interface* map_element =
+      bpf_map_lookup_elem(&m_upf_interfaces, &key);
+
+  if (map_element) {
+    *iface_ip = map_element->ipv4_address;
+    return true;
+  }
+
+  return false;
+}
+
 /*****************************************************************************************************************/
 
 static __always_inline bool retrieve_upf_iface_from_map(
@@ -50,6 +69,7 @@ static __always_inline bool retrieve_upf_iface_from_map(
 
   return false;
 }
+
 
 /*****************************************************************************************************************/
 static __always_inline bool update_dst_mac_address(

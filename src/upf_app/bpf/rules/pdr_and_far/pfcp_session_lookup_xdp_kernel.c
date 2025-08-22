@@ -69,7 +69,7 @@ static u8 next_hop_n3_dst_mac_address[6] = {0};
 static u8 next_hop_n3_src_mac_address[6] = {0};
 // static u8 next_hop_n6_mac_address[6] = {0};
 
-static bool cached_n3     = false;
+static bool cached_n3 = false;
 static bool cached_n3_mac = false;
 // static bool cached_n6 = false;
 
@@ -236,6 +236,28 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far, u8 qfi) {
       "outer IP header ( ip_saddr, ip_daddr ) : ( %pI4, %pI4 )", &iph->saddr,
       &iph->daddr);
 
+
+  /*
+  |----------------------------------------------------------------|
+  |----------------- Update Dest MAC Using FIB --------------------|
+  |----------------------------------------------------------------|
+  */
+  if (!cached_n3_mac) {
+    update_mac_address(ctx, ethh, iph, N3_INTERFACE);
+    // Copy to local src and dest MAC addresses for future use
+    memcpy(
+        next_hop_n3_dst_mac_address, ethh->h_dest,
+        sizeof(next_hop_n3_dst_mac_address));
+    memcpy(
+        next_hop_n3_src_mac_address, ethh->h_source,
+        sizeof(next_hop_n3_src_mac_address));
+
+    cached_n3_mac = true;
+  } else {
+    // Use the cached MAC addresses
+    memcpy(ethh->h_dest, next_hop_n3_dst_mac_address, sizeof(ethh->h_dest));
+    memcpy(ethh->h_source, next_hop_n3_src_mac_address, sizeof(ethh->h_source));
+  }
   /*
   |----------------------------------------------------------------|
   |----------------- Update Dest MAC Using FIB --------------------|
