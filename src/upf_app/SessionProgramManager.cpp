@@ -443,8 +443,8 @@ void SessionProgramManager::updateARPTableForN6(
     pPFCP_Session_LookupProgram->getArpTableMap()->update(
         upfn6IP, map_table, BPF_ANY);
   } catch (const std::exception& ex) {
-    Logger::upf_app().error(
-        "Error: The ARP table was not updated for N6 Next HOP");
+    Logger::upf_app().warn(
+        "The ARP table was not updated for N6 Next HOP");
   }
 }
 
