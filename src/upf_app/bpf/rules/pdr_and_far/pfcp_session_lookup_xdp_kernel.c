@@ -365,26 +365,38 @@ remove_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* far) {
 
   e_reference_point n6_key = N6_INTERFACE;
 
-  // if (!cached_n6) {
   struct s_interface* map_element =
       bpf_map_lookup_elem(&m_upf_interfaces, &n6_key);
 
+  struct iphdr* iph = (void*) (new_ethh + 1);
+  if ((void*) (iph + 1) > data_end) {
+    return DROP;
+  }
+  /*
+  |----------------------------------------------------------------|
+  |----------------- Update Dest MAC Using FIB --------------------|
+  |----------------------------------------------------------------|
+  */
   if (!map_element) {
-    bpf_debug("N6 interface is missing in UPF map. Drop the packet");
-    return FAILURE;
+    bpf_debug("N6 interface is missing in UPF map. Use FIB to update MAC");
+
+    update_mac_address(ctx, ethh, iph, N3_INTERFACE);
+    // TODO:  Copy to local src and dest MAC addresses for future use
+ 
+  } else {
+    upf_n6_ip = map_element->ipv4_address;
+
+    struct s_arp_mapping* map_entry = {0};
+    map_entry = bpf_map_lookup_elem(&m_arp_table, &upf_n6_ip);
+
+    if (!map_entry) {
+      bpf_debug("N6's Next Hop MAC address not found in map_entry. USe FIB to update MAC");
+      update_mac_address(ctx, ethh, iph, N3_INTERFACE);
+    } else {
+      bpf_debug("N6's Next Hop MAC address found in map_entry");
+      memcpy(new_ethh->h_dest, map_entry->mac_address, sizeof(new_ethh->h_dest));
+    }
   }
-
-  upf_n6_ip = map_element->ipv4_address;
-
-  struct s_arp_mapping* map_entry = {0};
-  map_entry = bpf_map_lookup_elem(&m_arp_table, &upf_n6_ip);
-
-  if (!map_entry) {
-    bpf_debug("N6's Next Hop MAC address not found. Drop the packet");
-    return FAILURE;
-  }
-
-  memcpy(new_ethh->h_dest, map_entry->mac_address, sizeof(new_ethh->h_dest));
 
   bpf_debug(
       "Destination MAC  %x:%x:%x:", new_ethh->h_dest[0], new_ethh->h_dest[1],

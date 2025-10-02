@@ -94,6 +94,9 @@ static __always_inline int update_mac_address(
   }
 
   fib_params.ifindex = ctx->ingress_ifindex;
+  bpf_debug(
+      "Calling FIB lookup ifindex:%d, src_ip:%pI4, dst_ip:%pI4", fib_params.ifindex,
+      &fib_params.ipv4_src, &fib_params.ipv4_dst);
 
   int rc = bpf_fib_lookup(ctx, &fib_params, sizeof(fib_params), 0);
   switch (rc) {
