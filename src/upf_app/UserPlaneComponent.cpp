@@ -73,8 +73,8 @@ void UserPlaneComponent::setMembers(
   mGTPInterface = gtpInterface;
   mUDPInterface = udpInterface;
 
-  mpPFCP_Session_LookupProgram =
-      std::make_shared<PFCP_Session_LookupProgram>(gtpInterface, udpInterface);
+  mpPFCP_Session_LookupProgram = std::make_shared<PFCP_Session_LookupProgram>(
+      gtpInterface, udpInterface, upf_cfg);
 
   if (!mpPFCP_Session_LookupProgram) {
     Logger::upf_app().error("The eBPF Program is Not Initialized");
