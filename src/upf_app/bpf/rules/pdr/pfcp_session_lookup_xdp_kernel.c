@@ -149,7 +149,7 @@ static __always_inline u32 match_sdf_filter_ipv4(
 
   /*
    * TODO:
-   * Check if an enum is really needed to redifine protocol:
+   * Check if an enum is really needed to redefine protocol:
    * switch (ip_protocol) {
          case IPPROTO_ICMP:
            return 0;
