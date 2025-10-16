@@ -29,13 +29,61 @@ int is_little_endian2() {
 
 /*---------------------------------------------------------------------------------------------------------------*/
 PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
-    const std::string& gtpInterface, const std::string& udpInterface)
+    const std::string& gtpInterface, const std::string& udpInterface,
+    const upf_config& upf_cfg)
     : mGTPInterface(gtpInterface), mUDPInterface(udpInterface) {
+  struct pfcp_session_lookup_xdp_kernel_c* skel = nullptr;
+  int ret                                       = -1;
+
+  Logger::upf_app().info("Initializing PFCP Session Lookup BPF program...");
+  // create the open function (callable)
+  auto open_fn = [&upf_cfg, this]() -> pfcp_session_lookup_xdp_kernel_c* {
+    struct pfcp_session_lookup_xdp_kernel_c* skel =
+        pfcp_session_lookup_xdp_kernel_c__open();
+    if (!skel) {
+      Logger::upf_app().error("Failed to open BPF skeleton");
+      return nullptr;
+    }
+
+    // configure maps / rodata here (same pattern as kernel perf)
+    uint32_t max_rules_match_pdr =
+        upf_cfg.max_pdrs_per_pdu_session * upf_cfg.max_pdu_session;
+    bpf_map__set_max_entries(
+        skel->maps.m_upf_interfaces, upf_cfg.max_upf_interfaces);
+    bpf_map__set_max_entries(
+        skel->maps.m_redirect_interfaces, upf_cfg.max_upf_redirect_interfaces);
+    bpf_map__set_max_entries(
+        skel->maps.m_session_mapping, upf_cfg.max_pdu_session);
+    bpf_map__set_max_entries(
+        skel->maps.m_session_pdrs, upf_cfg.max_pdrs_per_pdu_session);
+    bpf_map__set_max_entries(
+        skel->maps.m_sdf_filter, upf_cfg.max_sdf_filters_per_pdu_session);
+    bpf_map__set_max_entries(skel->maps.m_arp_table, upf_cfg.max_arp_entries);
+    bpf_map__set_max_entries(
+        skel->maps.m_rules_match_pdr,
+        upf_cfg.max_pdrs_per_pdu_session * upf_cfg.max_pdu_session);
+
+    // optionally set rodata fields:
+    if (skel->rodata) {
+      skel->rodata->max_upf_interfaces = upf_cfg.max_upf_interfaces;
+      skel->rodata->max_upf_redirect_interfaces =
+          upf_cfg.max_upf_redirect_interfaces;
+      skel->rodata->max_pdu_session          = upf_cfg.max_pdu_session;
+      skel->rodata->max_pdrs_per_pdu_session = upf_cfg.max_pdrs_per_pdu_session;
+      skel->rodata->max_sdf_filters_per_pdu_session =
+          upf_cfg.max_sdf_filters_per_pdu_session;
+      skel->rodata->max_arp_entries = upf_cfg.max_arp_entries;
+    }
+
+    return skel;
+  };
+
+  // now create the lifecycle object with a callable open_fn (not a raw skel)
   mpLifeCycle = std::make_shared<PFCP_Session_LookupProgramLifeCycle>(
-      pfcp_session_lookup_xdp_kernel_c__open,
-      pfcp_session_lookup_xdp_kernel_c__load,
-      pfcp_session_lookup_xdp_kernel_c__attach,
-      pfcp_session_lookup_xdp_kernel_c__destroy);
+      open_fn,
+      /* load */ pfcp_session_lookup_xdp_kernel_c__load,
+      /* attach */ pfcp_session_lookup_xdp_kernel_c__attach,
+      /* destroy*/ pfcp_session_lookup_xdp_kernel_c__destroy);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -118,7 +166,8 @@ void PFCP_Session_LookupProgram::setup(bool isQosEnabled) {
       "Link Non-GTP XDP Section to interface %s", mUDPInterface.c_str());
   if (isQosEnabled) {
     Logger::upf_app().debug(
-        "QoS enforcement is enabled in the configuration. A TC BPF section is "
+        "QoS enforcement is enabled in the configuration. A TC BPF section "
+        "is "
         "created ");
     mpLifeCycle->link(XDPSection::Shaping, mUDPInterface.c_str());
   } else {
@@ -216,6 +265,7 @@ void PFCP_Session_LookupProgram::removeFramedRoute(FramedRoutingKeyBPF key) {
   }
 }
 
+/*---------------------------------------------------------------------------------------------------------------*/
 void PFCP_Session_LookupProgram::setFramedRouting(bool enable) {
   uint8_t value = (enable) ? 1 : 0;
   uint8_t key   = 0;

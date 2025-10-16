@@ -12,6 +12,11 @@
 #include "interfaces.h"
 #include <framed_routing_bpf.h>
 
+#include "upf_config.hpp"
+
+using namespace oai::config;
+extern upf_config upf_cfg;
+
 class BPFMaps;
 class BPFMap;
 class SessionManager;
@@ -26,7 +31,8 @@ using PFCP_Session_LookupProgramLifeCycle =
 class PFCP_Session_LookupProgram {
  public:
   explicit PFCP_Session_LookupProgram(
-      const std::string& gtpInterface, const std::string& udpInterface);
+      const std::string& gtpInterface, const std::string& udpInterface,
+      const upf_config& upf_cfg);
   virtual ~PFCP_Session_LookupProgram();
   void setup(bool isQosEnabled);
   std::shared_ptr<BPFMaps> getMaps();
