@@ -60,14 +60,6 @@ std::unique_ptr<lttng_configuration> lttng_config_yaml;
 boost::asio::io_service io_service;
 bool single_teardown_call;
 
-#ifndef N3_IF_NAME
-#define N3_IF_NAME upf_cfg.n3.if_name
-#endif  // N3_IF_NAME
-
-#ifndef N6_IF_NAME
-#define N6_IF_NAME upf_cfg.n6.if_name
-#endif  // N6_IF_NAME
-
 std::unique_ptr<upf_config_yaml> upf_cfg_yaml            = nullptr;
 std::shared_ptr<oai::http::http_client> http_client_inst = nullptr;
 //------------------------------------------------------------------------------
@@ -118,8 +110,8 @@ void my_app_signal_handler(int s) {
 
 //------------------------------------------------------------------------------
 void setup_bpf() {
-  std::string sGTPInterface = N3_IF_NAME;
-  std::string sUDPInterface = N6_IF_NAME;
+  std::string sGTPInterface = upf_cfg.n3.if_name;
+  std::string sUDPInterface = upf_cfg.n6.if_name;
   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
   Logger::upf_app().info("Non-GTP interface: %s", sUDPInterface.c_str());
 
@@ -132,26 +124,11 @@ void setup_bpf() {
 
 //------------------------------------------------------------------------------
 int main(int argc, char** argv) {
-  // Command line options
-
-  // std::string configPath =
-  //     "/home/messaoudi/workspace/project-oai-qos/oai-cn5g-upf/etc/"
-  //     "ebpf_maps.conf";
-
   if (!Options::parse(argc, argv)) {
     std::cout << "Options::parse() failed" << std::endl;
     return 1;
   }
 
-  // if (!ConfigLoader::getInstance().loadConfig(configPath)) {
-  //   std::cerr << "Failed to load ebpf map sizes config file" << std::endl;
-  //   return 1;  // Exit if config fails
-  // }
-
-  // printFileContents(configPath);
-
-  // Logger
-  // Config
   std::string conf_file_name = Options::getlibconfigConfig();
 
   std::cout << "Trying to read .yaml configuration file: " << conf_file_name
