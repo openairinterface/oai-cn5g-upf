@@ -68,7 +68,7 @@ static u8 next_hop_n3_mac_address[6] = {0};
 static bool cached_n3 = false;
 // static bool cached_n6 = false;
 
-#define MAX_PDRS_PER_SESSION 32
+//#define MAX_PDRS_PER_SESSION 32
 
 enum ret_code {
   FAILURE = -1,  // Distinguished frop drop for further processing later on. We
@@ -524,6 +524,7 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
 
 #pragma clang loop unroll(full)
   for (int i = 0; i < MAX_PDRS_PER_SESSION; i++) {
+    if (i >= max_pdrs_per_pdu_session) break;
     pfcp_pdr_t_* pdr_high_prec = &(*pdrs)[i];
     pdi_t_ pdi                 = pdr_high_prec->pdi;
     u32 ipaddr                 = bpf_htonl(pdi.ue_ip_address.ipv4_address);
