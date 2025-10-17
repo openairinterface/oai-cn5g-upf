@@ -7,7 +7,6 @@
 #include "sdf_filter.h"
 #include "qos_flow.h"
 
-#define QOS_FLOWS_MAX_ENTRIES 10000
 #define MAX_INTERFACES 10
 
 /*---------------------------------------------------------------------------------------------------------------*/
