@@ -16,7 +16,7 @@
 #include "helpers/NextHopFinder.hpp"
 #include <errno.h>
 #include <arpa/inet.h>
-#include <arp_table_maps.h>
+#include <arp_table.h>
 #include <session_id.h>
 #include "upf_config.hpp"
 #include <thread>
