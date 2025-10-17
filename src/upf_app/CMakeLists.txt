@@ -25,7 +25,7 @@ include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model.cmake)
 
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/include)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr)
+include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr_and_far)
 
 ##############################################################
 #                          FAR                               #

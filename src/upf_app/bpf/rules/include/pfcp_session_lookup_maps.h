@@ -8,7 +8,6 @@
 #include <linux/bpf.h>
 #include <stdint.h>
 #include <ie/teid.h>
-#include <next_prog_rule_key.h>
 #include <rules_matching_pdr.h>
 #include "interfaces.h"
 #include "session_id.h"

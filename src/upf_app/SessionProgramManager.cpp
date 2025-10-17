@@ -53,12 +53,12 @@ int is_little_endian() {
 //       strstr(buf.machine, "armv7") || strstr(buf.machine, "aarch64"));
 // }
 //---------------------------------------------------------------------------------------------------------------
-std::ostream& operator<<(
-    std::ostream& Str, struct next_rule_prog_index_key const& v) {
-  Str << "TEID: " << v.teid << " SOURCE INTERFACE: " << v.source_value
-      << "IPv4 ADDRESS: " << v.ipv4_address;
-  return Str;
-}
+// std::ostream& operator<<(
+//     std::ostream& Str, struct next_rule_prog_index_key const& v) {
+//   Str << "TEID: " << v.teid << " SOURCE INTERFACE: " << v.source_value
+//       << "IPv4 ADDRESS: " << v.ipv4_address;
+//   return Str;
+// }
 
 //---------------------------------------------------------------------------------------------------------------
 SessionProgramManager::SessionProgramManager() {
@@ -300,21 +300,21 @@ pfcp_qer_t_ SessionProgramManager::createQer(
 
 //---------------------------------------------------------------------------------------------------------------
 // Helper function to initialize the key for the FARProgram
-void SessionProgramManager::initializeNextRuleProgIndexKey(
-    next_rule_prog_index_key& key, uint32_t teid, uint32_t ueIpAddress,
-    uint8_t sourceInterface) {
-  __builtin_memset(&key, 0, sizeof(struct next_rule_prog_index_key));
+// void SessionProgramManager::initializeNextRuleProgIndexKey(
+//     next_rule_prog_index_key& key, uint32_t teid, uint32_t ueIpAddress,
+//     uint8_t sourceInterface) {
+//   __builtin_memset(&key, 0, sizeof(struct next_rule_prog_index_key));
 
-  if (likely(is_little_endian())) {
-    key.teid         = htonl(teid);
-    key.ipv4_address = htonl(ueIpAddress);
-  } else {
-    key.teid         = teid;
-    key.ipv4_address = ueIpAddress;
-  }
+//   if (likely(is_little_endian())) {
+//     key.teid         = htonl(teid);
+//     key.ipv4_address = htonl(ueIpAddress);
+//   } else {
+//     key.teid         = teid;
+//     key.ipv4_address = ueIpAddress;
+//   }
 
-  key.source_value = sourceInterface;
-}
+//   key.source_value = sourceInterface;
+// }
 
 //---------------------------------------------------------------------------------------------------------------
 // Helper function to store Session mapping
@@ -440,17 +440,17 @@ void SessionProgramManager::updateARPTableForN3(
 }
 
 //---------------------------------------------------------------------------------------------------------------
-// Helper function to save SEID with FAR program
-void SessionProgramManager::saveSeidWithinFARProgram(
-    uint64_t seid,
-    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-    const next_rule_prog_index_key& key) {
-  // Map the deployed pipeline to the seid.
-  // The seid will be used to destroy the pipeline.
-  mSessionProgramsMap[seid] =
-      std::make_shared<SessionPrograms>(key, pPFCP_Session_LookupProgram);
-  addPFCPProgram(seid, pPFCP_Session_LookupProgram);
-}
+// // Helper function to save SEID with FAR program
+// void SessionProgramManager::saveSeidWithinFARProgram(
+//     uint64_t seid,
+//     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+//     const next_rule_prog_index_key& key) {
+//   // Map the deployed pipeline to the seid.
+//   // The seid will be used to destroy the pipeline.
+//   mSessionProgramsMap[seid] =
+//       std::make_shared<SessionPrograms>(key, pPFCP_Session_LookupProgram);
+//   addPFCPProgram(seid, pPFCP_Session_LookupProgram);
+// }
 
 //---------------------------------------------------------------------------------------------------------------
 uint32_t SessionProgramManager::getGnodebIp(
@@ -555,7 +555,7 @@ void SessionProgramManager::createPipeline(
   pfcp::source_interface_t sourceInterface;
   uint16_t pdr_id;
   uint32_t far_id;
-  next_rule_prog_index_key key;
+  // next_rule_prog_index_key key;
   session_id pduSession;
   uint64_t seid = session->get_up_seid();
 
@@ -870,16 +870,7 @@ void SessionProgramManager::removePipeline(uint64_t seid) {
   Logger::upf_app().debug(
       "Delete the SessionPrograms object. It will release the pipeline");
 
-  auto key = it->second->getKey();
-
-  // it->second.reset();
-
-  // mSessionProgramsMap.erase(seid);
-
   Logger::upf_app().debug("Clean PDU Session from the entry program's map");
-  // auto pPFCP_Session_LookupProgram =
-  //     UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
-  // pPFCP_Session_LookupProgram->getNextProgRuleIndexMap()->remove(key);
 }
 
 //---------------------------------------------------------------------------------------------------------------

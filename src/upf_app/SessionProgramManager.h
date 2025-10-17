@@ -11,7 +11,6 @@
 #include <pfcp/pfcp_far.h>
 #include <pfcp/pfcp_pdr.h>
 #include <pfcp/pfcp_qer.h>
-#include <next_prog_rule_key.h>
 #include <session_id.h>
 #include <netinet/ether.h>
 
@@ -67,9 +66,7 @@ class SessionProgramManager {
       std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
       std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs,
       bool isModification = false, uint32_t teid2 = 0);
-  void initializeNextRuleProgIndexKey(
-      next_rule_prog_index_key& key, uint32_t teid, uint32_t ueIpAddress,
-      uint8_t sourceInterface);
+
   void addPFCPProgram(
       uint64_t seid,
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
@@ -77,13 +74,7 @@ class SessionProgramManager {
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
       uint32_t ue_ip_address, uint32_t teid_dl, uint32_t teid_ul,
       uint64_t seid);
-  void storeFARInFARMap(
-      std::shared_ptr<FARProgram> pFARProgram,
-      std::shared_ptr<pfcp::pfcp_far> pFar);
-  void saveSeidWithinFARProgram(
-      uint64_t seid,
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-      const next_rule_prog_index_key& key);
+
   void updateARPTableForN6(
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
       uint32_t dnIP, uint32_t upfn6IP);
