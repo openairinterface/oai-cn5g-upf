@@ -16,6 +16,12 @@
 // #include <netlink/route/qdisc.h>
 #include <qos_flow.h>
 #include <pfcp_session.hpp>
+
+#include "upf_config.hpp"
+
+using namespace oai::config;
+extern upf_config upf_cfg;
+
 class BPFMaps;
 class BPFMap;
 class SessionManager;
@@ -23,144 +29,59 @@ class SessionManager;
 
 using QERProgramLifeCycle = ProgramLifeCycle<qer_tc_kernel_c>;
 
-/**
- * @brief Singleton class to abstract the UPF bpf tc program.
- */
 class QERProgram : public BPFProgram {
  public:
-  /*---------------------------------------------------------------------------------------------------------------*/
-  /**
-   * @brief Construct a new QERProgram object.
-   *
-   */
-  explicit QERProgram();
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  /**
-   * @brief Destroy the QERProgram object
-   */
+  explicit QERProgram(const upf_config& upf_cfg);
   virtual ~QERProgram();
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  /**
-   * @brief Setup the tc BPF program when QoS Feature is disabled
-   *
-   */
   void setup();
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  /**
-   * @brief Setup tc BPF program when QoS Feature is enabled
-   *
-   * @param const std::string&
-   * @param const std::string&
-   * @param const char*
-   * @param std::vector<struct s_fiveQosFlow*>
-   * @param uint64_t
-   * @param struct gtpUTunnel*
-   */
   void setup(
       uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
       std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs);
-  /*---------------------------------------------------------------------------------------------------------------*/
-  /**
-   * @brief Get the BPFMaps object.
-   *
-   * @return std::shared_ptr<BPFMaps> The reference of the BPFMaps.
-   */
   std::shared_ptr<BPFMaps> getMaps();
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  /**
-   * @brief Tear downs the BPF program.
-   *
-   */
   void tearDown();
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-
   std::shared_ptr<BPFMap> getEgressIfindexMap() const;
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  /**
-   * @brief Get the n3 GTP-U Tunnel Map object.
-   *
-   * @return std::shared_ptr<BPFMap>  The seid value of the PDU session
-   * associated with the n3 GTP-U Tunnel.
-   */
   std::shared_ptr<BPFMap> geGtpUTunnelMap() const;
-
   std::shared_ptr<BPFMap> getSdfFilterMap() const;
-
-  /*---------------------------------------------------------------------------------------------------------------*/
   std::shared_ptr<BPFMap> get5GQoSFlowParamsMap() const;
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-
-  // std::shared_ptr<BPFMap> getQoSFlowMap() const;
-  //   std::shared_ptr<BPFMap> getDefaultQfiMap() const;
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-
-  //   struct qer_tc_kernel_c* get_bpf_skel_object();
-  //   int teardown_hook(int ifindex);
-  //   int tc_detach_egress(int ifindex);
-  //   int tc_attach_egress(
-  //       int ifindex, struct qer_tc_kernel_c* obj, const char* section_name);
-  //   int tc_attach_ingress(
-  //       int ifindex, struct qer_tc_kernel_c* obj, const char* section_name);
-  //   int add_clsact_qdisc(int ifindex, enum bpf_tc_attach_point attach_point);
-
   bool no_htb_root_qdisc(const std::string interface);
-
   bool no_htb_default_class(const std::string interface);
   bool no_tc_filter_bpf(const std::string interface);
-  /*---------------------------------------------------------------------------------------------------------------*/
   std::shared_ptr<pfcp::pfcp_qer> retrive_default_qer_with_default_qfi(
       std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer);
+
+  void setDefaultClassHandle(uint32_t handle) {
+    m_default_class_handle = handle;
+  }
+  uint32_t getDefaultClassHandle() const { return m_default_class_handle; }
+
+  void setDefaultClassRate(uint32_t rate) { m_default_class_rate = rate; }
+  uint32_t getDefaultClassRate() const { return m_default_class_rate; }
+
+  void setDefaultClassCeil(uint32_t ceil) { m_default_class_ceil = ceil; }
+  uint32_t getDefaultClassCeil() const { return m_default_class_ceil; }
+
+  void setR2qRoot(uint32_t r2q) { m_r2q_root = r2q; }
+  uint32_t getR2qRoot() const { return m_r2q_root; }
   /*---------------------------------------------------------------------------------------------------------------*/
  private:
-  /**
-   * @brief Initialize BPF wrappers maps.
-   *
-   */
+  uint32_t m_default_class_handle;
+  uint32_t m_default_class_rate;  // kbps
+  uint32_t m_default_class_ceil;  // kbps
+  uint32_t m_r2q_root;            // qdisc r2q
+
   void initializeMaps();
+  void configureQerMaps(
+      struct qer_tc_kernel_c* skel, const upf_config& upf_cfg);
 
   void build_pdr_map(const std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs);
   std::shared_ptr<pfcp::pfcp_pdr> get_pdr_by_qer_id(uint32_t qer_id) const;
 
   std::unordered_map<uint32_t, std::shared_ptr<pfcp::pfcp_pdr>> pdr_map;
-
-  //   void storeQosFlow(std::shared_ptr<pfcp::pfcp_qer> pQer);
-  /*---------------------------------------------------------------------------------------------------------------*/
-  // The reference of the bpf maps.
   std::shared_ptr<BPFMaps> mpMaps;
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  // The skeleton of the UPF program generated by bpftool.
-  // ProgramLifeCycle is the owner of the pointer.
   qer_tc_kernel_c* spSkeleton;
-
-  /*---------------------------------------------------------------------------------------------------------------*/
   std::shared_ptr<BPFMap> mpEgressIfindexMap;
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-
-  // The BPF lifecycle program.
   std::shared_ptr<QERProgramLifeCycle> mpLifeCycle;
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  // The 5G QoS Flow Parameters map.
   std::shared_ptr<BPFMap> mp5GQoSFlowParamsMap;
-
-  /*---------------------------------------------------------------------------------------------------------------*/
-  // The 5G QoS Flow.
-  // std::shared_ptr<BPFMap> mpQoSFlowMap;
-
-  // std::shared_ptr<BPFMap> mpDefaultQfiMap;
-  /*---------------------------------------------------------------------------------------------------------------*/
   std::vector<struct s_fiveQosFlow> qosFlowsQfis;
 };
 

@@ -732,7 +732,8 @@ void SessionProgramManager::modifyPipeline(
         seid, value, BPF_ANY);
 
     logger.debug("Instantiate a new QERProgram");
-    std::shared_ptr<QERProgram> pQERProgram = std::make_shared<QERProgram>();
+    std::shared_ptr<QERProgram> pQERProgram =
+        std::make_shared<QERProgram>(upf_cfg);
     pQERProgram->setup(seid, session->qers_downlink, session->pdrs_downlink);
   }
 

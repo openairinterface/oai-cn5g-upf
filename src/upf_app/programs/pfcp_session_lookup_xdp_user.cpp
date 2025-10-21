@@ -9,9 +9,19 @@
 #include "interfaces.h"
 #include "logger.hpp"
 #include "upf_config.hpp"
+#include "utils/net_utils.hpp"
+#include "utils/bpf_utils.hpp"
 
 using namespace oai::config;
 extern upf_config upf_cfg;
+
+const std::string UDP_INTERFACE =
+    UserPlaneComponent::getInstance().getUDPInterface();
+const std::string GTP_INTERFACE =
+    UserPlaneComponent::getInstance().getGTPInterface();
+
+using namespace oai::utils::net;
+using namespace oai::utils::bpf;
 
 class XDPSection {
  public:
@@ -21,121 +31,68 @@ class XDPSection {
 };
 
 /*---------------------------------------------------------------------------------------------------------------*/
-int is_little_endian2() {
-  u32 value = 1;
-  u8* byte  = (u8*) &value;
-  return (*byte == 1);
-}
-
-/*---------------------------------------------------------------------------------------------------------------*/
-// PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
-//     const std::string& gtpInterface, const std::string& udpInterface,
-//     const upf_config& upf_cfg)
-//     : mGTPInterface(gtpInterface), mUDPInterface(udpInterface) {
-//   struct pfcp_session_lookup_xdp_kernel_c* skel = nullptr;
-//   int ret                                       = -1;
-
-//   Logger::upf_app().info("Initializing PFCP Session Lookup BPF program...");
-//   // create the open function (callable)
-//   auto open_fn = [&upf_cfg, this]() -> pfcp_session_lookup_xdp_kernel_c* {
-//     struct pfcp_session_lookup_xdp_kernel_c* skel =
-//         pfcp_session_lookup_xdp_kernel_c__open();
-//     if (!skel) {
-//       Logger::upf_app().error("Failed to open BPF skeleton");
-//       return nullptr;
-//     }
-
-//     // configure maps / rodata here (same pattern as kernel perf)
-//     uint32_t max_rules_match_pdr =
-//         upf_cfg.max_pdrs_per_pdu_session * upf_cfg.max_pdu_session;
-//     bpf_map__set_max_entries(
-//         skel->maps.m_upf_interfaces, upf_cfg.max_upf_interfaces);
-//     bpf_map__set_max_entries(
-//         skel->maps.m_redirect_interfaces,
-//         upf_cfg.max_upf_redirect_interfaces);
-//     bpf_map__set_max_entries(
-//         skel->maps.m_session_mapping, upf_cfg.max_pdu_session);
-//     bpf_map__set_max_entries(
-//         skel->maps.m_session_pdrs, upf_cfg.max_pdrs_per_pdu_session);
-//     bpf_map__set_max_entries(
-//         skel->maps.m_sdf_filter, upf_cfg.max_sdf_filters_per_pdu_session);
-//     bpf_map__set_max_entries(skel->maps.m_arp_table,
-//     upf_cfg.max_arp_entries);
-//     bpf_map__set_max_entries(skel->maps.m_rules_match_pdr,
-//     max_rules_match_pdr);
-
-//     redirect interfaces and arp tables sould be less or
-//         equal than max upf interfaces(
-//             even incuding n4 since URR is also using this interface to
-//             forward
-//                 traffic to SMF)
-
-//         /*---------------------------------------------------------------------------------------------------------------*/
-//         struct {
-//       __uint(type, BPF_MAP_TYPE_DEVMAP);
-//       __uint(max_entries, MAX_INTERFACES);
-//       __type(key, u32);    // id
-//       __type(value, u32);  // tx port
-//     } m_redirect_interfaces SEC(".maps");
-
-//     /*---------------------------------------------------------------------------------------------------------------*/
-//     struct {
-//       __uint(type, BPF_MAP_TYPE_HASH);
-//       __uint(max_entries, ARP_ENTRIES_MAX_SIZE);
-//       __type(key, u32);                     // IPv4 address
-//       __type(value, struct s_arp_mapping);  // <IP Address, MAC address>
-//     } m_arp_table SEC(".maps");
-
-//     // optionally set rodata fields:
-//     if (skel->rodata) {
-//       skel->rodata->max_upf_interfaces = upf_cfg.max_upf_interfaces;
-//       skel->rodata->max_upf_redirect_interfaces =
-//           upf_cfg.max_upf_redirect_interfaces;
-//       skel->rodata->max_pdu_session          = upf_cfg.max_pdu_session;
-//       skel->rodata->max_pdrs_per_pdu_session =
-//       upf_cfg.max_pdrs_per_pdu_session;
-//       skel->rodata->max_sdf_filters_per_pdu_session =
-//           upf_cfg.max_sdf_filters_per_pdu_session;
-//       skel->rodata->max_arp_entries = upf_cfg.max_arp_entries;
-//     }
-
-//     return skel;
-//   };
-
-//   // now create the lifecycle object with a callable open_fn (not a raw skel)
-//   mpLifeCycle = std::make_shared<PFCP_Session_LookupProgramLifeCycle>(
-//       open_fn,
-//       /* load */ pfcp_session_lookup_xdp_kernel_c__load,
-//       /* attach */ pfcp_session_lookup_xdp_kernel_c__attach,
-//       /* destroy*/ pfcp_session_lookup_xdp_kernel_c__destroy);
-// }
-
-/*---------------------------------------------------------------------------------------------------------------*/
-
-void PFCP_Session_LookupProgram::configure_bpf_maps_and_rodata(
+void PFCP_Session_LookupProgram::configurePfcpSessionLookupMaps(
     struct pfcp_session_lookup_xdp_kernel_c* skel, const upf_config& upf_cfg) {
   if (!skel) {
-    Logger::upf_app().error("Null skeleton in configure_bpf_maps_and_rodata");
+    Logger::upf_app().error("Null skeleton in configurePfcpSessionLookupMaps");
     return;
+  }
+
+  int num_ifaces = count_available_interfaces();
+  if (upf_cfg.max_upf_interfaces > num_ifaces) {
+    Logger::upf_app().warn(
+        "Configured max_upf_interfaces (%u) exceeds available system "
+        "interfaces (%d). "
+        "Clamping to %d.",
+        upf_cfg.max_upf_interfaces, num_ifaces, num_ifaces);
+  }
+
+  if (upf_cfg.max_upf_redirect_interfaces > upf_cfg.max_upf_interfaces) {
+    Logger::upf_app().error(
+        "Invalid config: max_upf_redirect_interfaces (%u) cannot exceed "
+        "max_upf_interfaces (%u).",
+        upf_cfg.max_upf_redirect_interfaces, upf_cfg.max_upf_interfaces);
+    throw std::runtime_error(
+        "Invalid UPF configuration (redirect > interfaces)");
+  }
+
+  if (upf_cfg.max_upf_redirect_interfaces > upf_cfg.max_arp_entries) {
+    Logger::upf_app().warn(
+        "max_upf_redirect_interfaces (%u) > max_arp_entries (%u): "
+        "redirects may not all resolve via ARP.",
+        upf_cfg.max_upf_redirect_interfaces, upf_cfg.max_arp_entries);
   }
 
   // Compute derived limits
   uint32_t max_rules_match_pdr =
       upf_cfg.max_pdrs_per_pdu_session * upf_cfg.max_pdu_session;
 
-  // Configure BPF map sizes
-  bpf_map__set_max_entries(
-      skel->maps.m_upf_interfaces, upf_cfg.max_upf_interfaces);
-  bpf_map__set_max_entries(
-      skel->maps.m_redirect_interfaces, upf_cfg.max_upf_redirect_interfaces);
-  bpf_map__set_max_entries(
-      skel->maps.m_session_mapping, upf_cfg.max_pdu_session);
-  bpf_map__set_max_entries(
-      skel->maps.m_session_pdrs, upf_cfg.max_pdrs_per_pdu_session);
-  bpf_map__set_max_entries(
-      skel->maps.m_sdf_filter, upf_cfg.max_sdf_filters_per_pdu_session);
-  bpf_map__set_max_entries(skel->maps.m_arp_table, upf_cfg.max_arp_entries);
-  bpf_map__set_max_entries(skel->maps.m_rules_match_pdr, max_rules_match_pdr);
+  bool ok = true;
+  ok &= configure_map_max_entries(
+      skel->maps.m_upf_interfaces, "m_upf_interfaces",
+      upf_cfg.max_upf_interfaces);
+  ok &= configure_map_max_entries(
+      skel->maps.m_redirect_interfaces, "m_redirect_interfaces",
+      upf_cfg.max_upf_redirect_interfaces);
+  ok &= configure_map_max_entries(
+      skel->maps.m_session_mapping, "m_session_mapping",
+      upf_cfg.max_pdu_session);
+  ok &= configure_map_max_entries(
+      skel->maps.m_session_pdrs, "m_session_pdrs",
+      upf_cfg.max_pdrs_per_pdu_session);
+  ok &= configure_map_max_entries(
+      skel->maps.m_sdf_filter, "m_sdf_filter",
+      upf_cfg.max_sdf_filters_per_pdu_session);
+  ok &= configure_map_max_entries(
+      skel->maps.m_arp_table, "m_arp_table", upf_cfg.max_arp_entries);
+  ok &= configure_map_max_entries(
+      skel->maps.m_rules_match_pdr, "m_rules_match_pdr", max_rules_match_pdr);
+  if (!ok) {
+    Logger::upf_app().error(
+        "One or more BPF map configurations failed for PFCP Session Lookup "
+        "program.");
+    throw std::runtime_error("PFCP Session Lookup map configuration failed");
+  }
 
   // Configure .rodata constants (if available)
   if (skel->rodata) {
@@ -170,7 +127,7 @@ PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
     }
 
     // Configure maps and rodata
-    this->configure_bpf_maps_and_rodata(skel, upf_cfg);
+    this->configurePfcpSessionLookupMaps(skel, upf_cfg);
     return skel;
   };
 
@@ -231,11 +188,9 @@ void PFCP_Session_LookupProgram::setup(bool isQosEnabled) {
   mpLifeCycle->attach();
 
   Logger::upf_app().debug("Configure redirect interface");
-  auto udpInterface = UserPlaneComponent::getInstance().getUDPInterface();
-  auto gtpInterface = UserPlaneComponent::getInstance().getGTPInterface();
 
-  uint32_t udpInterfaceIndex = if_nametoindex(udpInterface.c_str());
-  uint32_t gtpInterfaceIndex = if_nametoindex(gtpInterface.c_str());
+  uint32_t udpInterfaceIndex = if_nametoindex(UDP_INTERFACE.c_str());
+  uint32_t gtpInterfaceIndex = if_nametoindex(UDP_INTERFACE.c_str());
   uint32_t uplinkId          = static_cast<uint32_t>(FlowDirection::UPLINK);
   uint32_t downlinkId        = static_cast<uint32_t>(FlowDirection::DOWNLINK);
 

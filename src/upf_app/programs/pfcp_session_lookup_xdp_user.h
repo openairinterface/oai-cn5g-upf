@@ -56,7 +56,7 @@ class PFCP_Session_LookupProgram {
 
  private:
   void initializeMaps();
-  void configure_bpf_maps_and_rodata(
+  void configurePfcpSessionLookupMaps(
       struct pfcp_session_lookup_xdp_kernel_c* skel, const upf_config& upf_cfg);
   pfcp_session_lookup_xdp_kernel_c* spSkeleton;
   std::shared_ptr<PFCP_Session_LookupProgramLifeCycle> mpLifeCycle;
