@@ -15,11 +15,6 @@
 using namespace oai::config;
 extern upf_config upf_cfg;
 
-const std::string UDP_INTERFACE =
-    UserPlaneComponent::getInstance().getUDPInterface();
-const std::string GTP_INTERFACE =
-    UserPlaneComponent::getInstance().getGTPInterface();
-
 using namespace oai::utils::net;
 using namespace oai::utils::bpf;
 
@@ -189,8 +184,13 @@ void PFCP_Session_LookupProgram::setup(bool isQosEnabled) {
 
   Logger::upf_app().debug("Configure redirect interface");
 
-  uint32_t udpInterfaceIndex = if_nametoindex(UDP_INTERFACE.c_str());
-  uint32_t gtpInterfaceIndex = if_nametoindex(UDP_INTERFACE.c_str());
+  const std::string udpIface =
+      UserPlaneComponent::getInstance().getUDPInterface();
+  const std::string gtpIface =
+      UserPlaneComponent::getInstance().getGTPInterface();
+
+  uint32_t udpInterfaceIndex = if_nametoindex(udpIface.c_str());
+  uint32_t gtpInterfaceIndex = if_nametoindex(gtpIface.c_str());
   uint32_t uplinkId          = static_cast<uint32_t>(FlowDirection::UPLINK);
   uint32_t downlinkId        = static_cast<uint32_t>(FlowDirection::DOWNLINK);
 
