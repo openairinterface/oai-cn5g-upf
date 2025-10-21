@@ -220,7 +220,7 @@ upf::upf(
     const std::map<std::string, upf_interface_config>& interfaces)
     : nf(name, host, sbi),
       m_upf_support_features(
-          false, false, 8, 4, 10000, 8, 8, 8, 1572, false, false),
+          false, false, 3, 2, 10000, 8, 8, 8, 2, false, false),
       m_interfaces(interfaces) {
   model::nrf::SnssaiUpfInfoItem item;
   item.setSNssai(DEFAULT_SNSSAI);

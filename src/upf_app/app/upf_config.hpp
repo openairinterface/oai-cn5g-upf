@@ -180,13 +180,13 @@ class upf_config {
     enable_5g_features              = true;
     enable_bpf_datapath             = false;
     enable_qos                      = false;
-    max_upf_interfaces              = 8;
-    max_upf_redirect_interfaces     = 4;
+    max_upf_interfaces              = 3;
+    max_upf_redirect_interfaces     = 2;
     max_pdu_session                 = 10000;
     max_pdrs_per_pdu_session        = 8;
     max_qos_flows_per_pdu_session   = 8;
     max_sdf_filters_per_pdu_session = 8;
-    max_arp_entries                 = 1572;
+    max_arp_entries                 = 2;
     register_nrf                    = false;
     upf_info                        = {};
 
