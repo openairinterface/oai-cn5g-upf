@@ -143,6 +143,11 @@ function main()
         verbose=1
         shift;
         ;;
+      --bpf-debug)
+        echo "BPF debug logs enabled"
+        cmake_args="$cmake_args -DBPF_DEBUG=ON"
+        shift;
+        ;;
       -V | --Verbose)
         echo "CMake build process verbose"
         verbose=1

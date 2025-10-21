@@ -595,7 +595,9 @@ pipeline {
         for (htmlFile in htmlFiles) {
           if ("MERGE".equals(env.gitlabActionType)) {
             sh "sed -i -e 's#TEMPLATE_MERGE_REQUEST_LINK#${gitlabMergeRequestLink}#g' ${htmlFile}"
-            sh "sed -i -e 's#TEMPLATE_MERGE_REQUEST_TEMPLATE#${env.gitlabMergeRequestTitle}#' ${htmlFile}"
+            def unsafePattern = /[^a-zA-Z0-9",\.\?\-_ %\+\[\]\(\)~]/
+            def sanitizedTitle = env.gitlabMergeRequestTitle.replaceAll(unsafePattern, '-')
+            sh "sed -i -e 's#TEMPLATE_MERGE_REQUEST_TEMPLATE#${sanitizedTitle}#' ${htmlFile}"
           }
           sh "sed -i -e 's#TEMPLATE_TIME#${JOB_TIMESTAMP}#' ${htmlFile}"
           archiveArtifacts artifacts: htmlFile
