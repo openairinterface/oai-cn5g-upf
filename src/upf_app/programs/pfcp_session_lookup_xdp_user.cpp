@@ -62,6 +62,8 @@ void PFCP_Session_LookupProgram::configurePfcpSessionLookupMaps(
   uint32_t max_rules_match_pdr =
       upf_cfg.max_pdrs_per_pdu_session * upf_cfg.max_pdu_session;
 
+  uint32_t max_qos_enabling = upf_cfg.max_pdu_session;
+
   bool ok = true;
   ok &= configure_map_max_entries(
       skel->maps.m_upf_interfaces, "m_upf_interfaces",
@@ -82,6 +84,8 @@ void PFCP_Session_LookupProgram::configurePfcpSessionLookupMaps(
       skel->maps.m_arp_table, "m_arp_table", upf_cfg.max_arp_entries);
   ok &= configure_map_max_entries(
       skel->maps.m_rules_match_pdr, "m_rules_match_pdr", max_rules_match_pdr);
+  ok &= configure_map_max_entries(
+      skel->maps.m_qos_enabling, "m_qos_enabling", max_qos_enabling);
   if (!ok) {
     Logger::upf_app().error(
         "One or more BPF map configurations failed for PFCP Session Lookup "
@@ -98,7 +102,8 @@ void PFCP_Session_LookupProgram::configurePfcpSessionLookupMaps(
     skel->rodata->max_pdrs_per_pdu_session = upf_cfg.max_pdrs_per_pdu_session;
     skel->rodata->max_sdf_filters_per_pdu_session =
         upf_cfg.max_sdf_filters_per_pdu_session;
-    skel->rodata->max_arp_entries = upf_cfg.max_arp_entries;
+    skel->rodata->max_arp_entries  = upf_cfg.max_arp_entries;
+    skel->rodata->max_qos_enabling = upf_cfg.max_pdu_session;
   }
 }
 

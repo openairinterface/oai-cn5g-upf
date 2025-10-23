@@ -20,6 +20,7 @@ const volatile int max_pdu_session SEC(".rodata");
 const volatile int max_pdrs_per_pdu_session SEC(".rodata");
 const volatile int max_sdf_filters_per_pdu_session SEC(".rodata");
 const volatile int max_arp_entries SEC(".rodata");
+const volatile int max_qos_enabling SEC(".rodata");
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
@@ -58,7 +59,7 @@ struct {
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, 1); /* max_pdu_session */
+  __uint(max_entries, 1); /* max_qos_enabling = max_pdu_session */
   __type(key, u64);       // seid
   __type(value, u32);     // Value type (0 for false, 1 for true)
 } m_qos_enabling SEC(".maps");
