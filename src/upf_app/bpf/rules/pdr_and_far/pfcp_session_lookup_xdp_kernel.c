@@ -4,7 +4,7 @@
 #include <bpf_helpers.h>
 #include <bpf_endian.h>
 #include <endian.h>
-#include <lib/crc16.h>
+//#include <lib/crc16.h>
 #include <utils/csum.h>
 
 #include <protocols/ip.h>
