@@ -37,7 +37,7 @@ log_level:
 
 # If you enable registration, the other NFs will use the NRF discovery mechanism
 register_nf:
-  general: no
+  general: yes
 
 http_version: 2
 
