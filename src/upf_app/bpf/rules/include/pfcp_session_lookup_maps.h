@@ -8,65 +8,65 @@
 #include <linux/bpf.h>
 #include <stdint.h>
 #include <ie/teid.h>
-#include <next_prog_rule_map.h>
-#include <next_prog_rule_key.h>
 #include <rules_matching_pdr.h>
 #include "interfaces.h"
 #include "session_id.h"
 
-#define MAX_LENGTH 10000  // 10
-#define INTERFACE_ENTRIES_MAX 12
-#define MAX_UEs 10000
 #define MAX_PDRS_PER_SESSION 32
-#define MAX_SDF_FITLER_ENTRIES 1000
+
+const volatile int max_upf_interfaces SEC(".rodata");
+const volatile int max_upf_redirect_interfaces SEC(".rodata");
+const volatile int max_pdu_session SEC(".rodata");
+const volatile int max_pdrs_per_pdu_session SEC(".rodata");
+const volatile int max_sdf_filters_per_pdu_session SEC(".rodata");
+const volatile int max_arp_entries SEC(".rodata");
+const volatile int max_qos_enabling SEC(".rodata");
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, MAX_SDF_FITLER_ENTRIES);
-  __type(key, struct session_qfi);  // <qfi, seid>
-  __type(value, struct sdf_filtr);
-} m_sdf_filter SEC(".maps");
-
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, INTERFACE_ENTRIES_MAX);
+  __uint(max_entries, 1); /* max_upf_interfaces */
   __type(key, e_reference_point);
   __type(value, struct s_interface);
 } m_upf_interfaces SEC(".maps");
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, MAX_LENGTH);
+  __uint(max_entries, 1);           /* max_sdf_filters_per_pdu_session */
+  __type(key, struct session_qfi);  // <qfi, seid>
+  __type(value, struct sdf_filtr);
+} m_sdf_filter SEC(".maps");
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, 1);            /* max_pdu_session */
   __type(key, u32);                  // ue_ip_address
   __type(value, struct session_id);  // < teid_ul, teid_dl, seid >
 } m_session_mapping SEC(".maps");
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, MAX_LENGTH);
-  __type(key, u64);  // seid
+  __uint(max_entries, 1); /* max_pdrs_per_pdu_session */
+  __type(key, u64);       // seid
   __type(value, pfcp_pdr_t_[MAX_PDRS_PER_SESSION]);
 } m_session_pdrs SEC(".maps");
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(
-      max_entries,
-      MAX_LENGTH);  // max_rules = max_pdrs_per_pdu_session * max_pdu_session
+  __uint(max_entries, 1); /* max_pdrs_per_pdu_session * max_pdu_session */
   __type(key, struct pdrs_per_session);   // < pdr_id, seid >
   __type(value, struct rules_match_pdr);  // < FAR, QER, /* MAR, BAR, URR */ >
 } m_rules_match_pdr SEC(".maps");
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, MAX_LENGTH);  // Store only one entry for the QoS flag
-  __type(key, u64);                 // seid
-  __type(value, u32);               // Value type (0 for false, 1 for true)
+  __uint(max_entries, 1); /* max_qos_enabling = max_pdu_session */
+  __type(key, u64);       // seid
+  __type(value, u32);     // Value type (0 for false, 1 for true)
 } m_qos_enabling SEC(".maps");
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, MAX_UEs);
+  __uint(max_entries, 1);
   __type(key, u32);    // hash_framed_routing_key
   __type(value, u32);  // ue_ip
 } m_framed_route_mapping SEC(".maps");

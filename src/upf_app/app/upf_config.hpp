@@ -128,6 +128,13 @@ class upf_config {
   bool enable_5g_features;
   bool enable_bpf_datapath;
   bool enable_qos;
+  u_int16_t max_upf_interfaces;
+  u_int16_t max_upf_redirect_interfaces;
+  u_int16_t max_pdu_session;
+  u_int16_t max_pdrs_per_pdu_session;
+  u_int16_t max_qos_flows_per_pdu_session;
+  u_int16_t max_sdf_filters_per_pdu_session;
+  u_int16_t max_arp_entries;
   bool register_nrf;
   struct in_addr remote_n6;
   upf_info_t upf_info;
@@ -170,11 +177,18 @@ class upf_config {
     n4.thread_rd_sched_params.sched_priority = 95;
     n4.port                                  = pfcp::default_port;
 
-    enable_5g_features  = true;
-    enable_bpf_datapath = false;
-    enable_qos          = false;
-    register_nrf        = false;
-    upf_info            = {};
+    enable_5g_features              = true;
+    enable_bpf_datapath             = false;
+    enable_qos                      = false;
+    max_upf_interfaces              = 3;
+    max_upf_redirect_interfaces     = 2;
+    max_pdu_session                 = 10000;
+    max_pdrs_per_pdu_session        = 8;
+    max_qos_flows_per_pdu_session   = 8;
+    max_sdf_filters_per_pdu_session = 8;
+    max_arp_entries                 = 2;
+    register_nrf                    = false;
+    upf_info                        = {};
 
     log_level            = spdlog::level::debug;
     http_version         = 2;

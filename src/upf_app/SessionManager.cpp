@@ -5,7 +5,6 @@
 #include <interfaces/SessionBpf.h>
 #include <pfcp/pfcp_session.h>
 #include <wrappers/BPFMaps.h>
-#include <next_prog_rule_key.h>
 #include "logger.hpp"
 #include "upf_config.hpp"
 

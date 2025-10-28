@@ -4,7 +4,7 @@
 #include <bpf_helpers.h>
 #include <bpf_endian.h>
 #include <endian.h>
-#include <lib/crc16.h>
+//#include <lib/crc16.h>
 #include <utils/csum.h>
 
 #include <protocols/ip.h>
@@ -25,8 +25,8 @@
 
 #include <utils/logger.h>
 #include <utils/utils.h>
-#include <next_prog_rule_key.h>
-#include <framed_routing_bpf.h>
+//#include <next_prog_rule_key.h>
+#include "framed_routing_bpf.h"
 
 #include "xdp_stats_kern.h"
 #include <linux/bpf.h>
@@ -68,7 +68,7 @@ static u8 next_hop_n3_mac_address[6] = {0};
 static bool cached_n3 = false;
 // static bool cached_n6 = false;
 
-#define MAX_PDRS_PER_SESSION 32
+//#define MAX_PDRS_PER_SESSION 32
 
 enum ret_code {
   FAILURE = -1,  // Distinguished frop drop for further processing later on. We
@@ -149,7 +149,7 @@ static __always_inline u32 match_sdf_filter_ipv4(
 
   /*
    * TODO:
-   * Check if an enum is really needed to redifine protocol:
+   * Check if an enum is really needed to redefine protocol:
    * switch (ip_protocol) {
          case IPPROTO_ICMP:
            return 0;
@@ -524,6 +524,7 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
 
 #pragma clang loop unroll(full)
   for (int i = 0; i < MAX_PDRS_PER_SESSION; i++) {
+    if (i >= max_pdrs_per_pdu_session) break;
     pfcp_pdr_t_* pdr_high_prec = &(*pdrs)[i];
     pdi_t_ pdi                 = pdr_high_prec->pdi;
     u32 ipaddr                 = bpf_htonl(pdi.ue_ip_address.ipv4_address);

@@ -25,7 +25,7 @@ include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model.cmake)
 
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/include)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr)
+include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr_and_far)
 
 ##############################################################
 #                          FAR                               #
@@ -49,10 +49,11 @@ add_library(UPF_XDP STATIC
   SessionManager.cpp
   SessionPrograms.cpp
   programs/pfcp_session_lookup_xdp_user.cpp
-  #programs/far_xdp_user.cpp
   programs/BPFProgram.cpp
   wrappers/BPFMaps.cpp
   wrappers/BPFMap.cpp
+  programs/utils/bpf_utils.cpp
+  programs/utils/net_utils.cpp
 )
 
 link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src)
@@ -106,6 +107,8 @@ install(
   programs/BPFProgram.cpp
   wrappers/BPFMaps.cpp
   wrappers/BPFMap.cpp
+  programs/utils/bpf_utils.cpp
+  programs/utils/net_utils.cpp
 )
 
   target_link_libraries(UPF_TC

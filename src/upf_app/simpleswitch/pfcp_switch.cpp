@@ -34,7 +34,7 @@
 #include "upf_config.hpp"
 #include "upf_pfcp_association.hpp"
 #include "simple_switch.hpp"
-#include "../bpf/rules/pdr/framed_routing_bpf.h"
+#include "../bpf/rules/pdr_and_far/framed_routing_bpf.h"
 
 #include <algorithm>
 #include <fstream>  // std::ifstream

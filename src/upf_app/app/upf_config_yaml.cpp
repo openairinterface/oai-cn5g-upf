@@ -32,8 +32,11 @@ namespace oai::config {
 
 //------------------------------------------------------------------------------
 upf_support_features::upf_support_features(
-    bool enable_bpf_datapath, bool enable_qos, bool enable_snat,
-    bool enable_fr) {
+    bool enable_bpf_datapath, bool enable_qos, u_int16_t max_upf_interfaces,
+    u_int16_t max_upf_redirect_interfaces, u_int16_t max_pdu_session,
+    u_int16_t max_pdrs_per_pdu_session, u_int16_t max_qos_flows_per_pdu_session,
+    u_int16_t max_sdf_filters_per_pdu_session, u_int16_t max_arp_entries,
+    bool enable_snat, bool enable_fr) {
   m_config_name = "Supported Features";
 
   m_enable_bpf_datapath = option_config_value(
@@ -42,10 +45,36 @@ upf_support_features::upf_support_features(
   m_enable_qos = option_config_value(
       UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS_LABEL, enable_qos);
 
+  m_max_upf_interfaces = int_config_value(
+      UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_INTERFACES_LABEL,
+      (int) max_upf_interfaces);
+
+  m_max_upf_redirect_interfaces = int_config_value(
+      UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_REDIRECT_INTERFACES_LABEL,
+      (int) max_upf_redirect_interfaces);
+
+  m_max_pdu_session = int_config_value(
+      UPF_CONFIG_SUPPORT_FEATURES_MAX_PDU_SESSION_LABEL, (int) max_pdu_session);
+
+  m_max_pdrs_per_pdu_session = int_config_value(
+      UPF_CONFIG_SUPPORT_FEATURES_MAX_PDRS_PER_PDU_SESSION_LABEL,
+      (int) max_pdrs_per_pdu_session);
+
+  m_max_qos_flows_per_pdu_session = int_config_value(
+      UPF_CONFIG_SUPPORT_FEATURES_MAX_QOS_FLOWS_PER_PDU_SESSION_LABEL,
+      (int) max_qos_flows_per_pdu_session);
+
+  m_max_sdf_filters_per_pdu_session = int_config_value(
+      UPF_CONFIG_SUPPORT_FEATURES_MAX_SDF_FILTERS_PER_PDU_SESSION_LABEL,
+      (int) max_sdf_filters_per_pdu_session);
+
+  m_max_arp_entries = int_config_value(
+      UPF_CONFIG_SUPPORT_FEATURES_MAX_ARP_ENTRIES_LABEL, (int) max_arp_entries);
+
   m_enable_snat = option_config_value(
-      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT_LABEL, enable_snat);
-  m_enable_fr =
-      option_config_value(UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR, enable_fr);
+      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT_LABEL, (int) enable_snat);
+  m_enable_fr = option_config_value(
+      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR, (int) enable_fr);
 }
 
 //------------------------------------------------------------------------------
@@ -57,6 +86,41 @@ void upf_support_features::from_yaml(const YAML::Node& node) {
 
   if (node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS]) {
     m_enable_qos.from_yaml(node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS]);
+  }
+
+  if (node[UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_INTERFACES]) {
+    m_max_upf_interfaces.from_yaml(
+        node[UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_INTERFACES]);
+  }
+
+  if (node[UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_REDIRECT_INTERFACES]) {
+    m_max_upf_redirect_interfaces.from_yaml(
+        node[UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_REDIRECT_INTERFACES]);
+  }
+
+  if (node[UPF_CONFIG_SUPPORT_FEATURES_MAX_PDU_SESSION]) {
+    m_max_pdu_session.from_yaml(
+        node[UPF_CONFIG_SUPPORT_FEATURES_MAX_PDU_SESSION]);
+  }
+
+  if (node[UPF_CONFIG_SUPPORT_FEATURES_MAX_PDRS_PER_PDU_SESSION]) {
+    m_max_pdrs_per_pdu_session.from_yaml(
+        node[UPF_CONFIG_SUPPORT_FEATURES_MAX_PDRS_PER_PDU_SESSION]);
+  }
+
+  if (node[UPF_CONFIG_SUPPORT_FEATURES_MAX_QOS_FLOWS_PER_PDU_SESSION]) {
+    m_max_qos_flows_per_pdu_session.from_yaml(
+        node[UPF_CONFIG_SUPPORT_FEATURES_MAX_QOS_FLOWS_PER_PDU_SESSION]);
+  }
+
+  if (node[UPF_CONFIG_SUPPORT_FEATURES_MAX_SDF_FILTERS_PER_PDU_SESSION]) {
+    m_max_sdf_filters_per_pdu_session.from_yaml(
+        node[UPF_CONFIG_SUPPORT_FEATURES_MAX_SDF_FILTERS_PER_PDU_SESSION]);
+  }
+
+  if (node[UPF_CONFIG_SUPPORT_FEATURES_MAX_ARP_ENTRIES]) {
+    m_max_arp_entries.from_yaml(
+        node[UPF_CONFIG_SUPPORT_FEATURES_MAX_ARP_ENTRIES]);
   }
 
   if (node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT]) {
@@ -88,6 +152,51 @@ std::string upf_support_features::to_string(const std::string& indent) const {
       BASE_FORMATTER, INNER_LIST_ELEM,
       UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS_LABEL, inner_width, enable_qos));
 
+  u_int16_t max_upf_interfaces = m_max_upf_interfaces.get_value();
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, INNER_LIST_ELEM,
+      UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_INTERFACES_LABEL, inner_width,
+      max_upf_interfaces));
+
+  u_int16_t max_upf_redirect_interfaces =
+      m_max_upf_redirect_interfaces.get_value();
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, INNER_LIST_ELEM,
+      UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_REDIRECT_INTERFACES_LABEL,
+      inner_width, max_upf_redirect_interfaces));
+
+  u_int16_t max_pdu_session = m_max_pdu_session.get_value();
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, INNER_LIST_ELEM,
+      UPF_CONFIG_SUPPORT_FEATURES_MAX_PDU_SESSION_LABEL, inner_width,
+      max_pdu_session));
+
+  u_int16_t max_pdrs_per_pdu_session = m_max_pdrs_per_pdu_session.get_value();
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, INNER_LIST_ELEM,
+      UPF_CONFIG_SUPPORT_FEATURES_MAX_PDRS_PER_PDU_SESSION_LABEL, inner_width,
+      max_pdrs_per_pdu_session));
+
+  u_int16_t max_qos_flows_per_pdu_session =
+      m_max_qos_flows_per_pdu_session.get_value();
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, INNER_LIST_ELEM,
+      UPF_CONFIG_SUPPORT_FEATURES_MAX_QOS_FLOWS_PER_PDU_SESSION_LABEL,
+      inner_width, max_qos_flows_per_pdu_session));
+
+  u_int16_t max_sdf_filters_per_pdu_session =
+      m_max_sdf_filters_per_pdu_session.get_value();
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, INNER_LIST_ELEM,
+      UPF_CONFIG_SUPPORT_FEATURES_MAX_SDF_FILTERS_PER_PDU_SESSION_LABEL,
+      inner_width, max_sdf_filters_per_pdu_session));
+
+  u_int16_t max_arp_entries = m_max_arp_entries.get_value();
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, INNER_LIST_ELEM,
+      UPF_CONFIG_SUPPORT_FEATURES_MAX_ARP_ENTRIES_LABEL, inner_width,
+      max_arp_entries));
+
   // Enable SNAT
   std::string enable_snat = m_enable_snat.get_value() ?
                                 UPF_CONFIG_OPTION_YES_STR :
@@ -110,7 +219,8 @@ upf::upf(
     const std::string& name, const std::string& host, const sbi_interface& sbi,
     const std::map<std::string, upf_interface_config>& interfaces)
     : nf(name, host, sbi),
-      m_upf_support_features(false, false, false, false),
+      m_upf_support_features(
+          false, false, 3, 2, 10000, 8, 8, 8, 2, false, false),
       m_interfaces(interfaces) {
   model::nrf::SnssaiUpfInfoItem item;
   item.setSNssai(DEFAULT_SNSSAI);
@@ -214,6 +324,43 @@ bool upf_support_features::get_option_enable_bpf_datapath() const {
 //------------------------------------------------------------------------------
 bool upf_support_features::get_option_enable_qos() const {
   return m_enable_qos.get_value();
+}
+
+//------------------------------------------------------------------------------
+u_int16_t upf_support_features::get_option_max_upf_interfaces() const {
+  return m_max_upf_interfaces.get_value();
+}
+
+//------------------------------------------------------------------------------
+u_int16_t upf_support_features::get_option_max_upf_redirect_interfaces() const {
+  return m_max_upf_redirect_interfaces.get_value();
+}
+
+//------------------------------------------------------------------------------
+u_int16_t upf_support_features::get_option_max_pdu_session() const {
+  return m_max_pdu_session.get_value();
+}
+
+//------------------------------------------------------------------------------
+u_int16_t upf_support_features::get_option_max_pdrs_per_pdu_session() const {
+  return m_max_pdrs_per_pdu_session.get_value();
+}
+
+//------------------------------------------------------------------------------
+u_int16_t upf_support_features::get_option_max_qos_flows_per_pdu_session()
+    const {
+  return m_max_qos_flows_per_pdu_session.get_value();
+}
+
+//------------------------------------------------------------------------------
+u_int16_t upf_support_features::get_option_max_sdf_filters_per_pdu_session()
+    const {
+  return m_max_sdf_filters_per_pdu_session.get_value();
+}
+
+//------------------------------------------------------------------------------
+u_int16_t upf_support_features::get_option_max_arp_entries() const {
+  return m_max_arp_entries.get_value();
 }
 
 //------------------------------------------------------------------------------
@@ -402,7 +549,26 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
 
   cfg.enable_bpf_datapath =
       upf_local->get_support_features().get_option_enable_bpf_datapath();
-  cfg.enable_qos  = upf_local->get_support_features().get_option_enable_qos();
+  cfg.enable_qos = upf_local->get_support_features().get_option_enable_qos();
+
+  cfg.max_upf_interfaces =
+      upf_local->get_support_features().get_option_max_upf_interfaces();
+  cfg.max_upf_redirect_interfaces =
+      upf_local->get_support_features()
+          .get_option_max_upf_redirect_interfaces();
+  cfg.max_pdu_session =
+      upf_local->get_support_features().get_option_max_pdu_session();
+  cfg.max_pdrs_per_pdu_session =
+      upf_local->get_support_features().get_option_max_pdrs_per_pdu_session();
+  cfg.max_qos_flows_per_pdu_session =
+      upf_local->get_support_features()
+          .get_option_max_qos_flows_per_pdu_session();
+  cfg.max_sdf_filters_per_pdu_session =
+      upf_local->get_support_features()
+          .get_option_max_sdf_filters_per_pdu_session();
+  cfg.max_arp_entries =
+      upf_local->get_support_features().get_option_max_arp_entries();
+
   cfg.enable_snat = upf_local->get_support_features().get_option_enable_snat();
   cfg.enable_fr   = upf_local->get_support_features().get_option_enable_fr();
 
