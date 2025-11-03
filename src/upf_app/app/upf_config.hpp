@@ -190,12 +190,12 @@ class upf_config {
     max_arp_entries                 = 2;
     register_nrf                    = false;
     upf_info                        = {};
-    enable_5g_features  = true;
-    enable_bpf_datapath = false;
-    enable_qos          = false;
-    enable_eth_pdu      = false;
-    register_nrf        = false;
-    upf_info            = {};
+    enable_5g_features              = true;
+    enable_bpf_datapath             = false;
+    enable_qos                      = false;
+    enable_eth_pdu                  = false;
+    register_nrf                    = false;
+    upf_info                        = {};
 
     log_level            = spdlog::level::debug;
     http_version         = 2;
