@@ -13,13 +13,7 @@
 #include <qer_tc_kernel_skel.h>
 #include <wrappers/BPFMap.hpp>
 #include <BPFProgram.h>
-#include "interfaces.h"
-
-// #include <netlink/netlink.h>
-// #include <netlink/route/qdisc.h>
-#include <qos_flow.h>
 #include <pfcp_session.hpp>
-
 #include "upf_config.hpp"
 
 using namespace oai::config;
@@ -28,7 +22,6 @@ extern upf_config upf_cfg;
 class BPFMaps;
 class BPFMap;
 class SessionManager;
-// class RulesUtilities;
 
 using QERProgramLifeCycle = ProgramLifeCycle<qer_tc_kernel_c>;
 
@@ -85,7 +78,6 @@ class QERProgram : public BPFProgram {
   std::shared_ptr<BPFMap> mpEgressIfindexMap;
   std::shared_ptr<QERProgramLifeCycle> mpLifeCycle;
   std::shared_ptr<BPFMap> mp5GQoSFlowParamsMap;
-  std::vector<struct s_fiveQosFlow> qosFlowsQfis;
 };
 
 #endif  // __QER_TC_USER_H__

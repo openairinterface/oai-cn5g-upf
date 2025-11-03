@@ -5,7 +5,7 @@
 #include <linux/bpf.h>
 #include <types.h>
 #include "sdf_filter.h"
-#include "qos_flow.h"
+//#include "qos_flow.h"
 
 const volatile int max_egress_interfaces SEC(".rodata");
 /*---------------------------------------------------------------------------------------------------------------*/

@@ -5,7 +5,6 @@
 #include <SessionProgramManager.h>
 #include <pfcp_session_lookup_xdp_user.h>
 #include <bits/stdc++.h>  //sort
-#include <interfaces/SessionBpf.h>
 #include <pfcp/pfcp_session.h>
 #include <wrappers/BPFMaps.h>
 #include "logger.hpp"

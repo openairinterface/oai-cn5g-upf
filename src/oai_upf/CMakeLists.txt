@@ -264,7 +264,6 @@ ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/app ${CMAKE_CURRENT_BINARY_DIR}/app)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/simpleswitch ${CMAKE_CURRENT_BINARY_DIR}/simpleswitch)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/gtpv1u ${CMAKE_CURRENT_BINARY_DIR}/gtpv1u)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/udp ${CMAKE_CURRENT_BINARY_DIR}/udp)
-ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/interfaces ${CMAKE_CURRENT_BINARY_DIR}/interfaces)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/framed_routing ${CMAKE_CURRENT_BINARY_DIR}/framed_routing)
 
 ################################################################################
@@ -281,11 +280,10 @@ include_directories(${SRC_TOP_DIR}/itti)
 include_directories(${SRC_TOP_DIR}/pfcp)
 include_directories(${SRC_TOP_DIR}/udp)
 include_directories(${SRC_TOP_DIR}/upf_app)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr_and_far)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/include)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel/rules/pdr_and_far)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel/rules/include)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
-include_directories(${SRC_TOP_DIR}/upf_app/interfaces)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/upf_app/framed_routing)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
@@ -333,11 +331,9 @@ target_link_libraries (upf
   ${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so
   APP
   SIMPLE_SWITCH
-  interfaces
   UDP
   GTPV1U
   PFCP
-  #far_xdp
   pfcp_session_lookup_xdp
   qer_tc
   UPF_XDP
