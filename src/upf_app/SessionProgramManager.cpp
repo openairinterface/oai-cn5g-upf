@@ -366,6 +366,59 @@ void SessionProgramManager::storePduSessionInMap(
 }
 
 //---------------------------------------------------------------------------------------------------------------
+// Helper function to store ETH PDU Session mapping
+void SessionProgramManager::storeETHPduSessionInMap(
+    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+    uint32_t teid_ul, uint32_t teid_dl, uint32_t n3IpAddress, uint64_t seid) {
+  // Normalize TEIDs and SEID for little-endian systems
+  if (likely(is_little_endian())) {
+    teid_ul     = htonl(teid_ul);
+    teid_dl     = htonl(teid_dl);
+    n3IpAddress = htole32(n3IpAddress);
+    seid        = seid;  // TODO: verify if correct
+  }
+
+  struct eth__session_id eth_pdu_session = {0};
+  uint32_t key = teid_ul;  // Use teid_ul as the key for ETH PDU session
+  // Perform the lookup
+  int ret = pPFCP_Session_LookupProgram->getETHSessionMappingMap()->lookup(
+      key, &eth_pdu_session);
+  // If the session exists, update the relevant fields
+  if (ret == 0) {
+    if (eth_pdu_session.teid_ul == 0) {
+      if (teid_ul != 0) {
+        eth_pdu_session.teid_ul = teid_ul;
+      } else if (teid_dl != 0) {
+        eth_pdu_session.teid_ul = teid_dl;
+      }
+    }
+
+    if (eth_pdu_session.teid_dl == 0) {
+      if (teid_dl != 0) {
+        eth_pdu_session.teid_dl = teid_dl;
+      } else if (teid_ul != 0) {
+        eth_pdu_session.teid_dl = teid_ul;
+      }
+    }
+  } else {
+    // Update the map with the session data
+    eth_pdu_session.teid_ul =
+        teid_ul;  // TODO [ETH-PDU] remove this as not used, we reusing the
+                  // value struct for IP PDU
+    eth_pdu_session.teid_dl = teid_dl;
+    eth_pdu_session.ipv4_address =
+        n3IpAddress;  // To support multiple N3 interfaces
+    eth_pdu_session.seid = seid;
+  }
+  pPFCP_Session_LookupProgram->getETHSessionMappingMap()->update(
+      key, eth_pdu_session, BPF_ANY);
+  Logger::upf_app().debug(
+      "Stored ETH PDU session in map with TEID_UL: %u, TEID_DL: %u, SEID: "
+      "%llu, IP Address: %u",
+      teid_ul, teid_dl, seid, n3IpAddress);
+}
+
+//---------------------------------------------------------------------------------------------------------------
 void SessionProgramManager::updateARPTableForN6(
     std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
     uint32_t dnIP, uint32_t upfn6IP) {
@@ -552,6 +605,7 @@ void SessionProgramManager::createPipeline(
   pfcp::pdi pdi;
   pfcp::fteid_t fteid;
   pfcp::ue_ip_address_t ueIpAddress;
+  pfcp::ethernet_packet_filter ethernetPacketFilter;
   pfcp::source_interface_t sourceInterface;
   uint16_t pdr_id;
   uint32_t far_id;
@@ -584,7 +638,41 @@ void SessionProgramManager::createPipeline(
        * TODO: Implement the logic when fteid is not present
        */
     }
-    if (!pdi.get(ueIpAddress)) {
+
+    if (session->get_pdn_type() != pfcp::pdn_type_value_e::ETHERNET &&
+        pdi.get(ueIpAddress)) {
+      if (unlikely(!ueIpAddress.v4)) {
+        logger.error(
+            "IPv6 UE IP Address is not supported yet for PDR %d", pdr_id);
+        throw std::runtime_error(
+            "IPv6 UE IP Address is not supported yet for PDR: " +
+            std::to_string(pdr_id));
+      }
+      logger.debug(
+          "UE IP Address for PDR %d: %s", pdr_id,
+          inet_ntoa(ueIpAddress.ipv4_address));
+      storePduSessionInMap(
+          pPFCP_Session_LookupProgram, ueIpAddress.ipv4_address.s_addr,
+          fteid.teid, 0, seid);
+    } else if (
+        sourceInterface.interface_value == INTERFACE_VALUE_ACCESS &&
+        pdi.get(ethernetPacketFilter)) {  // UL only. For DL we will used the
+                                          // learned MAC
+      logger.debug("ETH-PDU: creating pipeline for ETH PDU session");
+      pfcp::ethertype_t ethertype;
+      if (!ethernetPacketFilter.get(ethertype)) {
+        ethertype.ethertype = 0;
+      }
+      // TODO [ETH-PDU] support other packet filters
+      logger.info(
+          "ETH-PDU: Only considering Ethertype from the Ethernet Packet Filter "
+          "IE");
+      // TODO [ETH-PDU] store in the session map
+      logger.info(
+          "ETH PDU: Storing ETH PDU session in map with TEID %u", fteid.teid);
+      storeETHPduSessionInMap(
+          pPFCP_Session_LookupProgram, fteid.teid, 0, upfn3IP, seid);
+    } else {
       ueIpAddress.ipv4_address.s_addr = 0;
       logger.warn("UE IP Address is missing for PDR %d", pdr_id);
 
@@ -593,10 +681,6 @@ void SessionProgramManager::createPipeline(
        */
     }
     // sessionIds(pduSession, seid, fteid.teid, 0);
-
-    storePduSessionInMap(
-        pPFCP_Session_LookupProgram, ueIpAddress.ipv4_address.s_addr,
-        fteid.teid, 0, seid);
 
     std::shared_ptr<pfcp::pfcp_far> far;
     if (!getFar(session, pdr, far)) {
@@ -680,6 +764,78 @@ void SessionProgramManager::createPipeline(
 }
 
 //---------------------------------------------------------------------------------------------------------------
+void SessionProgramManager::modifyETHPipeline(
+    std::shared_ptr<pfcp::pfcp_session> session, uint32_t teid_ul,
+    uint32_t teid_dl) {
+  auto& logger = Logger::upf_app();
+
+  uint32_t upfn3Ip = upf_cfg.n3.addr4.s_addr;
+
+  logger.debug(
+      "ETH-PDU: modifying pipeline for ETH PDU session \n %s",
+      session->to_string());
+  uint64_t seid   = session->get_up_seid();
+  uint32_t pdr_id = 0;
+
+  if (session->pdrs.size() > MAX_PDRS_SESSION) {
+    logger.error(
+        "Number of PDRs within a PDU session exceeds %d, please either "
+        "increase this number or remove some PDRs",
+        MAX_PDRS_SESSION);
+    throw std::runtime_error(
+        "Number of requested PDRs exceeds the allocated size for PDRs "
+        "vector:");
+  }
+
+  auto pPFCP_Session_LookupProgram =
+      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+
+  logger.debug(
+      "ETH-PDU: Storing ETH PDU session in map with TEID_UL: %u, TEID_DL: %u, "
+      "SEID: %llu",
+      teid_ul, teid_dl, seid);
+  storeETHPduSessionInMap(
+      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram(),
+      teid_ul, teid_dl, upfn3Ip, session->get_up_seid());
+
+  pfcp_pdr_t_ pdrs[MAX_PDRS_SESSION] = {0};
+  int i                              = 0;
+
+  for (const auto& pdr : session->pdrs) {
+    pdr_id = pdr->pdr_id.rule_id;
+    logger.debug("Processing PDR %d on Modification", pdr_id);
+    std::shared_ptr<pfcp::pfcp_far> far;
+    std::shared_ptr<pfcp::pfcp_qer> qer;
+
+    if (!getFar(session, pdr, far)) {
+      throw std::runtime_error(
+          "Error retrieving FAR for PDR ID: " + std::to_string(pdr_id));
+    }
+
+    // TODO [ETH-PDU] support QER for ETH PDU
+
+    struct rules_match_pdr rules = {0};
+    rules.far                    = createFar(far);
+    rules.qer                    = createQer(qer);
+
+    struct pdrs_per_session pdr_key = {0};
+    pdr_key.pdr_id                  = pdr_id;
+    pdr_key.seid                    = seid;
+
+    pPFCP_Session_LookupProgram->getETHRulesMatchPdrMap()->update(
+        pdr_key, rules, BPF_ANY);
+
+    // TODO [ETH-PDU] support ] SDF Flow Description
+
+    pdrs[i] = createPdr(pdr);
+    i++;
+  }
+
+  pPFCP_Session_LookupProgram->getETHSessionPdrsMap()->update(
+      seid, pdrs, BPF_ANY);
+}
+
+//---------------------------------------------------------------------------------------------------------------
 void SessionProgramManager::modifyPipeline(
     std::shared_ptr<pfcp::pfcp_session> session, uint32_t teid_ul,
     uint32_t teid_dl) {
@@ -697,6 +853,12 @@ void SessionProgramManager::modifyPipeline(
 
   pfcp::pdi pdi;
   pfcp::source_interface_t sourceInterface;
+
+  if (session->get_pdn_type() == pfcp::pdn_type_value_e::ETHERNET) {
+    logger.debug("ETH-PDU: modifying pipeline for ETH PDU session");
+    modifyETHPipeline(session, teid_ul, teid_dl);
+    return;
+  }
 
   if (!ueIp) {
     logger.error(

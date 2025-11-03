@@ -16,3 +16,9 @@ std::shared_ptr<PFCP_Session_LookupProgram> SessionPrograms::getPFCPProgram()
     const {
   return mpPFCP_Session_LookupProgram;
 }
+
+/**************************************************************************************************/
+pdn_type_e SessionPrograms::getPdnType() const {
+  return mPdnType;
+}
+/**************************************************************************************************/

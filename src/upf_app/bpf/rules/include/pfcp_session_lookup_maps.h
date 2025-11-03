@@ -1,6 +1,7 @@
 #ifndef __PFCP_SESSION_LOOKUP_MAPS_H__
 #define __PFCP_SESSION_LOOKUP_MAPS_H__
 
+#include <bpf_helpers.h>
 #include <ie/group_ie/create_pdr.h>
 #include <pfcp/pfcp_pdr.h>
 #include <pfcp/pfcp_far.h>
@@ -8,6 +9,9 @@
 #include <linux/bpf.h>
 #include <stdint.h>
 #include <ie/teid.h>
+#include <next_prog_rule_map.h>
+#include <next_prog_rule_key.h>
+#include <mac_pdu_session_key.h>
 #include <rules_matching_pdr.h>
 #include "interfaces.h"
 #include "session_id.h"
@@ -77,5 +81,13 @@ struct {
   __type(key, u8);         // Key is a constant, e.g., 0
   __type(value, u8);       // Value indicates if framed routing is enabled
 } framed_routing_flag SEC(".maps");
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, MAX_LENGTH);  // 10,
+  __type(key, u8[ETH_ALEN]);
+  __type(value, struct mac_pdu_session_value);
+  __uint(pinning, 1);
+} m_mac_pdu_session SEC(".maps");
 
 #endif  // __PFCP_SESSION_LOOKUP_MAPS_H__

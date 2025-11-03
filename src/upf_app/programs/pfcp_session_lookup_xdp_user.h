@@ -53,6 +53,11 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> getSdfFilterMap() const;
   std::shared_ptr<BPFMap> getQosEnablingMap() const;
   std::shared_ptr<BPFMap> getUeQfiTeidMap() const;
+  // Maps for ETH PDU session
+  std::shared_ptr<BPFMap> getETHMacPduSessionMap() const;
+  std::shared_ptr<BPFMap> getETHSessionMappingMap() const;
+  std::shared_ptr<BPFMap> getETHRulesMatchPdrMap() const;
+  std::shared_ptr<BPFMap> getETHSessionPdrsMap() const;
 
  private:
   void initializeMaps();
@@ -74,6 +79,12 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> mpQosEnablingMap;
   std::shared_ptr<BPFMap> mpFramedRouteMappingMap;
   std::shared_ptr<BPFMap> mpFramedRouteFlagMap;
+
+  // Maps for ETH PDU session
+  std::shared_ptr<BPFMap> mpETHMacPduSessionMap;
+  std::shared_ptr<BPFMap> mpETHSessionMappingMap;
+  std::shared_ptr<BPFMap> mpETHRulesMatchPdrMap;
+  std::shared_ptr<BPFMap> mpETHSessionPdrsMap;
 };
 
 #endif  // __PFCP_SESSION_LOOKUP_XDP_USER_H__

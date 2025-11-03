@@ -85,6 +85,26 @@ class SessionManager {
       std::shared_ptr<pfcp::pfcp_session> pSession_establishment,
       std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs);
 
+  /*****************************************************************************************************************/
+  bool extractPdi(std::shared_ptr<pfcp::pfcp_pdr> pdr, pfcp::pdi& pdi);
+
+  /*****************************************************************************************************************/
+  bool extractSourceIface(
+      pfcp::pdi& pdi, pfcp::source_interface_t& sourceInterface);
+
+  /*****************************************************************************************************************/
+  bool extractUeIpv4(pfcp::pdi& pdi, pfcp::ue_ip_address_t& ueIpAddress);
+
+  /*****************************************************************************************************************/
+  bool extractEthernetPduSessionInformation(
+      pfcp::pdi& pdi,
+      pfcp::ethernet_pdu_session_information_t& ethernetPduSessionInformation);
+
+  /*****************************************************************************************************************/
+  bool extractEthernetPacketFilter(
+      pfcp::pdi& pdi, pfcp::ethernet_packet_filter& ethernetPacketFilter);
+
+  /*---------------------------------------------------------------------------------------------------------------*/
   bool getFar(
       std::shared_ptr<pfcp::pfcp_session> session,
       std::shared_ptr<pfcp::pfcp_pdr> pdr,
@@ -100,6 +120,7 @@ class SessionManager {
   uint64_t findUplinkTeid(
       uint64_t seid,
       const std::vector<std::shared_ptr<pfcp::pfcp_session>>& sessions);
+  uint64_t findUplinkTeid(const std::shared_ptr<pfcp::pfcp_session> session);
 
   static bool comparePDR(
       const std::shared_ptr<pfcp::pfcp_pdr>& first,
