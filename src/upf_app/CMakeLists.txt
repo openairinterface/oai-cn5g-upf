@@ -1,7 +1,7 @@
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/toolchain.cmake)
 
-add_subdirectory(bpf)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf/bpf_pfcp)
+add_subdirectory(kernel)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel/bpf_pfcp)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/common)
 include_directories(${SRC_TOP_DIR}/common/msg)
@@ -23,15 +23,14 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf/nrf_model.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model.cmake)
 
-include_directories(${SRC_TOP_DIR}/upf_app/bpf)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/include)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr_and_far)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel/rules/include)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel/rules/pdr_and_far)
 
 ##############################################################
 #                          FAR                               #
 ##############################################################
-include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/far)
-# include_directories(${LibNL_INCLUDE_DIR})
+include_directories(${SRC_TOP_DIR}/upf_app/kernel/rules/far)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 
 set(GTP_INTERFACE $ENV{GTP_INTERFACE})
@@ -60,8 +59,6 @@ link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src)
 target_link_libraries(UPF_XDP
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.a
   ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.so
-  # PUBLIC upfutils
-  # PRIVATE spdlog
   PRIVATE elf
   PRIVATE z qer_tc
 )
@@ -69,9 +66,8 @@ target_link_libraries(UPF_XDP
 target_include_directories(UPF_XDP PUBLIC
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/include>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/>
-  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/bpf>
+  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/kernel>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/skel>
-  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/interfaces>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/programs>
 )
 
@@ -90,8 +86,7 @@ install(
 ##############################################################
 #                          QER                               #
 ##############################################################
-  # include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindLibNL.cmake)
-  include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/qer)
+  include_directories(${SRC_TOP_DIR}/upf_app/kernel/rules/qer)
   
   add_library(UPF_TC STATIC
   UserPlaneComponent.cpp
@@ -123,9 +118,8 @@ install(
   target_include_directories(UPF_TC PUBLIC
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/include>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/>
-  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/bpf>
+  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/kernel>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/skel>
-  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/interfaces>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/programs>
   )
 

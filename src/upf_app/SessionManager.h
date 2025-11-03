@@ -4,7 +4,6 @@
 #include <UserPlaneComponent.h>
 #include <ie/fseid.h>
 #include <ie/pdr_id.h>
-// #include <interfaces/RulesUtilities.h>
 #include <memory>
 #include <pfcp/pfcp_far.h>
 #include <pfcp/pfcp_pdr.h>
@@ -21,9 +20,6 @@
 #include "itti_msg_n4.hpp"
 
 class BPFMap;
-// class ForwardingActionRules;
-// class PacketDetectionRules;
-class SessionBpf;
 
 class SessionManager {
   enum class Direction { Uplink, Downlink };
