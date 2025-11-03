@@ -380,9 +380,9 @@ remove_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* far) {
   if (!map_element) {
     bpf_debug("N6 interface is missing in UPF map. Use FIB to update MAC");
 
-    update_mac_address(ctx, ethh, iph, N3_INTERFACE);
+    update_mac_address(ctx, new_ethh, iph, N3_INTERFACE);
     // TODO:  Copy to local src and dest MAC addresses for future use
- 
+
   } else {
     upf_n6_ip = map_element->ipv4_address;
 
@@ -391,7 +391,7 @@ remove_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* far) {
 
     if (!map_entry) {
       bpf_debug("N6's Next Hop MAC address not found in map_entry. USe FIB to update MAC");
-      update_mac_address(ctx, ethh, iph, N3_INTERFACE);
+      update_mac_address(ctx, new_ethh, iph, N3_INTERFACE);
     } else {
       bpf_debug("N6's Next Hop MAC address found in map_entry");
       memcpy(new_ethh->h_dest, map_entry->mac_address, sizeof(new_ethh->h_dest));
