@@ -4,7 +4,7 @@
 #ifndef __LOGGER_H__
 #define __LOGGER_H__
 
-#include <bpf_helpers.h>
+#include <bpf/bpf_helpers.h>
 
 // #define DEBUG 0
 #ifdef BPF_DEBUG

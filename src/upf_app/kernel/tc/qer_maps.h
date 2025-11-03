@@ -1,7 +1,6 @@
 #ifndef __QER_MAPS_H__
 #define __QER_MAPS_H__
 
-#include <bpf_helpers.h>
 #include <linux/bpf.h>
 #include <types.h>
 #include "sdf_filter.h"

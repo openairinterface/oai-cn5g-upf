@@ -1,10 +1,8 @@
 include(${SRC_TOP_DIR}/upf_app/cmake/toolchain.cmake)
 include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel)
-include_directories(${SRC_TOP_DIR}/upf_app/kernel)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel/include)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel/xdp)
-#include_directories(${SRC_TOP_DIR}/upf_app/kernel/far)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel/tc)
 include_directories(${SRC_TOP_DIR}/upf_app/include)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
@@ -18,22 +16,12 @@ if(DEFINED BPF_DEBUG)
 endif()
 
 add_custom_target(upf_xdp_all DEPENDS pfcp_session_lookup_xdp)
-# add_custom_target(upf_tc_all DEPENDS qer_tc)
-
-
 
 ###########################################################################
 #                       GENERATE eBPF XDP Skeletons                       #
 ###########################################################################
 function(xdp arg)
-  if (${arg} STREQUAL "pfcp_session_lookup")
-    set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/xdp")
-  #elseif (${arg} STREQUAL "far")
-  #  set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/far")
-  else()
-    message(FATAL_ERROR "Invalid arg: ${arg}")
-  endif()
-
+  set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/xdp")
   add_library(${arg}_xdp STATIC ${source_dir}/${arg}_xdp_kernel.c)
   add_custom_command(
     TARGET ${arg}_xdp
@@ -46,9 +34,6 @@ function(xdp arg)
 endfunction()
 
 xdp(pfcp_session_lookup)
-#xdp(far)
-
-
 
 ###########################################################################
 #                       GENERATE eBPF TC Skeletons                        #

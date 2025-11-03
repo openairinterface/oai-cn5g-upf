@@ -415,16 +415,16 @@ void SessionManager::modifyBpfSession(
          * remove qers from session->qers; session->uplink_qers;
          session->downlink_qers;
           */
-          if (upf_cfg.enable_fr) {
-            pfcp::pdi pdi;
-            if (pdr->get(pdi)) {
-              std::vector<pfcp::framed_route_t> framedRoutes;
-              if (pdi.get(framedRoutes)) {
-                SessionProgramManager::getInstance().removeFramedRoutes(
-                    framedRoutes);
-              }
-            }
-          }
+          // if (upf_cfg.enable_fr) {
+          //   pfcp::pdi pdi;
+          //   if (pdr->get(pdi)) {
+          //     std::vector<pfcp::framed_route_t> framedRoutes;
+          //     if (pdi.get(framedRoutes)) {
+          //       SessionProgramManager::getInstance().removeFramedRoutes(
+          //           framedRoutes);
+          //     }
+          //   }
+          // }
         }
       }
     }
@@ -469,18 +469,18 @@ void SessionManager::removeBpfSession(
     // Removed");
   }
 
-  if (upf_cfg.enable_fr) {
-    // Remove framed route to ue_ip mapping
-    for (auto pdr : pSession->pdrs) {
-      pfcp::pdi pdi;
-      if (pdr->get(pdi)) {
-        std::vector<pfcp::framed_route_t> framedRoutes;
-        if (pdi.get(framedRoutes)) {
-          SessionProgramManager::getInstance().removeFramedRoutes(framedRoutes);
-        }
-      }
-    }
-  }
+  // if (upf_cfg.enable_fr) {
+  //   // Remove framed route to ue_ip mapping
+  //   for (auto pdr : pSession->pdrs) {
+  //     pfcp::pdi pdi;
+  //     if (pdr->get(pdi)) {
+  //       std::vector<pfcp::framed_route_t> framedRoutes;
+  //       if (pdi.get(framedRoutes)) {
+  //         SessionProgramManager::getInstance().removeFramedRoutes(framedRoutes);
+  //       }
+  //     }
+  //   }
+  // }
 
   SessionProgramManager::getInstance().removePipeline(seid);
   Logger::upf_app().debug("Session 0x%x Has Been Removed Successfully", seid);

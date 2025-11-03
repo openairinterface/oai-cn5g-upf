@@ -4,7 +4,7 @@
 #ifndef __XDP_STATS_KERN_H
 #define __XDP_STATS_KERN_H
 
-#include <bpf_helpers.h>
+#include <bpf/bpf_helpers.h>
 #include <utils/logger.h>
 #include "xdp_stats_kern_user.h"
 

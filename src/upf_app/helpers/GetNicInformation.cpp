@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
-#include <types.h>
+//#include <types.h>
 #include <arpa/inet.h>
 #include <netinet/ether.h>
 #include <fstream>
@@ -17,9 +17,6 @@
 #include <stdexcept>
 #include <arpa/inet.h>
 #include <sstream>
-
-#define COMMAND_MAX_LENGTH 256
-#define OUTPUT_MAX_LENGTH 256
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // Function to read a value from a file

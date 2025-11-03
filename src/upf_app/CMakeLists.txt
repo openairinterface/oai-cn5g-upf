@@ -30,7 +30,6 @@ include_directories(${SRC_TOP_DIR}/upf_app/kernel/include)
 ##############################################################
 #                          XDP                               #
 ##############################################################
-#include_directories(${SRC_TOP_DIR}/upf_app/kernel/far)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel/xdp)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 

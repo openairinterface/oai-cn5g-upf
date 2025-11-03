@@ -1,10 +1,9 @@
 #define KBUILD_MODNAME pfcp_session_lookup_xdp_kernel
 
 #include <types.h>
-#include <bpf_helpers.h>
-#include <bpf_endian.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>
 #include <endian.h>
-//#include <lib/crc16.h>
 #include <utils/csum.h>
 
 #include <protocols/ip.h>
@@ -25,7 +24,6 @@
 
 #include <utils/logger.h>
 #include <utils/utils.h>
-//#include <next_prog_rule_key.h>
 #include "framed_routing_bpf.h"
 
 #include "xdp_stats_kern.h"
@@ -38,7 +36,7 @@
 #include <linux/if_ether.h>
 #include <linux/if_vlan.h>
 
-#include "bpf_endian.h"
+//#include "bpf_endian.h"
 
 #include <string.h>  //Needed for memcpy
 

@@ -2,13 +2,13 @@
 #define __SESSIONMANAGER_H__
 
 #include <UserPlaneComponent.h>
-#include <ie/fseid.h>
-#include <ie/pdr_id.h>
+//#include <ie/fseid.h>
+//#include <ie/pdr_id.h>
 #include <memory>
-#include <pfcp/pfcp_far.h>
-#include <pfcp/pfcp_pdr.h>
-#include <pfcp/pfcp_pdrs.h>
-#include <pfcp/pfcp_session.h>
+// #include <pfcp/pfcp_far.h>
+// #include <pfcp/pfcp_pdr.h>
+// #include <pfcp/pfcp_pdrs.h>
+// #include <pfcp/pfcp_session.h>
 #include <vector>
 #include <wrappers/BPFMap.hpp>
 
