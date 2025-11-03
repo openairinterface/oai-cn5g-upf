@@ -83,7 +83,9 @@ struct {
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, MAX_ETH_PDU_SESSIONS);  // 500 // TODO: check from 3gpp standards
+  __uint(
+      max_entries,
+      MAX_ETH_PDU_SESSIONS);  // 500 // TODO: check from 3gpp standards
   __type(key, u8[ETH_ALEN]);
   __type(value, struct mac_pdu_session_value);
   __uint(pinning, 1);
