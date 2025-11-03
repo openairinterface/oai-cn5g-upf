@@ -411,7 +411,7 @@ remove_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* far) {
     map_entry = bpf_map_lookup_elem(&m_arp_table, &upf_n6_ip);
 
     if (!map_entry) {
-      bpf_debug("N6's Next Hop MAC address not found. Use FIB to update MAC");
+      bpf_debug("N6's Next Hop MAC address not found in map_entry. Use FIB to update MAC");
       update_mac_address(ctx, new_ethh, iph, N3_INTERFACE);
     } else {
       bpf_debug("N6's Next Hop MAC address found in map_entry");
