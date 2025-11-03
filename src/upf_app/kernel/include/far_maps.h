@@ -1,7 +1,6 @@
 #ifndef __FAR_MAPS_H__
 #define __FAR_MAPS_H__
 
-#include <bpf_helpers.h>
 #include <linux/bpf.h>
 #include <pfcp/pfcp_far.h>
 #include <types.h>

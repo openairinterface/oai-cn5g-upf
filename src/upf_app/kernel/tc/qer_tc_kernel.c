@@ -3,7 +3,8 @@
 // clang-format on
 
 #include "xdp_stats_kern.h"
-#include <bpf_helpers.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>
 #include <endian.h>
 #include <linux/bpf.h>
 #include <linux/if_ether.h>
@@ -20,7 +21,6 @@
 #include <utils/utils.h>
 #include <interfaces.h>
 #include <string.h>
-#include "bpf_endian.h"
 #include "sdf_filter.h"
 
 #include <linux/pkt_cls.h>

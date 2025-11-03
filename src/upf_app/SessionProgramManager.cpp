@@ -3,7 +3,6 @@
  */
 #include "SessionProgramManager.h"
 #include <qer_tc_user.h>
-//#include <pfcp_session_pdr_lookup_xdp_user.h>
 #include "SessionPrograms.h"
 #include <pfcp_session_lookup_xdp_user.h>
 #include <UserPlaneComponent.h>
@@ -13,7 +12,6 @@
 
 #include <observer/OnStateChangeSessionProgramObserver.h>
 #include <spdlog/fmt/ostr.h>
-#include <types.h>
 #include <wrappers/BPFMap.hpp>
 #include "logger.hpp"
 #include "helpers/NextHopFinder.hpp"
@@ -28,10 +26,6 @@
 #include "helpers/ConfigLoader.hpp"
 #include "sdf_filter.h"
 
-// #include <sys/utsname.h>
-// #include <stdio.h>
-// #include <string.h>
-
 using namespace oai::config;
 extern upf_config upf_cfg;
 
@@ -43,8 +37,8 @@ extern upf_config upf_cfg;
 #define MAX_PDRS_SESSION 32
 //---------------------------------------------------------------------------------------------------------------
 int is_little_endian() {
-  u32 value = 1;
-  u8* byte  = (u8*) &value;
+  uint32_t value = 1;
+  uint8_t* byte  = (uint8_t*) &value;
   return (*byte == 1);
 }
 
@@ -227,47 +221,47 @@ pfcp_pdr_t_ SessionProgramManager::createPdr(
 }
 
 //---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::addFramedRoutes(
-    uint32_t ueIpAddress,
-    const std::vector<pfcp::framed_route_t>& framedRoutes) {
-  auto pPFCP_Session_LookupProgram =
-      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+// void SessionProgramManager::addFramedRoutes(
+//     uint32_t ueIpAddress,
+//     const std::vector<pfcp::framed_route_t>& framedRoutes) {
+//   auto pPFCP_Session_LookupProgram =
+//       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
 
-  for (const auto& framedRoute : framedRoutes) {
-    Logger::upf_app().info(
-        "Add framed route to ue_ip mapping %s to UE IP 0x%x",
-        framedRoute.framed_route, ueIpAddress);
-    std::stringstream ss(framedRoute.framed_route);
-    std::string ipsubnetmask;
-    while (std::getline(ss, ipsubnetmask, ' ')) {
-      std::pair<uint32_t, uint32_t> ipCidr =
-          fr::FramedRouting::extractIPCidr(ipsubnetmask);
-      auto key = framed_routing_key_for_ip_cidr(ipCidr.first, ipCidr.second);
-      pPFCP_Session_LookupProgram->updateFramedRouteMappingMap(
-          ueIpAddress, key);
-    }
-  }
-}
+//   for (const auto& framedRoute : framedRoutes) {
+//     Logger::upf_app().info(
+//         "Add framed route to ue_ip mapping %s to UE IP 0x%x",
+//         framedRoute.framed_route, ueIpAddress);
+//     std::stringstream ss(framedRoute.framed_route);
+//     std::string ipsubnetmask;
+//     while (std::getline(ss, ipsubnetmask, ' ')) {
+//       std::pair<uint32_t, uint32_t> ipCidr =
+//           fr::FramedRouting::extractIPCidr(ipsubnetmask);
+//       auto key = framed_routing_key_for_ip_cidr(ipCidr.first, ipCidr.second);
+//       pPFCP_Session_LookupProgram->updateFramedRouteMappingMap(
+//           ueIpAddress, key);
+//     }
+//   }
+// }
 
 //---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::removeFramedRoutes(
-    const std::vector<pfcp::framed_route_t>& framedRoutes) {
-  auto pPFCP_Session_LookupProgram =
-      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
-  for (const auto& framedRoute : framedRoutes) {
-    std::stringstream ss(framedRoute.framed_route);
-    std::string ipsubnetmask;
-    Logger::upf_app().info(
-        "Remove framed route to ue_ip mapping for %s",
-        framedRoute.framed_route);
-    while (std::getline(ss, ipsubnetmask, ' ')) {
-      std::pair<uint32_t, uint32_t> ipCidr =
-          fr::FramedRouting::extractIPCidr(ipsubnetmask);
-      auto key = framed_routing_key_for_ip_cidr(ipCidr.first, ipCidr.second);
-      pPFCP_Session_LookupProgram->removeFramedRoute(key);
-    }
-  }
-}
+// void SessionProgramManager::removeFramedRoutes(
+//     const std::vector<pfcp::framed_route_t>& framedRoutes) {
+//   auto pPFCP_Session_LookupProgram =
+//       UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+//   for (const auto& framedRoute : framedRoutes) {
+//     std::stringstream ss(framedRoute.framed_route);
+//     std::string ipsubnetmask;
+//     Logger::upf_app().info(
+//         "Remove framed route to ue_ip mapping for %s",
+//         framedRoute.framed_route);
+//     while (std::getline(ss, ipsubnetmask, ' ')) {
+//       std::pair<uint32_t, uint32_t> ipCidr =
+//           fr::FramedRouting::extractIPCidr(ipsubnetmask);
+//       auto key = framed_routing_key_for_ip_cidr(ipCidr.first, ipCidr.second);
+//       pPFCP_Session_LookupProgram->removeFramedRoute(key);
+//     }
+//   }
+// }
 
 //---------------------------------------------------------------------------------------------------------------
 pfcp_qer_t_ SessionProgramManager::createQer(
@@ -776,18 +770,18 @@ void SessionProgramManager::createPipeline(
     ..................
     */
 
-    if ((upf_cfg.enable_fr) &&
-        (sourceInterface.interface_value == INTERFACE_VALUE_CORE)) {
-      if (ueIpAddress.v4) {
-        std::vector<pfcp::framed_route_t> framedRoutes;
-        if (pdi.get(framedRoutes)) {
-          SessionProgramManager::getInstance().addFramedRoutes(
-              ueIpAddress.ipv4_address.s_addr, framedRoutes);
-        }
-      } else {
-        Logger::upf_app().warn("Framed Route is not yet supported for Ipv6");
-      }
-    }
+    // if ((upf_cfg.enable_fr) &&
+    //     (sourceInterface.interface_value == INTERFACE_VALUE_CORE)) {
+    //   if (ueIpAddress.v4) {
+    //     std::vector<pfcp::framed_route_t> framedRoutes;
+    //     if (pdi.get(framedRoutes)) {
+    //       SessionProgramManager::getInstance().addFramedRoutes(
+    //           ueIpAddress.ipv4_address.s_addr, framedRoutes);
+    //     }
+    //   } else {
+    //     Logger::upf_app().warn("Framed Route is not yet supported for Ipv6");
+    //   }
+    // }
 
     pdrs[i] = createPdr(pdr);
     i++;
@@ -1103,15 +1097,15 @@ void SessionProgramManager::modifyPipeline(
       }
     }
 
-    if ((upf_cfg.enable_fr) &&
-        (pdr->get(pdi) && pdi.get(sourceInterface) &&
-         (sourceInterface.interface_value == INTERFACE_VALUE_CORE))) {
-      std::vector<pfcp::framed_route_t> framedRoutes;
-      if (pdi.get(framedRoutes)) {
-        SessionProgramManager::getInstance().addFramedRoutes(
-            ueIp, framedRoutes);
-      }
-    }
+    // if ((upf_cfg.enable_fr) &&
+    //     (pdr->get(pdi) && pdi.get(sourceInterface) &&
+    //      (sourceInterface.interface_value == INTERFACE_VALUE_CORE))) {
+    //   std::vector<pfcp::framed_route_t> framedRoutes;
+    //   if (pdi.get(framedRoutes)) {
+    //     SessionProgramManager::getInstance().addFramedRoutes(
+    //         ueIp, framedRoutes);
+    //   }
+    // }
 
     pdrs[i] = createPdr(pdr);
     i++;
