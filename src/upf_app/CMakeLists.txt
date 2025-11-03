@@ -24,13 +24,14 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model.cmake)
 
 include_directories(${SRC_TOP_DIR}/upf_app/kernel)
-include_directories(${SRC_TOP_DIR}/upf_app/kernel/rules/include)
-include_directories(${SRC_TOP_DIR}/upf_app/kernel/rules/pdr_and_far)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel/include)
+
 
 ##############################################################
-#                          FAR                               #
+#                          XDP                               #
 ##############################################################
-include_directories(${SRC_TOP_DIR}/upf_app/kernel/rules/far)
+#include_directories(${SRC_TOP_DIR}/upf_app/kernel/far)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel/xdp)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 
 set(GTP_INTERFACE $ENV{GTP_INTERFACE})
@@ -86,7 +87,7 @@ install(
 ##############################################################
 #                          QER                               #
 ##############################################################
-  include_directories(${SRC_TOP_DIR}/upf_app/kernel/rules/qer)
+  include_directories(${SRC_TOP_DIR}/upf_app/kernel/tc)
   
   add_library(UPF_TC STATIC
   UserPlaneComponent.cpp
