@@ -11,7 +11,6 @@
 #include <pfcp/pfcp_far.h>
 #include <pfcp/pfcp_pdr.h>
 #include <pfcp/pfcp_qer.h>
-#include <next_prog_rule_key.h>
 #include <mac_pdu_session_key.h>
 #include <session_id.h>
 #include <netinet/ether.h>
@@ -85,10 +84,6 @@ class SessionProgramManager {
   void storeFARInFARMap(
       std::shared_ptr<FARProgram> pFARProgram,
       std::shared_ptr<pfcp::pfcp_far> pFar);
-  void saveSeidWithinFARProgram(
-      uint64_t seid,
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-      const next_rule_prog_index_key& key);
   void updateARPTableForN6(
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
       uint32_t dnIP, uint32_t upfn6IP);

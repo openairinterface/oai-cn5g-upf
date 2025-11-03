@@ -9,14 +9,13 @@
 #include <linux/bpf.h>
 #include <stdint.h>
 #include <ie/teid.h>
-#include <next_prog_rule_map.h>
-#include <next_prog_rule_key.h>
 #include <mac_pdu_session_key.h>
 #include <rules_matching_pdr.h>
 #include "interfaces.h"
 #include "session_id.h"
 
 #define MAX_PDRS_PER_SESSION 32
+#define MAX_ETH_PDU_SESSIONS 500
 
 const volatile int max_upf_interfaces SEC(".rodata");
 const volatile int max_upf_redirect_interfaces SEC(".rodata");
@@ -84,7 +83,7 @@ struct {
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, MAX_LENGTH);  // 10,
+  __uint(max_entries, MAX_ETH_PDU_SESSIONS);  // 500 // TODO: check from 3gpp standards
   __type(key, u8[ETH_ALEN]);
   __type(value, struct mac_pdu_session_value);
   __uint(pinning, 1);

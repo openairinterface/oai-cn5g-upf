@@ -112,7 +112,7 @@ class upf_support_features : public config_type {
       u_int16_t max_pdrs_per_pdu_session,
       u_int16_t max_qos_flows_per_pdu_session,
       u_int16_t max_sdf_filters_per_pdu_session, u_int16_t max_arp_entries,
-      bool enable_eth_pdu);
+      bool enable_snat, bool enable_fr, bool enable_eth_pdu);
 
   void from_yaml(const YAML::Node& node) override;
 

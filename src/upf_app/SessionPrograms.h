@@ -4,7 +4,6 @@
 #include <memory>
 #include <pfcp_session_lookup_xdp_user.h>
 #include <unistd.h>
-#include <next_prog_rule_key.h>
 #include "3gpp_29.274.h"
 
 /**
@@ -24,7 +23,6 @@ class SessionPrograms {
 
  private:
   std::shared_ptr<PFCP_Session_LookupProgram> mpPFCP_Session_LookupProgram;
-  struct next_rule_prog_index_key mKey;
   pdn_type_e mPdnType;
 };
 
