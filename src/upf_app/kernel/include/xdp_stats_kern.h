@@ -5,7 +5,7 @@
 #define __XDP_STATS_KERN_H
 
 #include <bpf/bpf_helpers.h>
-#include <utils/logger.h>
+#include "utils/logger.h"
 #include "xdp_stats_kern_user.h"
 
 /* Data record type 'struct datarec' is defined in common/xdp_stats_kern_user.h,

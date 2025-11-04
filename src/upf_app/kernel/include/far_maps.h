@@ -1,10 +1,10 @@
 #ifndef __FAR_MAPS_H__
 #define __FAR_MAPS_H__
 
-#include <linux/bpf.h>
-#include <pfcp/pfcp_far.h>
 #include "linux/custom_types.h"
+#include "pfcp/pfcp_far.h"
 #include "arp_table.h"
+#include <linux/bpf.h>
 
 #define ARP_ENTRIES_MAX_SIZE 10000
 #define FAR_TAILS_MAX 20

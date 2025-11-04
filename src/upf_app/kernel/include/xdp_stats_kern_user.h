@@ -6,12 +6,13 @@
 #ifndef __XDP_STATS_KERN_USER_H
 #define __XDP_STATS_KERN_USER_H
 
+#include "linux/custom_types.h"
 #include <linux/bpf.h>
 
 /* This is the data record stored in the map */
 struct datarec {
-  __u64 rx_packets;
-  __u64 rx_bytes;
+  u64 rx_packets;
+  u64 rx_bytes;
 };
 
 #ifndef XDP_ACTION_MAX

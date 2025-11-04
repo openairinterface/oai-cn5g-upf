@@ -1,16 +1,17 @@
 #ifndef __PFCP_SESSION_LOOKUP_MAPS_H__
 #define __PFCP_SESSION_LOOKUP_MAPS_H__
 
-#include <ie/group_ie/create_pdr.h>
-#include <pfcp/pfcp_pdr.h>
-#include <pfcp/pfcp_far.h>
-#include <pfcp/pfcp_session.h>
-#include <linux/bpf.h>
-#include <stdint.h>
-#include <ie/teid.h>
-#include <rules_matching_pdr.h>
+#include "ie/group_ie/create_pdr.h"
+#include "ie/teid.h"
+#include "pfcp/pfcp_pdr.h"
+#include "pfcp/pfcp_far.h"
+#include "pfcp/pfcp_session.h"
+#include "rules_matching_pdr.h"
 #include "interfaces.h"
 #include "session_id.h"
+
+#include <linux/bpf.h>
+#include <stdint.h>
 
 #define MAX_PDRS_PER_SESSION 32
 

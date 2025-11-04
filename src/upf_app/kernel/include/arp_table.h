@@ -2,7 +2,6 @@
 #define __ARP_TABLE_H__
 
 #include "linux/custom_types.h"
-//#include <stdint.h>
 
 struct s_arp_mapping {
   u8 mac_address[6];
