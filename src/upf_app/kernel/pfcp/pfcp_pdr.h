@@ -1,7 +1,6 @@
 #ifndef __PFCP_PDR_H__
 #define __PFCP_PDR_H__
 
-#include <types.h>
 #include <ie/group_ie/create_pdr.h>
 
 typedef struct pfcp_pdr_s {

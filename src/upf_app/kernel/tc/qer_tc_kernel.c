@@ -1,7 +1,4 @@
-// clang-format off
-#include <types.h>
-// clang-format on
-
+#include "linux/custom_types.h"
 #include "xdp_stats_kern.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>

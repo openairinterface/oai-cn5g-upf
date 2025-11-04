@@ -1,7 +1,7 @@
 #if !defined(IE_TEID_H)
 #define IE_TEID_H
 
-#include <types.h>
+#include "linux/custom_types.h"
 
 // TEIDs
 typedef u32 teid_t_;

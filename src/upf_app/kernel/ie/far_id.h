@@ -1,8 +1,8 @@
 #ifndef __FAR_ID_H__
 #define __FAR_ID_H__
 
-#include <types.h>
-#include <ie/ie_base.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 //-------------------------------------
 // 8.2.74 FAR ID

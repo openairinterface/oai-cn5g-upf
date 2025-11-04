@@ -1,8 +1,7 @@
 #ifndef __GATE_STATUS_H__
 #define __GATE_STATUS_H__
 
-#include <types.h>
-#include <ie/ie_base.h>
+#include "linux/custom_types.h"
 
 //  8.2.7 Gate Status
 enum gate_status_e {

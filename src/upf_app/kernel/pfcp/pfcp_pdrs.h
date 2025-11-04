@@ -1,7 +1,6 @@
 #ifndef __PFCP_PDRS_H__
 #define __PFCP_PDRS_H__
 
-#include <types.h>
 #include <pfcp/pfcp_pdr.h>
 
 #define PDRS_MAX_SIZE 10000

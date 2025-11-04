@@ -1,8 +1,8 @@
 #ifndef __QOS_FLOW_IDENTIFIER_H__
 #define __QOS_FLOW_IDENTIFIER_H__
 
-#include <types.h>
-#include <ie/ie_base.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 // 8.2.89 QFI
 typedef struct qfi_s {

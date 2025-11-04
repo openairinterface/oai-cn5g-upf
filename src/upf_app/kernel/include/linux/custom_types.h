@@ -1,8 +1,8 @@
 /*
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
-#if !defined(TYPES_H)
-#define TYPES_H
+#if !defined(CUSTOM_TYPES_H)
+#define CUSTOM_TYPES_H
 
 #include <linux/types.h>
 #include <stdbool.h>
@@ -43,4 +43,4 @@ struct pdr_lookup_config {
   struct ____btf_map_##name __attribute__((section(".maps." #name), used))     \
   ____btf_map_##name = {}
 
-#endif  // TYPES_H
+#endif  // CUSTOM_TYPES_H

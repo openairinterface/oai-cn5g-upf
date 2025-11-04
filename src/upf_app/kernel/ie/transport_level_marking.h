@@ -1,8 +1,8 @@
 #ifndef __TRANSPORT_LEVEL_MARKING_H__
 #define __TRANSPORT_LEVEL_MARKING_H__
 
-#include <ie/ie_base.h>
-#include <types.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 //-------------------------------------
 // 8.2.12 Transport Level Marking

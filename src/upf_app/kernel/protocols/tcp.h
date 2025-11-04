@@ -1,8 +1,8 @@
 #if !defined(PROTOCOLS_TCP_H)
 #define PROTOCOLS_TCP_H
 
+#include "linux/custom_types.h"
 #include <linux/tcp.h>
-#include <types.h>
 #include <linux/bpf.h>
 #include <linux/if_ether.h>
 

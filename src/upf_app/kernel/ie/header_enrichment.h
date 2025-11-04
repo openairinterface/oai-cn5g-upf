@@ -1,8 +1,7 @@
 #ifndef __HEADER_ENRICHMENT_H__
 #define __HEADER_ENRICHMENT_H__
 
-#include <ie/ie_base.h>
-#include <types.h>
+#include "linux/custom_types.h"
 
 #define HEADER_ENRICHMENT_FIELD_NAME_MAX_SIZE 100
 #define HEADER_ENRICHMENT_FIELD_VALUE_MAX_SIZE 100

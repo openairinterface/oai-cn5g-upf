@@ -1,8 +1,8 @@
 #ifndef __FOWARDING_POLICY_H__
 #define __FOWARDING_POLICY_H__
 
-#include <ie/ie_base.h>
-#include <types.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 #define FOWARDING_POLICY_ID_MAX_SIZE 100
 //-------------------------------------

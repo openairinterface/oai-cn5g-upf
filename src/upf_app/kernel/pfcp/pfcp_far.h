@@ -1,7 +1,6 @@
 #ifndef __PFCP_FAR_H__
 #define __PFCP_FAR_H__
 
-#include <types.h>
 #include <ie/apply_action.h>
 #include <ie/group_ie/forwarding_parameters.h>
 #include <ie/group_ie/duplicating_parameters.h>

@@ -1,7 +1,6 @@
 #ifndef __PFCP_QER_H__
 #define __PFCP_QER_H__
 
-#include <types.h>
 #include <ie/group_ie/create_qer.h>
 #include <ie/qer_id.h>
 #include <ie/qer_correlation_id.h>

@@ -1,8 +1,7 @@
 #ifndef __QER_CORRELATION_ID_H__
 #define __QER_CORRELATION_ID_H__
 
-#include <types.h>
-#include <ie/ie_base.h>
+#include "linux/custom_types.h"
 
 //-------------------------------------
 // 8.2.10 QER Correlation ID

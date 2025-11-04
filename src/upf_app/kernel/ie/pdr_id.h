@@ -1,8 +1,8 @@
 #ifndef __PDR_ID_H__
 #define __PDR_ID_H__
 
-#include <types.h>
-#include <ie/ie_base.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 //-------------------------------------
 // 8.2.36 Packet Detection Rule ID (PDR ID)

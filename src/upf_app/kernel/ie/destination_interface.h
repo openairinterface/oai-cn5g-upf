@@ -1,8 +1,8 @@
 #ifndef __DESTINATION_INTERFACE_H__
 #define __DESTINATION_INTERFACE_H__
 
-#include <ie/ie_base.h>
-#include <types.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 //-------------------------------------
 // 8.2.24 Destination Interface

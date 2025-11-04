@@ -3,7 +3,7 @@
 
 #include <linux/bpf.h>
 #include <pfcp/pfcp_far.h>
-#include <types.h>
+#include "linux/custom_types.h"
 #include "arp_table.h"
 
 #define ARP_ENTRIES_MAX_SIZE 10000

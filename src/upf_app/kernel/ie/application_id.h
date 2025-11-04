@@ -1,8 +1,8 @@
 #if !defined(IE_APPLICATION_ID_H)
 #define IE_APPLICATION_ID_H
 
-#include <ie/ie_base.h>
-#include <types.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 //-------------------------------------
 //  8.2.6 Application ID

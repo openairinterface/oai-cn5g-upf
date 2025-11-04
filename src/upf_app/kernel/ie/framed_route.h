@@ -1,8 +1,8 @@
 #if !defined(IE_FRAMED_ROUTE_H)
 #define IE_FRAMED_ROUTE_H
 
-#include <ie/ie_base.h>
-#include <types.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 //-------------------------------------
 // 8.2.109 Framed-Route

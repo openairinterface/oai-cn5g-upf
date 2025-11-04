@@ -1,8 +1,7 @@
 #ifndef __GUARANTEED_BITRATE_H__
 #define __GUARANTEED_BITRATE_H__
 
-#include <types.h>
-#include <ie/ie_base.h>
+#include "linux/custom_types.h"
 
 // 8.2.9 GBR
 typedef struct gbr_s {

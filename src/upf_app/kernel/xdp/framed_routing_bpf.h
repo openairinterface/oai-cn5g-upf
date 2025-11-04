@@ -1,29 +1,29 @@
 #ifndef OPENAIRINTERFACE_FRAMED_ROUTING_BPF_H
 #define OPENAIRINTERFACE_FRAMED_ROUTING_BPF_H
 
-#include <types.h>
+#include "linux/custom_types.h"
 #include <stdint.h>
 
 struct FramedRoutingKeyBPF {
-  uint32_t networkAddress;
-  uint32_t subnet;
+  u32 networkAddress;
+  u32 subnet;
 };
 
-static __always_inline uint32_t
+static __always_inline u32
 hash_framed_routing_key(struct FramedRoutingKeyBPF* key) {
-  uint32_t hash = 17;
-  hash          = hash * 31 + key->networkAddress;
-  hash          = hash ^ key->subnet;
+  u32 hash = 17;
+  hash     = hash * 31 + key->networkAddress;
+  hash     = hash ^ key->subnet;
   return hash;
 }
 
 static __always_inline struct FramedRoutingKeyBPF
-framed_routing_key_for_ip_cidr(uint32_t ip, uint32_t cidr) {
-  const uint32_t ipv4Size = 32;
+framed_routing_key_for_ip_cidr(u32 ip, u32 cidr) {
+  const u32 ipv4Size = 32;
   // Calculate the subnet address
-  uint32_t subnet_mask = 0xffffffff << (ipv4Size - cidr);
+  u32 subnet_mask = 0xffffffff << (ipv4Size - cidr);
   // Calculate the network address
-  uint32_t network_address = subnet_mask & ip;
+  u32 network_address = subnet_mask & ip;
 
   struct FramedRoutingKeyBPF key = {network_address, subnet_mask};
 

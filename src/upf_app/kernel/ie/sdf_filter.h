@@ -1,8 +1,8 @@
 #if !defined(IE_SDF_FILTER_H)
 #define IE_SDF_FILTER_H
 
-#include <types.h>
-#include <ie/ie_base.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 #define MAX_FLOW_DESC_LEN 256  // Set a reasonable max length
 
