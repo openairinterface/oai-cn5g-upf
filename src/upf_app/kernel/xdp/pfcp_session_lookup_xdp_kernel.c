@@ -4,35 +4,20 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
 #include <endian.h>
-#include <utils/csum.h>
-
-#include <protocols/ip.h>
-#include <protocols/gtpu.h>
-#include <protocols/udp.h>
-#include <protocols/tcp.h>
-#include <protocols/eth.h>
-
-#include <pfcp/pfcp_far.h>
-#include <pfcp/pfcp_pdr.h>
-
-#include <ie/group_ie/pdi.h>
-
-#include <pfcp_session_lookup_maps.h>
-#include <far_maps.h>
-#include <interfaces.h>
-#include <sdf_filter.h>
-
-#include <utils/logger.h>
-#include <utils/utils.h>
+#include "utils/csum.h"
+#include "protocols/gtpu.h"
+#include "pfcp/pfcp_far.h"
+#include "pfcp/pfcp_pdr.h"
+#include "ie/group_ie/pdi.h"
+#include "pfcp_session_lookup_maps.h"
+#include "far_maps.h"
+#include "interfaces.h"
+#include "sdf_filter.h"
+#include "utils/logger.h"
+#include "utils/utils.h"
 #include "framed_routing_bpf.h"
-#include <utils/types.h>
-#include <mac_pdu_session_key.h>
-#include <pfcp_session_eth_pdu.h>
-#include <framed_routing_bpf.h>
-
 #include "xdp_stats_kern.h"
 #include <linux/bpf.h>
-
 #include <linux/ip.h>
 #include <linux/icmp.h>
 #include <linux/udp.h>

@@ -1,5 +1,15 @@
 #include "linux/custom_types.h"
 #include "xdp_stats_kern.h"
+#include "pfcp/pfcp_far.h"
+#include "pfcp/pfcp_pdr.h"
+#include "protocols/gtpu.h"
+#include "utils/csum.h"
+#include "utils/logger.h"
+#include "utils/utils.h"
+#include "interfaces.h"
+#include "sdf_filter.h"
+#include "qer_maps.h"
+
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
 #include <endian.h>
@@ -8,21 +18,8 @@
 #include <linux/ip.h>
 #include <linux/udp.h>
 #include <linux/tcp.h>
-#include <pfcp/pfcp_far.h>
-#include <pfcp/pfcp_pdr.h>
-#include <protocols/gtpu.h>
-#include <protocols/ip.h>
-#include <protocols/tcp.h>
-#include <utils/csum.h>
-#include <utils/logger.h>
-#include <utils/utils.h>
-#include <interfaces.h>
 #include <string.h>
-#include "sdf_filter.h"
-
 #include <linux/pkt_cls.h>
-#include <qer_maps.h>
-
 #include <linux/netdevice.h>
 #include <linux/pkt_sched.h>
 
@@ -103,7 +100,7 @@ int tc_filter_traffic(struct __sk_buff* skb) {
 
           u16 minor_id = generate_minor_id(
               qos_class_metadata->seid, qos_class_metadata->qfi);
-          __u32 classid = TC_H_MAKE(1, minor_id);
+          u32 classid = TC_H_MAKE(1, minor_id);
 
           skb->tc_index   = classid;
           skb->tc_classid = classid;
