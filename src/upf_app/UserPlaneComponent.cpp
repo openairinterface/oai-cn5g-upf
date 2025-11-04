@@ -56,7 +56,7 @@ void UserPlaneComponent::onNewSessionProgram(
 }
 
 //---------------------------------------------------------------------------------------------------------------
-void UserPlaneComponent::onDestroySessionProgram(u_int32_t programId) {
+void UserPlaneComponent::onDestroySessionProgram(uint32_t programId) {
   mpPFCP_Session_LookupProgram->removeProgramMap(programId);
 }
 

@@ -1,8 +1,9 @@
 #ifndef __RULES_MATCHING_PDR_H__
 #define __RULES_MATCHING_PDR_H__
 
-#include <pfcp/pfcp_far.h>
-#include <pfcp/pfcp_qer.h>
+#include "linux/custom_types.h"
+#include "pfcp/pfcp_far.h"
+#include "pfcp/pfcp_qer.h"
 
 struct rules_match_pdr {
   pfcp_far_t_ far;
@@ -11,13 +12,8 @@ struct rules_match_pdr {
 };
 
 struct pdrs_per_session {
-  uint16_t pdr_id;
-  uint64_t seid;
+  u16 pdr_id;
+  u64 seid;
 };
-
-// struct sdfs_per_session {
-//   uint16_t qer_id;
-//   uint64_t seid;
-// };
 
 #endif  // __RULES_MATCHING_PDR_H__

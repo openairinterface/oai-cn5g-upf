@@ -2,7 +2,6 @@
 #define __INTERFACES_H__
 
 #include "linux/custom_types.h"
-#include <stdint.h>
 
 typedef enum {
   N3_INTERFACE,

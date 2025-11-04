@@ -27,6 +27,7 @@ include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model.cmake)
 
 include_directories(${SRC_TOP_DIR}/upf_app/kernel)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel/include)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel/pfcp)
 
 
 ##############################################################

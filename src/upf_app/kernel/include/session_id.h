@@ -2,7 +2,6 @@
 #define __SESSION_ID_H__
 
 #include "linux/custom_types.h"
-#include <stdint.h>
 
 struct session_id {
   u32 teid_ul;
