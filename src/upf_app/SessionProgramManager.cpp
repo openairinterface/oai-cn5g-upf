@@ -375,12 +375,6 @@ void SessionProgramManager::updateARPTableForN6(
     memset(&map_table, 0, sizeof(struct s_arp_mapping));
     memcpy(map_table.mac_address, remoteN6MAC, 6);
     map_table.ipv4_address = ipnexremoteN6hop;
-
-    // int max_entries =
-    //     ConfigLoader::getInstance().getValue("max_arp_entries", 333);
-    // Logger::upf_app().error(
-    //     "************************ max_arp_entries = %d", max_entries);
-    // pPFCP_Session_LookupProgram->getArpTableMap()->resize(max_entries);
     pPFCP_Session_LookupProgram->getArpTableMap()->update(
         upfn6IP, map_table, BPF_ANY);
   } catch (const std::exception& ex) {
@@ -405,12 +399,6 @@ void SessionProgramManager::updateARPTableForN3(
     memset(&map_table, 0, sizeof(struct s_arp_mapping));
     memcpy(map_table.mac_address, remoteN3MAC, 6);
     map_table.ipv4_address = ipnexremoteN3hop;
-
-    // int max_entries =
-    //     ConfigLoader::getInstance().getValue("max_arp_entries", 777);
-    // Logger::upf_app().error(
-    //     "************************ max_arp_entries = %d", max_entries);
-    // pPFCP_Session_LookupProgram->getArpTableMap()->resize(max_entries);
     pPFCP_Session_LookupProgram->getArpTableMap()->update(
         upfn3IP, map_table, BPF_ANY);
 

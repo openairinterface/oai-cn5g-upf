@@ -10,7 +10,7 @@
 #include "pfcp/pfcp_pdr.h"
 #include "ie/group_ie/pdi.h"
 #include "pfcp_session_lookup_maps.h"
-#include "far_maps.h"
+//#include "far_maps.h"
 #include "interfaces.h"
 #include "sdf_filter.h"
 #include "utils/logger.h"
