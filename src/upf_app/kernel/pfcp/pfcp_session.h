@@ -4,6 +4,7 @@
 #include <ie/fseid.h>
 #include <pfcp/pfcp_pdr.h>
 #include <pfcp/pfcp_far.h>
+#include "linux/custom_types.h"
 
 #define SESSION_PDRS_MAX_SIZE 100
 #define SESSION_FARS_MAX_SIZE 100

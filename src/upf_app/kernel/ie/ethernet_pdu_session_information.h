@@ -1,8 +1,8 @@
 #if !defined(IE_ETHERNET_PDU_SESSION_INFORMATION)
 #define IE_ETHERNET_PDU_SESSION_INFORMATION
 
-#include <ie/ie_base.h>
-#include <types.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 //-------------------------------------
 // 8.2.102 Ethernet PDU Session Information

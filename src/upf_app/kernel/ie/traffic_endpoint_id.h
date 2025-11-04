@@ -1,8 +1,8 @@
 #if !defined(IE_TRAFFIC_ENDPOINT_H)
 #define IE_TRAFFIC_ENDPOINT_H
 
-#include <types.h>
-#include <ie/ie_base.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 //-------------------------------------
 // 8.2.92 Traffic Endpoint ID

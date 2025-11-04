@@ -1,5 +1,5 @@
-#if !defined(TYPES_H)
-#define TYPES_H
+#if !defined(CUSTOM_TYPES_H)
+#define CUSTOM_TYPES_H
 
 #include <linux/types.h>
 
@@ -30,4 +30,4 @@ enum FlowDirection { DOWNLINK = 0, UPLINK = 1 };
   struct ____btf_map_##name __attribute__((section(".maps." #name), used))     \
   ____btf_map_##name = {}
 
-#endif  // TYPES_H
+#endif  // CUSTOM_TYPES_H

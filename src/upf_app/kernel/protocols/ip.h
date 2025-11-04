@@ -2,9 +2,9 @@
 #define PROTOCOLS_IP_H
 
 #include <linux/ip.h>
-#include <types.h>
 #include <linux/bpf.h>
 #include <linux/if_ether.h>
+#include "linux/custom_types.h"
 
 #define IP_CSUM_OFFSET (sizeof(struct ethhdr) + offsetof(struct iphdr, check))
 

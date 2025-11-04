@@ -1,7 +1,8 @@
 #if !defined(IE_UE_IP_ADDRESS_H)
 #define IE_UE_IP_ADDRESS_H
 
-#include <types.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 #ifdef KERNEL_SPACE
 #include <linux/in.h>

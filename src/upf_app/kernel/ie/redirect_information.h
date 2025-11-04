@@ -1,8 +1,8 @@
 #ifndef __REDIRECT_INFORMATION_H__
 #define __REDIRECT_INFORMATION_H__
 
-#include <ie/ie_base.h>
-#include <types.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 //-------------------------------------
 // 8.2.20 Redirect Information

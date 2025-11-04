@@ -1,12 +1,7 @@
 #ifndef __SDF_FILTER_H__
 #define __SDF_FILTER_H__
 
-#include <types.h>
-//#include <linux/in.h>
-//#include <linux/ip.h>
-//#include <linux/ipv6.h>
-//#include <linux/tcp.h>
-//#include <linux/udp.h>
+#include "linux/custom_types.h"
 
 /*---------------------------------------------------------------------------------------------------------------*/
 

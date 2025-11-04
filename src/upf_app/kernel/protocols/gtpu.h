@@ -1,7 +1,7 @@
 #if !defined(PROTOCOLS_GTP_H)
 #define PROTOCOLS_GTP_H
 
-#include <types.h>
+#include "linux/custom_types.h"
 #include <linux/bpf.h>
 #include <stdint.h>
 

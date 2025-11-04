@@ -1,8 +1,8 @@
 #ifndef __FSEID_H__
 #define __FSEID_H__
 
-#include <ie/ie_base.h>
-#include "types.h"
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 #ifdef KERNEL_SPACE
 #include <linux/in.h>

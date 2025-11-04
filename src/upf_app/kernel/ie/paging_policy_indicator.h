@@ -1,8 +1,7 @@
 #ifndef __PAGING_POLICY_INDICATOR_H__
 #define __PAGING_POLICY_INDICATOR_H__
 
-#include <types.h>
-#include <ie/ie_base.h>
+#include "linux/custom_types.h"
 
 // 8.2.116 Paging Policy Indicator (PPI)
 typedef struct paging_policy_indicator_s {

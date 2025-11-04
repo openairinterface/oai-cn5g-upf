@@ -1,6 +1,6 @@
 #define KBUILD_MODNAME pfcp_session_lookup_xdp_kernel
 
-#include <types.h>
+#include "linux/custom_types.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
 #include <endian.h>

@@ -1,8 +1,7 @@
 #ifndef __PROXING_H__
 #define __PROXING_H__
 
-#include <ie/ie_base.h>
-#include <types.h>
+#include "linux/custom_types.h"
 
 //-------------------------------------
 // 8.2.97 Proxying

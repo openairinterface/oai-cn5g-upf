@@ -1,8 +1,8 @@
 #if !defined(IE_FRAMED_IPV6_ROUTING_H)
 #define IE_FRAMED_IPV6_ROUTING_H
 
-#include <ie/ie_base.h>
-#include <types.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 //-------------------------------------
 // 8.2.111 Framed-IPv6-Route

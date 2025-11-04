@@ -1,9 +1,9 @@
 #if !defined(IE_FTEID_H)
 #define IE_FTEID_H
 
-#include <types.h>
-#include <ie/teid.h>
-#include <ie/ie_base.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
+#include "ie/teid.h"
 
 //-------------------------------------
 // 8.2.3 F-TEID

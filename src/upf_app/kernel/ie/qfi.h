@@ -1,8 +1,8 @@
 #if !defined(IE_QFI_H)
 #define IE_QFI_H
 
-#include <types.h>
-#include <ie/ie_base.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 //-------------------------------------
 // 8.2.89 QFI
 typedef struct qfi {

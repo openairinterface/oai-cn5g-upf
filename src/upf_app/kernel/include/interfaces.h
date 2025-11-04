@@ -1,7 +1,7 @@
 #ifndef __INTERFACES_H__
 #define __INTERFACES_H__
 
-#include <types.h>
+#include "linux/custom_types.h"
 #include <stdint.h>
 
 typedef enum {

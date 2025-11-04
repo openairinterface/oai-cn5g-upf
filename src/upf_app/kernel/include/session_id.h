@@ -1,7 +1,7 @@
 #ifndef __SESSION_ID_H__
 #define __SESSION_ID_H__
 
-#include <types.h>
+#include "linux/custom_types.h"
 #include <stdint.h>
 
 struct session_id {

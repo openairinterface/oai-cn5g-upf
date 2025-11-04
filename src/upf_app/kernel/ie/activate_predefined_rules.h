@@ -1,8 +1,8 @@
 #ifndef __ACTIVATE_PREDEFINED_RULES_H__
 #define __ACTIVATE_PREDEFINED_RULES_H__
 
-#include <types.h>
-#include <ie/ie_base.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 //-------------------------------------
 // 8.2.72 Activate Predefined Rules

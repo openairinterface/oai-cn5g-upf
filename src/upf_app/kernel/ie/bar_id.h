@@ -1,8 +1,7 @@
 #ifndef __BAR_ID_H__
 #define __BAR_ID_H__
 
-#include <ie/ie_base.h>
-#include <types.h>
+#include "linux/custom_types.h"
 
 //-------------------------------------
 // 8.2.57 BAR ID

@@ -1,8 +1,7 @@
 #ifndef __PRECEDENCE_H__
 #define __PRECEDENCE_H__
 
-#include <types.h>
-#include <ie/ie_base.h>
+#include "linux/custom_types.h"
 
 //-------------------------------------
 // 8.2.11 Precedence

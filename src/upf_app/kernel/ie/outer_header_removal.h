@@ -1,8 +1,8 @@
 #if !defined(IE_OUTER_HEADER_REMOVAL)
 #define IE_OUTER_HEADER_REMOVAL
 
-#include <ie/ie_base.h>
-#include <types.h>
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 
 //-------------------------------------
 // 8.2.64 Outer Header Removal

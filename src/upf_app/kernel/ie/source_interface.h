@@ -1,9 +1,8 @@
 #if !defined(IE_SOURCE_INTERFACE_H)
 #define IE_SOURCE_INTERFACE_H
 
-#include <types.h>
-#include <ie/ie_base.h>
-
+#include "linux/custom_types.h"
+#include "ie/ie_base.h"
 //-------------------------------------
 // 8.2.2 Source Interface
 // FIXME: Conflit with destination_interface
