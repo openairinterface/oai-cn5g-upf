@@ -38,7 +38,7 @@ COPY ./etc-pki-entitlement /etc/pki/entitlement
 
 RUN rm /etc/rhsm-host && \
     subscription-manager repos --enable codeready-builder-for-rhel-9-x86_64-rpms && \
-    dnf update -y && \
+    dnf update -y --allowerasing --skip-broken --nobest && \
     # here just to display the current version
     cat /etc/os-release && \
     dnf -y install \
