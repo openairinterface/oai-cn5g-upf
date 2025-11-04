@@ -1,10 +1,12 @@
 #ifndef __PFCP_SESSION_LOOKUP_MAPS_H__
 #define __PFCP_SESSION_LOOKUP_MAPS_H__
 
+#include "linux/custom_types.h"
 #include "ie/group_ie/create_pdr.h"
 #include "ie/teid.h"
 #include "pfcp/pfcp_pdr.h"
 #include "pfcp/pfcp_far.h"
+#include "arp_table.h"
 #include "pfcp/pfcp_session.h"
 #include "rules_matching_pdr.h"
 #include "interfaces.h"
@@ -65,6 +67,20 @@ struct {
   __type(key, u64);       // seid
   __type(value, u32);     // Value type (0 for false, 1 for true)
 } m_qos_enabling SEC(".maps");
+
+struct {
+  __uint(type, BPF_MAP_TYPE_DEVMAP);
+  __uint(max_entries, 1);
+  __type(key, u32);    // id
+  __type(value, u32);  // tx port
+} m_redirect_interfaces SEC(".maps");
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(max_entries, 1);
+  __type(key, u32);                     // IPv4 address
+  __type(value, struct s_arp_mapping);  // <IP Address, MAC address>
+} m_arp_table SEC(".maps");
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
