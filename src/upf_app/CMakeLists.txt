@@ -50,8 +50,8 @@ add_library(UPF_XDP STATIC
   SessionPrograms.cpp
   user/pfcp_session_lookup_xdp_user.cpp
   user/BPFProgram.cpp
-  wrappers/BPFMaps.cpp
-  wrappers/BPFMap.cpp
+  user/wrappers/BPFMaps.cpp
+  user/wrappers/BPFMap.cpp
   user/utils/bpf_utils.cpp
   user/utils/net_utils.cpp
 )
@@ -101,8 +101,8 @@ install(
   SessionPrograms.cpp
   user/qer_tc_user.cpp
   user/BPFProgram.cpp
-  wrappers/BPFMaps.cpp
-  wrappers/BPFMap.cpp
+  user/wrappers/BPFMaps.cpp
+  user/wrappers/BPFMap.cpp
   user/utils/bpf_utils.cpp
   user/utils/net_utils.cpp
 )

@@ -10,7 +10,7 @@
 // #include <pfcp/pfcp_pdrs.h>
 // #include <pfcp/pfcp_session.h>
 #include <vector>
-#include <wrappers/BPFMap.hpp>
+//#include <wrappers/BPFMap.hpp>
 
 #include <msg_pfcp.hpp>
 #include "3gpp_29.244.hpp"
