@@ -11,7 +11,7 @@ include_directories(${SRC_TOP_DIR}/common/utils)
 include_directories(${SRC_TOP_DIR}/gtpv1u)
 include_directories(${SRC_TOP_DIR}/itti)
 include_directories(${SRC_TOP_DIR}/pfcp)
-include_directories(${SRC_TOP_DIR}/udp)  
+include_directories(${SRC_TOP_DIR}/udp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/common)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/config)
@@ -50,12 +50,12 @@ add_library(UPF_XDP STATIC
   SessionProgramManager.cpp
   SessionManager.cpp
   SessionPrograms.cpp
-  programs/pfcp_session_lookup_xdp_user.cpp
-  programs/BPFProgram.cpp
+  user/pfcp_session_lookup_xdp_user.cpp
+  user/BPFProgram.cpp
   wrappers/BPFMaps.cpp
   wrappers/BPFMap.cpp
-  programs/utils/bpf_utils.cpp
-  programs/utils/net_utils.cpp
+  user/utils/bpf_utils.cpp
+  user/utils/net_utils.cpp
 )
 
 link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src)
@@ -71,7 +71,7 @@ target_include_directories(UPF_XDP PUBLIC
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/kernel>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/skel>
-  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/programs>
+  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/user>
 )
 
 add_dependencies(UPF_XDP upf_xdp_all)
@@ -90,7 +90,7 @@ install(
 #                          QER                               #
 ##############################################################
   include_directories(${SRC_TOP_DIR}/upf_app/kernel/tc)
-  
+
   add_library(UPF_TC STATIC
   UserPlaneComponent.cpp
   Configuration.cpp
@@ -101,13 +101,12 @@ install(
   SessionProgramManager.cpp
   SessionManager.cpp
   SessionPrograms.cpp
-  programs/qer_tc_user.cpp
-  programs/far_tc_user.cpp
-  programs/BPFProgram.cpp
+  user/qer_tc_user.cpp
+  user/BPFProgram.cpp
   wrappers/BPFMaps.cpp
   wrappers/BPFMap.cpp
-  programs/utils/bpf_utils.cpp
-  programs/utils/net_utils.cpp
+  user/utils/bpf_utils.cpp
+  user/utils/net_utils.cpp
 )
 
   target_link_libraries(UPF_TC
@@ -124,13 +123,13 @@ install(
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/kernel>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/skel>
-  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/programs>
+  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/user>
   )
 
   add_dependencies(UPF_TC upf_xdp_all)
 
   add_dependencies(UPF_TC upf_tc_all)
-  
+
   install(
       TARGETS UPF_TC
       EXPORT "${TARGETS_EXPORT_NAME}"
