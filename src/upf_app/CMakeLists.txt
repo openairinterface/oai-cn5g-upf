@@ -70,8 +70,10 @@ target_include_directories(UPF_XDP PUBLIC
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/include>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/kernel>
-  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/skel>
+  #$<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/skel>
+  $<BUILD_INTERFACE:${OPENAIRCN_DIR}/build/upf/build/skel>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/user>
+  
 )
 
 add_dependencies(UPF_XDP upf_xdp_all)
@@ -122,7 +124,8 @@ install(
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/include>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/kernel>
-  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/skel>
+  #$<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/skel>
+  $<BUILD_INTERFACE:${OPENAIRCN_DIR}/build/upf/build/skel>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/user>
   )
 
