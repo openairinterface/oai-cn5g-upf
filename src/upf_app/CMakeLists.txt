@@ -22,7 +22,6 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf/nrf_model.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf/nrf_model.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model.cmake)
-
 include_directories(${SRC_TOP_DIR}/upf_app/kernel)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel/include)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel/pfcp)
@@ -32,6 +31,7 @@ include_directories(${SRC_TOP_DIR}/upf_app/kernel/pfcp)
 #                          XDP                               #
 ##############################################################
 include_directories(${SRC_TOP_DIR}/upf_app/kernel/xdp)
+include_directories(${SRC_TOP_DIR}/upf_app/control)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 
 set(GTP_INTERFACE $ENV{GTP_INTERFACE})
@@ -39,15 +39,15 @@ set(UDP_INTERFACE $ENV{UDP_INTERFACE})
 set(SOCKET_BUFFER_ENABLED $ENV{SOCKET_BUFFER_ENABLED})
 
 add_library(UPF_XDP STATIC
-  UserPlaneComponent.cpp
-  Configuration.cpp
-  SignalHandler.cpp
+  control/UserPlaneComponent.cpp
+  control/Configuration.cpp
+  control/SignalHandler.cpp
   helpers/NextHopFinder.cpp
   helpers/CmdRunner.cpp
   helpers/SdfFilterParser.cpp
-  SessionProgramManager.cpp
-  SessionManager.cpp
-  SessionPrograms.cpp
+  control/SessionProgramManager.cpp
+  control/SessionManager.cpp
+  control/SessionPrograms.cpp
   user/pfcp_session_lookup_xdp_user.cpp
   user/BPFProgram.cpp
   user/wrappers/BPFMaps.cpp
@@ -67,8 +67,8 @@ target_link_libraries(UPF_XDP
 target_include_directories(UPF_XDP PUBLIC
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/include>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/>
+  $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/control>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/kernel>
-  #$<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/skel>
   $<BUILD_INTERFACE:${OPENAIRCN_DIR}/build/upf/build/skel>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/user>
   
@@ -92,15 +92,15 @@ install(
   include_directories(${SRC_TOP_DIR}/upf_app/kernel/tc)
   
   add_library(UPF_TC STATIC
-  UserPlaneComponent.cpp
-  Configuration.cpp
-  SignalHandler.cpp
+  control/UserPlaneComponent.cpp
+  control/Configuration.cpp
+  control/SignalHandler.cpp
   helpers/NextHopFinder.cpp
   helpers/SdfFilterParser.cpp
   helpers/GetNicInformation.cpp
-  SessionProgramManager.cpp
-  SessionManager.cpp
-  SessionPrograms.cpp
+  control/SessionProgramManager.cpp
+  control/SessionManager.cpp
+  control/SessionPrograms.cpp
   user/qer_tc_user.cpp
   user/BPFProgram.cpp
   user/wrappers/BPFMaps.cpp
@@ -122,7 +122,6 @@ install(
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/include>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/kernel>
-  #$<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/skel>
   $<BUILD_INTERFACE:${OPENAIRCN_DIR}/build/upf/build/skel>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/user>
   )
