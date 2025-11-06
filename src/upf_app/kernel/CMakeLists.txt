@@ -28,9 +28,6 @@ function(xdp arg)
   add_custom_command(
     TARGET ${arg}_xdp
     PRE_LINK
-    # COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_SOURCE_DIR}/../skel
-    # COMMAND bpftool gen skeleton $<TARGET_OBJECTS:${arg}_xdp> > ${CMAKE_CURRENT_SOURCE_DIR}/../skel/${arg}_xdp_kernel_skel.h
-    # COMMAND sed -i '9i\#define typeof\(x\) __typeof__\(x\)' ${CMAKE_CURRENT_SOURCE_DIR}/../skel/${arg}_xdp_kernel_skel.h
     COMMAND ${CMAKE_COMMAND} -E make_directory ${OPENAIRCN_DIR}/build/upf/build/skel
     COMMAND bpftool gen skeleton $<TARGET_OBJECTS:${arg}_xdp> > ${OPENAIRCN_DIR}/build/upf/build/skel/${arg}_xdp_kernel_skel.h
     COMMAND sed -i '9i\#define typeof\(x\) __typeof__\(x\)' ${OPENAIRCN_DIR}/build/upf/build/skel/${arg}_xdp_kernel_skel.h
@@ -56,9 +53,6 @@ function(tc arg)
   add_custom_command(
     TARGET ${arg}_tc
     PRE_LINK
-    # COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_SOURCE_DIR}/../skel
-    # COMMAND bpftool gen skeleton $<TARGET_OBJECTS:${arg}_tc> > ${CMAKE_CURRENT_SOURCE_DIR}/../skel/${arg}_tc_kernel_skel.h
-    # COMMAND sed -i '9i\#define typeof\(x\) __typeof__\(x\)' ${CMAKE_CURRENT_SOURCE_DIR}/../skel/${arg}_tc_kernel_skel.h
     COMMAND ${CMAKE_COMMAND} -E make_directory ${OPENAIRCN_DIR}/build/upf/build/skel
     COMMAND bpftool gen skeleton $<TARGET_OBJECTS:${arg}_tc> > ${OPENAIRCN_DIR}/build/upf/build/skel/${arg}_tc_kernel_skel.h
     COMMAND sed -i '9i\#define typeof\(x\) __typeof__\(x\)' ${OPENAIRCN_DIR}/build/upf/build/skel/${arg}_tc_kernel_skel.h
