@@ -69,7 +69,7 @@ static u8 next_hop_n3_dst_mac_address[6] = {0};
 static u8 next_hop_n3_src_mac_address[6] = {0};
 // static u8 next_hop_n6_mac_address[6] = {0};
 
-static bool cached_n3 = false;
+static bool cached_n3     = false;
 static bool cached_n3_mac = false;
 // static bool cached_n6 = false;
 
@@ -235,7 +235,6 @@ create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far, u8 qfi) {
   bpf_debug(
       "outer IP header ( ip_saddr, ip_daddr ) : ( %pI4, %pI4 )", &iph->saddr,
       &iph->daddr);
-
 
   /*
   |----------------------------------------------------------------|
@@ -411,7 +410,7 @@ remove_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* far) {
     map_entry = bpf_map_lookup_elem(&m_arp_table, &upf_n6_ip);
 
     if (!map_entry) {
-      bpf_debug("N6's Next Hop MAC address not found in map_entry. Use FIB to update MAC");
+      bpf_debug("N6's Next Hop MAC address not found. Use FIB to update MAC");
       update_mac_address(ctx, new_ethh, iph, N3_INTERFACE);
     } else {
       bpf_debug("N6's Next Hop MAC address found in map_entry");

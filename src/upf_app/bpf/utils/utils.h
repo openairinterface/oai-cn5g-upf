@@ -36,7 +36,6 @@
 #define ntohl(x) __constant_ntohl((x))
 #endif
 
-
 static void swap_src_dst_mac(void* data) {
   bpf_debug("Swapping MAC address...\n");
   unsigned short* p = data;
@@ -69,7 +68,6 @@ static __always_inline bool retrieve_upf_iface_from_map(
 
   return false;
 }
-
 
 /*****************************************************************************************************************/
 static __always_inline bool update_dst_mac_address(
