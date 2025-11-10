@@ -69,6 +69,8 @@ static long broadcast_callback_fn(
  * element (PDU session) in the map. When the map iterator reaches the end, it
  * will stop calling this callback function.
  * */
+// TODO: use bpf_for instead of #pragma clang loop unroll. Requires Kernel
+// >= 6.3
 #pragma clang loop unroll(full)
   for (int v = 0; v < MAX_PDU_SESSIONS; v++) {
     if (ctx->pdu_sessions[v] == pdu_session->teid_dl) break;
