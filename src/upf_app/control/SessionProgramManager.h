@@ -20,13 +20,13 @@
 
 class BPFMap;
 class OnStateChangeSessionProgramObserver;
-class PFCP_Session_LookupProgram;
+class UPF_XDPProgram;
 class SessionPrograms;
 class FARProgram;
 
 struct pfcpprograms {
   uint64_t seid;
-  std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram;
+  std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram;
 };
 
 struct pduSessionInfo {
@@ -46,12 +46,12 @@ class SessionProgramManager {
   void removeAll();
   void setOnNewSessionObserver(OnStateChangeSessionProgramObserver* pObserver);
   void updateArpTableMap(
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-      uint32_t upfIP, uint32_t remoteIP);
+      std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram, uint32_t upfIP,
+      uint32_t remoteIP);
   uint32_t getRemoteIP(uint32_t upfIP, uint32_t remoteIP);
-  pfcp_far_t_ createFar(std::shared_ptr<pfcp::pfcp_far> pFar);
-  pfcp_pdr_t_ createPdr(std::shared_ptr<pfcp::pfcp_pdr> pPdr);
-  pfcp_qer_t_ createQer(std::shared_ptr<pfcp::pfcp_qer> pQer);
+  pfcp_far_t createFar(std::shared_ptr<pfcp::pfcp_far> pFar);
+  pfcp_pdr_t createPdr(std::shared_ptr<pfcp::pfcp_pdr> pPdr);
+  pfcp_qer_t createQer(std::shared_ptr<pfcp::pfcp_qer> pQer);
   void createPipeline(std::shared_ptr<pfcp::pfcp_session> session);
   void modifyPipeline(
       std::shared_ptr<pfcp::pfcp_session> session, uint32_t teid);
@@ -75,24 +75,17 @@ class SessionProgramManager {
       bool isModification = false, uint32_t teid2 = 0);
 
   void addPFCPProgram(
-      uint64_t seid,
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
+      uint64_t seid, std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram);
   void storePduSessionInMap(
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-      uint32_t ue_ip_address, uint32_t teid_dl, uint32_t teid_ul,
-      uint64_t seid);
-  void storeETHPduSessionInMap(
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-      uint32_t teid_ul, uint32_t teid_dl, uint32_t n3IpAddress, uint64_t seid);
-  void storeFARInFARMap(
-      std::shared_ptr<FARProgram> pFARProgram,
-      std::shared_ptr<pfcp::pfcp_far> pFar);
+      std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram, uint32_t ue_ip_address,
+      uint32_t teid_dl, uint32_t teid_ul, uint64_t seid);
+
   void updateARPTableForN6(
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-      uint32_t dnIP, uint32_t upfn6IP);
+      std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram, uint32_t dnIP,
+      uint32_t upfn6IP);
   void updateARPTableForN3(
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-      uint32_t gNodeBIP, uint32_t upfn3IP, uint32_t seid);
+      std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram, uint32_t gNodeBIP,
+      uint32_t upfn3IP, uint32_t seid);
   bool getFar(
       std::shared_ptr<pfcp::pfcp_session> session,
       std::shared_ptr<pfcp::pfcp_pdr> pdr,

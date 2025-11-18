@@ -6,7 +6,7 @@
 #define __SESSIONPROGRAMS_H__
 
 #include <memory>
-#include <pfcp_session_lookup_xdp_user.h>
+#include <upf_xdp_user.h>
 #include <unistd.h>
 #include "3gpp_29.274.h"
 
@@ -18,16 +18,14 @@
  */
 class SessionPrograms {
  public:
-  SessionPrograms(
-      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram);
+  SessionPrograms(std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram);
   virtual ~SessionPrograms();
-  std::shared_ptr<PFCP_Session_LookupProgram> getPFCPProgram() const;
+  std::shared_ptr<UPF_XDPProgram> getPFCPProgram() const;
 
   pdn_type_e getPdnType() const;
 
  private:
-  std::shared_ptr<PFCP_Session_LookupProgram> mpPFCP_Session_LookupProgram;
-  pdn_type_e mPdnType;
+  std::shared_ptr<UPF_XDPProgram> mpUPF_XDPProgram;
 };
 
 #endif  // __SESSIONPROGRAMS_H__

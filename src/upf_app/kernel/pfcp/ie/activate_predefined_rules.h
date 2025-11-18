@@ -6,10 +6,10 @@
 
 //-------------------------------------
 // 8.2.72 Activate Predefined Rules
-typedef struct activate_predefined_rules_s {
-  ie_base_t_ base;
+typedef struct activate_predefined_rules {
+  ie_base_t base;
   // TODO Undefined string
   u8 predefined_rules_name[10];
-} activate_predefined_rules_t_;
+} activate_predefined_rules_t;
 
 #endif  // __ACTIVATE_PREDEFINED_RULES_H__

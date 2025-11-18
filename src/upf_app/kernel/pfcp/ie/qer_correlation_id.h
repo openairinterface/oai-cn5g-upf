@@ -5,7 +5,7 @@
 
 //-------------------------------------
 // 8.2.10 QER Correlation ID
-typedef struct qer_correlation_id_s {
+typedef struct qer_correlation_id {
   u32 qer_correlation_id;
 } qer_correlation_id_t;
 

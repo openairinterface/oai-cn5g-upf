@@ -5,8 +5,8 @@
 
 //-------------------------------------
 // 8.2.57 BAR ID
-typedef struct bar_id_s {
+typedef struct bar_id {
   u8 bar_id;
-} bar_id_t_;
+} bar_id_t;
 
 #endif  // __BAR_ID_H__

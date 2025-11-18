@@ -50,7 +50,7 @@ add_library(UPF_XDP STATIC
   control/SessionProgramManager.cpp
   control/SessionManager.cpp
   control/SessionPrograms.cpp
-  user/pfcp_session_lookup_xdp_user.cpp
+  user/upf_xdp_user.cpp
   user/BPFProgram.cpp
   user/wrappers/BPFMaps.cpp
   user/wrappers/BPFMap.cpp

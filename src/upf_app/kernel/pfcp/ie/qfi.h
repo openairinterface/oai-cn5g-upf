@@ -6,9 +6,9 @@
 //-------------------------------------
 // 8.2.89 QFI
 typedef struct qfi {
-  ie_base_t_ base;
+  ie_base_t base;
   u8 spare : 2;
   u8 qfi : 6;
-} qfi_t_;
+} qfi_t;
 
 #endif  // IE_QFI_H

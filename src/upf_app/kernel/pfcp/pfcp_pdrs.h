@@ -5,10 +5,10 @@
 
 #define PDRS_MAX_SIZE 10000
 
-typedef struct pfcp_pdrs_s {
+typedef struct pfcp_pdrs {
   u32 pdrs_counter;
-  pfcp_pdr_t_ pdrs[PDRS_MAX_SIZE];
+  pfcp_pdr_t pdrs[PDRS_MAX_SIZE];
 
-} pfcp_pdrs_t_;
+} pfcp_pdrs_t;
 
 #endif  // __PFCP_PDRS_H__

@@ -5,7 +5,7 @@
 #include "ie/ie_base.h"
 
 /// 8.2.88 RQI
-typedef struct rqi_s {
+typedef struct rqi {
   u8 spare : 7;
   u8 rqi : 1;
 } rqi_t;

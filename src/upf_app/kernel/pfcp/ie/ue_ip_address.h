@@ -13,7 +13,7 @@
 //-------------------------------------
 // 8.2.62 UE IP Address
 typedef struct ue_ip_address {
-  ie_base_t_ base;
+  ie_base_t base;
   u8 ipv6d : 1;  // This bit is only applicable to the UE IP address IE in the
                  // PDI IE and whhen V6 bit is set to "1". If this bit is set to
                  // "1", then the IPv6 Prefix Delegation Bits field shall be
@@ -33,6 +33,6 @@ typedef struct ue_ip_address {
   u32 ipv4_address;
   u8 ipv6_address[16];
   u8 ipv6_prefix_delegation_bits;
-} ue_ip_address_t_;
+} ue_ip_address_t;
 
 #endif  // IE_UE_IP_ADDRESS_H

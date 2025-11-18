@@ -11,7 +11,7 @@
 #include <netinet/in.h>
 #endif
 
-enum outer_header_creation_description_value_e {
+enum outer_header_creation_description_value {
   OUTER_HEADER_CREATION_GTPU_UDP_IPV4 = 0x0100,
   OUTER_HEADER_CREATION_GTPU_UDP_IPV6 = 0x0200,
   OUTER_HEADER_CREATION_UDP_IPV4      = 0x0400,
@@ -20,13 +20,13 @@ enum outer_header_creation_description_value_e {
 
 //-------------------------------------
 // 8.2.56 Outer Header Creation
-typedef struct outer_header_creation_s {
-  ie_base_t_ base;
+typedef struct outer_header_creation {
+  ie_base_t base;
   u16 outer_header_creation_description;
   u32 teid;
   struct in_addr ipv4_address;
   struct in6_addr ipv6_address;
   u16 port_number;
-} outer_header_creation_t_;
+} outer_header_creation_t;
 
 #endif  // __OUTER_HEADER_CREATION_H__

@@ -6,8 +6,7 @@
 #include <SessionManager.h>
 #include <SessionProgramManager.h>
 #include <SignalHandler.h>
-#include <pfcp_session_lookup_xdp_user.h>
-#include <far_tc_user.h>
+#include <upf_xdp_user.h>
 #include "logger.hpp"
 #include <helpers/GetNicInformation.hpp>
 
@@ -34,9 +33,8 @@ std::shared_ptr<SessionManager> UserPlaneComponent::getSessionManager() const {
 }
 
 //---------------------------------------------------------------------------------------------------------------
-std::shared_ptr<PFCP_Session_LookupProgram>
-UserPlaneComponent::getPFCP_Session_LookupProgram() const {
-  return mpPFCP_Session_LookupProgram;
+std::shared_ptr<UPF_XDPProgram> UserPlaneComponent::getUPF_XDPProgram() const {
+  return mpUPF_XDPProgram;
 }
 
 //---------------------------------------------------------------------------------------------------------------
@@ -52,12 +50,12 @@ std::string UserPlaneComponent::getUDPInterface() const {
 //---------------------------------------------------------------------------------------------------------------
 void UserPlaneComponent::onNewSessionProgram(
     u_int32_t programId, u_int32_t fileDescriptor) {
-  // mpPFCP_Session_LookupProgram->updateProgramMap(programId, fileDescriptor);
+  // mpUPF_XDPProgram->updateProgramMap(programId, fileDescriptor);
 }
 
 //---------------------------------------------------------------------------------------------------------------
 void UserPlaneComponent::onDestroySessionProgram(uint32_t programId) {
-  mpPFCP_Session_LookupProgram->removeProgramMap(programId);
+  mpUPF_XDPProgram->removeProgramMap(programId);
 }
 
 //---------------------------------------------------------------------------------------------------------------
@@ -78,10 +76,10 @@ void UserPlaneComponent::setMembers(
   mGTPInterface = gtpInterface;
   mUDPInterface = udpInterface;
 
-  mpPFCP_Session_LookupProgram = std::make_shared<PFCP_Session_LookupProgram>(
-      gtpInterface, udpInterface, upf_cfg);
+  mpUPF_XDPProgram =
+      std::make_shared<UPF_XDPProgram>(gtpInterface, udpInterface, upf_cfg);
 
-  if (!mpPFCP_Session_LookupProgram) {
+  if (!mpUPF_XDPProgram) {
     Logger::upf_app().error("The eBPF Program is Not Initialized");
     throw std::runtime_error("The eBPF Program is Not Initialized");
   }
@@ -103,7 +101,7 @@ void UserPlaneComponent::setup(
   setMembers(gtpInterface, udpInterface);
   SignalHandler::getInstance().enable();
 
-  mpPFCP_Session_LookupProgram->setup(isQosEnabled);
+  mpUPF_XDPProgram->setup(isQosEnabled);
 
   if (isEthPduEnabled) {
     mpFARTCProgram->setup();
@@ -115,7 +113,6 @@ void UserPlaneComponent::setup(
 
 //---------------------------------------------------------------------------------------------------------------
 void UserPlaneComponent::tearDown() {
-  mpPFCP_Session_LookupProgram->tearDown();
-  mpFARTCProgram->tearDown();
+  mpUPF_XDPProgram->tearDown();
   SessionProgramManager::getInstance().removeAll();
 }

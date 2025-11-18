@@ -4,7 +4,7 @@
 #include "linux/custom_types.h"
 
 // 8.2.9 GBR
-typedef struct gbr_s {
+typedef struct gbr {
   u64 ul_gbr;
   u64 dl_gbr;
 } gbr_t;
