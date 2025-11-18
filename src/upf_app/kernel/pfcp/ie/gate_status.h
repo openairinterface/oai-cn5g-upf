@@ -4,13 +4,13 @@
 #include "linux/custom_types.h"
 
 //  8.2.7 Gate Status
-enum gate_status_e {
+enum gate_status_value {
   /* Request / Initial message */
   OPEN   = 0,
   CLOSED = 1
 };
 
-typedef struct gate_status_s {
+typedef struct gate_status {
   u8 ul_gate : 2;
   u8 dl_gate : 2;
 } gate_status_t;

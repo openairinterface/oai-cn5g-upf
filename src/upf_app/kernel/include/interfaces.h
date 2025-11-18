@@ -9,9 +9,9 @@ typedef enum {
   N4_INTERFACE,
   N9_INTERFACE,
   N19_INTERFACE
-} e_reference_point;
+} reference_point_t;
 
-struct s_interface {
+struct interface_config {
   u32 ipv4_address;
   u32 port;
   const char* if_name;

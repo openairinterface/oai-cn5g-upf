@@ -7,7 +7,7 @@
 #include <observer/OnStateChangeSessionProgramObserver.h>
 
 class SessionManager;
-class PFCP_Session_LookupProgram;
+class UPF_XDPProgram;
 class PFCP_Session_PDR_LookupProgram;
 
 /**
@@ -69,13 +69,12 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
-   * @brief Get PFCP_Session_LookupProgram object.
+   * @brief Get UPF_XDPProgram object.
    *
-   * @return std::shared_ptr<PFCP_Session_LookupProgram> The
-   * PFCP_Session_LookupProgram reference.
+   * @return std::shared_ptr<UPF_XDPProgram> The
+   * UPF_XDPProgram reference.
    */
-  std::shared_ptr<PFCP_Session_LookupProgram> getPFCP_Session_LookupProgram()
-      const;
+  std::shared_ptr<UPF_XDPProgram> getUPF_XDPProgram() const;
 
   /*---------------------------------------------------------------------------------------------------------------*/
   /**
@@ -129,8 +128,8 @@ class UserPlaneComponent : public OnStateChangeSessionProgramObserver {
   // The session manager reference.
   std::shared_ptr<SessionManager> mpSessionManager;
 
-  // The PFCP_Session_LookupProgram (BPF program entry point) reference.
-  std::shared_ptr<PFCP_Session_LookupProgram> mpPFCP_Session_LookupProgram;
+  // The UPF_XDPProgram (BPF program entry point) reference.
+  std::shared_ptr<UPF_XDPProgram> mpUPF_XDPProgram;
 
   // The PFCP_Session_PDR_LookupProgram (BPF program for PFCP Session)
   // reference.

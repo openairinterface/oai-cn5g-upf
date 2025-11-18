@@ -16,25 +16,25 @@ if(DEFINED BPF_DEBUG)
   endif()
 endif()
 
-add_custom_target(upf_xdp_all DEPENDS pfcp_session_lookup_xdp)
+add_custom_target(upf_xdp_all DEPENDS upf_xdp)
 
 ###########################################################################
 #                       GENERATE eBPF XDP Skeletons                       #
 ###########################################################################
 function(xdp arg)
   set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/xdp")
-  add_library(${arg}_xdp STATIC ${source_dir}/${arg}_xdp_kernel.c)
+  add_library(${arg}_xdp STATIC ${source_dir}/${arg}_xdp_kern.c)
   add_custom_command(
     TARGET ${arg}_xdp
     PRE_LINK
     COMMAND ${CMAKE_COMMAND} -E make_directory ${OPENAIRCN_DIR}/build/upf/build/skel
-    COMMAND bpftool gen skeleton $<TARGET_OBJECTS:${arg}_xdp> > ${OPENAIRCN_DIR}/build/upf/build/skel/${arg}_xdp_kernel_skel.h
-    COMMAND sed -i '9i\#define typeof\(x\) __typeof__\(x\)' ${OPENAIRCN_DIR}/build/upf/build/skel/${arg}_xdp_kernel_skel.h
-    DEPENDS ${source_dir}/${arg}_xdp_kernel.c
+    COMMAND bpftool gen skeleton $<TARGET_OBJECTS:${arg}_xdp> > ${OPENAIRCN_DIR}/build/upf/build/skel/${arg}_xdp_kern_skel.h
+    COMMAND sed -i '9i\#define typeof\(x\) __typeof__\(x\)' ${OPENAIRCN_DIR}/build/upf/build/skel/${arg}_xdp_kern_skel.h
+    DEPENDS ${source_dir}/${arg}_xdp_kern.c
   )
 endfunction()
 
-xdp(pfcp_session_lookup)
+xdp(upf)
 
 ###########################################################################
 #                       GENERATE eBPF TC Skeletons                        #

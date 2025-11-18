@@ -18,8 +18,8 @@
 
 /*---------------------------------------------------------------------------------------------------------------*/
 typedef struct source_interface {
-  ie_base_t_ base;
+  ie_base_t base;
   u8 interface_value;
-} source_interface_t_;
+} source_interface_t;
 
 #endif  // IE_SOURCE_INTERFACE_H

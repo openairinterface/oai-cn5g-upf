@@ -7,9 +7,9 @@
 //-------------------------------------
 // 8.2.111 Framed-IPv6-Route
 typedef struct framed_ipv6_route {
-  ie_base_t_ base;
+  ie_base_t base;
   // TODO undefined value
   u8 framed_ipv6_route[20];
-} framed_ipv6_route_t_;
+} framed_ipv6_route_t;
 
 #endif  // IE_FRAMED_IPV6_ROUTING_H

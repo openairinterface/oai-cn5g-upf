@@ -6,10 +6,10 @@
 
 //-------------------------------------
 //  8.2.6 Application ID
-typedef struct application_id_s {
-  ie_base_t_ base;
+typedef struct application_id {
+  ie_base_t base;
   // TODO string size is not 10.
   u8 application_id[10];
-} application_id_t_;
+} application_id_t;
 
 #endif  // IE_APPLICATION_ID_H

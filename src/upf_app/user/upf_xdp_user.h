@@ -1,5 +1,5 @@
-#ifndef __PFCP_SESSION_LOOKUP_XDP_USER_H__
-#define __PFCP_SESSION_LOOKUP_XDP_USER_H__
+#ifndef __UPF_XDP_USER_H__
+#define __UPF_XDP_USER_H__
 
 #include <ProgramLifeCycle.hpp>
 #include <atomic>
@@ -7,7 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <signal.h>  // signals
-#include <pfcp_session_lookup_xdp_kernel_skel.h>
+#include <upf_xdp_kern_skel.h>
 #include <wrappers/BPFMap.hpp>
 #include "interfaces.h"
 #include <framed_routing_bpf.h>
@@ -22,22 +22,21 @@ class BPFMap;
 class SessionManager;
 class RulesUtilities;
 
-using PFCP_Session_LookupProgramLifeCycle =
-    ProgramLifeCycle<pfcp_session_lookup_xdp_kernel_c>;
+using UPF_XDPProgramLifeCycle = ProgramLifeCycle<upf_xdp_kern_c>;
 
 /**
  * @brief Singleton class to abrastract the UPF bpf program.
  */
-class PFCP_Session_LookupProgram {
+class UPF_XDPProgram {
  public:
-  explicit PFCP_Session_LookupProgram(
+  explicit UPF_XDPProgram(
       const std::string& gtpInterface, const std::string& udpInterface,
       const upf_config& upf_cfg);
-  virtual ~PFCP_Session_LookupProgram();
+  virtual ~UPF_XDPProgram();
   void setup(bool isQosEnabled);
   std::shared_ptr<BPFMaps> getMaps();
   void tearDown();
-  void create_upf_interface_map_entry(e_reference_point s);
+  void create_upf_interface_map_entry(reference_point_t s);
   void removeProgramMap(uint32_t key);
   std::shared_ptr<BPFMap> getFramedRouteMappingMap();
   void updateFramedRouteMappingMap(uint32_t ue_ip, FramedRoutingKeyBPF key);
@@ -57,9 +56,9 @@ class PFCP_Session_LookupProgram {
  private:
   void initializeMaps();
   void configurePfcpSessionLookupMaps(
-      struct pfcp_session_lookup_xdp_kernel_c* skel, const upf_config& upf_cfg);
-  pfcp_session_lookup_xdp_kernel_c* spSkeleton;
-  std::shared_ptr<PFCP_Session_LookupProgramLifeCycle> mpLifeCycle;
+      struct upf_xdp_kern_c* skel, const upf_config& upf_cfg);
+  upf_xdp_kern_c* spSkeleton;
+  std::shared_ptr<UPF_XDPProgramLifeCycle> mpLifeCycle;
   std::string mGTPInterface;
   std::string mUDPInterface;
   std::shared_ptr<BPFMaps> mpMaps;
@@ -76,4 +75,4 @@ class PFCP_Session_LookupProgram {
   std::shared_ptr<BPFMap> mpFramedRouteFlagMap;
 };
 
-#endif  // __PFCP_SESSION_LOOKUP_XDP_USER_H__
+#endif  // __UPF_XDP_USER_H__
