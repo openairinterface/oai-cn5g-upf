@@ -3,7 +3,7 @@
 
 #include "linux/custom_types.h"
 
-struct s_arp_mapping {
+struct arp_entry {
   u8 mac_address[6];
   u32 ipv4_address;
 };

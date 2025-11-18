@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
-#include "pfcp_session_lookup_xdp_user.h"
+#include "upf_xdp_user.h"
 #include <SessionManager.h>
 #include <bpf/bpf.h>     // bpf calls
 #include <bpf/libbpf.h>  // bpf wrappers
@@ -23,14 +23,14 @@ using namespace oai::utils::bpf;
 
 class XDPSection {
  public:
-  static constexpr const char* Uplink   = "xdp_handle_uplink";
-  static constexpr const char* Downlink = "xdp_handle_downlink";
-  static constexpr const char* Shaping  = "xdp_handle_shaping";
+  static constexpr const char* Uplink   = "xdp_uplink";
+  static constexpr const char* Downlink = "xdp_downlink";
+  static constexpr const char* Shaping  = "xdp_qos";
 };
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void PFCP_Session_LookupProgram::configurePfcpSessionLookupMaps(
-    struct pfcp_session_lookup_xdp_kernel_c* skel, const upf_config& upf_cfg) {
+void UPF_XDPProgram::configurePfcpSessionLookupMaps(
+    struct upf_xdp_kern_c* skel, const upf_config& upf_cfg) {
   if (!skel) {
     Logger::upf_app().error("Null skeleton in configurePfcpSessionLookupMaps");
     return;
@@ -69,26 +69,28 @@ void PFCP_Session_LookupProgram::configurePfcpSessionLookupMaps(
 
   bool ok = true;
   ok &= configure_map_max_entries(
-      skel->maps.m_upf_interfaces, "m_upf_interfaces",
+      skel->maps.upf_interface_map, "upf_interface_map",
       upf_cfg.max_upf_interfaces);
   ok &= configure_map_max_entries(
-      skel->maps.m_redirect_interfaces, "m_redirect_interfaces",
+      skel->maps.redirect_interfaces_map, "redirect_interfaces_map",
       upf_cfg.max_upf_redirect_interfaces);
   ok &= configure_map_max_entries(
-      skel->maps.m_session_mapping, "m_session_mapping",
+      skel->maps.session_by_ue_ip_map, "session_by_ue_ip_map",
       upf_cfg.max_pdu_session);
   ok &= configure_map_max_entries(
-      skel->maps.m_session_pdrs, "m_session_pdrs",
+      skel->maps.pdrs_per_session_map, "pdrs_per_session_map",
       upf_cfg.max_pdrs_per_pdu_session);
   ok &= configure_map_max_entries(
-      skel->maps.m_sdf_filter, "m_sdf_filter",
+      skel->maps.sdf_filters_map, "sdf_filters_map",
       upf_cfg.max_sdf_filters_per_pdu_session);
   ok &= configure_map_max_entries(
-      skel->maps.m_arp_table, "m_arp_table", upf_cfg.max_arp_entries);
+      skel->maps.arp_table_map, "arp_table_map", upf_cfg.max_arp_entries);
   ok &= configure_map_max_entries(
-      skel->maps.m_rules_match_pdr, "m_rules_match_pdr", max_rules_match_pdr);
+      skel->maps.rules_match_pdr_map, "rules_match_pdr_map",
+      max_rules_match_pdr);
   ok &= configure_map_max_entries(
-      skel->maps.m_qos_enabling, "m_qos_enabling", max_qos_enabling);
+      skel->maps.session_qos_enabled_map, "session_qos_enabled_map",
+      max_qos_enabling);
   if (!ok) {
     Logger::upf_app().error(
         "One or more BPF map configurations failed for PFCP Session Lookup "
@@ -98,39 +100,31 @@ void PFCP_Session_LookupProgram::configurePfcpSessionLookupMaps(
 
   // Configure .rodata constants (if available)
   if (skel->rodata) {
-    skel->rodata->max_upf_interfaces = upf_cfg.max_upf_interfaces;
-    skel->rodata->max_upf_redirect_interfaces =
+    skel->rodata->MAX_UPF_INTERFACES = upf_cfg.max_upf_interfaces;
+    skel->rodata->MAX_UPF_REDIRECT_INTERFACES =
         upf_cfg.max_upf_redirect_interfaces;
-    skel->rodata->max_pdu_session          = upf_cfg.max_pdu_session;
-    skel->rodata->max_pdrs_per_pdu_session = upf_cfg.max_pdrs_per_pdu_session;
-    skel->rodata->max_sdf_filters_per_pdu_session =
+    skel->rodata->MAX_PDU_SESSIONS         = upf_cfg.max_pdu_session;
+    skel->rodata->MAX_PDRS_PER_PDU_SESSION = upf_cfg.max_pdrs_per_pdu_session;
+    skel->rodata->MAX_SDF_FILTERS_PER_PDU_SESSION =
         upf_cfg.max_sdf_filters_per_pdu_session;
-    skel->rodata->max_arp_entries  = upf_cfg.max_arp_entries;
-    skel->rodata->max_qos_enabling = upf_cfg.max_pdu_session;
-
-    // Configure PDR lookup behavior
-    skel->rodata->config.ignore_qfi_for_uplink = upf_cfg.ignore_qfi_for_uplink;
-
-    Logger::upf_app().info(
-        "PDR Lookup Config: ignore_qfi_for_uplink=%s",
-        upf_cfg.ignore_qfi_for_uplink ? "true" : "false");
+    skel->rodata->MAX_ARP_ENTRIES  = upf_cfg.max_arp_entries;
+    skel->rodata->MAX_QOS_ENABLING = upf_cfg.max_pdu_session;
   }
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
-PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
+UPF_XDPProgram::UPF_XDPProgram(
     const std::string& gtpInterface, const std::string& udpInterface,
     const upf_config& upf_cfg)
     : mGTPInterface(gtpInterface), mUDPInterface(udpInterface) {
-  struct pfcp_session_lookup_xdp_kernel_c* skel = nullptr;
-  int ret                                       = -1;
+  struct upf_xdp_kern_c* skel = nullptr;
+  int ret                     = -1;
 
-  Logger::upf_app().info("Initializing PFCP Session Lookup BPF program...");
+  Logger::upf_app().info("Initializing UPF XDP Program ...");
 
-  auto open_fn = [&upf_cfg, this]() -> pfcp_session_lookup_xdp_kernel_c* {
-    struct pfcp_session_lookup_xdp_kernel_c* skel =
-        pfcp_session_lookup_xdp_kernel_c__open();
+  auto open_fn = [&upf_cfg, this]() -> upf_xdp_kern_c* {
+    struct upf_xdp_kern_c* skel = upf_xdp_kern_c__open();
     if (!skel) {
       Logger::upf_app().error("Failed to open BPF skeleton");
       return nullptr;
@@ -141,18 +135,17 @@ PFCP_Session_LookupProgram::PFCP_Session_LookupProgram(
     return skel;
   };
 
-  mpLifeCycle = std::make_shared<PFCP_Session_LookupProgramLifeCycle>(
+  mpLifeCycle = std::make_shared<UPF_XDPProgramLifeCycle>(
       open_fn,
-      /* load */ pfcp_session_lookup_xdp_kernel_c__load,
-      /* attach */ pfcp_session_lookup_xdp_kernel_c__attach,
-      /* destroy*/ pfcp_session_lookup_xdp_kernel_c__destroy);
+      /* load */ upf_xdp_kern_c__load,
+      /* attach */ upf_xdp_kern_c__attach,
+      /* destroy*/ upf_xdp_kern_c__destroy);
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void PFCP_Session_LookupProgram::create_upf_interface_map_entry(
-    e_reference_point s) {
-  struct s_interface iface;
-  __builtin_memset(&iface, 0, sizeof(s_interface));
+void UPF_XDPProgram::create_upf_interface_map_entry(reference_point_t s) {
+  struct interface_config iface;
+  __builtin_memset(&iface, 0, sizeof(interface_config));
 
   switch (s) {
     case N3_INTERFACE:
@@ -188,10 +181,10 @@ void PFCP_Session_LookupProgram::create_upf_interface_map_entry(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-PFCP_Session_LookupProgram::~PFCP_Session_LookupProgram() {}
+UPF_XDPProgram::~UPF_XDPProgram() {}
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void PFCP_Session_LookupProgram::setup(bool isQosEnabled) {
+void UPF_XDPProgram::setup(bool isQosEnabled) {
   spSkeleton = mpLifeCycle->open();
   initializeMaps();
   mpLifeCycle->load();
@@ -243,20 +236,19 @@ void PFCP_Session_LookupProgram::setup(bool isQosEnabled) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMaps> PFCP_Session_LookupProgram::getMaps() {
+std::shared_ptr<BPFMaps> UPF_XDPProgram::getMaps() {
   return mpMaps;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 // TODO: Check when kill when running.
 // It was noted the infinity loop.
-void PFCP_Session_LookupProgram::tearDown() {
-  mpLifeCycle->unpin_maps();
+void UPF_XDPProgram::tearDown() {
   mpLifeCycle->tearDown();
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void PFCP_Session_LookupProgram::removeProgramMap(uint32_t key) {
+void UPF_XDPProgram::removeProgramMap(uint32_t key) {
   s32 fd;
   // Remove only if exists.
   if (mpTeidSessionMap->lookup(key, &fd) == 0) {
@@ -265,56 +257,53 @@ void PFCP_Session_LookupProgram::removeProgramMap(uint32_t key) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSessionMappingMap()
-    const {
+std::shared_ptr<BPFMap> UPF_XDPProgram::getSessionMappingMap() const {
   return mpSessionMappingMap;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getEgressInterfaceMap()
-    const {
+std::shared_ptr<BPFMap> UPF_XDPProgram::getEgressInterfaceMap() const {
   return mpEgressInterfaceMap;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getArpTableMap() const {
+std::shared_ptr<BPFMap> UPF_XDPProgram::getArpTableMap() const {
   return mpArpTableMap;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getIfaceMap() const {
+std::shared_ptr<BPFMap> UPF_XDPProgram::getIfaceMap() const {
   return mpUPFIfaceMap;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getRulesMatchPdrMap()
-    const {
+std::shared_ptr<BPFMap> UPF_XDPProgram::getRulesMatchPdrMap() const {
   return mpRulesMatchPdrMap;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSessionPdrsMap() const {
+std::shared_ptr<BPFMap> UPF_XDPProgram::getSessionPdrsMap() const {
   return mpSessionPdrsMap;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
 
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getSdfFilterMap() const {
+std::shared_ptr<BPFMap> UPF_XDPProgram::getSdfFilterMap() const {
   return mpSdfFilterMap;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getQosEnablingMap() const {
+std::shared_ptr<BPFMap> UPF_XDPProgram::getQosEnablingMap() const {
   return mpQosEnablingMap;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getFramedRouteMappingMap() {
+std::shared_ptr<BPFMap> UPF_XDPProgram::getFramedRouteMappingMap() {
   return mpFramedRouteMappingMap;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void PFCP_Session_LookupProgram::updateFramedRouteMappingMap(
+void UPF_XDPProgram::updateFramedRouteMappingMap(
     uint32_t ue_ip, FramedRoutingKeyBPF key) {
   uint32_t hash_key = hash_framed_routing_key(&key);
   Logger::upf_app().debug(
@@ -323,7 +312,7 @@ void PFCP_Session_LookupProgram::updateFramedRouteMappingMap(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void PFCP_Session_LookupProgram::removeFramedRoute(FramedRoutingKeyBPF key) {
+void UPF_XDPProgram::removeFramedRoute(FramedRoutingKeyBPF key) {
   uint32_t hash_key = hash_framed_routing_key(&key);
   uint32_t ueip;
   if (mpFramedRouteMappingMap->lookup(hash_key, &ueip) == 0) {
@@ -332,7 +321,7 @@ void PFCP_Session_LookupProgram::removeFramedRoute(FramedRoutingKeyBPF key) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void PFCP_Session_LookupProgram::setFramedRouting(bool enable) {
+void UPF_XDPProgram::setFramedRouting(bool enable) {
   uint8_t value = (enable) ? 1 : 0;
   uint8_t key   = 0;
   mpFramedRouteFlagMap->update(key, value, BPF_ANY);
@@ -361,23 +350,25 @@ std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getETHSessionPdrsMap()
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-void PFCP_Session_LookupProgram::initializeMaps() {
+void UPF_XDPProgram::initializeMaps() {
   // Store all maps available in the program.
   mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
 
   mpSessionMappingMap =
-      std::make_shared<BPFMap>(mpMaps->getMap("m_session_mapping"));
-  mpArpTableMap = std::make_shared<BPFMap>(mpMaps->getMap("m_arp_table"));
+      std::make_shared<BPFMap>(mpMaps->getMap("session_by_ue_ip_map"));
+  mpArpTableMap = std::make_shared<BPFMap>(mpMaps->getMap("arp_table_map"));
   mpEgressInterfaceMap =
-      std::make_shared<BPFMap>(mpMaps->getMap("m_redirect_interfaces"));
-  mpUPFIfaceMap = std::make_shared<BPFMap>(mpMaps->getMap("m_upf_interfaces"));
-  mpSessionPdrsMap = std::make_shared<BPFMap>(mpMaps->getMap("m_session_pdrs"));
+      std::make_shared<BPFMap>(mpMaps->getMap("redirect_interfaces_map"));
+  mpUPFIfaceMap = std::make_shared<BPFMap>(mpMaps->getMap("upf_interface_map"));
+  mpSessionPdrsMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("pdrs_per_session_map"));
   mpRulesMatchPdrMap =
-      std::make_shared<BPFMap>(mpMaps->getMap("m_rules_match_pdr"));
+      std::make_shared<BPFMap>(mpMaps->getMap("rules_match_pdr_map"));
 
-  mpSdfFilterMap = std::make_shared<BPFMap>(mpMaps->getMap("m_sdf_filter"));
+  mpSdfFilterMap = std::make_shared<BPFMap>(mpMaps->getMap("sdf_filters_map"));
 
-  mpQosEnablingMap = std::make_shared<BPFMap>(mpMaps->getMap("m_qos_enabling"));
+  mpQosEnablingMap =
+      std::make_shared<BPFMap>(mpMaps->getMap("session_qos_enabled_map"));
   mpFramedRouteMappingMap =
       std::make_shared<BPFMap>(mpMaps->getMap("m_framed_route_mapping"));
   mpFramedRouteFlagMap =

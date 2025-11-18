@@ -6,8 +6,8 @@
 #include "pfcp/pfcp_qer.h"
 
 struct rules_match_pdr {
-  pfcp_far_t_ far;
-  pfcp_qer_t_ qer;
+  pfcp_far_t far;
+  pfcp_qer_t qer;
   // TODO: add other RUles here !
 };
 

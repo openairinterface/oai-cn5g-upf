@@ -334,7 +334,7 @@ target_link_libraries (upf
   UDP
   GTPV1U
   PFCP
-  pfcp_session_lookup_xdp
+  upf_xdp
   qer_tc
   UPF_XDP
   UPF_TC

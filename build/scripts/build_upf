@@ -208,15 +208,15 @@ function main()
 
   if [ -d /usr/include/aarch64-linux-gnu ]; then
     echo "Linking include dirs for aarch64"
-    $SUDO ln -s /usr/include/aarch64-linux-gnu/asm /usr/include/asm
-    $SUDO ln -s /usr/include/aarch64-linux-gnu/bits /usr/include/bits
-    $SUDO ln -s /usr/include/aarch64-linux-gnu/gnu /usr/include/gnu
+    # $SUDO ln -s /usr/include/aarch64-linux-gnu/asm /usr/include/asm
+    # $SUDO ln -s /usr/include/aarch64-linux-gnu/bits /usr/include/bits
+    # $SUDO ln -s /usr/include/aarch64-linux-gnu/gnu /usr/include/gnu
     $SUDO cp -s /usr/include/aarch64-linux-gnu/sys/* /usr/include/sys/.
   fi
   if [ -d /usr/include/x86_64-linux-gnu ]; then
-    $SUDO ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm
-    $SUDO ln -s /usr/include/x86_64-linux-gnu/bits /usr/include/bits
-    $SUDO ln -s /usr/include/x86_64-linux-gnu/gnu /usr/include/gnu
+    # $SUDO ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm
+    # $SUDO ln -s /usr/include/x86_64-linux-gnu/bits /usr/include/bits
+    # $SUDO ln -s /usr/include/x86_64-linux-gnu/gnu /usr/include/gnu
     $SUDO cp -s /usr/include/x86_64-linux-gnu/sys/* /usr/include/sys/.
   fi
 

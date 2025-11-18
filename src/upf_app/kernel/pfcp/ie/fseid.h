@@ -15,11 +15,11 @@
 #include <cstdint>  // include this header for uint64_t
 #endif
 
-typedef u64 seid_t_;
+// typedef u64 seid_t;
 
 //-------------------------------------
 // 8.2.37 F-SEID
-typedef struct fseid_s {
+typedef struct fseid {
   u8 spare : 6;
   u8 v4 : 1;
   u8 v6 : 1;
@@ -28,7 +28,7 @@ typedef struct fseid_s {
   struct in6_addr ipv6_address;
 
 #ifdef __cplusplus
-  bool operator==(const struct fseid_s& i) const {
+  bool operator==(const struct fseid& i) const {
     if ((i.seid == this->seid) && (i.v4 == this->v4) &&
         (i.ipv4_address.s_addr == this->ipv4_address.s_addr) &&
         (i.v6 == this->v6) &&
@@ -41,7 +41,7 @@ typedef struct fseid_s {
       return false;
     }
   };
-  bool operator<(const struct fseid_s& i) const {
+  bool operator<(const struct fseid& i) const {
     if (i.seid < this->seid)
       return true;
     else if (i.seid > this->seid)
@@ -76,6 +76,6 @@ typedef struct fseid_s {
     return false;
   };
 #endif
-} fseid_t_;
+} fseid_t;
 
 #endif  // __FSEID_H__

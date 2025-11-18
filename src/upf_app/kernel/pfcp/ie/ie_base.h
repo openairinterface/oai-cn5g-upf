@@ -7,6 +7,6 @@
 typedef struct ie_base {
   u16 type;
   u16 length;
-} ie_base_t_;
+} ie_base_t;
 
 #endif  // IE_IE_BASE_H

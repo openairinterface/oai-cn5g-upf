@@ -6,15 +6,15 @@
 #include "ie/gate_status.h"
 #include "ie/maximum_bitrate.h"
 #include "ie/guaranteed_bitrate.h"
-#include "ie/qos_flow_identifier.h"
+#include "ie/qfi.h"
 #include "ie/reflective_qos.h"
 #include "ie/paging_policy_indicator.h"
 
 //------------------------------------------------------------------------------
 
 // Table 7.5.2.5-1: Create QER IE within PFCP Session Establishment Request
-typedef struct create_qer_s {
-  qer_id_t_ qer_id;
+typedef struct create_qer {
+  qer_id_t qer_id;
   qer_correlation_id_t qer_correlation_id;
   gate_status_t gate_status;
   mbr_t maximum_bitrate;

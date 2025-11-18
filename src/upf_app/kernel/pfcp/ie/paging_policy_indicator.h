@@ -4,7 +4,7 @@
 #include "linux/custom_types.h"
 
 // 8.2.116 Paging Policy Indicator (PPI)
-typedef struct paging_policy_indicator_s {
+typedef struct paging_policy_indicator {
   u8 spare : 4;
   u8 ppi_value : 4;
 } paging_policy_indicator_t;

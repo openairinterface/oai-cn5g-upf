@@ -6,7 +6,7 @@
 
 //-------------------------------------
 // 8.2.24 Destination Interface
-enum destination_interface_value_e {
+enum destination_interface_value {
   /* Request / Initial message */
   INTERFACE_VALUE_ACCESS         = 0,
   INTERFACE_VALUE_CORE           = 1,
@@ -15,13 +15,13 @@ enum destination_interface_value_e {
   INTERFACE_VALUE_LI_FUNCTION    = 4
 };
 
-typedef struct destination_interface_s {
-  ie_base_t_ base;
+typedef struct destination_interface {
+  ie_base_t base;
   u8 interface_value;
-  // bool operator==(const struct destination_interface_s &i) const
+  // bool operator==(const struct destination_interface &i) const
   // {
   //   return (i.interface_value == interface_value);
   // };
-} destination_interface_t_;
+} destination_interface_t;
 
 #endif  // __DESTINATION_INTERFACE_H__

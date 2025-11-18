@@ -67,7 +67,7 @@ check_configuration_file() {
 }
 
 ######################################################################################################
-# Function to check if the N3 XDP program <xdp_handle_uplink> properly attached
+# Function to check if the N3 XDP program <xdp_uplink> properly attached
 ######################################################################################################
 check_n3_xdp_program() {
   local interface_name="$1"
@@ -87,17 +87,17 @@ check_n3_xdp_program() {
     return 1
   fi
 	
-  if [[ "$XDP_PROGRAM_NAME" == "xdp_handle_uplink" ]]; then
-    echo "xdp_handle_uplink program is correctly linked to $interface_name interface."
+  if [[ "$XDP_PROGRAM_NAME" == "xdp_uplink" ]]; then
+    echo "xdp_uplink program is correctly linked to $interface_name interface."
   else
-    echo "Healthcheck error: xdp_handle_uplink program not linked to $interface_name interface. Found $XDP_PROGRAM_NAME instead."
+    echo "Healthcheck error: xdp_uplink program not linked to $interface_name interface. Found $XDP_PROGRAM_NAME instead."
     return 1
   fi
 }
 
 
 ######################################################################################################
-# Function to check if the N6 XDP program <xdp_handle_downlink> or <xdp_handle_shaping> properly attached
+# Function to check if the N6 XDP program <xdp_downlink> or <xdp_qos> properly attached
 ######################################################################################################
 check_n6_xdp_program() {
   local interface_name="$1"
@@ -119,19 +119,19 @@ check_n6_xdp_program() {
 	
   # Check if QoS is enabled
   if check_enable_qos; then
-    # If QoS is enabled, check if the program name is xdp_handle_shaping
-    if [[ "$XDP_PROGRAM_NAME" == "xdp_handle_shaping" ]]; then
-      echo "xdp_handle_shaping program is correctly linked to $interface_name interface."
+    # If QoS is enabled, check if the program name is xdp_qos
+    if [[ "$XDP_PROGRAM_NAME" == "xdp_qos" ]]; then
+      echo "xdp_qos program is correctly linked to $interface_name interface."
     else
-      echo "Healthcheck error: xdp_handle_shaping program not linked to $interface_name interface. Found $XDP_PROGRAM_NAME instead."
+      echo "Healthcheck error: xdp_qos program not linked to $interface_name interface. Found $XDP_PROGRAM_NAME instead."
       return 1
     fi
   else
-    # If QoS is not enabled, check if the program name is xdp_handle_downlink
-    if [[ "$XDP_PROGRAM_NAME" == "xdp_handle_downlink" ]]; then
-      echo "xdp_handle_downlink program is correctly linked to $interface_name interface."
+    # If QoS is not enabled, check if the program name is xdp_downlink
+    if [[ "$XDP_PROGRAM_NAME" == "xdp_downlink" ]]; then
+      echo "xdp_downlink program is correctly linked to $interface_name interface."
     else
-      echo "Healthcheck error: xdp_handle_downlink program not linked to $interface_name interface. Found $XDP_PROGRAM_NAME instead."
+      echo "Healthcheck error: xdp_downlink program not linked to $interface_name interface. Found $XDP_PROGRAM_NAME instead."
       return 1
     fi
   fi

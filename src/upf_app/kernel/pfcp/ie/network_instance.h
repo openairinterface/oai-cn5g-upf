@@ -6,9 +6,9 @@
 
 #define NETWORK_INSTANCE_MAX_SIZE 100
 typedef struct network_instance {
-  ie_base_t_ base;
+  ie_base_t base;
   /*char*/ s8 network_instance[NETWORK_INSTANCE_MAX_SIZE];
 
-} network_instance_t_;
+} network_instance_t;
 
 #endif  // IE_NETWORK_INTANCE_H
