@@ -104,6 +104,7 @@ install(
   SessionManager.cpp
   SessionPrograms.cpp
   programs/qer_tc_user.cpp
+  programs/far_tc_user.cpp
   programs/BPFProgram.cpp
   wrappers/BPFMaps.cpp
   wrappers/BPFMap.cpp
@@ -131,6 +132,8 @@ install(
 
   add_dependencies(UPF_TC upf_xdp_all)
 
+  add_dependencies(UPF_TC upf_tc_all)
+  
   install(
       TARGETS UPF_TC
       EXPORT "${TARGETS_EXPORT_NAME}"

@@ -46,6 +46,43 @@ uint64_t SessionManager::findUplinkTeid(
 }
 
 //---------------------------------------------------------------------------------------------------------------
+uint64_t SessionManager::findUplinkTeid(
+    const std::shared_ptr<pfcp::pfcp_session> session) {
+  uint32_t ret = 0;  // Default TEID value
+
+  std::shared_ptr<pfcp::pfcp_far> far;
+  pfcp::forwarding_parameters forwardingParams;
+
+  Logger::upf_app().debug(
+      "Retrieving teid from session seid " SEID_FMT " ",
+      session->get_up_seid());
+
+  for (const auto& pdr : session->pdrs_uplink) {
+    pfcp::pdi pdi;
+    pfcp::source_interface_t sourceInterface;
+
+    if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
+      Logger::upf_app().error(
+          "Missing Mandatory IE in pdr: %d", pdr->pdr_id.rule_id);
+      throw std::runtime_error("Missing Mandatory ie in pdr");
+    }
+
+    if (pdr->outer_header_removal.first) {
+      Logger::upf_app().debug(
+          "Session seid " SEID_FMT " has outer header removal",
+          session->get_up_seid());
+      ret = pdi.local_fteid.second.teid;
+      Logger::upf_app().debug(
+          "Session seid " SEID_FMT " has teid " TEID_FMT " ",
+          session->get_up_seid(), ret);
+      break;
+    }
+  }
+
+  return ret;
+}
+
+//---------------------------------------------------------------------------------------------------------------
 void SessionManager::categorizePDRs(
     std::shared_ptr<pfcp::pfcp_session> session) {
   auto& logger = Logger::upf_n4();
@@ -285,8 +322,9 @@ void SessionManager::modifyBpfSession(
     pfcp::source_interface_t sourceInterface;
 
     uint32_t teid_dl = retrieveTeid(session);
-    uint32_t teid_ul = findUplinkTeid(
-        seid, sessions);  // should be saved in ebpf_session at establishment
+    uint32_t teid_ul = findUplinkTeid(session);
+    // uint32_t teid_ul = findUplinkTeid(
+    //     seid, sessions);  // should be saved in ebpf_session at establishment
     if (teid_dl) {
       if (teid_ul) {
         SessionProgramManager::getInstance().modifyPipeline(
@@ -362,8 +400,10 @@ void SessionManager::modifyBpfSession(
       pfcp::source_interface_t sourceInterface;
 
       uint32_t teid_dl = retrieveTeid(session);
-      uint32_t teid_ul = findUplinkTeid(
-          seid, sessions);  // should be saved in ebpf_session at establishment
+      uint32_t teid_ul = findUplinkTeid(session);
+      // uint32_t teid_ul = findUplinkTeid(
+      //     seid, sessions);  // should be saved in ebpf_session at
+      //     establishment
       if (teid_dl) {
         if (teid_ul) {
           SessionProgramManager::getInstance().modifyPipeline(

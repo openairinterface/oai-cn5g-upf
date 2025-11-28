@@ -25,8 +25,11 @@
 
 #include <utils/logger.h>
 #include <utils/utils.h>
-//#include <next_prog_rule_key.h>
 #include "framed_routing_bpf.h"
+#include <utils/types.h>
+#include <mac_pdu_session_key.h>
+#include <pfcp_session_eth_pdu.h>
+#include <framed_routing_bpf.h>
 
 #include "xdp_stats_kern.h"
 #include <linux/bpf.h>
@@ -70,29 +73,6 @@ static bool cached_n3 = false;
 
 //#define MAX_PDRS_PER_SESSION 32
 
-enum ret_code {
-  FAILURE = -1,  // Distinguished frop drop for further processing later on. We
-                 // may not drop the packet
-  SUCCESS  = 0,
-  PASS     = 1,
-  DROP     = 2,
-  REDIRECT = 3,
-};
-
-/*---------------------------------------------------------------------------------------------------------------*/
-static __always_inline bool update_dst_mac_address(
-    u32 ip, struct ethhdr* p_eth) {
-  struct s_arp_mapping* map_entry = {0};
-  // memset(&map_entry, 0, sizeof(struct s_arp_mapping));
-
-  map_entry = bpf_map_lookup_elem(&m_arp_table, &ip);
-
-  if (map_entry) {
-    memcpy(p_eth->h_dest, map_entry->mac_address, sizeof(p_eth->h_dest));
-    return true;
-  }
-  return false;
-}
 /*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline u32 match_sdf_filter_ipv4(
     const struct packet_filter* filter, const struct sdf_filtr* sdf) {
@@ -176,7 +156,6 @@ static __always_inline u32 match_sdf_filter_ipv4(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-
 static __always_inline u32
 create_outer_header_gtpu_ipv4(struct xdp_md* ctx, pfcp_far_t_* p_far, u8 qfi) {
   // Adjust space to the left.
@@ -857,8 +836,7 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
 
 //--------------------------------------------------------------------------------------
 
-SEC("xdp")
-int xdp_handle_uplink(struct xdp_md* ctx) {
+static __always_inline int entry_point_uplink__ip_pdu(struct xdp_md* ctx) {
   bpf_debug("================< XDP: Handle Uplink >================");
   /*
     |-----------------------------------------------------------------------|
@@ -947,6 +925,26 @@ int xdp_handle_uplink(struct xdp_md* ctx) {
       return XDP_PASS;
     }
   }
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+SEC("xdp")
+int xdp_handle_uplink(struct xdp_md* ctx) {
+  bpf_debug("================< PFCP PDR UL Sesction >================");
+  struct ethhdr* ethh = (void*) (long) ctx->data;
+  int action          = XDP_PASS;
+
+  action = entry_point_uplink__ip_pdu(ctx);
+
+  // When entry_point_uplink__ip_pdu returns XDP_PASS, this could be an ETH PDU
+  // PACKET (for DL and DL)
+  if (action != XDP_PASS) {
+    return action;
+  }
+
+  action = entry_point_uplink__eth_pdu(ctx);
+
+  return action;
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -1066,8 +1064,7 @@ int xdp_handle_shaping(struct xdp_md* ctx) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-SEC("xdp")
-int xdp_handle_downlink(struct xdp_md* ctx) {
+static __always_inline int entry_point_downlink__ip_pdu(struct xdp_md* ctx) {
   bpf_debug("================< XDP: Handle Downlink >================");
   /*
    |-----------------------------------------------------------------------|
@@ -1155,6 +1152,27 @@ int xdp_handle_downlink(struct xdp_md* ctx) {
       return XDP_PASS;
     }
   }
+}
+
+/*---------------------------------------------------------------------------------------------------------------*/
+SEC("xdp")
+int xdp_handle_downlink(struct xdp_md* ctx) {
+  bpf_debug("================< PFCP PDR DL Sesction >================");
+  struct ethhdr* ethh = (void*) (long) ctx->data;
+  void* data_end      = (void*) (long) ctx->data_end;
+  int action          = XDP_PASS;
+
+  action = entry_point_downlink__ip_pdu(ctx);
+
+  // When eth_handle returns XDP_PASS, this could be an ETH PDU PACKET (for DL
+  // and DL)
+  if (action != XDP_PASS) {
+    return action;
+  }
+
+  action = entry_point_downlink__eth_pdu(ctx);
+
+  return action;
 }
 
 char _license[] SEC("license") = "GPL";

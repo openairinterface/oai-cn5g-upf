@@ -11,6 +11,7 @@
 #include <pfcp/pfcp_far.h>
 #include <pfcp/pfcp_pdr.h>
 #include <pfcp/pfcp_qer.h>
+#include <mac_pdu_session_key.h>
 #include <session_id.h>
 #include <netinet/ether.h>
 
@@ -59,6 +60,9 @@ class SessionProgramManager {
       const std::vector<pfcp::framed_route_t>& framedRoutes);
   void removeFramedRoutes(
       const std::vector<pfcp::framed_route_t>& framedRoutes);
+  void modifyETHPipeline(
+      std::shared_ptr<pfcp::pfcp_session> session, uint32_t teid_ul,
+      uint32_t teid_dl);
 
   void createPipeline(
       uint64_t seid, uint32_t teid1, uint8_t sourceInterface,
@@ -74,7 +78,12 @@ class SessionProgramManager {
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
       uint32_t ue_ip_address, uint32_t teid_dl, uint32_t teid_ul,
       uint64_t seid);
-
+  void storeETHPduSessionInMap(
+      std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
+      uint32_t teid_ul, uint32_t teid_dl, uint32_t n3IpAddress, uint64_t seid);
+  void storeFARInFARMap(
+      std::shared_ptr<FARProgram> pFARProgram,
+      std::shared_ptr<pfcp::pfcp_far> pFar);
   void updateARPTableForN6(
       std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
       uint32_t dnIP, uint32_t upfn6IP);
@@ -106,6 +115,12 @@ class SessionProgramManager {
   int32_t getEmptySlot();
 
   std::shared_ptr<BPFMap> mpTeidSessionMap;
+  std::shared_ptr<BPFMap> mpUeIpSessionMap;
+
+  // TODO [ETH-PDU] downlink map ETH PDU session info (always recorded)
+
+  // The observer which will be notified when a PFCP_Session_PDR_LookupProgram
+  // is created.
   OnStateChangeSessionProgramObserver* mpOnNewSessionProgramObserver;
   std::map<uint32_t, std::shared_ptr<SessionPrograms>> mSessionProgramsMap;
   std::array<int64_t, 10> mProgramArray;

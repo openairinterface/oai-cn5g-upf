@@ -3,6 +3,7 @@
 #include <SessionProgramManager.h>
 #include <SignalHandler.h>
 #include <pfcp_session_lookup_xdp_user.h>
+#include <far_tc_user.h>
 #include "logger.hpp"
 #include <helpers/GetNicInformation.hpp>
 
@@ -80,17 +81,29 @@ void UserPlaneComponent::setMembers(
     Logger::upf_app().error("The eBPF Program is Not Initialized");
     throw std::runtime_error("The eBPF Program is Not Initialized");
   }
+
+  mpFARTCProgram = std::make_shared<FARTCProgram>();
+  if (!mpFARTCProgram) {
+    Logger::upf_app().error("The eBPF Program is Not Initialized");
+    throw std::runtime_error("The eBPF Program is Not Initialized");
+  }
 }
 
 //---------------------------------------------------------------------------------------------------------------
 void UserPlaneComponent::setup(
     const std::string& gtpInterface, const std::string& udpInterface) {
   const bool isQosEnabled = upf_cfg.enable_bpf_datapath && upf_cfg.enable_qos;
+  const bool isEthPduEnabled =
+      upf_cfg.enable_bpf_datapath && upf_cfg.enable_eth_pdu;
 
   setMembers(gtpInterface, udpInterface);
   SignalHandler::getInstance().enable();
 
   mpPFCP_Session_LookupProgram->setup(isQosEnabled);
+
+  if (isEthPduEnabled) {
+    mpFARTCProgram->setup();
+  }
 
   // Pass maps to sessionManager.
   mpSessionManager = std::make_shared<SessionManager>();
@@ -99,5 +112,6 @@ void UserPlaneComponent::setup(
 //---------------------------------------------------------------------------------------------------------------
 void UserPlaneComponent::tearDown() {
   mpPFCP_Session_LookupProgram->tearDown();
+  mpFARTCProgram->tearDown();
   SessionProgramManager::getInstance().removeAll();
 }

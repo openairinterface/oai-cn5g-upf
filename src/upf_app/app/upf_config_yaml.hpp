@@ -76,6 +76,9 @@ constexpr auto
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_MAX_ARP_ENTRIES = "max_arp_entries";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_MAX_ARP_ENTRIES_LABEL =
     "Max ARP Entries";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_ETH_PDU = "enable_eth_pdu";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_ETH_PDU_LABEL =
+    "Enable Ethernet PDU Session";
 
 constexpr auto UPF_CONFIG_REMOTE_N6_GW       = "remote_n6_gw";
 constexpr auto UPF_CONFIG_REMOTE_N6_GW_LABEL = "Remote N6 Gateway";
@@ -100,6 +103,7 @@ class upf_support_features : public config_type {
   int_config_value m_max_arp_entries{};
   option_config_value m_enable_snat{};
   option_config_value m_enable_fr{};
+  option_config_value m_enable_eth_pdu{};
 
  public:
   explicit upf_support_features(
@@ -108,7 +112,7 @@ class upf_support_features : public config_type {
       u_int16_t max_pdrs_per_pdu_session,
       u_int16_t max_qos_flows_per_pdu_session,
       u_int16_t max_sdf_filters_per_pdu_session, u_int16_t max_arp_entries,
-      bool enable_snat, bool enable_fr);
+      bool enable_snat, bool enable_fr, bool enable_eth_pdu);
 
   void from_yaml(const YAML::Node& node) override;
 
@@ -124,6 +128,7 @@ class upf_support_features : public config_type {
   [[nodiscard]] u_int16_t get_option_max_arp_entries() const;
   [[nodiscard]] bool get_option_enable_snat() const;
   [[nodiscard]] bool get_option_enable_fr() const;
+  [[nodiscard]] bool get_option_enable_eth_pdu() const;
 };
 
 class upf_interface_config : public local_interface {

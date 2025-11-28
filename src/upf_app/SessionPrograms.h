@@ -4,6 +4,7 @@
 #include <memory>
 #include <pfcp_session_lookup_xdp_user.h>
 #include <unistd.h>
+#include "3gpp_29.274.h"
 
 /**
  * @brief This class represents the Data-Path path. It stores the program
@@ -18,8 +19,11 @@ class SessionPrograms {
   virtual ~SessionPrograms();
   std::shared_ptr<PFCP_Session_LookupProgram> getPFCPProgram() const;
 
+  pdn_type_e getPdnType() const;
+
  private:
   std::shared_ptr<PFCP_Session_LookupProgram> mpPFCP_Session_LookupProgram;
+  pdn_type_e mPdnType;
 };
 
 #endif  // __SESSIONPROGRAMS_H__

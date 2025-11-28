@@ -1,6 +1,7 @@
 #ifndef __PFCP_SESSION_LOOKUP_MAPS_H__
 #define __PFCP_SESSION_LOOKUP_MAPS_H__
 
+#include <bpf_helpers.h>
 #include <ie/group_ie/create_pdr.h>
 #include <pfcp/pfcp_pdr.h>
 #include <pfcp/pfcp_far.h>
@@ -8,11 +9,13 @@
 #include <linux/bpf.h>
 #include <stdint.h>
 #include <ie/teid.h>
+#include <mac_pdu_session_key.h>
 #include <rules_matching_pdr.h>
 #include "interfaces.h"
 #include "session_id.h"
 
 #define MAX_PDRS_PER_SESSION 32
+#define MAX_ETH_PDU_SESSIONS 500
 
 const volatile int max_upf_interfaces SEC(".rodata");
 const volatile int max_upf_redirect_interfaces SEC(".rodata");
@@ -77,5 +80,15 @@ struct {
   __type(key, u8);         // Key is a constant, e.g., 0
   __type(value, u8);       // Value indicates if framed routing is enabled
 } framed_routing_flag SEC(".maps");
+
+struct {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __uint(
+      max_entries,
+      MAX_ETH_PDU_SESSIONS);  // 500 // TODO: check from 3gpp standards
+  __type(key, u8[ETH_ALEN]);
+  __type(value, struct mac_pdu_session_value);
+  __uint(pinning, 1);
+} m_mac_pdu_session SEC(".maps");
 
 #endif  // __PFCP_SESSION_LOOKUP_MAPS_H__
