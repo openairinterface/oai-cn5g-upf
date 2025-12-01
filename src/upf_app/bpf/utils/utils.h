@@ -41,32 +41,16 @@ static void swap_src_dst_mac(void* data) {
   unsigned short* p = data;
   unsigned short dst[3];
 
-static __always_inline bool retrieve_upf_iface_from_map(
-    e_reference_point key, u32* iface_ip) {
-  struct s_interface* map_element =
-      bpf_map_lookup_elem(&m_upf_interfaces, &key);
-
-  if (map_element) {
-    *iface_ip = map_element->ipv4_address;
-    return true;
-  }
-
-  return false;
-}
-
-/*****************************************************************************************************************/
-
-static __always_inline bool retrieve_upf_iface_from_map(
-    e_reference_point key, u32* iface_ip) {
-  struct s_interface* map_element =
-      bpf_map_lookup_elem(&m_upf_interfaces, &key);
-
-  if (map_element) {
-    *iface_ip = map_element->ipv4_address;
-    return true;
-  }
-
-  return false;
+  dst[0] = p[0];
+  dst[1] = p[1];
+  dst[2] = p[2];
+  p[0]   = p[3];
+  p[1]   = p[4];
+  p[2]   = p[5];
+  p[3]   = dst[0];
+  p[4]   = dst[1];
+  p[5]   = dst[2];
+  bpf_debug("Swapping MAC address...DONE!\n");
 }
 
 /*****************************************************************************************************************/
