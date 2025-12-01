@@ -486,7 +486,7 @@ void SessionProgramManager::updateARPTableForN3(
   } catch (const std::exception& ex) {
     // Handle the exception here or log it for debugging
     // Note: It's better to handle exceptions rather than ignoring them.
-    Logger::upf_app().error(
+    Logger::upf_app().warn(
         "Error: The ARP table was not updated for N3 Next HOP");
   }
 }
