@@ -619,15 +619,42 @@ void SessionProgramManager::createPipeline(
   pfcp_pdr_t_ pdrs[MAX_PDRS_SESSION] = {0};
   int i                              = 0;
 
-  // Handle Uplink PDRs
-  for (const auto pdr : session->pdrs) {
-    pdr_id = pdr->pdr_id.rule_id;
-    logger.debug("Processing PDR %d on establishment", pdr_id);
+  // BUG FIX: Use sorted PDRs (uplink + downlink) instead of unsorted session->pdrs
+  // This ensures PDRs are processed in precedence order (lower value = higher priority)
+  std::vector<std::shared_ptr<pfcp::pfcp_pdr>> all_sorted_pdrs;
+  all_sorted_pdrs.reserve(session->pdrs_uplink.size() + session->pdrs_downlink.size());
+  all_sorted_pdrs.insert(all_sorted_pdrs.end(), 
+                         session->pdrs_uplink.begin(), 
+                         session->pdrs_uplink.end());
+  all_sorted_pdrs.insert(all_sorted_pdrs.end(), 
+                         session->pdrs_downlink.begin(), 
+                         session->pdrs_downlink.end());
 
+  logger.info(
+      "SEID " SEID_FMT ": Processing %zu PDRs (Uplink: %zu, Downlink: %zu) in precedence order",
+      seid, all_sorted_pdrs.size(), session->pdrs_uplink.size(), session->pdrs_downlink.size());
+
+  // Process PDRs in sorted precedence order
+  for (const auto pdr : all_sorted_pdrs) {
+    pdr_id = pdr->pdr_id.rule_id;
+    
     if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
       throw std::runtime_error(
           "Missing Mandatory IE in PDR: " + std::to_string(pdr_id));
     }
+
+    // Log precedence information for debugging QoS enforcement
+    pfcp::precedence_t precedence;
+    pfcp::fteid_t temp_fteid;
+    pfcp::qfi_t temp_qfi;
+    pdr->get(precedence);
+    pdi.get(temp_fteid);
+    pdi.get(temp_qfi);
+    
+    const char* direction = (sourceInterface.interface_value == INTERFACE_VALUE_ACCESS) ? "UPLINK" : "DOWNLINK";
+    logger.debug(
+        "Processing PDR %d [%s] (Precedence: %u, TEID: %u, QFI: %u, Array Index: %d) on establishment", 
+        pdr_id, direction, precedence.precedence, temp_fteid.teid, temp_qfi.qfi, i);
 
     if (!pdi.get(fteid)) {
       fteid.teid = 0;
@@ -753,6 +780,18 @@ void SessionProgramManager::createPipeline(
 
     pdrs[i] = createPdr(pdr);
     i++;
+  }
+
+  logger.info(
+      "SEID " SEID_FMT ": Loaded %d PDRs into BPF map in precedence order", 
+      seid, i);
+  logger.info("  >> Writing to BPF m_session_pdrs map with key SEID=%lu (0x%lx)", seid, seid);
+  logger.debug("Final PDR array order being written to BPF map:");
+  for (int j = 0; j < i; j++) {
+    const char* dir = (pdrs[j].pdi.source_interface.interface_value == INTERFACE_VALUE_ACCESS) ? "UL" : "DL";
+    logger.debug("  BPF Array[%d]: PDR_ID=%u, Precedence=%u, Direction=%s, TEID=%u, QFI=%u", 
+                 j, pdrs[j].pdr_id.rule_id, pdrs[j].precedence.precedence, dir,
+                 pdrs[j].pdi.fteid.teid, pdrs[j].pdi.qfi.qfi);
   }
 
   pPFCP_Session_LookupProgram->getSessionPdrsMap()->update(seid, pdrs, BPF_ANY);
@@ -905,9 +944,42 @@ void SessionProgramManager::modifyPipeline(
   pfcp_pdr_t_ pdrs[MAX_PDRS_SESSION] = {0};
   int i                              = 0;
 
-  for (const auto& pdr : session->pdrs) {
+  // BUG FIX: Use sorted PDRs (uplink + downlink) instead of unsorted session->pdrs
+  // This ensures PDRs are processed in precedence order (lower value = higher priority)
+  std::vector<std::shared_ptr<pfcp::pfcp_pdr>> all_sorted_pdrs;
+  all_sorted_pdrs.reserve(session->pdrs_uplink.size() + session->pdrs_downlink.size());
+  all_sorted_pdrs.insert(all_sorted_pdrs.end(), 
+                         session->pdrs_uplink.begin(), 
+                         session->pdrs_uplink.end());
+  all_sorted_pdrs.insert(all_sorted_pdrs.end(), 
+                         session->pdrs_downlink.begin(), 
+                         session->pdrs_downlink.end());
+
+  logger.info(
+      "SEID " SEID_FMT ": Modifying %zu PDRs (Uplink: %zu, Downlink: %zu) in precedence order",
+      seid, all_sorted_pdrs.size(), session->pdrs_uplink.size(), session->pdrs_downlink.size());
+
+  for (const auto& pdr : all_sorted_pdrs) {
     pdr_id = pdr->pdr_id.rule_id;
-    logger.debug("Processing PDR %d on Modification", pdr_id);
+    
+    if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
+      throw std::runtime_error(
+          "Missing Mandatory IE in PDR: " + std::to_string(pdr_id));
+    }
+
+    // Log precedence information for debugging QoS enforcement
+    pfcp::precedence_t precedence;
+    pfcp::fteid_t temp_fteid;
+    pfcp::qfi_t temp_qfi;
+    pdr->get(precedence);
+    pdi.get(temp_fteid);
+    pdi.get(temp_qfi);
+    
+    const char* direction = (sourceInterface.interface_value == INTERFACE_VALUE_ACCESS) ? "UPLINK" : "DOWNLINK";
+    logger.debug(
+        "Processing PDR %d [%s] (Precedence: %u, TEID: %u, QFI: %u, Array Index: %d) on Modification", 
+        pdr_id, direction, precedence.precedence, temp_fteid.teid, temp_qfi.qfi, i);
+    
     std::shared_ptr<pfcp::pfcp_far> far;
     std::shared_ptr<pfcp::pfcp_qer> qer;
 
@@ -1016,6 +1088,18 @@ void SessionProgramManager::modifyPipeline(
 
     pdrs[i] = createPdr(pdr);
     i++;
+  }
+
+  logger.info(
+      "SEID " SEID_FMT ": Updated %d PDRs in BPF map in precedence order", 
+      seid, i);
+  logger.info("  >> Writing to BPF m_session_pdrs map with key SEID=%lu (0x%lx)", seid, seid);
+  logger.debug("Final PDR array order being written to BPF map:");
+  for (int j = 0; j < i; j++) {
+    const char* dir = (pdrs[j].pdi.source_interface.interface_value == INTERFACE_VALUE_ACCESS) ? "UL" : "DL";
+    logger.debug("  BPF Array[%d]: PDR_ID=%u, Precedence=%u, Direction=%s, TEID=%u, QFI=%u", 
+                 j, pdrs[j].pdr_id.rule_id, pdrs[j].precedence.precedence, dir,
+                 pdrs[j].pdi.fteid.teid, pdrs[j].pdi.qfi.qfi);
   }
 
   pPFCP_Session_LookupProgram->getSessionPdrsMap()->update(seid, pdrs, BPF_ANY);

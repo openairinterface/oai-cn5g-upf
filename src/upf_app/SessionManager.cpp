@@ -87,9 +87,13 @@ void SessionManager::categorizePDRs(
     std::shared_ptr<pfcp::pfcp_session> session) {
   auto& logger = Logger::upf_n4();
 
+  logger.debug("Categorising %zu PDRs for SEID " SEID_FMT,
+               session->pdrs.size(), session->get_up_seid());
+
   for (auto& pdr : session->pdrs) {
     pfcp::pdi pdi;
     pfcp::source_interface_t sourceInterface;
+    pfcp::precedence_t precedence;
 
     if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
       throw std::runtime_error(
@@ -98,6 +102,10 @@ void SessionManager::categorizePDRs(
     }
 
     std::shared_ptr<pfcp::pfcp_qer> qer;
+    uint8_t qfi = 0;
+    if (pdr->get(precedence) && getQer(session, pdr, qer) && qer->qfi.first) {
+      qfi = qer->qfi.second.qfi;
+    }
 
     switch (sourceInterface.interface_value) {
       case INTERFACE_VALUE_ACCESS: {
@@ -105,6 +113,10 @@ void SessionManager::categorizePDRs(
         if (getQer(session, pdr, qer)) {
           session->qers_uplink.push_back(qer);
         }
+        logger.debug(
+            "  PDR %u -> UPLINK (Precedence: %u, QFI: %u)",
+            pdr->pdr_id.rule_id,
+            pdr->get(precedence) ? precedence.precedence : 0, qfi);
         break;
       }
       case INTERFACE_VALUE_CORE: {
@@ -112,6 +124,10 @@ void SessionManager::categorizePDRs(
         if (getQer(session, pdr, qer)) {
           session->qers_downlink.push_back(qer);
         }
+        logger.debug(
+            "  PDR %u -> DOWNLINK (Precedence: %u, QFI: %u)",
+            pdr->pdr_id.rule_id,
+            pdr->get(precedence) ? precedence.precedence : 0, qfi);
         break;
       }
       case INTERFACE_VALUE_SGI_LAN_N6_LAN:
@@ -155,7 +171,29 @@ bool SessionManager::getQer(
 //---------------------------------------------------------------------------------------------------------------
 void SessionManager::sortPDRs(
     std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs) {
+  auto& logger = Logger::upf_n4();
+
+  // Log PDR order before sorting
+  logger.debug("PDRs before sorting by precedence:");
+  for (size_t i = 0; i < pdrs.size(); i++) {
+    pfcp::precedence_t prec;
+    if (pdrs[i]->get(prec)) {
+      logger.debug("  [%zu] PDR %u (Precedence: %u)",
+                   i, pdrs[i]->pdr_id.rule_id, prec.precedence);
+    }
+  }
+
   std::sort(pdrs.begin(), pdrs.end(), comparePDR);
+
+  // Log PDR order after sorting
+  logger.debug("PDRs after sorting by precedence (lower value = higher priority):");
+  for (size_t i = 0; i < pdrs.size(); i++) {
+    pfcp::precedence_t prec;
+    if (pdrs[i]->get(prec)) {
+      logger.debug("  [%zu] PDR %u (Precedence: %u)",
+                   i, pdrs[i]->pdr_id.rule_id, prec.precedence);
+    }
+  }
 }
 
 //---------------------------------------------------------------------------------------------------------------
