@@ -607,9 +607,11 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
 
       if (match) {
         // Check if this PDR has SDF filters
+        // When ignore_qfi_for_uplink is true and QFIs don't match, skip SDF filter check
+        // (the packet's QFI is what matters for SDF filter lookup)
         struct session_qfi sdf_key = {
             .seid = seid,
-            .qfi  = pdi.qfi.qfi,
+            .qfi  = ignore_qfi_for_uplink ? packet_qfi : pdi.qfi.qfi,
         };
 
         struct sdf_filtr* sdf = bpf_map_lookup_elem(&m_sdf_filter, &sdf_key);
