@@ -87,8 +87,9 @@ void SessionManager::categorizePDRs(
     std::shared_ptr<pfcp::pfcp_session> session) {
   auto& logger = Logger::upf_n4();
 
-  logger.debug("Categorising %zu PDRs for SEID " SEID_FMT,
-               session->pdrs.size(), session->get_up_seid());
+  logger.debug(
+      "Categorising %zu PDRs for SEID " SEID_FMT, session->pdrs.size(),
+      session->get_up_seid());
 
   for (auto& pdr : session->pdrs) {
     pfcp::pdi pdi;
@@ -114,8 +115,7 @@ void SessionManager::categorizePDRs(
           session->qers_uplink.push_back(qer);
         }
         logger.debug(
-            "  PDR %u -> UPLINK (Precedence: %u, QFI: %u)",
-            pdr->pdr_id.rule_id,
+            "  PDR %u -> UPLINK (Precedence: %u, QFI: %u)", pdr->pdr_id.rule_id,
             pdr->get(precedence) ? precedence.precedence : 0, qfi);
         break;
       }
@@ -178,20 +178,23 @@ void SessionManager::sortPDRs(
   for (size_t i = 0; i < pdrs.size(); i++) {
     pfcp::precedence_t prec;
     if (pdrs[i]->get(prec)) {
-      logger.debug("  [%zu] PDR %u (Precedence: %u)",
-                   i, pdrs[i]->pdr_id.rule_id, prec.precedence);
+      logger.debug(
+          "  [%zu] PDR %u (Precedence: %u)", i, pdrs[i]->pdr_id.rule_id,
+          prec.precedence);
     }
   }
 
   std::sort(pdrs.begin(), pdrs.end(), comparePDR);
 
   // Log PDR order after sorting
-  logger.debug("PDRs after sorting by precedence (lower value = higher priority):");
+  logger.debug(
+      "PDRs after sorting by precedence (lower value = higher priority):");
   for (size_t i = 0; i < pdrs.size(); i++) {
     pfcp::precedence_t prec;
     if (pdrs[i]->get(prec)) {
-      logger.debug("  [%zu] PDR %u (Precedence: %u)",
-                   i, pdrs[i]->pdr_id.rule_id, prec.precedence);
+      logger.debug(
+          "  [%zu] PDR %u (Precedence: %u)", i, pdrs[i]->pdr_id.rule_id,
+          prec.precedence);
     }
   }
 }

@@ -25,7 +25,8 @@ enum FlowDirection { DOWNLINK = 0, UPLINK = 1 };
 
 /*
  * Configuration structure for PDR lookup behavior.
- * This is read-only data (.rodata) that can be configured from userspace before loading.
+ * This is read-only data (.rodata) that can be configured from userspace before
+ * loading.
  */
 struct pdr_lookup_config {
   bool ignore_qfi_for_uplink;

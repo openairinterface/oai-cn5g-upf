@@ -68,12 +68,11 @@ static u32 upf_n6_ip = 0;
 static u8 next_hop_n3_mac_address[6] = {0};
 // static u8 next_hop_n6_mac_address[6] = {0};
 
-
 static bool cached_n3 = false;
 // static bool cached_n6 = false;
 
 const volatile struct pdr_lookup_config config = {
-  .ignore_qfi_for_uplink = true,  // Default: enable QFI ignore mode
+    .ignore_qfi_for_uplink = true,  // Default: enable QFI ignore mode
 };
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -489,13 +488,13 @@ static __always_inline struct session_id* pfcp_session_lookup_over_n3(
  * Extracts packet 5-tuple and calls match_sdf_filter_ipv4
  */
 static __always_inline bool packet_filter_is_matching_sdf(
-    struct iphdr* iph, void* l4_hdr, const struct sdf_filtr* sdf, void* data_end) {
-
+    struct iphdr* iph, void* l4_hdr, const struct sdf_filtr* sdf,
+    void* data_end) {
   struct packet_filter filter = {0};
 
   // Extract IP addresses and protocol
-  filter.src_ip = bpf_htonl(iph->saddr);
-  filter.dst_ip = bpf_htonl(iph->daddr);
+  filter.src_ip   = bpf_htonl(iph->saddr);
+  filter.dst_ip   = bpf_htonl(iph->daddr);
   filter.protocol = iph->protocol;
 
   // Extract port numbers based on protocol
@@ -538,13 +537,15 @@ static __always_inline bool packet_filter_is_matching_sdf(
  *
  * IMPORTANT: If ignore_qfi_for_uplink is true, UPF will ignore QFI and classify
  * traffic using only TEID + SDF filters. This is standards-compliant, but means
- * all traffic on the TEID gets the same radio QoS; UPF can still enforce different
- * QoS for core network and charging/reporting.
+ * all traffic on the TEID gets the same radio QoS; UPF can still enforce
+ * different QoS for core network and charging/reporting.
  */
 static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
     u64 seid, u32 packet_teid, u32 packet_ue_ip, u8 packet_qfi,
     struct iphdr* iph, void* l4_hdr, void* data_end) {
-  bpf_debug("Looking up PDRs for SEID=%llu, packet TEID=%u, QFI=%u", seid, packet_teid, packet_qfi);
+  bpf_debug(
+      "Looking up PDRs for SEID=%llu, packet TEID=%u, QFI=%u", seid,
+      packet_teid, packet_qfi);
 
   pfcp_pdr_t_(*pdrs)[MAX_PDRS_PER_SESSION] =
       bpf_map_lookup_elem(&m_session_pdrs, &seid);
@@ -557,7 +558,7 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
   bpf_debug("Found PDR array for SEID=%llu, checking each PDR...", seid);
 
   pfcp_pdr_t_* best_match = NULL;
-  u32 best_precedence = 0xFFFFFFFF;
+  u32 best_precedence     = 0xFFFFFFFF;
 
 #pragma clang loop unroll(full)
   for (int i = 0; i < MAX_PDRS_PER_SESSION; i++) {
@@ -568,22 +569,33 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
     u32 precedence             = pdr_high_prec->precedence.precedence;
 
     if ((ipaddr == packet_ue_ip) &&
-        (bpf_htonl(pdi.source_interface.interface_value) == INTERFACE_VALUE_ACCESS)) {
-      bpf_debug("Precedence=%u, TEID=%d, QFI=%u", precedence, pdi.fteid.teid, pdi.qfi.qfi);
-      bpf_debug("( packet_ue_ip,  pdi.ue_ip_address ) : ( %pI4, %pI4 )", &packet_ue_ip, &ipaddr);
-      bpf_debug("( packet_teid,   pdi.fteid.teid    ) : ( %d  , %d )", packet_teid, pdi.fteid.teid);
-      bpf_debug("( packet_qfi,    pdi.qfi.qfi       ) : ( %u  , %u )", packet_qfi, pdi.qfi.qfi);
+        (bpf_htonl(pdi.source_interface.interface_value) ==
+         INTERFACE_VALUE_ACCESS)) {
+      bpf_debug(
+          "Precedence=%u, TEID=%d, QFI=%u", precedence, pdi.fteid.teid,
+          pdi.qfi.qfi);
+      bpf_debug(
+          "( packet_ue_ip,  pdi.ue_ip_address ) : ( %pI4, %pI4 )",
+          &packet_ue_ip, &ipaddr);
+      bpf_debug(
+          "( packet_teid,   pdi.fteid.teid    ) : ( %d  , %d )", packet_teid,
+          pdi.fteid.teid);
+      bpf_debug(
+          "( packet_qfi,    pdi.qfi.qfi       ) : ( %u  , %u )", packet_qfi,
+          pdi.qfi.qfi);
       bool match = false;
       if (config.ignore_qfi_for_uplink) {
         match = (packet_teid == pdi.fteid.teid);
       } else {
-        match = ((packet_teid == pdi.fteid.teid) && (packet_qfi == pdi.qfi.qfi));
+        match =
+            ((packet_teid == pdi.fteid.teid) && (packet_qfi == pdi.qfi.qfi));
       }
 
       if (match) {
         // Check if this PDR has SDF filters
-        // When config.ignore_qfi_for_uplink is true and QFIs don't match, skip SDF filter check
-        // (the packet's QFI is what matters for SDF filter lookup)
+        // When config.ignore_qfi_for_uplink is true and QFIs don't match, skip
+        // SDF filter check (the packet's QFI is what matters for SDF filter
+        // lookup)
         struct session_qfi sdf_key = {
             .seid = seid,
             .qfi  = config.ignore_qfi_for_uplink ? packet_qfi : pdi.qfi.qfi,
@@ -593,35 +605,52 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
 
         if (sdf) {
           // SDF filter exists - must match packet
-          bpf_debug("SDF key ( seid, qfi ): ( %llu, %u )", sdf_key.seid, sdf_key.qfi);
+          bpf_debug(
+              "SDF key ( seid, qfi ): ( %llu, %u )", sdf_key.seid, sdf_key.qfi);
 
           if (packet_filter_is_matching_sdf(iph, l4_hdr, sdf, data_end)) {
-            bpf_debug("SDF Match! PDR %u (Precedence: %u) is a candidate", pdr_high_prec->pdr_id.rule_id, precedence);
+            bpf_debug(
+                "SDF Match! PDR %u (Precedence: %u) is a candidate",
+                pdr_high_prec->pdr_id.rule_id, precedence);
             if (precedence < best_precedence) {
-              best_match = pdr_high_prec;
+              best_match      = pdr_high_prec;
               best_precedence = precedence;
-              bpf_debug("New best match: PDR %u (Precedence: %u)", pdr_high_prec->pdr_id.rule_id, precedence);
+              bpf_debug(
+                  "New best match: PDR %u (Precedence: %u)",
+                  pdr_high_prec->pdr_id.rule_id, precedence);
             }
           } else {
-            bpf_debug("SDF filter did NOT match for PDR %u, continuing to next PDR", pdr_high_prec->pdr_id.rule_id);
+            bpf_debug(
+                "SDF filter did NOT match for PDR %u, continuing to next PDR",
+                pdr_high_prec->pdr_id.rule_id);
           }
         } else {
           // No SDF filter - TEID (or TEID+QFI) match is sufficient
-          bpf_debug("No SDF filter for PDR %u - TEID%s match is sufficient", pdr_high_prec->pdr_id.rule_id, config.ignore_qfi_for_uplink ? "" : "+QFI");
+          bpf_debug(
+              "No SDF filter for PDR %u - TEID%s match is sufficient",
+              pdr_high_prec->pdr_id.rule_id,
+              config.ignore_qfi_for_uplink ? "" : "+QFI");
           if (precedence < best_precedence) {
-            best_match = pdr_high_prec;
+            best_match      = pdr_high_prec;
             best_precedence = precedence;
-            bpf_debug("New best match: PDR %u (Precedence: %u)", pdr_high_prec->pdr_id.rule_id, precedence);
+            bpf_debug(
+                "New best match: PDR %u (Precedence: %u)",
+                pdr_high_prec->pdr_id.rule_id, precedence);
           }
         }
       } else {
-        bpf_debug("PDR %u did NOT match (TEID%s mismatch), continuing...", pdr_high_prec->pdr_id.rule_id, config.ignore_qfi_for_uplink ? "" : " or QFI");
+        bpf_debug(
+            "PDR %u did NOT match (TEID%s mismatch), continuing...",
+            pdr_high_prec->pdr_id.rule_id,
+            config.ignore_qfi_for_uplink ? "" : " or QFI");
       }
     }
   }
 
   if (best_match) {
-    bpf_debug("Returning best match: PDR %u (Precedence: %u)", best_match->pdr_id.rule_id, best_match->precedence.precedence);
+    bpf_debug(
+        "Returning best match: PDR %u (Precedence: %u)",
+        best_match->pdr_id.rule_id, best_match->precedence.precedence);
   }
 
   return best_match;
@@ -866,8 +895,8 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
       u32 source_interface = pdi.source_interface.interface_value;
       bpf_debug(
           "N6 PDR Lookup: PDR_ID=%u, Precedence=%u, UE_IP=%pI4",
-          pdr_high_prec->pdr_id.rule_id,
-          pdr_high_prec->precedence.precedence, &ipaddr);
+          pdr_high_prec->pdr_id.rule_id, pdr_high_prec->precedence.precedence,
+          &ipaddr);
 
       switch (source_interface) {
         case INTERFACE_VALUE_ACCESS: {
@@ -889,8 +918,10 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
           u32* enabling_qos = bpf_map_lookup_elem(&m_qos_enabling, &seid);
 
           if (!enabling_qos) {
-            bpf_debug("Qos enforcement not enabled for Session %llu, returning PDR %u",
-                      seid, pdr_high_prec->pdr_id.rule_id);
+            bpf_debug(
+                "Qos enforcement not enabled for Session %llu, returning PDR "
+                "%u",
+                seid, pdr_high_prec->pdr_id.rule_id);
             return pdr_high_prec;
           } else {
             struct session_qfi sdf_key = {0};
@@ -900,9 +931,14 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
             const struct sdf_filtr* sdf =
                 bpf_map_lookup_elem(&m_sdf_filter, &sdf_key);
             if (!sdf) {
-              bpf_debug("SDF Filter not found for QFI %u! Treating as NON-GBR/default traffic", *qfi_out);
-              bpf_debug("Returning PDR %u (Precedence: %u) as default rule",
-                        pdr_high_prec->pdr_id.rule_id, pdr_high_prec->precedence.precedence);
+              bpf_debug(
+                  "SDF Filter not found for QFI %u! Treating as "
+                  "NON-GBR/default traffic",
+                  *qfi_out);
+              bpf_debug(
+                  "Returning PDR %u (Precedence: %u) as default rule",
+                  pdr_high_prec->pdr_id.rule_id,
+                  pdr_high_prec->precedence.precedence);
               // TODO:
               // Treat default qos flow here !!!
               return pdr_high_prec;
@@ -911,12 +947,15 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
                 "SDF key ( seid, qfi ): ( %llu, %u )", sdf_key.seid,
                 sdf_key.qfi);
             if (match_sdf_filter_ipv4(packet_filter, sdf)) {
-              bpf_debug("SDF Match! Returning PDR %u (Precedence: %u)",
-                        pdr_high_prec->pdr_id.rule_id, pdr_high_prec->precedence.precedence);
+              bpf_debug(
+                  "SDF Match! Returning PDR %u (Precedence: %u)",
+                  pdr_high_prec->pdr_id.rule_id,
+                  pdr_high_prec->precedence.precedence);
               return pdr_high_prec;
             } else {
-              bpf_debug("SDF filter did NOT match for PDR %u, continuing to next PDR",
-                        pdr_high_prec->pdr_id.rule_id);
+              bpf_debug(
+                  "SDF filter did NOT match for PDR %u, continuing to next PDR",
+                  pdr_high_prec->pdr_id.rule_id);
             }
 
             break;
@@ -1023,9 +1062,8 @@ static __always_inline int entry_point_uplink__ip_pdu(struct xdp_md* ctx) {
     |--- (Find matching PDR of the PFCP session with highest precedence) ---|
     |-----------------------------------------------------------------------|
     */
-  pfcp_pdr_t_* pdr_high_precedence =
-      pfcp_session_s_lookup_precedence_over_n3(seid, teid_ul, ue_ip, qfi,
-                                                inner_iph, l4_hdr, data_end);
+  pfcp_pdr_t_* pdr_high_precedence = pfcp_session_s_lookup_precedence_over_n3(
+      seid, teid_ul, ue_ip, qfi, inner_iph, l4_hdr, data_end);
 
   if (!pdr_high_precedence) {
     bpf_debug(
