@@ -525,16 +525,16 @@ static __always_inline bool packet_filter_is_matching_sdf(
 //--------------------------------------------------------------------------------------
 
 /*
- * 3GPP TS 29.244 Section 5.2.1.2 (Packet Detection):
+ * 3GPP TS 29.244 Section 5.2.1A (Packet Detection Rule Handling):
  * Multiple PDRs may match a packet. When multiple PDRs match, the PDR with
  * the lowest Precedence value shall be selected.
  *
- * 3GPP TS 29.244 Section 8.2.5 (PDI - Packet Detection Information):
+ * 3GPP TS 29.244 Section 8.2.X:
  * For uplink packets, the PDI may contain:
- * - UE IP address (mandatory for N3 interface)
+ * - UE IP address(es) (mandatory for N3 interface)
  * - F-TEID (GTP-U tunnel information)
- * - QFI (QoS Flow Identifier)
- * - SDF Filter (optional, for fine-grained packet filtering)
+ * - QFI(s) (QoS Flow Identifier)
+ * - SDF Filter(s) (optional, for fine-grained packet filtering)
  *
  * IMPORTANT: Multiple PDRs can have the same TEID+QFI combination but with
  * different SDF filters. This allows differentiated QoS treatment based on
@@ -548,16 +548,16 @@ static __always_inline bool packet_filter_is_matching_sdf(
  */
 
 /*
- * 3GPP TS 29.244 Section 5.2.1.2 (Packet Detection):
+ * 3GPP TS 29.244 Section 5.2.1A (Packet Detection Rule Handling):
  * Multiple PDRs may match a packet. When multiple PDRs match, the PDR with
  * the lowest Precedence value shall be selected.
  *
- * 3GPP TS 29.244 Section 8.2.5 (PDI - Packet Detection Information):
+ * 3GPP TS 29.244 Section 8.2.X
  * For uplink packets, the PDI may contain:
- * - UE IP address (mandatory for N3 interface)
+ * - UE IP address(es) (mandatory for N3 interface)
  * - F-TEID (GTP-U tunnel information)
- * - QFI (QoS Flow Identifier)
- * - SDF Filter (optional, for fine-grained packet filtering)
+ * - QFI(s) (QoS Flow Identifier)
+ * - SDF Filter(s) (optional, for fine-grained packet filtering)
  *
  * IMPORTANT: If ignore_qfi_for_uplink is true, UPF will ignore QFI and classify
  * traffic using only TEID + SDF filters. This is standards-compliant, but means
