@@ -136,6 +136,7 @@ class upf_config {
   u_int16_t max_sdf_filters_per_pdu_session;
   u_int16_t max_arp_entries;
   bool enable_eth_pdu;
+  bool ignore_qfi_for_uplink;
   bool register_nrf;
   struct in_addr remote_n6;
   upf_info_t upf_info;
@@ -188,6 +189,7 @@ class upf_config {
     max_qos_flows_per_pdu_session   = 8;
     max_sdf_filters_per_pdu_session = 8;
     max_arp_entries                 = 2;
+    ignore_qfi_for_uplink           = true;
     register_nrf                    = false;
     upf_info                        = {};
     enable_5g_features              = true;

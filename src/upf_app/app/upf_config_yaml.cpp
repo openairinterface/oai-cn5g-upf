@@ -36,7 +36,8 @@ upf_support_features::upf_support_features(
     u_int16_t max_upf_redirect_interfaces, u_int16_t max_pdu_session,
     u_int16_t max_pdrs_per_pdu_session, u_int16_t max_qos_flows_per_pdu_session,
     u_int16_t max_sdf_filters_per_pdu_session, u_int16_t max_arp_entries,
-    bool enable_snat, bool enable_fr, bool enable_eth_pdu) {
+    bool enable_snat, bool enable_fr, bool enable_eth_pdu,
+    bool ignore_qfi_for_uplink) {
   m_config_name = "Supported Features";
 
   m_enable_bpf_datapath = option_config_value(
@@ -77,6 +78,9 @@ upf_support_features::upf_support_features(
       UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR, (int) enable_fr);
   m_enable_eth_pdu = option_config_value(
       UPF_CONFIG_SUPPORT_FEATURES_ENABLE_ETH_PDU_LABEL, (int) enable_eth_pdu);
+  m_ignore_qfi_for_uplink = option_config_value(
+      UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK_LABEL,
+      (int) ignore_qfi_for_uplink);
 }
 
 //------------------------------------------------------------------------------
@@ -133,6 +137,10 @@ void upf_support_features::from_yaml(const YAML::Node& node) {
   if (node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_ETH_PDU]) {
     m_enable_eth_pdu.from_yaml(
         node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_ETH_PDU]);
+  }
+  if (node[UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK]) {
+    m_ignore_qfi_for_uplink.from_yaml(
+        node[UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK]);
   }
 }
 
@@ -226,6 +234,15 @@ std::string upf_support_features::to_string(const std::string& indent) const {
       BASE_FORMATTER, INNER_LIST_ELEM,
       UPF_CONFIG_SUPPORT_FEATURES_ENABLE_ETH_PDU_LABEL, inner_width,
       enable_eth_pdu));
+
+  // Ignore QFI for Uplink
+  std::string ignore_qfi_for_uplink = m_ignore_qfi_for_uplink.get_value() ?
+                                          UPF_CONFIG_OPTION_YES_STR :
+                                          UPF_CONFIG_OPTION_NO_STR;
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, INNER_LIST_ELEM,
+      UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK_LABEL, inner_width,
+      ignore_qfi_for_uplink));
   return out;
 }
 
@@ -235,7 +252,7 @@ upf::upf(
     const std::map<std::string, upf_interface_config>& interfaces)
     : nf(name, host, sbi),
       m_upf_support_features(
-          false, false, 3, 2, 10000, 8, 8, 8, 2, false, false, false),
+          false, false, 3, 2, 10000, 8, 8, 8, 2, false, false, false, true),
       m_interfaces(interfaces) {
   model::nrf::SnssaiUpfInfoItem item;
   item.setSNssai(DEFAULT_SNSSAI);
@@ -391,6 +408,11 @@ bool upf_support_features::get_option_enable_fr() const {
 //------------------------------------------------------------------------------
 bool upf_support_features::get_option_enable_eth_pdu() const {
   return m_enable_eth_pdu.get_value();
+}
+
+//------------------------------------------------------------------------------
+bool upf_support_features::get_option_ignore_qfi_for_uplink() const {
+  return m_ignore_qfi_for_uplink.get_value();
 }
 
 //------------------------------------------------------------------------------
@@ -593,6 +615,8 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   cfg.enable_fr   = upf_local->get_support_features().get_option_enable_fr();
   cfg.enable_eth_pdu =
       upf_local->get_support_features().get_option_enable_eth_pdu();
+  cfg.ignore_qfi_for_uplink =
+      upf_local->get_support_features().get_option_ignore_qfi_for_uplink();
 
   auto snssai_upf_list = upf_local->get_upf_info().getSNssaiUpfInfoList();
   for (const auto& snssai : snssai_upf_list) {

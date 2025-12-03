@@ -72,9 +72,9 @@ static u8 next_hop_n3_mac_address[6] = {0};
 static bool cached_n3 = false;
 // static bool cached_n6 = false;
 
-// Configuration: If true, UPF will ignore QFI for uplink classification and use only TEID + SDF filters
-// This is useful when gNB does not support multiple QFI per TEID (see 3GPP TS 29.244 Section 5.2.1.2, 8.2.5)
-static bool ignore_qfi_for_uplink = true; // Set to true to enable QFI ignore mode
+const volatile struct pdr_lookup_config config = {
+  .ignore_qfi_for_uplink = true,  // Default: enable QFI ignore mode
+};
 
 /*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline u32 match_sdf_filter_ipv4(
@@ -529,29 +529,6 @@ static __always_inline bool packet_filter_is_matching_sdf(
  * Multiple PDRs may match a packet. When multiple PDRs match, the PDR with
  * the lowest Precedence value shall be selected.
  *
- * 3GPP TS 29.244 Section 8.2.X:
- * For uplink packets, the PDI may contain:
- * - UE IP address(es) (mandatory for N3 interface)
- * - F-TEID (GTP-U tunnel information)
- * - QFI(s) (QoS Flow Identifier)
- * - SDF Filter(s) (optional, for fine-grained packet filtering)
- *
- * IMPORTANT: Multiple PDRs can have the same TEID+QFI combination but with
- * different SDF filters. This allows differentiated QoS treatment based on
- * specific traffic patterns (e.g., different destination ports) within the
- * same QoS flow.
- *
- * The matching logic must:
- * 1. Match UE IP, TEID, and QFI (basic flow identification)
- * 2. Check SDF filters if present (fine-grained traffic filtering)
- * 3. Return the PDR with lowest precedence among all matches
- */
-
-/*
- * 3GPP TS 29.244 Section 5.2.1A (Packet Detection Rule Handling):
- * Multiple PDRs may match a packet. When multiple PDRs match, the PDR with
- * the lowest Precedence value shall be selected.
- *
  * 3GPP TS 29.244 Section 8.2.X
  * For uplink packets, the PDI may contain:
  * - UE IP address(es) (mandatory for N3 interface)
@@ -596,10 +573,8 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
       bpf_debug("( packet_ue_ip,  pdi.ue_ip_address ) : ( %pI4, %pI4 )", &packet_ue_ip, &ipaddr);
       bpf_debug("( packet_teid,   pdi.fteid.teid    ) : ( %d  , %d )", packet_teid, pdi.fteid.teid);
       bpf_debug("( packet_qfi,    pdi.qfi.qfi       ) : ( %u  , %u )", packet_qfi, pdi.qfi.qfi);
-
-      // If ignore_qfi_for_uplink is true, only match TEID (not QFI)
       bool match = false;
-      if (ignore_qfi_for_uplink) {
+      if (config.ignore_qfi_for_uplink) {
         match = (packet_teid == pdi.fteid.teid);
       } else {
         match = ((packet_teid == pdi.fteid.teid) && (packet_qfi == pdi.qfi.qfi));
@@ -607,11 +582,11 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
 
       if (match) {
         // Check if this PDR has SDF filters
-        // When ignore_qfi_for_uplink is true and QFIs don't match, skip SDF filter check
+        // When config.ignore_qfi_for_uplink is true and QFIs don't match, skip SDF filter check
         // (the packet's QFI is what matters for SDF filter lookup)
         struct session_qfi sdf_key = {
             .seid = seid,
-            .qfi  = ignore_qfi_for_uplink ? packet_qfi : pdi.qfi.qfi,
+            .qfi  = config.ignore_qfi_for_uplink ? packet_qfi : pdi.qfi.qfi,
         };
 
         struct sdf_filtr* sdf = bpf_map_lookup_elem(&m_sdf_filter, &sdf_key);
@@ -632,7 +607,7 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
           }
         } else {
           // No SDF filter - TEID (or TEID+QFI) match is sufficient
-          bpf_debug("No SDF filter for PDR %u - TEID%s match is sufficient", pdr_high_prec->pdr_id.rule_id, ignore_qfi_for_uplink ? "" : "+QFI");
+          bpf_debug("No SDF filter for PDR %u - TEID%s match is sufficient", pdr_high_prec->pdr_id.rule_id, config.ignore_qfi_for_uplink ? "" : "+QFI");
           if (precedence < best_precedence) {
             best_match = pdr_high_prec;
             best_precedence = precedence;
@@ -640,7 +615,7 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
           }
         }
       } else {
-        bpf_debug("PDR %u did NOT match (TEID%s mismatch), continuing...", pdr_high_prec->pdr_id.rule_id, ignore_qfi_for_uplink ? "" : " or QFI");
+        bpf_debug("PDR %u did NOT match (TEID%s mismatch), continuing...", pdr_high_prec->pdr_id.rule_id, config.ignore_qfi_for_uplink ? "" : " or QFI");
       }
     }
   }
