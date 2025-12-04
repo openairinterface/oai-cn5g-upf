@@ -55,7 +55,8 @@ struct packet_filter {
 struct session_qfi {
   u64 seid;
   u8 qfi;
-};
+  u8 padding[7];  // Align to 8 bytes for BPF verifier compatibility
+} __attribute__((aligned(8)));
 
 struct sdf_filtr {
   u16 protocol;
