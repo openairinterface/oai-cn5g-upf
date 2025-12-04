@@ -112,7 +112,12 @@ bool pfcp_far::update(const pfcp::update_far& update, uint8_t& cause_value) {
     forwarding_parameters.second.update(
         update.update_forwarding_parameters.second);
     if (update.update_forwarding_parameters.second.pfcpsmreq_flags.first) {
-      // TODO
+      // TODO: Implement handling of PFCPSMReq-Flags (3GPP TS 29.244 Section 8.2.31)
+      // The flags indicate:
+      // - DROBU: Drop Buffered Packets - should trigger dropping of buffered DL packets
+      // - SNDEM: Send End Marker packets - should trigger sending GTP-U End Marker
+      // - QAURR: Query URR - should trigger immediate usage report for associated URRs
+      // Currently the UPF does not actively use these flags
     }
   }
   if (update.update_duplicating_parameters.first) {
