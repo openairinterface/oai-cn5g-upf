@@ -80,6 +80,11 @@ constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_ETH_PDU = "enable_eth_pdu";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_ETH_PDU_LABEL =
     "Enable Ethernet PDU Session";
 
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK =
+    "ignore_qfi_for_uplink";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK_LABEL =
+    "Ignore QFI For Uplink Classification";
+
 constexpr auto UPF_CONFIG_REMOTE_N6_GW       = "remote_n6_gw";
 constexpr auto UPF_CONFIG_REMOTE_N6_GW_LABEL = "Remote N6 Gateway";
 
@@ -104,6 +109,7 @@ class upf_support_features : public config_type {
   option_config_value m_enable_snat{};
   option_config_value m_enable_fr{};
   option_config_value m_enable_eth_pdu{};
+  option_config_value m_ignore_qfi_for_uplink{};
 
  public:
   explicit upf_support_features(
@@ -112,7 +118,8 @@ class upf_support_features : public config_type {
       u_int16_t max_pdrs_per_pdu_session,
       u_int16_t max_qos_flows_per_pdu_session,
       u_int16_t max_sdf_filters_per_pdu_session, u_int16_t max_arp_entries,
-      bool enable_snat, bool enable_fr, bool enable_eth_pdu);
+      bool enable_snat, bool enable_fr, bool enable_eth_pdu,
+      bool ignore_qfi_for_uplink);
 
   void from_yaml(const YAML::Node& node) override;
 
@@ -129,6 +136,7 @@ class upf_support_features : public config_type {
   [[nodiscard]] bool get_option_enable_snat() const;
   [[nodiscard]] bool get_option_enable_fr() const;
   [[nodiscard]] bool get_option_enable_eth_pdu() const;
+  [[nodiscard]] bool get_option_ignore_qfi_for_uplink() const;
 };
 
 class upf_interface_config : public local_interface {

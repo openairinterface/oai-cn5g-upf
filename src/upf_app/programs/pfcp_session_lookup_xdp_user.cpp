@@ -104,6 +104,13 @@ void PFCP_Session_LookupProgram::configurePfcpSessionLookupMaps(
         upf_cfg.max_sdf_filters_per_pdu_session;
     skel->rodata->max_arp_entries  = upf_cfg.max_arp_entries;
     skel->rodata->max_qos_enabling = upf_cfg.max_pdu_session;
+
+    // Configure PDR lookup behavior
+    skel->rodata->config.ignore_qfi_for_uplink = upf_cfg.ignore_qfi_for_uplink;
+
+    Logger::upf_app().info(
+        "PDR Lookup Config: ignore_qfi_for_uplink=%s",
+        upf_cfg.ignore_qfi_for_uplink ? "true" : "false");
   }
 }
 

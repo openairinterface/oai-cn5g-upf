@@ -71,7 +71,9 @@ static u8 next_hop_n3_mac_address[6] = {0};
 static bool cached_n3 = false;
 // static bool cached_n6 = false;
 
-//#define MAX_PDRS_PER_SESSION 32
+const volatile struct pdr_lookup_config config = {
+    .ignore_qfi_for_uplink = true,  // Default: enable QFI ignore mode
+};
 
 /*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline u32 match_sdf_filter_ipv4(
@@ -481,25 +483,82 @@ static __always_inline struct session_id* pfcp_session_lookup_over_n3(
 
 //--------------------------------------------------------------------------------------
 
+/*
+ * Helper function to match packet against SDF filter
+ * Extracts packet 5-tuple and calls match_sdf_filter_ipv4
+ */
+static __always_inline bool packet_filter_is_matching_sdf(
+    struct iphdr* iph, void* l4_hdr, const struct sdf_filtr* sdf,
+    void* data_end) {
+  struct packet_filter filter = {0};
+
+  // Extract IP addresses and protocol
+  filter.src_ip   = bpf_htonl(iph->saddr);
+  filter.dst_ip   = bpf_htonl(iph->daddr);
+  filter.protocol = iph->protocol;
+
+  // Extract port numbers based on protocol
+  if (iph->protocol == IPPROTO_TCP) {
+    struct tcphdr* tcph = (struct tcphdr*) l4_hdr;
+    if ((void*) (tcph + 1) > data_end) {
+      return false;
+    }
+    filter.src_port = bpf_htons(tcph->source);
+    filter.dst_port = bpf_htons(tcph->dest);
+  } else if (iph->protocol == IPPROTO_UDP) {
+    struct udphdr* udph = (struct udphdr*) l4_hdr;
+    if ((void*) (udph + 1) > data_end) {
+      return false;
+    }
+    filter.src_port = bpf_htons(udph->source);
+    filter.dst_port = bpf_htons(udph->dest);
+  } else {
+    // For other protocols (ICMP, etc.), ports are not applicable
+    filter.src_port = 0;
+    filter.dst_port = 0;
+  }
+
+  return match_sdf_filter_ipv4(&filter, sdf);
+}
+
+//--------------------------------------------------------------------------------------
+
+/*
+ * 3GPP TS 29.244 Section 5.2.1A (Packet Detection Rule Handling):
+ * Multiple PDRs may match a packet. When multiple PDRs match, the PDR with
+ * the lowest Precedence value shall be selected.
+ *
+ * 3GPP TS 29.244 Section 8.2.X
+ * For uplink packets, the PDI may contain:
+ * - UE IP address(es) (mandatory for N3 interface)
+ * - F-TEID (GTP-U tunnel information)
+ * - QFI(s) (QoS Flow Identifier)
+ * - SDF Filter(s) (optional, for fine-grained packet filtering)
+ *
+ * IMPORTANT: If ignore_qfi_for_uplink is true, UPF will ignore QFI and classify
+ * traffic using only TEID + SDF filters. This is standards-compliant, but means
+ * all traffic on the TEID gets the same radio QoS; UPF can still enforce
+ * different QoS for core network and charging/reporting.
+ */
 static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
-    u64 seid, u32 packet_teid, u32 packet_ue_ip, u8 packet_qfi) {
+    u64 seid, u32 packet_teid, u32 packet_ue_ip, u8 packet_qfi,
+    struct iphdr* iph, void* l4_hdr, void* data_end) {
+  bpf_debug(
+      "Looking up PDRs for SEID=%llu, packet TEID=%u, QFI=%u", seid,
+      packet_teid, packet_qfi);
+
   pfcp_pdr_t_(*pdrs)[MAX_PDRS_PER_SESSION] =
       bpf_map_lookup_elem(&m_session_pdrs, &seid);
 
   if (!pdrs) {
-    bpf_debug("No PDRs found for SEID: %llu", seid);
+    bpf_debug("No PDRs found in m_session_pdrs map for SEID: %llu", seid);
     return NULL;
   }
 
-  /*
-   * The pragma unrol will be replace with:
-   *
-   *      int i;
-   *      bpf_for(i, 0, MAX_PDRS_PER_SESSION) {
-   *
-   * This is supported on newer kernels (v6.3+), Clang >= 17, libbpf >= 1.3 or
-   * so, Linux kernel headers >= 6.3
-   */
+  bpf_debug("Found PDR array for SEID=%llu, checking each PDR...", seid);
+
+  pfcp_pdr_t_* best_match = NULL;
+  u32 best_precedence     = 0xFFFFFFFF;
 
 #pragma clang loop unroll(full)
   for (int i = 0; i < MAX_PDRS_PER_SESSION; i++) {
@@ -507,13 +566,14 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
     pfcp_pdr_t_* pdr_high_prec = &(*pdrs)[i];
     pdi_t_ pdi                 = pdr_high_prec->pdi;
     u32 ipaddr                 = bpf_htonl(pdi.ue_ip_address.ipv4_address);
+    u32 precedence             = pdr_high_prec->precedence.precedence;
 
     if ((ipaddr == packet_ue_ip) &&
         (bpf_htonl(pdi.source_interface.interface_value) ==
          INTERFACE_VALUE_ACCESS)) {
-      // After uplink/downlink separation, we can remove the source_interface
-      // check
-
+      bpf_debug(
+          "Precedence=%u, TEID=%d, QFI=%u", precedence, pdi.fteid.teid,
+          pdi.qfi.qfi);
       bpf_debug(
           "( packet_ue_ip,  pdi.ue_ip_address ) : ( %pI4, %pI4 )",
           &packet_ue_ip, &ipaddr);
@@ -523,14 +583,77 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n3(
       bpf_debug(
           "( packet_qfi,    pdi.qfi.qfi       ) : ( %u  , %u )", packet_qfi,
           pdi.qfi.qfi);
-      if ((packet_teid == pdi.fteid.teid) && (packet_qfi == pdi.qfi.qfi)) {
-        return pdr_high_prec;  // Maybe continue here directly is better
+      bool match = false;
+      if (config.ignore_qfi_for_uplink) {
+        match = (packet_teid == pdi.fteid.teid);
+      } else {
+        match =
+            ((packet_teid == pdi.fteid.teid) && (packet_qfi == pdi.qfi.qfi));
+      }
+
+      if (match) {
+        // Check if this PDR has SDF filters
+        // When config.ignore_qfi_for_uplink is true and QFIs don't match, skip
+        // SDF filter check (the packet's QFI is what matters for SDF filter
+        // lookup)
+        struct session_qfi sdf_key = {
+            .seid = seid,
+            .qfi  = config.ignore_qfi_for_uplink ? packet_qfi : pdi.qfi.qfi,
+        };
+
+        struct sdf_filtr* sdf = bpf_map_lookup_elem(&m_sdf_filter, &sdf_key);
+
+        if (sdf) {
+          // SDF filter exists - must match packet
+          bpf_debug(
+              "SDF key ( seid, qfi ): ( %llu, %u )", sdf_key.seid, sdf_key.qfi);
+
+          if (packet_filter_is_matching_sdf(iph, l4_hdr, sdf, data_end)) {
+            bpf_debug(
+                "SDF Match! PDR %u (Precedence: %u) is a candidate",
+                pdr_high_prec->pdr_id.rule_id, precedence);
+            if (precedence < best_precedence) {
+              best_match      = pdr_high_prec;
+              best_precedence = precedence;
+              bpf_debug(
+                  "New best match: PDR %u (Precedence: %u)",
+                  pdr_high_prec->pdr_id.rule_id, precedence);
+            }
+          } else {
+            bpf_debug(
+                "SDF filter did NOT match for PDR %u, continuing to next PDR",
+                pdr_high_prec->pdr_id.rule_id);
+          }
+        } else {
+          // No SDF filter - TEID (or TEID+QFI) match is sufficient
+          bpf_debug(
+              "No SDF filter for PDR %u - TEID%s match is sufficient",
+              pdr_high_prec->pdr_id.rule_id,
+              config.ignore_qfi_for_uplink ? "" : "+QFI");
+          if (precedence < best_precedence) {
+            best_match      = pdr_high_prec;
+            best_precedence = precedence;
+            bpf_debug(
+                "New best match: PDR %u (Precedence: %u)",
+                pdr_high_prec->pdr_id.rule_id, precedence);
+          }
+        }
+      } else {
+        bpf_debug(
+            "PDR %u did NOT match (TEID%s mismatch), continuing...",
+            pdr_high_prec->pdr_id.rule_id,
+            config.ignore_qfi_for_uplink ? "" : " or QFI");
       }
     }
   }
 
-  // No match found
-  return NULL;
+  if (best_match) {
+    bpf_debug(
+        "Returning best match: PDR %u (Precedence: %u)",
+        best_match->pdr_id.rule_id, best_match->precedence.precedence);
+  }
+
+  return best_match;
 }
 
 //--------------------------------------------------------------------------------------
@@ -770,6 +893,11 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
 
     if (ipaddr == packet_ue_ip) {
       u32 source_interface = pdi.source_interface.interface_value;
+      bpf_debug(
+          "N6 PDR Lookup: PDR_ID=%u, Precedence=%u, UE_IP=%pI4",
+          pdr_high_prec->pdr_id.rule_id, pdr_high_prec->precedence.precedence,
+          &ipaddr);
+
       switch (source_interface) {
         case INTERFACE_VALUE_ACCESS: {
           // bpf_debug(
@@ -790,7 +918,10 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
           u32* enabling_qos = bpf_map_lookup_elem(&m_qos_enabling, &seid);
 
           if (!enabling_qos) {
-            bpf_debug("Qos enforcement not ebabled for Session %llu", seid);
+            bpf_debug(
+                "Qos enforcement not enabled for Session %llu, returning PDR "
+                "%u",
+                seid, pdr_high_prec->pdr_id.rule_id);
             return pdr_high_prec;
           } else {
             struct session_qfi sdf_key = {0};
@@ -800,16 +931,31 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence_over_n6(
             const struct sdf_filtr* sdf =
                 bpf_map_lookup_elem(&m_sdf_filter, &sdf_key);
             if (!sdf) {
-              bpf_debug("SDF Filter not found! This is a NON-GBR Traffic");
+              bpf_debug(
+                  "SDF Filter not found for QFI %u! Treating as "
+                  "NON-GBR/default traffic",
+                  *qfi_out);
+              bpf_debug(
+                  "Returning PDR %u (Precedence: %u) as default rule",
+                  pdr_high_prec->pdr_id.rule_id,
+                  pdr_high_prec->precedence.precedence);
               // TODO:
               // Treat default qos flow here !!!
-              break;
+              return pdr_high_prec;
             }
             bpf_debug(
                 "SDF key ( seid, qfi ): ( %llu, %u )", sdf_key.seid,
                 sdf_key.qfi);
             if (match_sdf_filter_ipv4(packet_filter, sdf)) {
+              bpf_debug(
+                  "SDF Match! Returning PDR %u (Precedence: %u)",
+                  pdr_high_prec->pdr_id.rule_id,
+                  pdr_high_prec->precedence.precedence);
               return pdr_high_prec;
+            } else {
+              bpf_debug(
+                  "SDF filter did NOT match for PDR %u, continuing to next PDR",
+                  pdr_high_prec->pdr_id.rule_id);
             }
 
             break;
@@ -877,14 +1023,47 @@ static __always_inline int entry_point_uplink__ip_pdu(struct xdp_md* ctx) {
       "Session found ( seid, teid_ul, teid_dl ) : ( %llu, %u, %u )", seid,
       teid_ul, teid_dl);
 
+  // Extract inner IP header for SDF filtering
+  struct iphdr* outer_iph = (struct iphdr*) (ethh + 1);
+  if ((void*) (outer_iph + 1) > data_end) {
+    return XDP_PASS;
+  }
+
+  struct udphdr* udph = (struct udphdr*) (outer_iph + 1);
+  if ((void*) (udph + 1) > data_end) {
+    return XDP_PASS;
+  }
+
+  struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
+  if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
+    return XDP_PASS;
+  }
+
+  struct gtpu_extn_pdu_session_container* ext_gtpuh =
+      (struct gtpu_extn_pdu_session_container*) (gtpuh + 1);
+  if ((void*) (ext_gtpuh + 1) > data_end) {
+    return XDP_PASS;
+  }
+
+  struct iphdr* inner_iph = (struct iphdr*) (ext_gtpuh + 1);
+  if ((void*) (inner_iph + 1) > data_end) {
+    return XDP_PASS;
+  }
+
+  // Get L4 header (TCP/UDP)
+  void* l4_hdr = (void*) (inner_iph + 1);
+  if ((void*) l4_hdr + sizeof(struct udphdr) > data_end) {
+    return XDP_PASS;
+  }
+
   /*
     |-----------------------------------------------------------------------|
     |------------------------ PFCP Session's Lookup ------------------------|
     |--- (Find matching PDR of the PFCP session with highest precedence) ---|
     |-----------------------------------------------------------------------|
     */
-  pfcp_pdr_t_* pdr_high_precedence =
-      pfcp_session_s_lookup_precedence_over_n3(seid, teid_ul, ue_ip, qfi);
+  pfcp_pdr_t_* pdr_high_precedence = pfcp_session_s_lookup_precedence_over_n3(
+      seid, teid_ul, ue_ip, qfi, inner_iph, l4_hdr, data_end);
 
   if (!pdr_high_precedence) {
     bpf_debug(

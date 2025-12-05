@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <signal.h>  // signals
+#include "types.h"
 #include <pfcp_session_lookup_xdp_kernel_skel.h>
 #include <wrappers/BPFMap.hpp>
 #include "interfaces.h"
