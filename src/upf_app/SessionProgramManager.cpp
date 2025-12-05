@@ -443,8 +443,7 @@ void SessionProgramManager::updateARPTableForN6(
     pPFCP_Session_LookupProgram->getArpTableMap()->update(
         upfn6IP, map_table, BPF_ANY);
   } catch (const std::exception& ex) {
-    Logger::upf_app().error(
-        "Error: The ARP table was not updated for N6 Next HOP");
+    Logger::upf_app().warn("The ARP table was not updated for N6 Next HOP");
   }
 }
 
@@ -487,7 +486,7 @@ void SessionProgramManager::updateARPTableForN3(
   } catch (const std::exception& ex) {
     // Handle the exception here or log it for debugging
     // Note: It's better to handle exceptions rather than ignoring them.
-    Logger::upf_app().error(
+    Logger::upf_app().warn(
         "Error: The ARP table was not updated for N3 Next HOP");
   }
 }

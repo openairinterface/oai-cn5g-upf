@@ -36,6 +36,23 @@
 #define ntohl(x) __constant_ntohl((x))
 #endif
 
+static void swap_src_dst_mac(void* data) {
+  bpf_debug("Swapping MAC address...\n");
+  unsigned short* p = data;
+  unsigned short dst[3];
+
+  dst[0] = p[0];
+  dst[1] = p[1];
+  dst[2] = p[2];
+  p[0]   = p[3];
+  p[1]   = p[4];
+  p[2]   = p[5];
+  p[3]   = dst[0];
+  p[4]   = dst[1];
+  p[5]   = dst[2];
+  bpf_debug("Swapping MAC address...DONE!\n");
+}
+
 /*****************************************************************************************************************/
 
 static __always_inline bool retrieve_upf_iface_from_map(
@@ -94,6 +111,9 @@ static __always_inline int update_mac_address(
   }
 
   fib_params.ifindex = ctx->ingress_ifindex;
+  bpf_debug(
+      "Calling FIB lookup ifindex:%d, src_ip:%pI4, dst_ip:%pI4",
+      fib_params.ifindex, &fib_params.ipv4_src, &fib_params.ipv4_dst);
 
   int rc = bpf_fib_lookup(ctx, &fib_params, sizeof(fib_params), 0);
   switch (rc) {
