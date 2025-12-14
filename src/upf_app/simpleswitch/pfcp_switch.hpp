@@ -50,6 +50,8 @@
 #include <variant>
 
 #include <pthread.h>
+#include "framed_routing/FramedRouting.hpp"
+#include "framed_routing/LocalRouting.hpp"
 
 namespace oai {
 namespace upf {
@@ -93,6 +95,11 @@ class pfcp_switch {
 #define PFCP_SWITCH_MIN_COMMIT_INTERVAL_MILLISECONDS 50
 
   // switching_data_per_cpu_socket             switching_data[];
+
+  const std::shared_ptr<fr::LocalRouting> local_routing =
+      std::make_shared<fr::LocalRouting>();
+  const std::shared_ptr<fr::FramedRouting> fr =
+      std::make_shared<fr::FramedRouting>(local_routing);
   std::unordered_map<pfcp::fseid_t, std::shared_ptr<pfcp::pfcp_session>>
       cp_fseid2pfcp_sessions;
   folly::AtomicHashMap<uint64_t, std::shared_ptr<pfcp::pfcp_session>>
@@ -106,8 +113,9 @@ class pfcp_switch {
 
   // moodycamel::ConcurrentQueue<pfcp::pfcp_session*> create_session_q;
 
-  void pdn_worker(const int id, const util::thread_sched_params& sched_params);
-  void pdn_read_loop(int sock_r, util::thread_sched_params sched_params);
+  void pdn_worker(
+      const int id, const oai::utils::thread_sched_params& sched_params);
+  void pdn_read_loop(int sock_r, oai::utils::thread_sched_params sched_params);
   int create_pdn_socket(
       const char* const ifname, const bool promisc, int& if_index);
   int create_pdn_socket(const char* const ifname);
@@ -176,8 +184,6 @@ class pfcp_switch {
   void pfcp_session_look_up_pack_in_access(
       struct ipv6hdr* const iph, const std::size_t num_bytes,
       const endpoint& r_endpoint){};
-  // void pfcp_session_look_up(struct ethhdr* const ethh, const std::size_t
-  // num_bytes);
 
   void pfcp_session_look_up_pack_in_core(
       const char* buffer, const std::size_t num_bytes);

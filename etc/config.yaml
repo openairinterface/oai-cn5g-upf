@@ -22,9 +22,12 @@
 # OAI CN Configuration File
 ### This file can be used by all OAI NFs
 ### Some fields are specific to an NF and will be ignored by other NFs
-### The {{ env['ENV_NAME'] }} syntax lets you define these values in a docker-compose file
-### If you intend to mount this file or use a bare-metal deployment, please refer to README.md
-### The README.md also defines default values and allowed values for each configuration parameter
+
+## NOTE ON YAML ANCHORS ##
+# We use YAML anchors to ease the configuration and to avoid duplicating parts of the configuration.
+# This is especially true for the SNSSAIs, as we have to define them for multiple NFs.
+# Please note that the use of anchors is not mandatory, and you can define the SNSSAI in each NF yourself.
+# You can read more about anchors here: https://yaml.org/spec/1.2.2/#anchors-and-aliases
 
 ############# Common configuration
 
@@ -35,7 +38,7 @@ log_level:
 # If you enable registration, the other NFs will use the NRF discovery mechanism
 register_nf:
   general: yes
-  
+
 http_version: 2
 
 ############## SBI Interfaces
@@ -74,7 +77,7 @@ nfs:
     n6:
       interface_name: demo-n6
     n9:
-      interface_name: demo-oai
+      interface_name: demo-n9
       port: 2152
   udm:
     host: oai-udm
@@ -96,6 +99,12 @@ nfs:
       interface_name: eth0
   nrf:
     host: oai-nrf
+    sbi:
+      port: 8080
+      api_version: v1
+      interface_name: eth0
+  pcf:
+    host: oai-pcf
     sbi:
       port: 8080
       api_version: v1
@@ -125,41 +134,39 @@ snssais:
 
 ############## NF-specific configuration
 amf:
-  pid_directory: "/var/run"
   amf_name: "OAI-AMF"
   # This really depends on if we want to keep the "mini" version or not
   support_features_options:
-    enable_simple_scenario: no
+    enable_simple_scenario: no # "no" by default with the normal deployment scenarios with AMF/SMF/UPF/AUSF/UDM/UDR/NRF.
+                               # set it to "yes" to use with the minimalist deployment scenario (including only AMF/SMF/UPF) by using the internal AUSF/UDM implemented inside AMF.
+                               # There's no NRF in this scenario, SMF info is taken from "nfs" section.
     enable_nssf: no
     enable_smf_selection: yes
-    use_external_udm: no
   relative_capacity: 30
-  statistics_timer_interval: 20  #in seconds
+  statistics_timer_interval: 20  # in seconds
   emergency_support: false
   served_guami_list:
     - mcc: 208
       mnc: 95
-      amf_region_id: 128
-      amf_set_id: 1
-      amf_pointer: 1
-    - mcc: 460
-      mnc: 11
-      amf_region_id: 10
-      amf_set_id: 1
-      amf_pointer: 1
+      amf_region_id: 01
+      amf_set_id: 001
+      amf_pointer: 01
+    - mcc: 001
+      mnc: 01
+      amf_region_id: 01
+      amf_set_id: 001
+      amf_pointer: 01
   plmn_support_list:
     - mcc: 208
       mnc: 95
       tac: 0xa000
       nssai:
-        - sst: 1
-        - sst: 1
-          sd: 000001
-        - sst: 222
-          sd: 00007B
+        - *embb_slice1
+        - *embb_slice2
+        - *custom_slice
   supported_integrity_algorithms:
-    - "NIA0"
     - "NIA1"
+    - "NIA0"
     - "NIA2"
   supported_encryption_algorithms:
     - "NEA0"
@@ -169,14 +176,14 @@ amf:
 smf:
   ue_mtu: 1500
   support_features:
-    use_local_subscription_info: yes # Use infos from local_subscription_info or from UDM
-    use_local_pcc_rules: yes # Use infos from local_pcc_rules or from PCF
+    use_local_subscription_info: no # Use infos from local_subscription_info or from UDM
+    use_local_pcc_rules: no # Use infos from local_pcc_rules or from PCF
   # we resolve from NRF, this is just to configure usage_reporting
   upfs:
-    # - host: oai-spgwu
-    - host: oai-upf
+    - host: 192.168.70.129
       config:
         enable_usage_reporting: no
+        enable_qers: no
   ue_dns:
     primary_ipv4: "172.21.3.100"
     primary_ipv6: "2001:4860:4860::8888"
@@ -185,26 +192,33 @@ smf:
   ims:
     pcscf_ipv4: "127.0.0.1"
     pcscf_ipv6: "fe80::7915:f408:1787:db8b"
- # the DNN you configure here should be configured in "dnns"
+  # the DNN you configure here should be configured in "dnns"
+  # follows the SmfInfo datatype from 3GPP TS 29.510
+  smf_info:
+    sNssaiSmfInfoList:
+      - sNssai: *embb_slice1
+        dnnSmfInfoList:
+          - dnn: "oai"
+      - sNssai: *embb_slice2
+        dnnSmfInfoList:
+          - dnn: "oai.ipv4"
+      - sNssai: *custom_slice
+        dnnSmfInfoList:
+          - dnn: "default"
   local_subscription_infos:
-    - single_nssai:
-        sst: 1
+    - single_nssai: *embb_slice1
       dnn: "oai"
       qos_profile:
         5qi: 9
         session_ambr_ul: "200Mbps"
         session_ambr_dl: "400Mbps"
-    - single_nssai:
-        sst: 1
-        sd: 1
+    - single_nssai: *embb_slice2
       dnn: "oai.ipv4"
       qos_profile:
         5qi: 9
         session_ambr_ul: "100Mbps"
         session_ambr_dl: "200Mbps"
-    - single_nssai:
-        sst: 222
-        sd: 123
+    - single_nssai: *custom_slice
       dnn: "default"
       qos_profile:
         5qi: 9
@@ -213,13 +227,45 @@ smf:
 
 upf:
   support_features:
-    enable_bpf_datapath: no   # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
-    enable_qos: no  # Only supported for BPF datapath. If "on" we use qdiscs to manage the QoS
-    qdisc_scheduler: "htb" # This value is used only in case QoS is enabled 
-    enable_snat: no           # If "on": Source natting is done for UE, DEFAULT= off
+    enable_bpf_datapath: yes    # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
+    enable_qos: yes
+    # OAI UPF EBPF MAP SIZES Configuration File
+    # These configuration map entries define key parameters for optimizing memory allocation and tuning the UPF. 
+    # The values set in this file directly impact the size of eBPF maps used for packet processing.
+    # Configuration Parameters: Each parameter in this file controls a specific aspect of UPF behavior.
+    # 1. Network Interface Limits
+    #     max_upf_interfaces (Default: 3)
+    #         Specifies the maximum number of network interfaces that UPF can manage.
+    #         Example: Physical/virtual interfaces for GTP-U traffic.
+
+    #     max_upf_redirect_interfaces (Default: 2)
+    #         Defines the maximum number of interfaces used for traffic redirection.
+    #         Example: Used in PDRs for forwarding packets to specific egress interfaces.
+    max_upf_interfaces: 3
+    max_upf_redirect_interfaces: 2
+    # 2. Session and Rule Limits
+    #     max_pdu_session (Default: 10,000)
+    #         Determines the maximum number of concurrent PDU sessions that UPF can handle.
+    #         Affects the memory allocation for session-related eBPF maps.
+    #     max_pdrs_per_pdu_session (Default: 8)
+    #         Defines the maximum number of Packet Detection Rules (PDRs) that can be applied per PDU session.
+    #         PDRs dictate how packets are processed, forwarded, or dropped.
+    #     max_qos_flows_per_pdu_session (Default: 8)
+    #         Sets the maximum number of QoS flows that a single PDU session can manage.
+    #         Impacts QoS-related eBPF maps (e.g., shaping, policing).
+    #     max_sdf_filters_per_pdu_session (Default: 8)
+    #         Specifies the maximum number of Service Data Flow (SDF) filters per session.
+    #         SDF filters define how traffic is classified within a QoS flow.
+    max_pdu_session: 10000 
+    max_pdrs_per_pdu_session: 8
+    #max_qos_flows_per_pdu_session: 8
+    max_sdf_filters_per_pdu_session: 8
+    # 3. ARP Table Limit
+    #     max_arp_entries (Default: 2)
+    #         Limits the number of ARP table entries stored in eBPF maps.
+    #         Used for resolving MAC addresses in the UPF forwarding path.
+    max_arp_entries: 2
   remote_n6_gw: oai-ext-dn
-  smfs:
-    - host: oai-smf            # To be used for PFCP association in case of no-NRF
   upf_info:
     sNssaiUpfInfoList:
       - sNssai: *embb_slice1
@@ -236,13 +282,20 @@ upf:
 dnns:
   - dnn: "oai"
     pdu_session_type: "IPV4"
-    ipv4_subnet: "12.1.1.0/24"
+    ipv4_subnet: "12.1.1.128/25"
   - dnn: "oai.ipv4"
     pdu_session_type: "IPV4"
-    ipv4_subnet: "12.1.2.0/24"
+    ipv4_subnet: "12.1.1.64/26"
   - dnn: "default"
     pdu_session_type: "IPV4"
-    ipv4_subnet: "12.1.3.0/24"
+    ipv4_subnet: "12.1.1.0/26"
   - dnn: "ims"
     pdu_session_type: "IPV4V6"
     ipv4_subnet: "14.1.1.2/24"
+
+pcf:
+  local_policy:
+    policy_decisions_path: /openair-pcf/policies/policy_decisions
+    pcc_rules_path: /openair-pcf/policies/pcc_rules
+    traffic_rules_path: /openair-pcf/policies/traffic_rules
+    qos_data_path: /openair-pcf/policies/qos_data

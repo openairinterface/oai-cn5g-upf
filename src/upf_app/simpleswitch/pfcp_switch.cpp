@@ -34,6 +34,7 @@
 #include "upf_config.hpp"
 #include "upf_pfcp_association.hpp"
 #include "simple_switch.hpp"
+#include "../bpf/rules/pdr_and_far/framed_routing_bpf.h"
 
 #include <algorithm>
 #include <fstream>  // std::ifstream
@@ -47,7 +48,6 @@
 #include <linux/if_packet.h>
 #include <linux/if_tun.h>
 #include <stdexcept>
-#include <net/ethernet.h>
 
 static std::shared_ptr<SessionManager> spSessionManager;
 
@@ -64,7 +64,7 @@ extern pfcp_switch* pfcp_switch_inst;
 
 //------------------------------------------------------------------------------
 void pfcp_switch::pdn_worker(
-    const int id, const util::thread_sched_params& sched_params) {
+    const int id, const oai::utils::thread_sched_params& sched_params) {
   uint64_t count      = 0;
   iovec_q_item_t* iov = nullptr;
 
@@ -96,9 +96,10 @@ void pfcp_switch::pdn_worker(
     iov = nullptr;
   }
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::pdn_read_loop(
-    int sock_r, util::thread_sched_params sched_params) {
+    int sock_r, oai::utils::thread_sched_params sched_params) {
   uint64_t count      = 0;
   uint64_t errors     = 0;
   iovec_q_item_t* iov = nullptr;
@@ -147,6 +148,7 @@ void pfcp_switch::pdn_read_loop(
     }
   }
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::send_to_core(char* const ip_packet, const ssize_t len) {
   ssize_t bytes_sent;
@@ -156,6 +158,7 @@ void pfcp_switch::send_to_core(char* const ip_packet, const ssize_t len) {
         "write fd %d failed rc=%d:%s", sock_w, bytes_sent, strerror(errno));
   }
 }
+
 //------------------------------------------------------------------------------
 int pfcp_switch::create_pdn_socket(
     const char* const ifname, const bool promisc, int& if_index) {
@@ -219,6 +222,7 @@ int pfcp_switch::create_pdn_socket(
   }
   return sd;
 }
+
 //------------------------------------------------------------------------------
 int pfcp_switch::create_pdn_socket(const char* const ifname) {
   struct sockaddr_in addr = {};
@@ -263,6 +267,7 @@ int pfcp_switch::create_pdn_socket(const char* const ifname) {
   }
   return RETURNerror;
 }
+
 //------------------------------------------------------------------------------
 int pfcp_switch::tun_open(char* devname, int flags) {
   struct ifreq ifr;
@@ -282,6 +287,7 @@ int pfcp_switch::tun_open(char* devname, int flags) {
   }
   return fd;
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::setup_pdn_interfaces() {
   std::string cmd = {};
@@ -323,21 +329,19 @@ void pfcp_switch::setup_pdn_interfaces() {
         struct in_addr address4_gw = {};
         address4_gw.s_addr = upf_cfg.pdns[0].network_ipv4.s_addr + be32toh(1);
 
-        cmd = fmt::format(
-            "ip route add {}/{} via {} dev tun0",
-            oai::utils::conv::toString(it.network_ipv4).c_str(), it.prefix_ipv4,
-            oai::utils::conv::toString(address4_gw).c_str());
-        rc = system((const char*) cmd.c_str());
+        auto routing_info = fr::RoutingInformation{
+            oai::utils::conv::toString(it.network_ipv4),
+            static_cast<uint32_t>(it.prefix_ipv4), "tun0",
+            oai::utils::conv::toString(address4_gw)};
+        local_routing->add_route(routing_info);
       }
 
       if (upf_cfg.enable_snat) {
-        cmd = fmt::format(
-            "iptables -t nat -A POSTROUTING -s {}/{} -o {} -j SNAT --to "
-            "{}",
-            oai::utils::conv::toString(it.network_ipv4).c_str(), it.prefix_ipv4,
-            upf_cfg.n6.if_name.c_str(),
-            oai::utils::conv::toString(upf_cfg.n6.addr4).c_str());
-        rc = system((const char*) cmd.c_str());
+        auto snat_info = fr::SourceNatInformation{
+            oai::utils::conv::toString(it.network_ipv4),
+            static_cast<uint32_t>(it.prefix_ipv4), upf_cfg.n6.if_name,
+            oai::utils::conv::toString(upf_cfg.n6.addr4)};
+        local_routing->add_source_snat(snat_info);
       }
     }
     if (it.prefix_ipv6) {
@@ -411,6 +415,7 @@ pfcp::fteid_t pfcp_switch::generate_fteid_n3() {
   }
   return fteid;
 }
+
 //------------------------------------------------------------------------------
 pfcp_switch::pfcp_switch()
     : seid_generator_(),
@@ -419,6 +424,7 @@ pfcp_switch::pfcp_switch()
       ul_n3_teid2pfcp_pdr(PFCP_SWITCH_MAX_PDRS),
       up_seid2pfcp_sessions(PFCP_SWITCH_MAX_SESSIONS),
       sock_w(0) {
+  bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
   num_threads_   = upf_cfg.n6.thread_rd_sched_params.thread_pool_size;
   int num_blocks = num_threads_ * 16;
   free_pool_     = new folly::MPMCQueue<iovec_q_item_t*>(num_blocks);
@@ -440,7 +446,7 @@ pfcp_switch::pfcp_switch()
     v->msg.msg_controllen = 0;
     free_pool_->blockingWrite(v);
   }
-  if (!upf_cfg.enable_bpf_datapath) {
+  if (!isBpfAccelerationEnabled) {
     // num_threads_ is currently fixed to 1
     for (int i = 0; i < num_threads_; i++) {
       pwThread_ = std::thread(
@@ -453,6 +459,7 @@ pfcp_switch::pfcp_switch()
     setup_pdn_interfaces();
   }
 }
+
 //------------------------------------------------------------------------------
 pfcp_switch::~pfcp_switch() {
   int res;
@@ -477,6 +484,7 @@ pfcp_switch::~pfcp_switch() {
   }
   delete[] socks_r_ptr;
 }
+
 //------------------------------------------------------------------------------
 bool pfcp_switch::get_pfcp_session_by_cp_fseid(
     const pfcp::fseid_t& fseid,
@@ -491,6 +499,7 @@ bool pfcp_switch::get_pfcp_session_by_cp_fseid(
     return true;
   }
 }
+
 //------------------------------------------------------------------------------
 bool pfcp_switch::get_pfcp_session_by_up_seid(
     const uint64_t cp_seid,
@@ -505,6 +514,7 @@ bool pfcp_switch::get_pfcp_session_by_up_seid(
     return true;
   }
 }
+
 //------------------------------------------------------------------------------
 bool pfcp_switch::get_pfcp_ul_pdrs_by_up_teid(
     const teid_t teid,
@@ -519,6 +529,7 @@ bool pfcp_switch::get_pfcp_ul_pdrs_by_up_teid(
     return true;
   }
 }
+
 //------------------------------------------------------------------------------
 bool pfcp_switch::get_pfcp_dl_pdrs_by_ue_ip(
     const uint32_t ue_ip,
@@ -533,18 +544,21 @@ bool pfcp_switch::get_pfcp_dl_pdrs_by_ue_ip(
     return true;
   }
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::add_pfcp_session_by_cp_fseid(
     const pfcp::fseid_t& fseid, std::shared_ptr<pfcp::pfcp_session>& session) {
   std::pair<fseid_t, std::shared_ptr<pfcp::pfcp_session>> entry(fseid, session);
   cp_fseid2pfcp_sessions.insert(entry);
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::add_pfcp_session_by_up_seid(
     const uint64_t seid, std::shared_ptr<pfcp::pfcp_session>& session) {
   std::pair<uint64_t, std::shared_ptr<pfcp::pfcp_session>> entry(seid, session);
   up_seid2pfcp_sessions.insert(entry);
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::remove_pfcp_session(
     std::shared_ptr<pfcp::pfcp_session>& session) {
@@ -552,6 +566,7 @@ void pfcp_switch::remove_pfcp_session(
   cp_fseid2pfcp_sessions.erase(session->cp_fseid);
   up_seid2pfcp_sessions.erase(session->seid);
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::remove_pfcp_session(const pfcp::fseid_t& cp_fseid) {
   std::shared_ptr<pfcp::pfcp_session> session = {};
@@ -571,6 +586,7 @@ void pfcp_switch::add_pfcp_ul_pdr_by_up_teid(
         std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>(
             new std::vector<std::shared_ptr<pfcp::pfcp_pdr>>());
     pdrs->push_back(pdr);
+
     std::pair<
         teid_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>
         entry(teid, pdrs);
@@ -592,6 +608,7 @@ void pfcp_switch::add_pfcp_ul_pdr_by_up_teid(
     }
   }
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::remove_pfcp_ul_pdrs_by_up_teid(const teid_t teid) {
   ul_n3_teid2pfcp_pdr.erase(teid);
@@ -603,6 +620,7 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
   folly::AtomicHashMap<
       uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>::
       const_iterator pit = ue_ipv4_hbo2pfcp_pdr.find(ue_ip);
+
   if (pit == ue_ipv4_hbo2pfcp_pdr.end()) {
     std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs =
         std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>(
@@ -612,8 +630,27 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
         uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>
         entry(ue_ip, pdrs);
     ue_ipv4_hbo2pfcp_pdr.insert(entry);
+    if (!upf_cfg.enable_bpf_datapath && upf_cfg.enable_fr &&
+        pdr->pdi.second.framed_route.first) {
+      for (const auto& item : pdr->pdi.second.framed_route.second) {
+        Logger::pfcp_switch().debug("framed routing ip: %s", item.framed_route);
+        fr->addFramedRoute(ue_ip, item);
+      }
+    }
     // Logger::pfcp_switch().info( "add_pfcp_dl_pdr_by_ue_ip UE IP %8x", ue_ip);
   } else {
+    // TODO: Dirty fix
+    ue_ipv4_hbo2pfcp_pdr.erase(ue_ip);
+    std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs =
+        std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>(
+            new std::vector<std::shared_ptr<pfcp::pfcp_pdr>>());
+    pdrs->push_back(pdr);
+    std::pair<
+        uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>
+        entry(ue_ip, pdrs);
+    ue_ipv4_hbo2pfcp_pdr.insert(entry);
+
+    /*
     // sort by precedence
     // const std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>&
     // spdrs = pit->second;
@@ -626,12 +663,19 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
         return;
       }
     }
+
+*/
   }
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::remove_pfcp_dl_pdrs_by_ue_ip(const uint32_t ue_ip) {
   ue_ipv4_hbo2pfcp_pdr.erase(ue_ip);
+  if (!upf_cfg.enable_bpf_datapath && upf_cfg.enable_fr) {
+    this->fr->remove_entry(ue_ip);
+  }
 }
+
 //------------------------------------------------------------------------------
 std::string pfcp_switch::to_string() const {
   std::string s = {};
@@ -689,6 +733,9 @@ void pfcp_switch::call_datapath(
 void pfcp_switch::handle_pfcp_session_establishment_request(
     std::shared_ptr<itti_n4_session_establishment_request> sreq,
     itti_n4_session_establishment_response* resp) {
+  bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
+  // bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
+
   itti_n4_session_establishment_request* req = sreq.get();
   pfcp::fseid_t fseid                        = {};
   pfcp::cause_t cause = {.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED};
@@ -740,22 +787,24 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
           /*
            *  Add create_qers
            */
-          pfcp::qer_id_t qer_id = {};
-          if (cr_pdr.get(qer_id)) {
-            pfcp::create_qer cr_qer = {};
-            if (not req->pfcp_ies.get(qer_id, cr_qer)) {
-              cause.cause_value         = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
-              offending_ie.offending_ie = PFCP_IE_CREATE_QER;
+          if (isBpfAccelerationEnabled) {
+            pfcp::qer_id_t qer_id = {};
+            if (cr_pdr.get(qer_id)) {
+              pfcp::create_qer cr_qer = {};
+              if (not req->pfcp_ies.get(qer_id, cr_qer)) {
+                cause.cause_value         = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
+                offending_ie.offending_ie = PFCP_IE_CREATE_QER;
+              }
+
+              // if (not session->create(cr_qer, cause,
+              // offending_ie.offending_ie)) {
+              //   session->cleanup();
+              //   delete session;
+              //   break;
+              // }
+
+              session->create(cr_qer, cause, offending_ie.offending_ie);
             }
-
-            // if (not session->create(cr_qer, cause,
-            // offending_ie.offending_ie)) {
-            //   session->cleanup();
-            //   delete session;
-            //   break;
-            // }
-
-            session->create(cr_qer, cause, offending_ie.offending_ie);
           }
 
           if (not session->create(
@@ -768,20 +817,20 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             resp->pfcp_ies.set(cause);
             break;
           }
-          pfcp::created_pdr created_pdr = {};
-          created_pdr.set(cr_pdr.pdr_id.second);
-          created_pdr.set(allocated_fteid);
-          resp->pfcp_ies.set(created_pdr);
+          if (allocated_fteid.v4 || allocated_fteid.v6) {
+            pfcp::created_pdr created_pdr = {};
+            created_pdr.set(cr_pdr.pdr_id.second);
+            created_pdr.set(allocated_fteid);
+            resp->pfcp_ies.set(created_pdr);
+          }
         }
       }
 
-      if (upf_cfg.enable_bpf_datapath) {
-        Logger::pfcp_switch().info(
-            "Establishing datapath: create PDRs + create FARs + create QERs "
-            "(if any)");
+      if (isBpfAccelerationEnabled) {
+        Logger::upf_app().info("Establish datapath: create(pdr(s) & far(s))");
         call_datapath(
             req, NULL, NULL, session, spSessionManager,
-            &SessionManager::createBPFSession);
+            &SessionManager::createBpfSession);
       }
 
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
@@ -856,6 +905,9 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
 void pfcp_switch::handle_pfcp_session_modification_request(
     std::shared_ptr<itti_n4_session_modification_request> sreq,
     itti_n4_session_modification_response* resp) {
+  bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
+  // bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
+
   itti_n4_session_modification_request* req = sreq.get();
 
   std::shared_ptr<pfcp::pfcp_session> s = {};
@@ -878,11 +930,12 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     resp->seid = session->cp_fseid.seid;
 
     for (auto it : req->pfcp_ies.remove_pdrs) {
-      if (upf_cfg.enable_bpf_datapath) {
-        Logger::pfcp_switch().info("Modifying datapath: remove PDRs");
+      if (isBpfAccelerationEnabled) {
+        Logger::upf_app().info("Modify datapath:remove(pdr)");
         call_datapath(
             NULL, req, NULL, session, spSessionManager,
-            &SessionManager::updateBPFSession);
+            &SessionManager::SessionManager::
+                modifyBpfSession /*&SessionManager::updateBpfSession*/);
       }
 
       remove_pdr& pdr = it;
@@ -900,11 +953,12 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.remove_fars) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: remove FARs");
+        if (isBpfAccelerationEnabled) {
+          Logger::upf_app().info("Modify datapath: remove(far)");
           call_datapath(
               NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
+              &SessionManager::
+                  modifyBpfSession /*&SessionManager::updateBpfSession*/);
         }
 
         remove_far& far = it;
@@ -920,48 +974,48 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
     }
-    /*======================================================================*/
 
     /*
      *  Add remove_qers
      */
-    if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
-      for (auto it : req->pfcp_ies.remove_qers) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: remove QERs");
+    if (isBpfAccelerationEnabled) {
+      if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+        for (auto it : req->pfcp_ies.remove_qers) {
+          Logger::upf_app().info("Modify datapath: remove(qer)");
           call_datapath(
               NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
+              &SessionManager::
+                  modifyBpfSession /*&SessionManager::updateBpfSession*/);
 
-        remove_qer& qer = it;
+          remove_qer& qer = it;
 
-        if (not session->remove(qer, cause, offending_ie.offending_ie)) {
-          if (cause.cause_value ==
-              CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
-            failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_QER;
-            failed_rule.rule_id_value = qer.qer_id.second.qer_id;
-            resp->pfcp_ies.set(failed_rule);
-            break;
+          if (not session->remove(qer, cause, offending_ie.offending_ie)) {
+            if (cause.cause_value ==
+                CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
+              failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_QER;
+              failed_rule.rule_id_value = qer.qer_id.second.qer_id;
+              resp->pfcp_ies.set(failed_rule);
+              break;
+            }
           }
         }
       }
     }
 
-    /*======================================================================*/
-
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.create_fars) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: create FARs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
         create_far& cr_far = it;
         if (not session->create(cr_far, cause, offending_ie.offending_ie)) {
           break;
         }
+      }
+
+      if (isBpfAccelerationEnabled) {
+        // Logger::upf_app().info("Modify datapath: add(far)");
+        // call_datapath(
+        //     NULL, req, NULL, session, spSessionManager,
+        //     &SessionManager::
+        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
       }
     }
 
@@ -1002,47 +1056,37 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         resp->pfcp_ies.set(created_pdr);
       }
 
-      if (upf_cfg.enable_bpf_datapath) {
-        Logger::pfcp_switch().info(
-            "Modifying datapath: create PDRs + create FARs");
-        call_datapath(
-            NULL, req, NULL, session, spSessionManager,
-            &SessionManager::updateBPFSession);
+      if (isBpfAccelerationEnabled) {
+        // Logger::upf_app().info("Modify datapath: add(pdr)");
+        // call_datapath(
+        //     NULL, req, NULL, session, spSessionManager,
+        //     &SessionManager::
+        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
       }
     }
-
-    /*======================================================================*/
 
     /*
      *  Add create_qers
      */
+    if (isBpfAccelerationEnabled) {
+      if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+        for (auto it : req->pfcp_ies.create_qers) {
+          create_qer& cr_qer = it;
+          if (not session->create(cr_qer, cause, offending_ie.offending_ie)) {
+            break;
+          }
+        }
 
-    if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
-      for (auto it : req->pfcp_ies.create_qers) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: create QERs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
-        create_qer& cr_qer = it;
-        if (not session->create(cr_qer, cause, offending_ie.offending_ie)) {
-          break;
-        }
+        // Logger::upf_app().info("Modify datapath: add(qer)");
+        // call_datapath(
+        //     NULL, req, NULL, session, spSessionManager,
+        //     &SessionManager::
+        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
       }
     }
 
-    /*======================================================================*/
-
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.update_pdrs) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: update PDRs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
-
         update_pdr& pdr     = it;
         uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
         if (not session->update(pdr, cause_value)) {
@@ -1053,14 +1097,15 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
 
-      for (auto it : req->pfcp_ies.update_fars) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: update FARs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
-        }
+      if (isBpfAccelerationEnabled) {
+        // Logger::upf_app().info("Modify datapath: update(pdr)");
+        // call_datapath(
+        //     NULL, req, NULL, session, spSessionManager,
+        //     &SessionManager::
+        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
+      }
 
+      for (auto it : req->pfcp_ies.update_fars) {
         update_far& far     = it;
         uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
         if (not session->update(far, cause_value)) {
@@ -1072,30 +1117,42 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
 
-      /*======================================================================*/
+      if (isBpfAccelerationEnabled) {
+        // Logger::upf_app().info("Modify datapath: update(far)");
+        // call_datapath(
+        //     NULL, req, NULL, session, spSessionManager,
+        //     &SessionManager::
+        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
+      }
 
       /*
        *  Add update_qers
        */
-      for (auto it : req->pfcp_ies.update_qers) {
-        if (upf_cfg.enable_bpf_datapath) {
-          Logger::pfcp_switch().info("Modifying datapath: update QERs");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::updateBPFSession);
+      if (isBpfAccelerationEnabled) {
+        for (auto it : req->pfcp_ies.update_qers) {
+          update_qer& qer     = it;
+          uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+          if (not session->update(qer, cause_value)) {
+            failed_rule_id_t failed_rule = {};
+            failed_rule.rule_id_type     = FAILED_RULE_ID_TYPE_QER;
+            failed_rule.rule_id_value    = qer.qer_id.second.qer_id;
+            resp->pfcp_ies.set(failed_rule);
+          }
         }
-
-        update_qer& qer     = it;
-        uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
-        if (not session->update(qer, cause_value)) {
-          failed_rule_id_t failed_rule = {};
-          failed_rule.rule_id_type     = FAILED_RULE_ID_TYPE_QER;
-          failed_rule.rule_id_value    = qer.qer_id.second.qer_id;
-          resp->pfcp_ies.set(failed_rule);
-        }
+        // Logger::upf_app().info("Modify datapath: update(qer)");
+        // call_datapath(
+        //     NULL, req, NULL, session, spSessionManager,
+        //     &SessionManager::
+        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
       }
+    }
 
-      /*======================================================================*/
+    if (isBpfAccelerationEnabled) {
+      Logger::upf_app().info("Modify datapath");
+      call_datapath(
+          NULL, req, NULL, session, spSessionManager,
+          &SessionManager::
+              modifyBpfSession /*&SessionManager::updateBpfSession*/);
     }
   }
   resp->pfcp_ies.set(cause);
@@ -1145,6 +1202,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 void pfcp_switch::handle_pfcp_session_deletion_request(
     std::shared_ptr<itti_n4_session_deletion_request> sreq,
     itti_n4_session_deletion_response* resp) {
+  bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
+
   itti_n4_session_deletion_request* req = sreq.get();
 
   std::shared_ptr<pfcp::pfcp_session> s = {};
@@ -1159,12 +1218,11 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
     pfcp::pfcp_session* session = s.get();
     resp->seid                  = s->cp_fseid.seid;
 
-    if (upf_cfg.enable_bpf_datapath) {
-      Logger::pfcp_switch().info(
-          "Deleting datapath: delete PDRs + delete FARs");
+    if (isBpfAccelerationEnabled) {
+      Logger::upf_app().info("Delete datapath");
       call_datapath(
           NULL, NULL, req, session, spSessionManager,
-          &SessionManager::removeBPFSession);
+          &SessionManager::removeBpfSession);
     }
 
     remove_pfcp_session(s);
@@ -1208,20 +1266,33 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
     }
   }
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::pfcp_session_look_up_pack_in_access(
     struct iphdr* const iph, const std::size_t num_bytes,
     const endpoint& r_endpoint, const uint32_t tunnel_id) {
+  bool isInAccess = false;
   if (!upf_cfg.nsf.bypass_ul_pfcp_rules) {
     std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs = {};
     if (get_pfcp_ul_pdrs_by_up_teid(tunnel_id, pdrs)) {
       bool nocp = false;
       bool buff = false;
-      for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it_pdr =
-               pdrs->begin();
-           it_pdr < pdrs->end(); ++it_pdr) {
-        if ((*it_pdr)->look_up_pack_in_access(
-                iph, num_bytes, r_endpoint, tunnel_id)) {
+      for (auto it_pdr = pdrs->begin(); it_pdr < pdrs->end(); ++it_pdr) {
+        isInAccess = (*it_pdr)->look_up_pack_in_access(
+            iph, num_bytes, r_endpoint, tunnel_id);
+        if (!isInAccess && upf_cfg.enable_fr &&
+            it_pdr->get()->pdi.second.framed_route.first) {
+          auto fr_ue_ip   = (struct iphdr*) malloc(sizeof(struct iphdr));
+          fr_ue_ip->saddr = be32toh(fr->retrieveUEIp(be32toh(iph->saddr)));
+          isInAccess      = (*it_pdr)->look_up_pack_in_access(
+              fr_ue_ip, num_bytes, r_endpoint, tunnel_id);
+        }
+        if (isInAccess) {
+          Logger::pfcp_switch().info(
+              "PDR/PDI IP is %4x ",
+              it_pdr->get()
+                  ->pdi.second.ue_ip_address.second.ipv4_address.s_addr);
+          Logger::pfcp_switch().info("Upstream IP is %4x ", iph->saddr);
           std::shared_ptr<pfcp::pfcp_session> ssession = {};
           uint64_t lseid                               = 0;
           if ((*it_pdr)->get(lseid)) {
@@ -1237,8 +1308,9 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
                 }
               }
             }
+            return;
           }
-          return;
+
         } else {
           Logger::pfcp_switch().info(
               "pfcp_session_look_up_pack_in_access failed PDR id %4x ",
@@ -1258,6 +1330,7 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
     }
   }
 }
+
 //------------------------------------------------------------------------------
 bool pfcp_switch::no_internal_loop(
     struct iphdr* const iph, const std::size_t num_bytes) {
@@ -1269,20 +1342,28 @@ bool pfcp_switch::no_internal_loop(
   }
   return true;
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::pfcp_session_look_up_pack_in_access(
     struct ipv6hdr* const ip6h, const std::size_t num_bytes,
     const endpoint& r_endpoint, const uint32_t tunnel_id) {
   // TODO
 }
+
 //------------------------------------------------------------------------------
 void pfcp_switch::pfcp_session_look_up_pack_in_core(
     const char* buffer, const std::size_t num_bytes) {
   struct iphdr* iph = (struct iphdr*) buffer;
   std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs;
   if (iph->version == 4) {
-    uint32_t ue_ip = be32toh(iph->daddr);
-    if (get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs)) {
+    uint32_t ue_ip    = be32toh(iph->daddr);
+    bool is_pdr_ue_ip = get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs);
+    if (!is_pdr_ue_ip && upf_cfg.enable_fr) {
+      uint32_t fr_ip = fr->retrieveUEIp(ue_ip);
+      ue_ip          = fr_ip != 0 ? fr_ip : ue_ip;
+      is_pdr_ue_ip   = get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs);
+    }
+    if (is_pdr_ue_ip) {
       bool nocp = false;
       bool buff = false;
       for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it =

@@ -40,6 +40,15 @@ cppcheckResource = params.CppCheckResource
 formatCheckNode = params.FormatCheckNode
 formatCheckResource = params.FormatCheckResource
 
+// Its main purpose is the ARM Neoverse-v2 Build
+armBuildResource = params.armBuildResource
+
+// Boolean param to control trivy scan
+runTrivyScan = params.runTrivyScan
+
+// Boolean param to control the run of "Pushing Image to Official Registry" stage (keep it false by default)
+runDockerHubPushStage = false // Please set it to true when replaying a "PUSH" event Pipeline
+
 // Tags/Branches to use
 def upf_tag = "develop"
 def upf_branch = "develop"
@@ -54,6 +63,15 @@ DH_Account = "oaisoftwarealliance"
 // Private Local Registry URL
 PrivateRegistryURL = 'selfix.sboai.cs.eurecom.fr'
 
+// Openshift project name
+Namespace = 'oaicicd-core'
+
+// Openshift server URL
+server = 'https://api.oai.cs.eurecom.fr:6443'
+
+// Docker build options
+dockerBuildOptions = '--no-cache '
+
 //-------------------------------------------------------------------------------
 // Pipeline start
 pipeline {
@@ -67,7 +85,8 @@ pipeline {
     gitLabConnection('OAI GitLab')
     // Minimal checks
     gitlabBuilds(builds: [
-      "Build Ubuntu UPF Image",
+      "Build Ubuntu ARM Neoverse V2 (Grace) Image",
+      "Build Ubuntu UPF Image with LTTNG",
       "Build RHEL UPF Image",
       "Static Code Analysis",
       "Code Formatting Checker"
@@ -143,12 +162,13 @@ pipeline {
     }
     stage('Build Core Network Function') {
       parallel {
-        stage ('Build Ubuntu UPF Image') {
+        stage ('Build Ubuntu ARM Neoverse V2 (Grace) Image') {
           steps {
             // Now it is only locked during this build stage and not for the whole pipeline
             lock(ubuntuBuildResource) {
+              lock(armBuildResource) {
               script {
-                gitlabCommitStatus(name: "Build Ubuntu UPF Image") {
+                gitlabCommitStatus(name: "Build Ubuntu ARM Neoverse V2 (Grace) Image") {
                   sh "docker image rm oai-upf:${upf_tag} || true"
                   sh "docker image prune --force"
                   if ("PUSH".equals(env.gitlabActionType)) {
@@ -156,24 +176,36 @@ pipeline {
                   }
                   if ("MERGE".equals(env.gitlabActionType)) {
                     dockerBuildOptions = ''
-                    // Copy pre-downloaded kernel tar ball
-                    sh "mkdir -p build/ext"
-                    sh "cp -f /opt/kernel-no-download/linux-5.7.tar.gz build/ext || true"
+                    sh "date --rfc-email > src/common-src/date.txt"
                   }
-                  sh "docker buildx build ${dockerBuildOptions} --target oai-upf --tag oai-upf:${upf_tag} --file docker/Dockerfile.upf.ubuntu . > archives/upf_ubuntu_image_build.log 2>&1"
-                  // Putting a place holder to try out on the flattening of image.
-                  // If not satisfactory, we can remove it.
-                  sh "python3 ./ci-scripts/flatten_image.py --tag oai-upf:${upf_tag}"
-                  sh "docker image prune --force"
-                  sh "docker image ls | egrep --color=never 'upf|REPOSITORY' >> archives/upf_ubuntu_image_build.log"
-                  // Pushing to local private registry for testing purpose
                   sh "docker login -u oaicicd -p oaicicd ${PrivateRegistryURL}"
-                  sh "docker image tag oai-upf:${upf_tag} ${PrivateRegistryURL}/oai-upf:${upf_tag}"
-                  sh "docker push ${PrivateRegistryURL}/oai-upf:${upf_tag}"
-                  // Remove all images locally
-                  sh "docker rmi oai-upf:${upf_tag} ${PrivateRegistryURL}/oai-upf:${upf_tag}"
+                  sh "docker buildx build ${dockerBuildOptions} \
+                    --target oai-upf \
+                    --tag ${PrivateRegistryURL}/oai-upf:${upf_tag} \
+                    --platform linux/amd64,linux/arm64 \
+                    --build-arg GIT_COMMIT=\"${shortenShaOne}\" \
+                    --file docker/Dockerfile.upf.ubuntu \
+                    --builder multiarch-localremote-builder \
+                    --progress=plain \
+                    --push . > archives/upf_ubuntu_image_build.log 2>&1"
+
+                  sh "docker image prune --force"
+                  sh "docker rmi ${PrivateRegistryURL}/oai-upf:${upf_tag} || true"
+                  sh "docker pull ${PrivateRegistryURL}/oai-upf:${upf_tag}"
+                  sh "docker image inspect ${PrivateRegistryURL}/oai-upf:${upf_tag} | jq '.[0] | {RepoTags, Labels: .Config.Labels, DockerVersion}' >> archives/upf_ubuntu_image_build.log 2>&1"
+                  sh "docker images ${PrivateRegistryURL}/oai-upf:${upf_tag} >> archives/upf_ubuntu_image_build.log 2>&1"
+                  // Run the trivy scan only if the boolean variable runTrivyScan is True
+                  if (runTrivyScan) {
+                       sh "docker rmi oai-upf:${shortenShaOne} || true"
+                       sh "docker image tag ${PrivateRegistryURL}/oai-upf:${upf_tag} oai-upf:${shortenShaOne}"
+                       sh "trivy image --exit-code 1 --severity MEDIUM,HIGH,CRITICAL --no-progress --format=template --template @./ci-scripts/common/html-templates/trivy_html.tpl --output archives/upf_multiarch_image_trivy_report.html oai-upf:${shortenShaOne} > /dev/null || true"
+                       sh "docker rmi oai-upf:${shortenShaOne} || true"
+                    }
+                  sh "docker rmi ${PrivateRegistryURL}/oai-upf:${upf_tag} || true"
                   sh "docker logout ${PrivateRegistryURL}"
+                  sh "bash ./ci-scripts/common/bash/extract_arm_amd_logs.sh archives/upf_ubuntu_image_build.log"
                 }
+              }
               }
             }
           }
@@ -183,6 +215,33 @@ pipeline {
             }
             unsuccessful {
               sh "echo 'OAI-UPF UBUNTU IMAGE BUILD: KO' >> archives/upf_ubuntu_image_build.log"
+            }
+          }
+        }
+        stage ('Build Ubuntu UPF Image with LTTNG') {
+          steps {
+            // I want the previous stage to run always before to profit from the cache
+            // This stage only exists to make sure we don't have a regression in LTTNG build
+            // Generated image is not used
+            sleep 30
+            lock(ubuntuBuildResource) {
+              script {
+                gitlabCommitStatus(name: "Build Ubuntu UPF Image with LTTNG") {
+                  sh "docker image rm oai-upf:lttng-build || true"
+                  sh "docker image prune --force"
+                  sh "docker buildx build --target oai-upf --tag oai-upf:lttng-build --file docker/Dockerfile.upf.ubuntu --build-arg ENABLE_LTTNG=true . > archives/upf_ubuntu_lttng_image_build.log 2>&1"
+                  sh "docker image prune --force"
+                  sh "docker image rm oai-upf:lttng-build || true"
+                }
+              }
+            }
+          }
+          post {
+            success {
+              sh "echo 'OAI-UPF UBUNTU IMAGE BUILD: OK' >> archives/upf_ubuntu_lttng_image_build.log"
+            }
+            unsuccessful {
+              sh "echo 'OAI-UPF UBUNTU IMAGE BUILD: KO' >> archives/upf_ubuntu_lttng_image_build.log"
             }
           }
         }
@@ -197,7 +256,7 @@ pipeline {
                   withCredentials([
                     [$class: 'UsernamePasswordMultiBinding', credentialsId: "${rhelOcCredentials}", usernameVariable: 'OC_Username', passwordVariable: 'OC_Password']
                   ]) {
-                    sh "oc login -u ${OC_Username} -p ${OC_Password}"
+                    sh "oc login -u ${OC_Username} -p ${OC_Password} --server=${server}"
                   }
                   sh "oc delete istag oai-upf:${upf_tag} || true"
                   // Copy the RHEL Host certificates for building
@@ -205,6 +264,7 @@ pipeline {
                   // Building
                   sh "oc delete -f openshift/build-config.yaml || true"
                   sh "sed -i -e 's@oai-upf:latest@oai-upf:${upf_tag}@g' openshift/build-config.yaml"
+                  sh "oc project ${Namespace}"
                   sh "oc create -f openshift/build-config.yaml"
                   // Trick to bypass bpftool build
                   sh "mkdir -p build/ext"
@@ -219,7 +279,7 @@ pipeline {
                   // need python to wait for pod upf-build-cfg-1-build to be Completed or Error
                   // it fails if it detects error or timeout at 20 minutes
                   sh "./ci-scripts/common/python/check_build_pod_status.py --pod-name upf-build-cfg-1-build --log-file archives/upf_rhel_image_build.log"
-                  sh "oc describe istag oai-upf:${upf_tag} | grep 'Image Size:' >> archives/upf_rhel_image_build.log"
+                  sh "oc describe istag oai-upf:${upf_tag} -n ${Namespace} | grep 'Image Size:' >> archives/upf_rhel_image_build.log"
                 }
               }
             }
@@ -233,7 +293,7 @@ pipeline {
             }
             cleanup {
               script {
-                sh "oc delete build upf-build-cfg-1 || true"
+                sh "oc delete bc upf-build-cfg -n ${Namespace} || true"
                 sh "oc logout || true"
                 stash allowEmpty: true, includes: 'archives/upf_rhel_image_build.log', name: 'rhelBuildLog'
               }
@@ -249,6 +309,7 @@ pipeline {
                 gitlabCommitStatus(name: "Static Code Analysis") {
                   // It's a different agent from main one.
                   prepareWorkspaceMergeCase()
+                  sh "date --rfc-email > src/common-src/date.txt"
                   // Moving to focal and cppcheck 1.90 and a dockerfile approach
                   sh 'sed -i -e "s@nfName@upf@" ci-scripts/common/docker/Dockerfile.ci.cppcheck'
                   sh 'docker build --target upf-cppcheck --tag upf-cppcheck:test --file ci-scripts/common/docker/Dockerfile.ci.cppcheck . > archives/cppcheck_install.log 2>&1'
@@ -287,6 +348,7 @@ pipeline {
                 gitlabCommitStatus(name: "Code Formatting Checker") {
                   // It's a different agent from main one.
                   prepareWorkspaceMergeCase()
+                  sh "date --rfc-email > src/common-src/date.txt"
                   sh 'sed -i -e "s@nfName@upf@" ci-scripts/common/docker/Dockerfile.ci.clang-format'
                   if ("MERGE".equals(env.gitlabActionType)) {
                     sh 'docker build --target upf-clang-format-check --tag upf-clang-format-check:test --file ci-scripts/common/docker/Dockerfile.ci.clang-format --build-arg MERGE_REQUEST_CHECK=True --build-arg SOURCE_BRANCH=' + env.gitlabSourceBranch + ' --build-arg TARGET_BRANCH=' + env.gitlabTargetBranch + ' . > archives/clang_format_install.log 2>&1'
@@ -483,17 +545,16 @@ pipeline {
         lock(ubuntuBuildResource) {
           script {
             // Only in case of push to target branch!
-            if ("PUSH".equals(env.gitlabActionType)) {
+            if ("PUSH".equals(env.gitlabActionType) || runDockerHubPushStage) {
               withCredentials([
                 [$class: 'UsernamePasswordMultiBinding', credentialsId: "${params.DockerHubCredentials}", usernameVariable: 'DH_Username', passwordVariable: 'DH_Password']
               ]) {
                 sh "echo ${DH_Password} | docker login --username ${DH_Username} --password-stdin"
               }
               sh "docker login -u oaicicd -p oaicicd ${PrivateRegistryURL}"
-              sh "docker pull ${PrivateRegistryURL}/oai-upf:${upf_tag}"
-              sh "docker image tag ${PrivateRegistryURL}/oai-upf:${upf_tag} ${DH_Account}/oai-upf:develop"
-              sh "docker push ${DH_Account}/oai-upf:develop"
-              sh "docker rmi ${DH_Account}/oai-upf:develop ${PrivateRegistryURL}/oai-upf:${upf_tag}"
+              sh "docker rmi ${PrivateRegistryURL}/oai-upf:${upf_tag} || true"
+              sh "docker buildx imagetools create -t ${DH_Account}/oai-upf:develop ${PrivateRegistryURL}/oai-upf:${upf_tag}"
+              sh "docker rmi ${DH_Account}/oai-upf:develop ${PrivateRegistryURL}/oai-upf:${upf_tag} || true"
               sh "docker logout ${PrivateRegistryURL}"
               sh "docker logout"
             }
@@ -523,12 +584,6 @@ pipeline {
     }
     cleanup {
       script {
-        // Zipping all archived log files
-        sh "zip -r -qq docker_logs.zip archives"
-        if (fileExists('docker_logs.zip')) {
-          archiveArtifacts artifacts: 'docker_logs.zip'
-        }
-
         // Generating the HTML report(s)
         if ("MERGE".equals(env.gitlabActionType)) {
           sh "./ci-scripts/generateHtmlReport.py --job-name ${JOB_NAME} --build-id ${BUILD_ID} --build-url ${BUILD_URL} --git-url ${GIT_URL} --git-src-branch ${env.gitlabSourceBranch} --git-src-commit ${env.gitlabMergeRequestLastCommit} --git-merge-request --git-dst-branch ${env.gitlabTargetBranch} --git-dst-commit ${GIT_COMMIT}"
@@ -540,10 +595,22 @@ pipeline {
         for (htmlFile in htmlFiles) {
           if ("MERGE".equals(env.gitlabActionType)) {
             sh "sed -i -e 's#TEMPLATE_MERGE_REQUEST_LINK#${gitlabMergeRequestLink}#g' ${htmlFile}"
-            sh "sed -i -e 's#TEMPLATE_MERGE_REQUEST_TEMPLATE#${env.gitlabMergeRequestTitle}#' ${htmlFile}"
+            def unsafePattern = /[^a-zA-Z0-9",\.\?\-_ %\+\[\]\(\)~]/
+            def sanitizedTitle = env.gitlabMergeRequestTitle.replaceAll(unsafePattern, '-')
+            sh "sed -i -e 's#TEMPLATE_MERGE_REQUEST_TEMPLATE#${sanitizedTitle}#' ${htmlFile}"
           }
           sh "sed -i -e 's#TEMPLATE_TIME#${JOB_TIMESTAMP}#' ${htmlFile}"
           archiveArtifacts artifacts: htmlFile
+        }
+
+        // Zipping all archived log files
+         if (fileExists('archives/upf_multiarch_image_trivy_report.html')) 
+          {
+              archiveArtifacts artifacts: 'archives/upf_multiarch_image_trivy_report.html'
+          }
+        sh "zip -r -qq docker_logs.zip archives -x archives/upf_multiarch_image_trivy_report.html"
+        if (fileExists('docker_logs.zip')) {
+          archiveArtifacts artifacts: 'docker_logs.zip'
         }
 
         // Sending email to commiter

@@ -54,8 +54,8 @@ void upf_n3_task(void*);
 void upf_n3_task(void* args_p) {
   const task_id_t task_id = TASK_UPF_N3;
 
-  const util::thread_sched_params* const sched_params =
-      (const util::thread_sched_params* const) args_p;
+  const oai::utils::thread_sched_params* const sched_params =
+      (const oai::utils::thread_sched_params* const) args_p;
   sched_params->apply(task_id, Logger::upf_n3());
 
   itti_inst->notify_task_ready(task_id);
@@ -144,7 +144,8 @@ void upf_n3::handle_receive(
       } else if (iph->version == 6) {
         pfcp_switch_inst->pfcp_session_look_up_pack_in_access(
             (struct ipv6hdr*) iph, gtp_payload_length, r_endpoint, tunnel_id);
-      } else {
+      }  // TODO [ETH-PDU] handle ETH type look up
+      else {
         Logger::upf_n3().trace("Unknown GTPU_G_PDU packet");
       }
     } else {
@@ -169,7 +170,8 @@ void upf_n3::handle_receive(
     } else if (iph->version == 6) {
       pfcp_switch_inst->pfcp_session_look_up_pack_in_access(
           (struct ipv6hdr*) iph, bytes_transferred, r_endpoint);
-    } else {
+    }  // TODO [ETH-PDU] handle ETH type look up
+    else {
       Logger::upf_n3().trace("Unknown IPX packet");
     }
   }
@@ -272,7 +274,8 @@ void upf_n3::report_error_indication(
   error_ind->gtp_ies.set(tun_data);
 
   gtp_u_peer_address_t peer_address = {};
-  if (xgpp_conv::endpoint_to_gtp_u_peer_address(r_endpoint, peer_address)) {
+  if (oai::utils::xgpp_conv::endpoint_to_gtp_u_peer_address(
+          r_endpoint, peer_address)) {
     error_ind->gtp_ies.set(peer_address);
   } else {
     // mandatory ie

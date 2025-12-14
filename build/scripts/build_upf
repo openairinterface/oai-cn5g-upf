@@ -69,6 +69,7 @@ function help()
   echo_error "  -j, --jobs                                Multiple jobs for compiling."
   echo_error "  -v, --verbose                             Build process verbose."
   echo_error "  -V, --Verbose                             CMake only build process verbose, display compilation warnings and errors."
+  echo_error "  -l, --lttng                               Build variant that will also include LTTNG" 
   echo_error " "
 }
 
@@ -98,6 +99,15 @@ function main()
       -c | --clean)
         clean=1
         echo "Clean the build generated files (build from scratch)"
+        shift;
+        ;;
+      -l | --lttng)
+        check_platform_for_lttng
+        output=$?
+        if [[ $output == 1 ]]; then
+          cmake_args="$cmake_args -DUSE_LTTNG=ON"
+          echo ${cmake_args}
+        fi
         shift;
         ;;
       -f | --force)
@@ -131,6 +141,11 @@ function main()
         cmake_args="$cmake_args -DCMAKE_VERBOSE_MAKEFILE=ON -k"
         make_args="VERBOSE=1 $make_args"
         verbose=1
+        shift;
+        ;;
+      --bpf-debug)
+        echo "BPF debug logs enabled"
+        cmake_args="$cmake_args -DBPF_DEBUG=ON"
         shift;
         ;;
       -V | --Verbose)
@@ -215,6 +230,21 @@ function main()
   ##############################################################################
   # Compile S/P-GW
   ##############################################################################
+
+  if [ -d /usr/include/aarch64-linux-gnu ]; then
+    echo "Linking include dirs for aarch64"
+    $SUDO ln -s /usr/include/aarch64-linux-gnu/asm /usr/include/asm
+    $SUDO ln -s /usr/include/aarch64-linux-gnu/bits /usr/include/bits
+    $SUDO ln -s /usr/include/aarch64-linux-gnu/gnu /usr/include/gnu
+    $SUDO cp -s /usr/include/aarch64-linux-gnu/sys/* /usr/include/sys/.
+  fi
+  if [ -d /usr/include/x86_64-linux-gnu ]; then
+    $SUDO ln -s /usr/include/x86_64-linux-gnu/asm /usr/include/asm
+    $SUDO ln -s /usr/include/x86_64-linux-gnu/bits /usr/include/bits
+    $SUDO ln -s /usr/include/x86_64-linux-gnu/gnu /usr/include/gnu
+    $SUDO cp -s /usr/include/x86_64-linux-gnu/sys/* /usr/include/sys/.
+  fi
+
   cd $OPENAIRCN_DIR/build/upf
   if [ ! -d ./build ]; then
     mkdir -m 777 -p -v build

@@ -157,7 +157,7 @@ set(CMAKE_C_FLAGS
 set(CMAKE_C_FLAGS
   "${CMAKE_C_FLAGS} -DSTDC_HEADERS=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_MEMORY_H=1 -DHAVE_STRINGS_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_UNISTD_H=1 -DHAVE_FCNTL_H=1 -DHAVE_ARPA_INET_H=1 -DHAVE_SYS_TIME_H=1 -DHAVE_SYS_SOCKET_H=1 -DHAVE_STRERROR=1 -DHAVE_SOCKET=1 -DHAVE_MEMSET=1 -DHAVE_GETTIMEOFDAY=1 -DHAVE_STDLIB_H=1 -DHAVE_MALLOC=1 -DHAVE_LIBSCTP"
 )
-set(CMAKE_C_FLAGS "-Wno-unused-function -Wno-error -Wno-return-type")
+set(CMAKE_C_FLAGS "-Wno-unused-function -Wno-error -Wno-return-type -Wno-empty-body")
 
 # set a flag for changes in the source code
 # these changes are related to hardcoded path to include .h files
@@ -277,7 +277,6 @@ else(STATIC_LINKING)
     SET(BUILD_SHARED_LIBS ON)
 endif(STATIC_LINKING)
 
-#ADD_SUBDIRECTORY(${SRC_TOP_DIR}/common ${CMAKE_CURRENT_BINARY_DIR}/common)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/common/utils ${CMAKE_CURRENT_BINARY_DIR}/utils)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/pfcp ${CMAKE_CURRENT_BINARY_DIR}/pfcp)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app ${CMAKE_CURRENT_BINARY_DIR}/upf_app)
@@ -286,6 +285,8 @@ ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/simpleswitch ${CMAKE_CURRENT_BINARY_DIR}
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/gtpv1u ${CMAKE_CURRENT_BINARY_DIR}/gtpv1u)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/udp ${CMAKE_CURRENT_BINARY_DIR}/udp)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/interfaces ${CMAKE_CURRENT_BINARY_DIR}/interfaces)
+ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/framed_routing ${CMAKE_CURRENT_BINARY_DIR}/framed_routing)
+
 ################################################################################
 # Specific part for oai_upf folder
 
@@ -293,23 +294,31 @@ add_definitions("-DPACKAGE_NAME=\"UPF\"")
 
 include_directories(${SRC_TOP_DIR}/oai_upf)
 include_directories(${SRC_TOP_DIR}/common)
-include_directories(${SRC_TOP_DIR}/itti)
 include_directories(${SRC_TOP_DIR}/common/msg)
 include_directories(${SRC_TOP_DIR}/common/utils)
 include_directories(${SRC_TOP_DIR}/gtpv1u)
+include_directories(${SRC_TOP_DIR}/itti)
 include_directories(${SRC_TOP_DIR}/pfcp)
 include_directories(${SRC_TOP_DIR}/udp)
 include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
+include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr_and_far)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/include)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 include_directories(${SRC_TOP_DIR}/upf_app/interfaces)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
+include_directories(${SRC_TOP_DIR}/upf_app/framed_routing)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/common)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/nas)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/nas/common)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/nas/utils)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/pfcp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/bstr)
+
 
 include_directories(${SRC_TOP_DIR}/../build/ext/libbpf)
 link_directories(${SRC_TOP_DIR}/../build/ext/libbpf/src)
@@ -341,20 +350,27 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
 # folly glog dl double-conversion for FB folly library
 target_link_libraries (upf 
   ${ASAN}  -Wl,--start-group CN_UTILS
-  ${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so 
+  ${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so
   APP
   SIMPLE_SWITCH
   interfaces
   UDP
   GTPV1U
   PFCP
-  far_xdp
-  pfcp_session_pdr_lookup_xdp
+  #far_xdp
   pfcp_session_lookup_xdp
   qer_tc
   UPF_XDP
   UPF_TC
   gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group
-  pthread m rt config++ 
+  pthread m rt config++
   event boost_system curl yaml-cpp cpr::cpr
 )
+
+
+add_boolean_option(USE_LTTNG  False "Activate the LTTNG tracer, a debugging/monitoring framework" ON)
+if (USE_LTTNG)
+    message("Using the lttng build variant")
+    add_definitions("-DLOGGER_CAN_USE_LTTNG")
+    target_link_libraries(upf -ldl lttng-ust)
+endif ()

@@ -28,11 +28,14 @@
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
 
-#define EGRESS_HANDLE 0x1
+// #define EGRESS_HANDLE 0x1
+#define EGRESS_HANDLE 0x10000
 #define EGRESS_PRIORITY 0xC02F
+#define EGRESS_BROADCAST_PRIORITY 0x0003
 
 #define INGRESS_HANDLE 0x1
 #define INGRESS_PRIORITY 0xC02F
+#define INGRESS_BROADCAST_PRIORITY 0x0003
 
 /**
  * @brief Program states.
@@ -63,10 +66,16 @@ class ProgramLifeCycle {
   void load();
   void attach();
   void link(std::string sectionName, std::string interface);
-  void tcAttachIngress(std::string sectionName, std::string interface);
-  void tcAttachEgress(std::string sectionName, std::string interface);
+  void tcAttachIngress(
+      std::string sectionName, std::string interface,
+      __u32 priority = INGRESS_PRIORITY);
+  void tcAttachEgress(
+      std::string sectionName, std::string interface,
+      __u32 priority = EGRESS_PRIORITY);
+  void tcDetachIngress(std::string interface, __u32 priority);
   void destroy();
   void tearDown();
+  void unpin_maps();
 
   BPFSkeletonType* getBPFSkeleton() const;
   ProgramState getState() const;
@@ -211,7 +220,7 @@ void ProgramLifeCycle<BPFSkeletonType>::link(
 //-------------------------------------------------------------------------------------------------------------
 template<class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
-    std::string sectionName, std::string interface) {
+    std::string sectionName, std::string interface, __u32 priority) {
   int err = 0;
   int fd;
   struct bpf_program* prog = NULL;
@@ -220,9 +229,9 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
   auto ifIndex = if_nametoindex(interface.c_str());
 
   if (!ifIndex) {
-    perror("if_nametoindex");
+    // perror("if_nametoindex");
     Logger::upf_app().error("Interface %s not found", interface.c_str());
-    throw std::runtime_error("Interface not found");
+    throw std::runtime_error("Interface not found: " + interface);
   }
 
   // Retrieve the BPF program based on the section name
@@ -236,9 +245,9 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
 
       if (fd < 0) {
         Logger::upf_app().error(
-            "Couldn't get file descriptor for program with section name: %s\n",
-            sectionName);
-        throw std::runtime_error("File descriptor not found");
+            "Failed to retrieve FD for program %s", sectionName);
+        throw std::runtime_error(
+            "File descriptor not found for " + sectionName);
       }
 
       // Create TC-BPF hook
@@ -249,29 +258,31 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
       attach_ingress.prog_fd = fd;
 
       err = bpf_tc_hook_create(&hook);
-      if (err && err != -EEXIST) {
-        Logger::upf_app().error(
-            "Couldn't create TC-BPF hook for interface %s (err:%d)\n",
-            interface, err);
-        throw std::runtime_error("TC Program not hooked to interface");
-      }
 
       if (err == -EEXIST) {
         Logger::upf_app().info(
-            "Success: TC-BPF hook already existed (Ignore: \"libbpf: Kernel "
-            "error message: Exclusivity flag on, cannot modify\")\n");
+            "Success: TC-BPF hook %s already exists for interface %s (Ignore: "
+            "libbpf: Kernel error message))",
+            sectionName, interface);
+      } else if (err) {
+        Logger::upf_app().error(
+            "Failed to create TC-BPF hook %s on %s (err: %d)", sectionName,
+            interface, err);
+        throw std::runtime_error(
+            "TC Program %s could not be hooked to interface " + sectionName +
+            interface);
       }
 
       // Attach the BPF program
       hook.attach_point       = BPF_TC_INGRESS;
       attach_ingress.flags    = BPF_TC_F_REPLACE;
       attach_ingress.handle   = INGRESS_HANDLE;
-      attach_ingress.priority = INGRESS_PRIORITY;
+      attach_ingress.priority = priority;
       err                     = bpf_tc_attach(&hook, &attach_ingress);
       if (err) {
         Logger::upf_app().error(
-            "Couldn't attach ingress program to interface %s (err:%d)\n",
-            interface, err);
+            "Failed to attach ingress program %s to interface %s (err: %d)",
+            sectionName, interface, err);
         throw std::runtime_error(
             "TC Program could not be attached to ingress interface");
       }
@@ -292,8 +303,8 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
       // Update the global link state.
       mState = ATTACHED_TO_INGRESS;
       Logger::upf_app().info(
-          "BPF program %s hooked in %s TC interface", sectionName.c_str(),
-          interface.c_str());
+          "BPF program %s successfully attached to %s interface",
+          sectionName.c_str(), interface.c_str());
       return;
     }
   }
@@ -305,7 +316,7 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachIngress(
 //-------------------------------------------------------------------------------------------------------------
 template<class BPFSkeletonType>
 void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
-    std::string sectionName, std::string interface) {
+    std::string sectionName, std::string interface, __u32 priority) {
   int err = 0;
   int fd;
   struct bpf_program* prog = NULL;
@@ -314,9 +325,9 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
   auto ifIndex = if_nametoindex(interface.c_str());
 
   if (!ifIndex) {
-    perror("if_nametoindex");
+    // perror("if_nametoindex");
     Logger::upf_app().error("Interface %s not found", interface.c_str());
-    throw std::runtime_error("Interface not found");
+    throw std::runtime_error("Interface not found: " + interface);
   }
 
   // Retrieve the BPF program based on the section name
@@ -330,9 +341,9 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
 
       if (fd < 0) {
         Logger::upf_app().error(
-            "Couldn't get file descriptor for program with section name: %s\n",
-            sectionName);
-        throw std::runtime_error("File descriptor not found");
+            "Failed to retrieve FD for program %s", sectionName);
+        throw std::runtime_error(
+            "File descriptor not found for " + sectionName);
       }
 
       // Create TC-BPF hook
@@ -343,28 +354,31 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
       attach_egress.prog_fd = fd;
 
       err = bpf_tc_hook_create(&hook);
-      if (err && err != -EEXIST) {
-        Logger::upf_app().error(
-            "Couldn't create TC-BPF hook for interface %s\n", interface);
-        throw std::runtime_error("TC Program not hooked to interface");
-      }
 
       if (err == -EEXIST) {
         Logger::upf_app().info(
-            "Success: TC-BPF hook already existed (Ignore: \"libbpf: Kernel "
-            "error message: Exclusivity flag on, cannot modify\")\n");
+            "Success: TC-BPF hook %s already exists for interface %s (Ignore: "
+            "libbpf: Kernel error message))",
+            sectionName, interface);
+      } else if (err) {
+        Logger::upf_app().error(
+            "Failed to create TC-BPF hook %s on %s (err: %d)", sectionName,
+            interface, err);
+        throw std::runtime_error(
+            "TC Program %s could not be hooked to interface " + sectionName +
+            interface);
       }
 
       // Attach the BPF program
       hook.attach_point      = BPF_TC_EGRESS;
       attach_egress.flags    = BPF_TC_F_REPLACE;
       attach_egress.handle   = EGRESS_HANDLE;
-      attach_egress.priority = EGRESS_PRIORITY;
+      attach_egress.priority = priority;
       err                    = bpf_tc_attach(&hook, &attach_egress);
       if (err) {
         Logger::upf_app().error(
-            "Couldn't attach egress program to interface %s (err:%d)\n",
-            interface, err);
+            "Failed to attach egress program %s to interface %s (err: %d)",
+            sectionName, interface, err);
         throw std::runtime_error(
             "TC Program could not be attached to egress interface");
       }
@@ -382,8 +396,8 @@ void ProgramLifeCycle<BPFSkeletonType>::tcAttachEgress(
       // Update the global link state.
       mState = ATTACHED_TO_EGRESS;
       Logger::upf_app().info(
-          "BPF program %s hooked in %s TC interface", sectionName.c_str(),
-          interface.c_str());
+          "BPF program %s successfully attached to %s interface", sectionName,
+          interface);
       return;
     }
   }
@@ -436,6 +450,7 @@ void ProgramLifeCycle<BPFSkeletonType>::tearDown() {
       Logger::upf_app().debug("There are not any program in LINKED state.");
     }
     destroy();
+
   } else {
     Logger::upf_app().debug("Programs is in IDLE state. TearDown skipped");
   }
@@ -450,6 +465,85 @@ void ProgramLifeCycle<BPFSkeletonType>::destroy() {
   }
   // TODO: Check if it is necessary delete sessionManager here.
   mState = IDLE;
+}
+
+//-------------------------------------------------------------------------------------------------------------
+// Tear down TC programs.
+template<class BPFSkeletonType>
+void ProgramLifeCycle<BPFSkeletonType>::tcDetachIngress(
+    std::string interface, __u32 priority) {
+  struct bpf_program* prog;
+  int fd;
+
+  std::string prog_name;
+  auto ifIndex = if_nametoindex(interface.c_str());
+  if (!ifIndex) {
+    perror("if_nametoindex");
+    Logger::upf_app().error("Interface %s not found", interface.c_str());
+    throw std::runtime_error("Interface not found");
+  }
+
+  bpf_object__for_each_program(prog, mpSkeleton->obj) {
+    prog_name = std::string(bpf_program__name(prog));
+    fd        = bpf_program__fd(prog);
+    // Find the section.
+    auto it = mSectionLinkInterfacesMap.find(prog_name);
+
+    if (it == mSectionLinkInterfacesMap.end()) {
+      Logger::upf_app().debug(
+          "BPF program %s are not link to any interface", prog_name.c_str());
+      continue;
+    }
+
+    // Create TC-BPF hook
+    DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .attach_point = BPF_TC_INGRESS);
+    DECLARE_LIBBPF_OPTS(bpf_tc_opts, attach_ingress);
+
+    hook.ifindex           = ifIndex;
+    attach_ingress.prog_fd = 0;
+    attach_ingress.prog_id = 0;
+
+    // Detach the BPF program
+    hook.attach_point       = BPF_TC_INGRESS;
+    attach_ingress.flags    = 0;
+    attach_ingress.handle   = INGRESS_HANDLE;
+    attach_ingress.priority = priority;
+    int err                 = bpf_tc_detach(&hook, &attach_ingress);
+    if (err) {
+      Logger::upf_app().error(
+          "Couldn't detach ingress program (%s) fd (%d) to interface %s "
+          "(err:%d)\n",
+          prog_name.c_str(), fd, interface, err);
+      throw std::runtime_error("TC Program could not be detached");
+    }
+
+    // Update the global link state.
+    mState = IDLE;
+    Logger::upf_app().info(
+        "BPF program %s unhooked from %s TC interface", prog_name.c_str(),
+        interface.c_str());
+  }
+}
+
+//-------------------------------------------------------------------------------------------------------------
+// Try to unpin map after the program is destroyed.
+template<class BPFSkeletonType>
+void ProgramLifeCycle<BPFSkeletonType>::unpin_maps() {
+  Logger::upf_app().debug(
+      "================== Unpinning maps for object %s\n",
+      bpf_object__name(mpSkeleton->obj));
+  try {
+    int err = bpf_object__unpin_maps(mpSkeleton->obj, NULL);
+    if (err) {
+      Logger::upf_app().warn(
+          "Couldn't unpin maps for object %s (err:%d).\n",
+          bpf_object__name(mpSkeleton->obj), err);
+    }
+  } catch (const std::exception& e) {
+    Logger::upf_app().error(
+        "Couldn't unpin maps for object %s (err:%s)\n",
+        bpf_object__name(mpSkeleton->obj), e.what());
+  }
 }
 
 //-------------------------------------------------------------------------------------------------------------

@@ -7,7 +7,7 @@
 struct session_id {
   u32 teid_ul;
   u32 teid_dl;
-  u32 seid;
+  u64 seid;
 };
 
 #endif  // __SESSION_ID_H__

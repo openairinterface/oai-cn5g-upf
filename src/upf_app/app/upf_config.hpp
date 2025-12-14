@@ -66,7 +66,7 @@ typedef struct interface_cfg_s {
   struct in6_addr addr6;
   unsigned int mtu;
   unsigned int port;
-  util::thread_sched_params thread_rd_sched_params;
+  oai::utils::thread_sched_params thread_rd_sched_params;
 } interface_cfg_t;
 
 typedef struct pdn_cfg_s {
@@ -80,11 +80,11 @@ typedef struct pdn_cfg_s {
 } pdn_cfg_t;
 
 typedef struct itti_cfg_s {
-  util::thread_sched_params itti_timer_sched_params;
-  util::thread_sched_params n3_sched_params;
-  util::thread_sched_params n4_sched_params;
-  util::thread_sched_params upf_app_sched_params;
-  util::thread_sched_params async_cmd_sched_params;
+  oai::utils::thread_sched_params itti_timer_sched_params;
+  oai::utils::thread_sched_params n3_sched_params;
+  oai::utils::thread_sched_params n4_sched_params;
+  oai::utils::thread_sched_params upf_app_sched_params;
+  oai::utils::thread_sched_params async_cmd_sched_params;
 } itti_cfg_t;
 
 // Non standart features
@@ -120,12 +120,23 @@ class upf_config {
   } nf_addr;
 
   bool enable_snat;
+  bool enable_fr;
+
   std::vector<pdn_cfg_t> pdns;
   std::vector<pfcp::node_id_t> smfs;
 
   bool enable_5g_features;
   bool enable_bpf_datapath;
   bool enable_qos;
+  u_int16_t max_upf_interfaces;
+  u_int16_t max_upf_redirect_interfaces;
+  u_int16_t max_pdu_session;
+  u_int16_t max_pdrs_per_pdu_session;
+  u_int16_t max_qos_flows_per_pdu_session;
+  u_int16_t max_sdf_filters_per_pdu_session;
+  u_int16_t max_arp_entries;
+  bool enable_eth_pdu;
+  bool ignore_qfi_for_uplink;
   bool register_nrf;
   struct in_addr remote_n6;
   upf_info_t upf_info;
@@ -152,6 +163,7 @@ class upf_config {
         max_pfcp_sessions(100),
         nsf(),
         enable_snat(false),
+        enable_fr(false),
         nrf_addr() {
     itti.itti_timer_sched_params.sched_priority = 85;
     itti.n3_sched_params.sched_priority         = 84;
@@ -167,11 +179,25 @@ class upf_config {
     n4.thread_rd_sched_params.sched_priority = 95;
     n4.port                                  = pfcp::default_port;
 
-    enable_5g_features  = true;
-    enable_bpf_datapath = false;
-    enable_qos          = false;
-    register_nrf        = false;
-    upf_info            = {};
+    enable_5g_features              = true;
+    enable_bpf_datapath             = false;
+    enable_qos                      = false;
+    max_upf_interfaces              = 3;
+    max_upf_redirect_interfaces     = 2;
+    max_pdu_session                 = 10000;
+    max_pdrs_per_pdu_session        = 8;
+    max_qos_flows_per_pdu_session   = 8;
+    max_sdf_filters_per_pdu_session = 8;
+    max_arp_entries                 = 2;
+    ignore_qfi_for_uplink           = true;
+    register_nrf                    = false;
+    upf_info                        = {};
+    enable_5g_features              = true;
+    enable_bpf_datapath             = false;
+    enable_qos                      = false;
+    enable_eth_pdu                  = false;
+    register_nrf                    = false;
+    upf_info                        = {};
 
     log_level            = spdlog::level::debug;
     http_version         = 2;

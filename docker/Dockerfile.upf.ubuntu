@@ -30,14 +30,17 @@
 # BASE IMAGE
 #---------------------------------------------------------------------
 ARG BASE_IMAGE=ubuntu:jammy
-FROM $BASE_IMAGE as oai-upf-base
+FROM $BASE_IMAGE AS oai-upf-base
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Paris
 ENV IS_DOCKERFILE=1
+ARG ENABLE_LTTNG=false
+ARG BPF_DEBUG=false
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade --yes && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes \
+      cmake \
       psmisc \
       git \
   && rm -rf /var/lib/apt/lists/*
@@ -60,12 +63,25 @@ RUN ./build_upf --install-deps --force
 #---------------------------------------------------------------------
 # BUILDER IMAGE
 #---------------------------------------------------------------------
-FROM oai-upf-base as oai-upf-builder
+FROM oai-upf-base AS oai-upf-builder
 # Copy the rest of source code
 COPY . /openair-upf
 # Building UPF
 WORKDIR /openair-upf/build/scripts
-RUN ./build_upf --clean --Verbose --build-type Release --jobs && \
+ARG BUILD_ARGS=""
+RUN  if [ "$ENABLE_LTTNG" = "true" ]; then apt-get update && \
+        DEBIAN_FRONTEND=noninteractive apt-get install --yes \
+        libstdc++-12-dev \
+        lttng-modules-dkms \
+        liblttng-ust-dev \
+        lttng-tools && \
+        ldconfig && \
+        BUILD_ARGS="--lttng"; \
+    else \
+        ldconfig; \
+    fi && \
+    if [ "$BPF_DEBUG" = "true" ]; then BUILD_ARGS="$BUILD_ARGS --bpf-debug"; fi && \
+    ./build_upf --clean --Verbose --build-type Release --jobs ${BUILD_ARGS}; \
     ldd /openair-upf/build/upf/build/upf && \
     mv /openair-upf/build/upf/build/upf /openair-upf/build/upf/build/oai_upf && \
     echo "end of UPF build"
@@ -73,9 +89,10 @@ RUN ./build_upf --clean --Verbose --build-type Release --jobs && \
 #---------------------------------------------------------------------
 # TARGET IMAGE
 #---------------------------------------------------------------------
-FROM $BASE_IMAGE as oai-upf
+FROM $BASE_IMAGE AS oai-upf
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Europe/Paris
+ARG ENABLE_LTTNG=false
 # We install some debug tools for the moment in addition of mandatory libraries
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade --yes && \
@@ -109,6 +126,8 @@ RUN apt-get update && \
 # Ubuntu 20 --> boost71
 # Ubuntu 22 --> boost74
       libboost-thread1.7?.0 \
+# lttng
+  && if [ "$ENABLE_LTTNG" = "true" ]; then DEBIAN_FRONTEND=noninteractive apt-get install --yes liblttng-ust-dev; fi \
   && rm -rf /var/lib/apt/lists/*
 
 # Copying executable and generated libraries
@@ -116,7 +135,9 @@ WORKDIR /openair-upf/bin
 COPY --from=oai-upf-builder \
     /usr/local/sbin/bpftool \
     /openair-upf/build/upf/build/oai_upf \
+    /openair-upf/build/upf/build/upf_app/bpf/CMakeFiles/qer_tc.dir/rules/qer/qer_tc_kernel.c.o \
     /openair-upf/scripts/healthcheck.sh \
+    /openair-upf/scripts/entrypoint.sh \
     ./
 
 WORKDIR /usr/local/lib
@@ -126,8 +147,8 @@ COPY --from=oai-upf-builder \
     /usr/local/lib/libcpr.so.1 \    
 # Ubuntu 20 --> libbfd-2.34
 # Ubuntu 22 --> libbfd-2.38
-    /usr/lib/x86_64-linux-gnu/libbfd-2.3?-system.so \
-    /usr/lib/x86_64-linux-gnu/libopcodes-2.3?-system.so \
+    /usr/lib/?-linux-gnu/libbfd-2.3?-system.so \
+    /usr/lib/?-linux-gnu/libopcodes-2.3?-system.so \
     /openair-upf/build/ext/libbpf/src/libbpf.so.1 \
     # /openair-upf/build/upf/build/upf_app/utils/libupfutils.so \
     ./
@@ -149,8 +170,17 @@ WORKDIR /openair-upf
 LABEL support-multi-sgwu-instances="true"
 LABEL support-nrf-fdqn="true"
 
+ARG GIT_COMMIT
+
+LABEL org.opencontainers.image.authors="OpenAirInterface <contact@openairinterface.org>" \
+      org.opencontainers.image.vendor="OpenAirInterface Software Alliance" \
+      org.opencontainers.image.licenses="OAI Public License, Version 1.1" \
+      org.opencontainers.image.title="OAI UPF" \
+      org.opencontainers.image.description="OpenAirInterface User Plane Function" \
+      org.opencontainers.image.revision="commit:${GIT_COMMIT}"
+
 # expose ports
-EXPOSE 2152/udp 8805/udp
+EXPOSE 2152/udp 8805/udp 5342 5343 5344
 # healthcheck
 HEALTHCHECK --interval=10s \
             --timeout=15s \
@@ -158,3 +188,5 @@ HEALTHCHECK --interval=10s \
     CMD /openair-upf/bin/healthcheck.sh
 
 CMD ["/openair-upf/bin/oai_upf", "-c", "/openair-upf/etc/config.yaml", "-o"]
+
+ENTRYPOINT [ "sh", "/openair-upf/bin/entrypoint.sh" ]

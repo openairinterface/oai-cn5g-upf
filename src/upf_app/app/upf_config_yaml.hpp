@@ -37,10 +37,53 @@ constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF = "enable_bpf_datapath";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF_LABEL =
     "Enable BPF Datapath";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT       = "enable_snat";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR         = "enable_fr";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT_LABEL = "Enable SNAT";
 
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS       = "enable_qos";
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS_LABEL = "Enable QoS";
+
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_INTERFACES =
+    "max_upf_interfaces";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_INTERFACES_LABEL =
+    "Max upf interfaces";
+
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_REDIRECT_INTERFACES =
+    "max_upf_redirect_interfaces";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_REDIRECT_INTERFACES_LABEL =
+    "Max upf redirect interfaces";
+
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_MAX_PDU_SESSION = "max_pdu_session";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_MAX_PDU_SESSION_LABEL =
+    "Max PDU Session";
+
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_MAX_PDRS_PER_PDU_SESSION =
+    "max_pdrs_per_pdu_session";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_MAX_PDRS_PER_PDU_SESSION_LABEL =
+    "Max PDRs Per PDU Session";
+
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_MAX_QOS_FLOWS_PER_PDU_SESSION =
+    "max_qos_flows_per_pdu_session";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_MAX_QOS_FLOWS_PER_PDU_SESSION_LABEL =
+    "Max Qos Flows Per PDU Session";
+
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_MAX_SDF_FILTERS_PER_PDU_SESSION =
+    "max_sdf_filters_per_pdu_session";
+constexpr auto
+    UPF_CONFIG_SUPPORT_FEATURES_MAX_SDF_FILTERS_PER_PDU_SESSION_LABEL =
+        "Max SDF Filters Per PDU Session";
+
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_MAX_ARP_ENTRIES = "max_arp_entries";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_MAX_ARP_ENTRIES_LABEL =
+    "Max ARP Entries";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_ETH_PDU = "enable_eth_pdu";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_ENABLE_ETH_PDU_LABEL =
+    "Enable Ethernet PDU Session";
+
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK =
+    "ignore_qfi_for_uplink";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK_LABEL =
+    "Ignore QFI For Uplink Classification";
 
 constexpr auto UPF_CONFIG_REMOTE_N6_GW       = "remote_n6_gw";
 constexpr auto UPF_CONFIG_REMOTE_N6_GW_LABEL = "Remote N6 Gateway";
@@ -56,18 +99,44 @@ class upf_support_features : public config_type {
  private:
   option_config_value m_enable_bpf_datapath{};
   option_config_value m_enable_qos{};
+  int_config_value m_max_upf_interfaces{};
+  int_config_value m_max_upf_redirect_interfaces{};
+  int_config_value m_max_pdu_session{};
+  int_config_value m_max_pdrs_per_pdu_session{};
+  int_config_value m_max_qos_flows_per_pdu_session{};
+  int_config_value m_max_sdf_filters_per_pdu_session{};
+  int_config_value m_max_arp_entries{};
   option_config_value m_enable_snat{};
+  option_config_value m_enable_fr{};
+  option_config_value m_enable_eth_pdu{};
+  option_config_value m_ignore_qfi_for_uplink{};
 
  public:
   explicit upf_support_features(
-      bool enable_bpf_datapath, bool enable_qos, bool enable_snat);
+      bool enable_bpf_datapath, bool enable_qos, u_int16_t max_upf_interfaces,
+      u_int16_t max_upf_redirect_interfaces, u_int16_t max_pdu_session,
+      u_int16_t max_pdrs_per_pdu_session,
+      u_int16_t max_qos_flows_per_pdu_session,
+      u_int16_t max_sdf_filters_per_pdu_session, u_int16_t max_arp_entries,
+      bool enable_snat, bool enable_fr, bool enable_eth_pdu,
+      bool ignore_qfi_for_uplink);
 
   void from_yaml(const YAML::Node& node) override;
 
   [[nodiscard]] std::string to_string(const std::string& indent) const override;
   [[nodiscard]] bool get_option_enable_bpf_datapath() const;
   [[nodiscard]] bool get_option_enable_qos() const;
+  [[nodiscard]] u_int16_t get_option_max_upf_interfaces() const;
+  [[nodiscard]] u_int16_t get_option_max_upf_redirect_interfaces() const;
+  [[nodiscard]] u_int16_t get_option_max_pdu_session() const;
+  [[nodiscard]] u_int16_t get_option_max_pdrs_per_pdu_session() const;
+  [[nodiscard]] u_int16_t get_option_max_qos_flows_per_pdu_session() const;
+  [[nodiscard]] u_int16_t get_option_max_sdf_filters_per_pdu_session() const;
+  [[nodiscard]] u_int16_t get_option_max_arp_entries() const;
   [[nodiscard]] bool get_option_enable_snat() const;
+  [[nodiscard]] bool get_option_enable_fr() const;
+  [[nodiscard]] bool get_option_enable_eth_pdu() const;
+  [[nodiscard]] bool get_option_ignore_qfi_for_uplink() const;
 };
 
 class upf_interface_config : public local_interface {

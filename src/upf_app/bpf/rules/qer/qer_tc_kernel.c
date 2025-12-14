@@ -18,11 +18,10 @@
 #include <utils/csum.h>
 #include <utils/logger.h>
 #include <utils/utils.h>
-//#include <far_maps.h>
 #include <interfaces.h>
-//#include <pfcp_session_lookup_maps.h>
-#include <string.h>  //Needed for memcpy
+#include <string.h>
 #include "bpf_endian.h"
+#include "sdf_filter.h"
 
 #include <linux/pkt_cls.h>
 #include <qer_maps.h>
@@ -30,254 +29,165 @@
 #include <linux/netdevice.h>
 #include <linux/pkt_sched.h>
 
-#define MARK_VALUE 0x12345678  // Marker value to match
-#define OFFSET 0               // Example offset where marker is stored
-#define TARGET_INTF 644
-/*---------------------------------------------------------------------------------------------------------------*/
-/**
- * @brief Filter the Uplink traffic
- *
- * @param skb
- * @param udph UDP header
- * @return __inline u32 the TC action taken
- */
+//#define __TC_H_MAKE(major, minor) (((major) << 16) | (minor))
 
-static __always_inline u32 egress_sdf_filter(
-    struct __sk_buff* skb, struct ethhdr* ethh, struct udphdr* udph) {
+//---------------------------------------------------------------------------------------------------------------
+// SEC("tc/egress")
+// egress_cls_func is called for packets that are going out of the network
+// SEC("classifier/egress")
+SEC("classifier")
+int tc_filter_traffic(struct __sk_buff* skb) {
+  bpf_debug("==========< tc/egress: Filter Traffic >==========");
+
+  void* data     = (void*) (long) skb->data;
   void* data_end = (void*) (long) skb->data_end;
 
-  struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
+  struct ethhdr* ethh = data;
 
-  // Check if the GTP header extends beyond the data end.
-  if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
-    bpf_debug("Invalid GTPU packet");
+  if ((void*) (ethh + 1) > data_end) {
+    bpf_debug("Error: Invalid Ethernet header");
     return TC_ACT_SHOT;
   }
 
-  struct gtpu_extn_pdu_session_container* gtpu_ext_h = (void*) (gtpuh + 1);
+  u16 l3_protocol = htons(ethh->h_proto);
+  bpf_debug("SDF FILTER: l3_protocol: 0x%x", l3_protocol);
 
-  // Check if the GTP extension header extends beyond the data end.
-  if ((void*) gtpu_ext_h + sizeof(*gtpu_ext_h) > data_end) {
-    bpf_debug("Invalid GTPU Extension packet");
-    return TC_ACT_SHOT;
-  }
-
-  struct iphdr* iph_inner = (void*) (ethh + 1);
-
-  if ((void*) iph_inner + sizeof(*iph_inner) > data_end) {
-    bpf_debug("Invalid Inner IP packet");
-    return TC_ACT_SHOT;
-  }
-
-  struct filter_key* key = {0};
-
-  u8 protocol = iph_inner->protocol;
-
-  key->src_ip   = iph_inner->saddr;
-  key->dst_ip   = iph_inner->daddr;
-  key->protocol = protocol;
-
-  switch (protocol) {
-    case IPPROTO_UDP: {
-      // Extract UDP header
-      struct udphdr* udph = (struct udphdr*) (iph_inner + 1);
-
-      if ((void*) (udph + 1) > data_end) {
-        bpf_debug("Invalid UDP header");
-        return TC_ACT_SHOT;
-      }
-
-      key->dst_port = udph->dest;
-      break;
-    }
-    case IPPROTO_TCP: {
-      // Extract TCP header
-      struct tcphdr* tcph = (struct tcphdr*) (iph_inner + 1);
-
-      if ((void*) (tcph + 1) > data_end) {
-        bpf_debug("Invalid TCP header");
-        return TC_ACT_SHOT;
-      }
-
-      key->dst_port = tcph->dest;
-      break;
-    }
-    default: {
-      bpf_debug("Unknown header");
-      bpf_debug("Use best effort QoS flow (i.e. default qfi)");
-      key->dst_port = 65535;
-    }
-  }
-
-  struct session_qfi* retrieved_value =
-      bpf_map_lookup_elem(&m_sdf_filter, &key);
-
-  if (retrieved_value) {
-    u8 qfi   = retrieved_value->qfi;
-    u64 seid = bpf_ntohs(retrieved_value->seid);
-
-    gtpu_ext_h->qfi = qfi;
-    u32 classid =
-        (seid << 16) |
-        ((seid * 256) + (qfi * 251 % 256));  // ( major << 16 ) | minor
-    skb->tc_classid = classid;
-    return TC_ACT_OK;
-  }
-
-  // default value qfi = 5 (NON-GBR QoS Flow)
-  skb->tc_classid = gtpu_ext_h->qfi;
-  return TC_ACT_OK;
-}
-
-/*---------------------------------------------------------------------------------------------------------------*/
-/**
- * IP SECTION.
- */
-
-/**
- * @brief Filter IPv4 header.
- *
- * @param skb The user accessible metadata for tc packet hook.
- * @param iph The IP header.
- * @return u32 The TC action.
- */
-
-static __always_inline u32
-ipv4_sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh, struct iphdr* iph) {
-  void* data_end = (void*) (long) skb->data_end;
-  u8 protocol    = iph->protocol;
-
-  switch (protocol) {
-    case IPPROTO_UDP: {
-      // Extract UDP header
-      struct udphdr* udph = (struct udphdr*) (iph + 1);
-
-      if ((void*) (udph + 1) > data_end) {
-        bpf_debug("Invalid UDP header");
-        return TC_ACT_SHOT;
-      }
-
-      if (htons(udph->dest) == GTP_UDP_PORT) {
-        bpf_printk("This is a GTP traffic");
-        return egress_sdf_filter(skb, ethh, udph);
-      }
-    }
-    default: {
-      return XDP_DROP;
-    }
-  }
-}
-
-/*---------------------------------------------------------------------------------------------------------------*/
-struct meta_info {
-  __u32 mark;
-} __attribute__((aligned(4)));
-
-/**
- * @brief Filter traffic according to ETH_TYPE
- *
- * @param skb
- * @param ethh Ethernet header
- * @return ** __inline TC taken action
- */
-static __always_inline u32
-sdf_filter(struct __sk_buff* skb, struct ethhdr* ethh) {
-  void* data_end = (void*) (long) skb->data_end;
-
-  u16 eth_type = htons(ethh->h_proto);
-  bpf_debug("Debug: eth_type:0x%x", eth_type);
-
-  switch (eth_type) {
+  switch (l3_protocol) {
     case ETH_P_IP: {
-      // Extract IP header
+      bpf_debug("SDF Filter: This is an IPv4 Packet");
+      // return ipv4_sdf_filter(skb);
+
       struct iphdr* iph = (struct iphdr*) (ethh + 1);
 
       if ((void*) (iph + 1) > data_end) {
-        bpf_debug("Invalid IPv4 header");
+        bpf_debug("Error: Invalid IPv4 header");
         return TC_ACT_SHOT;
       }
 
-      return ipv4_sdf_filter(skb, ethh, iph);
+      if (iph->protocol == IPPROTO_UDP) {
+        struct udphdr* udph = (struct udphdr*) (iph + 1);
+
+        if ((void*) (udph + 1) > data_end) {
+          bpf_debug("Error: Invalid UDP header");
+          return TC_ACT_SHOT;
+        }
+
+        if (htons(udph->dest) == GTP_UDP_PORT) {
+          bpf_debug("IPv4 SDF Filter: This is a GTP traffic");
+          // return egress_sdf_classifier(skb);
+
+          struct gtpuhdr* gtpuh = (struct gtpuhdr*) (udph + 1);
+
+          if ((void*) (gtpuh + 1) > data_end) {
+            bpf_debug("Error: Invalid GTPU packet");
+            return TC_ACT_SHOT;
+          }
+
+          struct gtpu_extn_pdu_session_container* gtpu_ext_h =
+              (struct gtpu_extn_pdu_session_container*) ((void*) (gtpuh + 1));
+
+          if ((void*) (gtpu_ext_h + 1) > data_end) {
+            bpf_debug("Error: Invalid GTPU Extension packet");
+            return TC_ACT_SHOT;
+          }
+
+          void* data_meta = (void*) (long) skb->data_meta;
+          struct session_qfi* qos_class_metadata = data_meta;
+
+          /* Check XDP gave us some data_meta */
+          if ((void*) (qos_class_metadata + 1) > data) {
+            bpf_debug("Error: Failed to load metadata from XDP");
+            return TC_ACT_SHOT;
+          }
+
+          bpf_debug(
+              "TC: Received XDP Metadata - seid: %llu, qfi: %u",
+              qos_class_metadata->seid, qos_class_metadata->qfi);
+
+          u16 minor_id = generate_minor_id(
+              qos_class_metadata->seid, qos_class_metadata->qfi);
+          __u32 classid = TC_H_MAKE(1, minor_id);
+
+          skb->tc_index   = classid;
+          skb->tc_classid = classid;
+
+          // skb->tc_index   = (1 << 16) | minor_id;
+          // skb->tc_classid = (1 << 16) | minor_id;
+
+          // skb->priority   = TC_H_MAKE(
+          //     1, minor_id);  // 1 is the HTB root handle's major number
+          bpf_debug("classid = 0x%x", classid);
+          // bpf_debug("TC: classid 0x%x", skb->tc_classid);
+          // bpf_debug("TC: indexid 0x%x", skb->tc_index);
+          return TC_ACT_OK;
+        }
+      }
+
+      return TC_ACT_SHOT;
     }
-    case ETH_P_IPV6: {
-      // TODO: Check if traitment is needed here
+    case ETH_P_IPV6:
+    case ETH_P_8021Q:
+    case ETH_P_8021AD:
+    case ETH_P_ARP:
       return TC_ACT_OK;
-    }
-    case ETH_P_8021Q: {
-      // TODO: Check if traitment is needed here
+    default:
       return TC_ACT_OK;
-    }
-    case ETH_P_8021AD: {
-      // TODO: Check if traitment is needed here
-      return TC_ACT_OK;
-    }
-    case ETH_P_ARP: {
-      // TODO: Check if traitment is needed here
-      return TC_ACT_OK;
-    }
-    default: {
-      // TODO: Check if traitment is needed here
-      return TC_ACT_OK;
-    }
   }
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//---------------------------------------------------------------------------------------------------------------
 
-SEC("tc")
-int tc_filter_traffic(struct __sk_buff* skb) {
-  bpf_debug("==========< QER Rules >==========\n");
+SEC("tc/ingress")
+int tc_redirect_traffic(struct __sk_buff* skb) {
+  bpf_debug("==========< tc/ingress: Redirect Traffic >==========");
 
-  // void *data      = (void *)(long)skb->data;
-  // void *data_meta = (void *)(long)skb->data_meta;
-  // struct meta_info *meta = data_meta;
+  void* data     = (void*) (long) skb->data;
+  void* data_end = (void*) (long) skb->data_end;
 
-  // /* Check SKB gave us some data_meta */
-  // if ((void *)(meta + 1) > data) {
-  // 	skb->mark = 41;
-  // 	 bpf_debug("No Meta_data found! Drop the packet");
-  // 	return TC_ACT_SHOT;
-  // }
+  struct session_qfi* qos_class_metadata;
+  qos_class_metadata = (struct session_qfi*) (long) skb->data_meta;
 
-  // /* Hint: See func tc_cls_act_is_valid_access() for BPF_WRITE access */
-  // skb->mark = meta->mark; /* Transfer XDP-mark to SKB-mark */
-
-  bpf_debug("TC Retrieves a Marker metadata value: %d", skb->mark);
-
-  // Check if the marker matches
-  // if (skb->mark == htonl(MARK_VALUE)) {
-  //   bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer");
-  //   return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
-  // }
-
-  // Extract Ethernet header
-  struct ethhdr* ethh = (void*) (long) skb->data;
-
-  if ((void*) (ethh + 1) > (void*) (long) skb->data_end) {
-    bpf_debug("Invalid Ethernet header");
+  /* Check XDP gave us some data_meta */
+  if ((void*) (qos_class_metadata + 1) > data) {
+    bpf_debug("Error: Failed to load metadata from XDP");
     return TC_ACT_SHOT;
   }
 
-  return sdf_filter(skb, ethh);
-}
+  struct ethhdr* ethh = data;
 
-// /*---------------------------------------------------------------------------------------------------------------*/
-
-SEC("tc")
-int tc_redirect_traffic(struct __sk_buff* skb) {
-  int key = DOWNLINK, *ifindex;
-
-  // return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
-
-  /* Lookup what ifindex to redirect packets to */
-  ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
-  if (ifindex) {
-    bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer");
-    return bpf_redirect(*ifindex, 0);
+  if ((void*) (ethh + 1) > data_end) {
+    bpf_debug("Error: Invalid Ethernet header");
+    return TC_ACT_SHOT;
   }
-  bpf_debug("TC Packets not redirected! Drop them");
-  return TC_ACT_SHOT;
+
+  u16 l3_protocol = htons(ethh->h_proto);
+  bpf_debug("INGRESS: l3_protocol: 0x%x", l3_protocol);
+
+  switch (l3_protocol) {
+    case ETH_P_IP: {
+      bpf_debug("INGRESS: This is an IPv4 Packet");
+
+      int key = DOWNLINK, *ifindex;
+      ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
+
+      if (ifindex) {
+        bpf_debug("TC_REDIRECT: Redirecting packet to N3 tc layer");
+        return bpf_redirect(*ifindex, 0);
+      }
+
+      bpf_debug("TC Packets are not redirected! Drop them");
+      return TC_ACT_SHOT;
+    }
+    case ETH_P_IPV6:
+    case ETH_P_8021Q:
+    case ETH_P_8021AD:
+    case ETH_P_ARP:
+      return TC_ACT_OK;
+    default:
+      return TC_ACT_OK;
+  }
 }
+
+//---------------------------------------------------------------------------------------------------------------
 
 char _license[] SEC("license") = "GPL";
-/*---------------------------------------------------------------------------------------------------------------*/

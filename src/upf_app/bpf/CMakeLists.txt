@@ -3,19 +3,22 @@ include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/include)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr)
+include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr_and_far)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/far)
 include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/qer)
-#include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/urr)
-#include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/bar)
-#include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/mar)
 include_directories(${SRC_TOP_DIR}/upf_app/include)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 
 add_definitions(-DKERNEL_SPACE)
 
-add_custom_target(upf_xdp_all DEPENDS pfcp_session_lookup_xdp pfcp_session_pdr_lookup_xdp far_xdp)
-add_custom_target(upf_tc_all DEPENDS qer_tc)
+if(DEFINED BPF_DEBUG)
+  if(BPF_DEBUG)
+    add_definitions(-DBPF_DEBUG)
+  endif()
+endif()
+
+add_custom_target(upf_xdp_all DEPENDS pfcp_session_lookup_xdp)
+add_custom_target(upf_tc_all DEPENDS far_tc)
 
 
 
@@ -23,10 +26,10 @@ add_custom_target(upf_tc_all DEPENDS qer_tc)
 #                       GENERATE eBPF XDP Skeletons                       #
 ###########################################################################
 function(xdp arg)
-  if (${arg} STREQUAL "pfcp_session_lookup" OR ${arg} STREQUAL "pfcp_session_pdr_lookup")
-    set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/rules/pdr")
-  elseif (${arg} STREQUAL "far")
-    set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/rules/far")
+  if (${arg} STREQUAL "pfcp_session_lookup")
+    set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/rules/pdr_and_far")
+  #elseif (${arg} STREQUAL "far")
+  #  set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/rules/far")
   else()
     message(FATAL_ERROR "Invalid arg: ${arg}")
   endif()
@@ -43,8 +46,7 @@ function(xdp arg)
 endfunction()
 
 xdp(pfcp_session_lookup)
-xdp(pfcp_session_pdr_lookup)
-xdp(far)
+#xdp(far)
 
 
 
@@ -52,7 +54,14 @@ xdp(far)
 #                       GENERATE eBPF TC Skeletons                        #
 ###########################################################################
 function(tc arg)
+  if (${arg} STREQUAL "qer")
   set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/rules/qer")
+  elseif (${arg} STREQUAL "far")
+    set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/rules/far")
+  else()
+    message(FATAL_ERROR "Invalid arg: ${arg}")
+  endif()
+  
   add_library(${arg}_tc STATIC ${source_dir}/${arg}_tc_kernel.c)
   add_custom_command(
     TARGET ${arg}_tc
@@ -65,3 +74,4 @@ function(tc arg)
 endfunction()
 
 tc(qer)
+tc(far)
