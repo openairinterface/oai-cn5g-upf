@@ -352,8 +352,8 @@ void pfcp_switch::setup_pdn_interfaces() {
       struct in6_addr addr6 = it.network_ipv6;
       addr6.s6_addr[15]     = 1;
       cmd                   = fmt::format(
-          "ip -6 addr add {}/{} dev tun{}",
-          oai::utils::conv::toString(addr6).c_str(), it.prefix_ipv6, index);
+                            "ip -6 addr add {}/{} dev tun{}",
+                            oai::utils::conv::toString(addr6).c_str(), it.prefix_ipv6, index);
       rc = system((const char*) cmd.c_str());
       // if ((it.enable_snat) && (/* SGI has IPv6 address*/)) {
       //   cmd = fmt::format(
@@ -930,14 +930,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     resp->seid = session->cp_fseid.seid;
 
     for (auto it : req->pfcp_ies.remove_pdrs) {
-      if (isBpfAccelerationEnabled) {
-        Logger::upf_app().info("Modify datapath:remove(pdr)");
-        call_datapath(
-            NULL, req, NULL, session, spSessionManager,
-            &SessionManager::SessionManager::
-                modifyBpfSession /*&SessionManager::updateBpfSession*/);
-      }
-
       remove_pdr& pdr = it;
 
       if (not session->remove(pdr, cause, offending_ie.offending_ie)) {
@@ -953,14 +945,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.remove_fars) {
-        if (isBpfAccelerationEnabled) {
-          Logger::upf_app().info("Modify datapath: remove(far)");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::
-                  modifyBpfSession /*&SessionManager::updateBpfSession*/);
-        }
-
         remove_far& far = it;
 
         if (not session->remove(far, cause, offending_ie.offending_ie)) {
@@ -978,25 +962,17 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     /*
      *  Add remove_qers
      */
-    if (isBpfAccelerationEnabled) {
-      if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
-        for (auto it : req->pfcp_ies.remove_qers) {
-          Logger::upf_app().info("Modify datapath: remove(qer)");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::
-                  modifyBpfSession /*&SessionManager::updateBpfSession*/);
+    if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+      for (auto it : req->pfcp_ies.remove_qers) {
+        remove_qer& qer = it;
 
-          remove_qer& qer = it;
-
-          if (not session->remove(qer, cause, offending_ie.offending_ie)) {
-            if (cause.cause_value ==
-                CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
-              failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_QER;
-              failed_rule.rule_id_value = qer.qer_id.second.qer_id;
-              resp->pfcp_ies.set(failed_rule);
-              break;
-            }
+        if (not session->remove(qer, cause, offending_ie.offending_ie)) {
+          if (cause.cause_value ==
+              CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
+            failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_QER;
+            failed_rule.rule_id_value = qer.qer_id.second.qer_id;
+            resp->pfcp_ies.set(failed_rule);
+            break;
           }
         }
       }
@@ -1285,7 +1261,7 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
           auto fr_ue_ip   = (struct iphdr*) malloc(sizeof(struct iphdr));
           fr_ue_ip->saddr = be32toh(fr->retrieveUEIp(be32toh(iph->saddr)));
           isInAccess      = (*it_pdr)->look_up_pack_in_access(
-              fr_ue_ip, num_bytes, r_endpoint, tunnel_id);
+                   fr_ue_ip, num_bytes, r_endpoint, tunnel_id);
         }
         if (isInAccess) {
           Logger::pfcp_switch().info(
