@@ -352,8 +352,8 @@ void pfcp_switch::setup_pdn_interfaces() {
       struct in6_addr addr6 = it.network_ipv6;
       addr6.s6_addr[15]     = 1;
       cmd                   = fmt::format(
-                            "ip -6 addr add {}/{} dev tun{}",
-                            oai::utils::conv::toString(addr6).c_str(), it.prefix_ipv6, index);
+          "ip -6 addr add {}/{} dev tun{}",
+          oai::utils::conv::toString(addr6).c_str(), it.prefix_ipv6, index);
       rc = system((const char*) cmd.c_str());
       // if ((it.enable_snat) && (/* SGI has IPv6 address*/)) {
       //   cmd = fmt::format(
@@ -1261,7 +1261,7 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
           auto fr_ue_ip   = (struct iphdr*) malloc(sizeof(struct iphdr));
           fr_ue_ip->saddr = be32toh(fr->retrieveUEIp(be32toh(iph->saddr)));
           isInAccess      = (*it_pdr)->look_up_pack_in_access(
-                   fr_ue_ip, num_bytes, r_endpoint, tunnel_id);
+              fr_ue_ip, num_bytes, r_endpoint, tunnel_id);
         }
         if (isInAccess) {
           Logger::pfcp_switch().info(
