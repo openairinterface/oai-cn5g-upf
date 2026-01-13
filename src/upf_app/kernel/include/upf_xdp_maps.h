@@ -7,15 +7,12 @@
 #include "pfcp/pfcp_pdr.h"
 #include "pfcp/pfcp_far.h"
 #include "arp_table.h"
-//#include "pfcp/pfcp_session.h"
 #include "rules_matching_pdr.h"
 #include "interfaces.h"
 #include "session_id.h"
-
+#include "upf_xdp_limits.h"
 #include <linux/bpf.h>
 #include <stdint.h>
-
-#define MAX_PDRS_PER_SESSION 32
 
 const volatile int MAX_UPF_INTERFACES SEC(".rodata");
 const volatile int MAX_UPF_REDIRECT_INTERFACES SEC(".rodata");
@@ -51,20 +48,19 @@ struct {
   __uint(max_entries, 1);
   /* max_pdrs_per_pdu_session */  // should be this: MAX_PDU_SESSIONS
   __type(key, u64);               // seid
-  __type(value, pfcp_pdr_t[MAX_PDRS_PER_SESSION]);  // should be this:
-                                                    // MAX_PDRS_PER_PDU_SESSION
-} pdrs_per_session_map SEC(".maps");                // m_session_pdrs
+  __type(value, struct pfcp_pdr[MAX_PDRS_PER_PDU_SESSION_LIMIT]);
+} pdrs_per_session_map SEC(".maps");  // m_session_pdrs
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, 1); /* max_pdrs_per_pdu_session * max_pdu_session */
+  __uint(max_entries, 1); /* max_pdrs_per_pdu_session * max_pdu_sessions */
   __type(key, struct pdrs_per_session);   // < pdr_id, seid >
   __type(value, struct rules_match_pdr);  // < FAR, QER, /* MAR, BAR, URR */ >
 } rules_match_pdr_map SEC(".maps");
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, 1); /* max_qos_enabling = max_pdu_session */
+  __uint(max_entries, 1); /* max_qos_enabling = max_pdu_sessions */
   __type(key, u64);       // seid
   __type(value, u32);     // Value type (0 for false, 1 for true)
 } session_qos_enabled_map SEC(".maps");

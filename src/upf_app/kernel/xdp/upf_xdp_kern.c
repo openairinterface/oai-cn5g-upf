@@ -310,7 +310,7 @@ static __always_inline u32 match_sdf_filter(
  */
 
 static __always_inline u32
-gtpu_encap_ipv4(struct xdp_md* ctx, pfcp_far_t* far, u8 qfi) {
+gtpu_encap_ipv4(struct xdp_md* ctx, struct pfcp_far* far, u8 qfi) {
   /* Expand headroom for GTP-U encapsulation */
   if (bpf_xdp_adjust_head(ctx, (int32_t) -GTP_ENCAPSULATED_SIZE)) {
     bpf_debug("Failed to adjust head for GTP-U encap");
@@ -506,7 +506,7 @@ gtpu_encap_ipv4(struct xdp_md* ctx, pfcp_far_t* far, u8 qfi) {
  */
 
 static __always_inline u32
-gtpu_decap_ipv4(struct xdp_md* ctx, pfcp_far_t* far) {
+gtpu_decap_ipv4(struct xdp_md* ctx, struct pfcp_far* far) {
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
 
@@ -583,11 +583,9 @@ gtpu_decap_ipv4(struct xdp_md* ctx, pfcp_far_t* far) {
   return RET_SUCCESS;
 }
 
-/* ==========================================================================
- */
-/*                        PACKET FILTER EXTRACTION */
-/* ==========================================================================
- */
+/* ========================================================================== */
+/*                        PACKET FILTER EXTRACTION                            */
+/* ========================================================================== */
 
 /**
  * @brief Extract 5-tuple from IP packet
@@ -865,9 +863,9 @@ static __always_inline struct session_id* lookup_session_n6(
  * @return Pointer to matched PDR or NULL
  */
 
-static __always_inline pfcp_pdr_t* match_pdr_n3(
+static __always_inline struct pfcp_pdr* match_pdr_n3(
     u64 seid, u32 pkt_teid, u32 pkt_ue_ip, u8 pkt_qfi) {
-  pfcp_pdr_t(*pdrs)[MAX_PDRS_PER_PDU_SESSION] =
+  struct pfcp_pdr(*pdrs)[MAX_PDRS_PER_PDU_SESSION] =
       bpf_map_lookup_elem(&pdrs_per_session_map, &seid);
 
   if (!pdrs) {
@@ -887,8 +885,9 @@ static __always_inline pfcp_pdr_t* match_pdr_n3(
    */
 
 #pragma clang loop unroll(full)
-  for (int i = 0; i < MAX_PDRS_PER_PDU_SESSION; i++) {
-    pfcp_pdr_t* pdr = &(*pdrs)[i];
+  for (int i = 0; i < MAX_PDRS_PER_PDU_SESSION_LIMIT; i++) {
+    if (i >= MAX_PDRS_PER_PDU_SESSION) break;
+    struct pfcp_pdr* pdr = &(*pdrs)[i];
 
     /* Skip invalid PDRs */
     if (pdr->pdr_id.rule_id == 0) {
@@ -896,10 +895,10 @@ static __always_inline pfcp_pdr_t* match_pdr_n3(
     }
 
     /* Retrieve PDI from PDR */
-    pdi_t pdi = pdr->pdi;
+    struct pdi pdi = pdr->pdi;
 
     /* Retrieve UE IP from PDI */
-    u32 ipaddr = bpf_htonl(pdi.ue_ip_address.ipv4_address);
+    u32 ipaddr = bpf_htonl(pdi.ue_ip_address.ipv4_address.s_addr);
 
     /* Check UE IP */
     if (ipaddr != pkt_ue_ip) {
@@ -957,9 +956,9 @@ static __always_inline pfcp_pdr_t* match_pdr_n3(
  * @param pkt_filter Packet 5-tuple for SDF matching
  * @return Pointer to matched PDR or NULL
  */
-static __always_inline pfcp_pdr_t* match_pdr_n6(
+static __always_inline struct pfcp_pdr* match_pdr_n6(
     u64 seid, u32 pkt_ue_ip, u8* qfi_out, struct packet_filter* pkt_filter) {
-  pfcp_pdr_t(*pdrs)[MAX_PDRS_PER_PDU_SESSION] =
+  struct pfcp_pdr(*pdrs)[MAX_PDRS_PER_PDU_SESSION] =
       bpf_map_lookup_elem(&pdrs_per_session_map, &seid);
 
   if (!pdrs) {
@@ -979,8 +978,9 @@ static __always_inline pfcp_pdr_t* match_pdr_n6(
    */
 
 #pragma clang loop unroll(full)
-  for (int i = 0; i < MAX_PDRS_PER_PDU_SESSION; i++) {
-    pfcp_pdr_t* pdr = &(*pdrs)[i];
+  for (int i = 0; i < MAX_PDRS_PER_PDU_SESSION_LIMIT; i++) {
+    if (i >= MAX_PDRS_PER_PDU_SESSION) break;
+    struct pfcp_pdr* pdr = &(*pdrs)[i];
 
     /* Skip invalid PDRs */
     if (pdr->pdr_id.rule_id == 0) {
@@ -988,10 +988,10 @@ static __always_inline pfcp_pdr_t* match_pdr_n6(
     }
 
     /* Retrieve PDI from PDR */
-    pdi_t pdi = pdr->pdi;
+    struct pdi pdi = pdr->pdi;
 
     /* Retrieve UE IP from PDI */
-    u32 ipaddr = bpf_htonl(pdi.ue_ip_address.ipv4_address);
+    u32 ipaddr = bpf_htonl(pdi.ue_ip_address.ipv4_address.s_addr);
 
     /* Check UE IP */
     /* TODO:
@@ -1093,8 +1093,8 @@ static __always_inline pfcp_pdr_t* match_pdr_n6(
 
 static __always_inline u32
 apply_far_n3(struct xdp_md* ctx, struct pdrs_per_session pdr_key) {
-  struct rules_match_pdr* rules = {0};
-  u64 seid                      = pdr_key.seid;
+  struct rules_match_pdr* rules    = {0};
+  __attribute__((unused)) u64 seid = pdr_key.seid;
 
   /* Lookup the rules associated with this PDR */
   rules = bpf_map_lookup_elem(&rules_match_pdr_map, &pdr_key);
@@ -1105,7 +1105,7 @@ apply_far_n3(struct xdp_md* ctx, struct pdrs_per_session pdr_key) {
   }
 
   /* Get FAR from rules */
-  pfcp_far_t* far = &rules->far;
+  struct pfcp_far* far = &rules->far;
 
   if (!far || far->far_id.far_id == 0) {
     bpf_debug("Invalid FAR for session %llu", seid);
@@ -1125,13 +1125,13 @@ apply_far_n3(struct xdp_md* ctx, struct pdrs_per_session pdr_key) {
    * that the FORWARD bit is set.
    */
   /* Priority 1: Check DROP flag (highest priority) */
-  if (action & APPLY_ACTION_DROP) {
+  if (action & PFCP_APPLY_ACTION_DROP) {
     bpf_debug("FAR action: DROP (seid=%llu)", seid);
     return RET_DROP;
   }
 
   /* Priority 2: Check FORWARD flag */
-  if (action & APPLY_ACTION_FORW) {
+  if (action & PFCP_APPLY_ACTION_FORW) {
     bpf_debug("FAR action: FORWARD - decapsulating GTP-U (seid=%llu)", seid);
     int ret = gtpu_decap_ipv4(ctx, far);
     switch (ret) {
@@ -1152,21 +1152,21 @@ apply_far_n3(struct xdp_md* ctx, struct pdrs_per_session pdr_key) {
   }
 
   /* Priority 3: Check BUFFER flag */
-  if (action & APPLY_ACTION_BUFF) {
+  if (action & PFCP_APPLY_ACTION_BUFF) {
     bpf_debug("FAR action: BUFFER - not supported, dropping (seid=%llu)", seid);
     return RET_DROP;
   }
 
   /* Priority 4: Check NOTIFY_CP flag (informational, may be combined with
    * others) */
-  if (action & APPLY_ACTION_NOCP) {
+  if (action & PFCP_APPLY_ACTION_NOCP) {
     bpf_debug("FAR action: NOTIFY_CP - not supported (seid=%llu)", seid);
     /* Note: In full implementation, this would trigger notification to control
      * plane */
   }
 
   /* Priority 5: Check DUPLICATE flag */
-  if (action & APPLY_ACTION_DUPL) {
+  if (action & PFCP_APPLY_ACTION_DUPL) {
     bpf_debug("FAR action: DUPLICATE - not supported (seid=%llu)", seid);
     /* Note: In full implementation, this would duplicate the packet */
   }
@@ -1220,7 +1220,7 @@ apply_far_n6(struct xdp_md* ctx, struct pdrs_per_session pdr_key, u8 qfi) {
   }
 
   /* Get FAR from rules */
-  pfcp_far_t* far = &rules->far;
+  struct pfcp_far* far = &rules->far;
   if (!far || far->far_id.far_id == 0) {
     bpf_debug("Invalid FAR for session %llu", seid);
     return RET_FAILURE;
@@ -1239,13 +1239,13 @@ apply_far_n6(struct xdp_md* ctx, struct pdrs_per_session pdr_key, u8 qfi) {
    * that the FORWARD bit is set.
    */
   /* Priority 1: Check DROP flag (highest priority) */
-  if (action & APPLY_ACTION_DROP) {
+  if (action & PFCP_APPLY_ACTION_DROP) {
     bpf_debug("FAR action: DROP (seid=%llu)", seid);
     return RET_DROP;
   }
 
   /* Priority 2: Check FORWARD flag */
-  if (action & APPLY_ACTION_FORW) {
+  if (action & PFCP_APPLY_ACTION_FORW) {
     bpf_debug(
         "FAR action: FORWARD - encapsulating GTP-U (seid=%llu, qfi=%u)", seid,
         qfi);
@@ -1266,7 +1266,7 @@ apply_far_n6(struct xdp_md* ctx, struct pdrs_per_session pdr_key, u8 qfi) {
         }
 
         /* QoS enabled - check gate status */
-        pfcp_qer_t* qer = &rules->qer;
+        struct pfcp_qer* qer = &rules->qer;
         if (!qer) {
           bpf_debug("QER not found for session %llu", seid);
           return RET_FAILURE;
@@ -1275,11 +1275,15 @@ apply_far_n6(struct xdp_md* ctx, struct pdrs_per_session pdr_key, u8 qfi) {
         /* Check downlink gate status (3GPP TS 29.244 R16 Section 8.2.41) */
         if (qer->gate_status.dl_gate == 0) {
           /* Gate OPEN - pass to TC for QoS shaping */
-          bpf_debug("DL gate OPEN for session %llu - passing to TC", seid);
+          bpf_debug(
+              "DL gate OPEN for session %llu, QFI %u - passing to TC", seid,
+              qer->qos_flow_identifier.qfi);
           return RET_PASS;
         } else {
           /* Gate CLOSED - drop packet */
-          bpf_debug("DL gate CLOSED for session %llu - dropping", seid);
+          bpf_debug(
+              "DL gate CLOSED for session %llu, QFI %u - dropping", seid,
+              qer->qos_flow_identifier.qfi);
           return RET_DROP;
         }
       }
@@ -1298,7 +1302,7 @@ apply_far_n6(struct xdp_md* ctx, struct pdrs_per_session pdr_key, u8 qfi) {
   }
 
   /* Priority 3: Check BUFFER flag */
-  if (action & APPLY_ACTION_BUFF) {
+  if (action & PFCP_APPLY_ACTION_BUFF) {
     bpf_debug(
         "FAR action: BUFFER - not supported in XDP, dropping (seid=%llu)",
         seid);
@@ -1306,13 +1310,13 @@ apply_far_n6(struct xdp_md* ctx, struct pdrs_per_session pdr_key, u8 qfi) {
   }
 
   /* Priority 4: Check NOTIFY_CP flag (informational) */
-  if (action & APPLY_ACTION_NOCP) {
+  if (action & PFCP_APPLY_ACTION_NOCP) {
     bpf_debug("FAR action: NOTIFY_CP - not supported in XDP (seid=%llu)", seid);
     /* Note: In full implementation, this would trigger CP notification */
   }
 
   /* Priority 5: Check DUPLICATE flag */
-  if (action & APPLY_ACTION_DUPL) {
+  if (action & PFCP_APPLY_ACTION_DUPL) {
     bpf_debug("FAR action: DUPLICATE - not supported in XDP (seid=%llu)", seid);
     /* Note: In full implementation, this would duplicate the packet */
   }
@@ -1387,9 +1391,9 @@ int xdp_uplink(struct xdp_md* ctx) {
     // return XDP_PASS;
   }
 
-  u64 seid    = session->seid;
-  u32 teid_ul = bpf_htonl(session->teid_ul);
-  u32 teid_dl = bpf_htonl(session->teid_dl);
+  u64 seid                            = session->seid;
+  u32 teid_ul                         = bpf_htonl(session->teid_ul);
+  __attribute__((unused)) u32 teid_dl = bpf_htonl(session->teid_dl);
   bpf_debug(
       "Session found ( seid, teid_ul, teid_dl ) : ( %llu, %u, %u )", seid,
       teid_ul, teid_dl);
@@ -1400,7 +1404,8 @@ int xdp_uplink(struct xdp_md* ctx) {
     |--- (Find matching PDR of the PFCP session with highest precedence) ---|
     |-----------------------------------------------------------------------|
     */
-  pfcp_pdr_t* pdr_high_precedence = match_pdr_n3(seid, teid_ul, ue_ip, qfi);
+  struct pfcp_pdr* pdr_high_precedence =
+      match_pdr_n3(seid, teid_ul, ue_ip, qfi);
 
   if (!pdr_high_precedence) {
     bpf_debug(
@@ -1506,9 +1511,9 @@ int xdp_qos(struct xdp_md* ctx) {
     return xdp_stats_record_action(ctx, XDP_PASS);
   }
 
-  u64 seid    = session->seid;
-  u32 teid_ul = bpf_htonl(session->teid_ul);
-  u32 teid_dl = bpf_htonl(session->teid_dl);
+  u64 seid                            = session->seid;
+  u32 __attribute__((unused)) teid_ul = bpf_htonl(session->teid_ul);
+  __attribute__((unused)) u32 teid_dl = bpf_htonl(session->teid_dl);
   bpf_debug(
       "Session found ( seid, teid_ul, teid_dl ) : ( %llu, %u, %u )", seid,
       teid_ul, teid_dl);
@@ -1520,7 +1525,7 @@ int xdp_qos(struct xdp_md* ctx) {
    |-----------------------------------------------------------------------|
    */
   u8 qfi = 0;
-  pfcp_pdr_t* pdr_high_precedence =
+  struct pfcp_pdr* pdr_high_precedence =
       match_pdr_n6(seid, ue_ip, &qfi, &pkt_filter);
 
   if (!pdr_high_precedence) {
@@ -1630,9 +1635,9 @@ int xdp_downlink(struct xdp_md* ctx) {
     return xdp_stats_record_action(ctx, XDP_PASS);
   }
 
-  u64 seid    = session->seid;
-  u32 teid_ul = bpf_htonl(session->teid_ul);
-  u32 teid_dl = bpf_htonl(session->teid_dl);
+  u64 seid                            = session->seid;
+  __attribute__((unused)) u32 teid_ul = bpf_htonl(session->teid_ul);
+  __attribute__((unused)) u32 teid_dl = bpf_htonl(session->teid_dl);
   bpf_debug(
       "Session found ( seid, teid_ul, teid_dl ) : ( %llu, %u, %u )", seid,
       teid_ul, teid_dl);
@@ -1644,7 +1649,7 @@ int xdp_downlink(struct xdp_md* ctx) {
      |-----------------------------------------------------------------------|
      */
   u8 qfi = 0;
-  pfcp_pdr_t* pdr_high_precedence =
+  struct pfcp_pdr* pdr_high_precedence =
       match_pdr_n6(seid, ue_ip, &qfi, &pkt_filter);
 
   if (!pdr_high_precedence) {
