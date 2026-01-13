@@ -1,81 +1,45 @@
-#ifndef __FSEID_H__
-#define __FSEID_H__
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 
-#include "linux/custom_types.h"
-#include "ie/ie_base.h"
+/*
+ * PFCP F-SEID (Fully Qualified Session Endpoint Identifier)
+ * Reference: 3GPP TS 29.244 Section 8.2.37
+ */
 
-#ifdef KERNEL_SPACE
+#ifndef _PFCP_FSEID_H
+#define _PFCP_FSEID_H
+
+#include <linux/types.h>
 #include <linux/in.h>
 #include <linux/in6.h>
-#else
-#include <netinet/in.h>
-#endif
+#include "ie_base.h"
 
-#ifdef __cplusplus
-#include <cstdint>  // include this header for uint64_t
-#endif
-
-// typedef u64 seid_t;
-
-//-------------------------------------
-// 8.2.37 F-SEID
-typedef struct fseid {
-  u8 spare : 6;
-  u8 v4 : 1;
-  u8 v6 : 1;
-  u64 seid;
+/**
+ * struct fseid - Fully Qualified Session Endpoint Identifier IE
+ * @base: Common IE header
+ * @v6: IPv6 address present
+ * @v4: IPv4 address present
+ * @spare: Spare bits
+ * @seid: Session Endpoint Identifier (network byte order)
+ * @ipv4_address: IPv4 address of CP function
+ * @ipv6_address: IPv6 address of CP function
+ *
+ * Uniquely identifies a PFCP session endpoint with IP address.
+ * SEID is unique per CP function node.
+ *
+ * Flags layout:
+ *   7   6   5   4   3   2   1   0
+ * +---+---+---+---+---+---+---+---+
+ * |    spare              | v4| v6|
+ * +---+---+---+---+---+---+---+---+
+ */
+struct fseid {
+  // struct ie_base base;
+  __u8 spare : 6, v4 : 1, v6 : 1;
+  __u64 seid;
   struct in_addr ipv4_address;
   struct in6_addr ipv6_address;
-
-#ifdef __cplusplus
-  bool operator==(const struct fseid& i) const {
-    if ((i.seid == this->seid) && (i.v4 == this->v4) &&
-        (i.ipv4_address.s_addr == this->ipv4_address.s_addr) &&
-        (i.v6 == this->v6) &&
-        (i.ipv6_address.s6_addr32[0] == this->ipv6_address.s6_addr32[0]) &&
-        (i.ipv6_address.s6_addr32[1] == this->ipv6_address.s6_addr32[1]) &&
-        (i.ipv6_address.s6_addr32[2] == this->ipv6_address.s6_addr32[2]) &&
-        (i.ipv6_address.s6_addr32[3] == this->ipv6_address.s6_addr32[3])) {
-      return true;
-    } else {
-      return false;
-    }
-  };
-  bool operator<(const struct fseid& i) const {
-    if (i.seid < this->seid)
-      return true;
-    else if (i.seid > this->seid)
-      return false;
-    if (i.v4 == this->v4) {
-      if (i.ipv4_address.s_addr > this->ipv4_address.s_addr)
-        return true;
-      else if (i.ipv4_address.s_addr < this->ipv4_address.s_addr)
-        return false;
-    } else if (this->v4)
-      return true;
-    if (i.v6 == this->v6) {
-      uint64_t i64 = ((uint64_t) i.ipv6_address.s6_addr32[0] << 32) |
-                     ((uint64_t) i.ipv6_address.s6_addr32[1]);
-      uint64_t this64 = ((uint64_t) this->ipv6_address.s6_addr32[0] << 32) |
-                        ((uint64_t) this->ipv6_address.s6_addr32[1]);
-
-      if (i64 < this64)
-        return true;
-      else if (i64 > this64)
-        return false;
-      i64 = ((uint64_t) i.ipv6_address.s6_addr32[2] << 32) |
-            ((uint64_t) i.ipv6_address.s6_addr32[3]);
-      this64 = ((uint64_t) this->ipv6_address.s6_addr32[2] << 32) |
-               ((uint64_t) this->ipv6_address.s6_addr32[3]);
-      if (i64 < this64)
-        return true;
-      else if (i64 > this64)
-        return false;
-    } else if (this->v6)
-      return true;
-    return false;
-  };
-#endif
-} fseid_t;
+} __attribute__((packed));
 
 #endif  // __FSEID_H__

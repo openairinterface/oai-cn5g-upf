@@ -14,14 +14,12 @@ bool pfcp_qer::update(const pfcp::update_qer& update, uint8_t& cause_value) {
   if (update.get(qer_id.second)) qer_id.first = true;
   if (update.get(qer_correlation_id.second)) qer_correlation_id.first = true;
   if (update.get(gate_status.second)) gate_status.first = true;
-  if (update.get(mbr.second)) mbr.first = true;
-  if (update.get(gbr.second)) gbr.first = true;
-  if (update.get(qfi.second)) qfi.first = true;
-  if (update.get(rqi.second)) rqi.first = true;
-  // TODO: Packet Rate, DL Flow Level Marking
-  // if (update.get(packet_rate.second)) packet_rate.first = true;
-  // if (update.get(dl_flow_level_marking.second)) dl_flow_level_marking.first =
-  // true;
-
+  if (update.get(maximum_bitrate.second)) maximum_bitrate.first = true;
+  if (update.get(guaranteed_bitrate.second)) guaranteed_bitrate.first = true;
+  if (update.get(qos_flow_id.second)) qos_flow_id.first = true;
+  if (update.get(reflective_qos.second)) reflective_qos.first = true;
+  if (update.get(paging_policy_indicator.second))
+    paging_policy_indicator.first = true;
+  if (update.get(averaging_window.second)) averaging_window.first = true;
   return true;
 }

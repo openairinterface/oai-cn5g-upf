@@ -1,14 +1,30 @@
-#if !defined(IE_NETWORK_INTANCE_H)
-#define IE_NETWORK_INTANCE_H
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 
-#include "linux/custom_types.h"
-#include "ie/ie_base.h"
+/*
+ * PFCP Network Instance
+ * Reference: 3GPP TS 29.244 Section 8.2.4
+ */
 
-#define NETWORK_INSTANCE_MAX_SIZE 100
-typedef struct network_instance {
-  ie_base_t base;
-  /*char*/ s8 network_instance[NETWORK_INSTANCE_MAX_SIZE];
+#ifndef _PFCP_NETWORK_INSTANCE_H
+#define _PFCP_NETWORK_INSTANCE_H
 
-} network_instance_t;
+#include <linux/types.h>
+#include "ie_base.h"
+#include "pfcp_limits.h"
 
-#endif  // IE_NETWORK_INTANCE_H
+/**
+ * struct network_instance - Network Instance IE
+ * @base: Common IE header
+ * @network_instance: Network instance name (APN/DNN format)
+ *
+ * Identifies the PDN/Data Network (e.g., "internet", "ims").
+ */
+struct network_instance {
+  // struct ie_base base;
+  char network_instance[PFCP_NETWORK_INSTANCE_MAX_LEN];
+} __attribute__((packed));
+;
+
+#endif /* _PFCP_NETWORK_INSTANCE_H */

@@ -112,7 +112,7 @@ void upf_app_task(void* args_p) {
 
 //------------------------------------------------------------------------------
 upf_app::upf_app(const std::string& config_file) {
-  Logger::upf_app().startup("Starting...");
+  Logger::upf_app().startup("UPF initialization started");
   upf_cfg.execute();
 
   if (itti_inst->create_task(
@@ -147,7 +147,7 @@ upf_app::upf_app(const std::string& config_file) {
     Logger::upf_app().error("Cannot create UPF_NRF: %s", e.what());
     throw;
   }
-  Logger::upf_app().startup("Started");
+  // Logger::upf_app().startup("Started");
 }
 
 //------------------------------------------------------------------------------
@@ -197,8 +197,26 @@ void upf_app::handle_itti_msg(std::shared_ptr<itti_n3_echo_request> m) {
 //------------------------------------------------------------------------------
 void upf_app::handle_itti_msg(
     std::shared_ptr<itti_n4_session_establishment_request> m) {
+  Logger::upf_app().info("");
+  // Logger::upf_app().info(
+  //     "┌───────────────────────────────────────────────────────────────────────"
+  //     "──────┐");
   Logger::upf_app().info(
-      "Received N4_SESSION_ESTABLISHMENT_REQUEST seid " SEID_FMT " ", m->seid);
+      "╔═══════════════════════════════════════════════════════════════════════"
+      "══════╗");
+  Logger::upf_app().info(
+      "│             Received N4_SESSION_ESTABLISHMENT_REQUEST seid"
+      " " SEID_FMT
+      "        "
+      "      │",
+      m->seid);
+  Logger::upf_app().info(
+      "╚═══════════════════════════════════════════════════════════════════════"
+      "══════╝");
+  // Logger::upf_app().info(
+  //     "└───────────────────────────────────────────────────────────────────────"
+  //     "──────┘");
+
   itti_n4_session_establishment_response* n4_resp =
       new itti_n4_session_establishment_response(TASK_UPF_APP, TASK_UPF_N4);
   pfcp_switch_inst->handle_pfcp_session_establishment_request(m, n4_resp);
@@ -224,8 +242,26 @@ void upf_app::handle_itti_msg(
 //------------------------------------------------------------------------------
 void upf_app::handle_itti_msg(
     std::shared_ptr<itti_n4_session_modification_request> m) {
+  Logger::upf_app().info("");
+  // Logger::upf_app().info(
+  //     "┌───────────────────────────────────────────────────────────────────────"
+  //     "──────┐");
   Logger::upf_app().info(
-      "Received N4_SESSION_MODIFICATION_REQUEST seid " SEID_FMT " ", m->seid);
+      "╔═══════════════════════════════════════════════════════════════════════"
+      "══════╗");
+  Logger::upf_app().info(
+      "│             Received N4_SESSION_MODIFICATION_REQUEST seid"
+      " " SEID_FMT
+      "        "
+      "       │",
+      m->seid);
+  Logger::upf_app().info(
+      "╚═══════════════════════════════════════════════════════════════════════"
+      "══════╝");
+  // Logger::upf_app().info(
+  //     "└───────────────────────────────────────────────────────────────────────"
+  //     "──────┘");
+
   itti_n4_session_modification_response* n4_resp =
       new itti_n4_session_modification_response(TASK_UPF_APP, TASK_UPF_N4);
   pfcp_switch_inst->handle_pfcp_session_modification_request(m, n4_resp);
@@ -245,8 +281,25 @@ void upf_app::handle_itti_msg(
 //------------------------------------------------------------------------------
 void upf_app::handle_itti_msg(
     std::shared_ptr<itti_n4_session_deletion_request> m) {
+  Logger::upf_app().info("");
+  // Logger::upf_app().info(
+  //     "┌───────────────────────────────────────────────────────────────────────"
+  //     "──────┐");
   Logger::upf_app().info(
-      "Received N4_SESSION_DELETION_REQUEST seid " SEID_FMT " ", m->seid);
+      "╔═══════════════════════════════════════════════════════════════════════"
+      "══════╗");
+  Logger::upf_app().info(
+      "│             Received N4_SESSION_DELETION_REQUEST seid"
+      " " SEID_FMT
+      "        "
+      "       │",
+      m->seid);
+  Logger::upf_app().info(
+      "╚═══════════════════════════════════════════════════════════════════════"
+      "══════╝");
+  // Logger::upf_app().info(
+  //     "└───────────────────────────────────────────────────────────────────────"
+  //     "──────┘");
   itti_n4_session_deletion_response* n4_resp =
       new itti_n4_session_deletion_response(TASK_UPF_APP, TASK_UPF_N4);
   pfcp_switch_inst->handle_pfcp_session_deletion_request(m, n4_resp);
@@ -267,6 +320,23 @@ void upf_app::handle_itti_msg(
 //------------------------------------------------------------------------------
 void upf_app::handle_itti_msg(
     std::shared_ptr<itti_n4_session_report_response> m) {
+  Logger::upf_app().info("");
+  // Logger::upf_app().info(
+  //     "┌───────────────────────────────────────────────────────────────────────"
+  //     "──────┐");
   Logger::upf_app().info(
-      "Received N4_SESSION_REPORT_RESPONSE seid " SEID_FMT " ", m->seid);
+      "╔═══════════════════════════════════════════════════════════════════════"
+      "══════╗");
+  Logger::upf_app().info(
+      "│             Received N4_SESSION_REPORT_RESPONSE seid"
+      " " SEID_FMT
+      "        "
+      "       │",
+      m->seid);
+  Logger::upf_app().info(
+      "╚═══════════════════════════════════════════════════════════════════════"
+      "══════╝");
+  // Logger::upf_app().info(
+  //     "└───────────────────────────────────────────────────────────────────────"
+  //     "──────┘");
 }

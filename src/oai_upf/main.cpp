@@ -34,6 +34,7 @@
 #include <UserPlaneComponent.h>
 
 #include "helpers/ConfigLoader.hpp"
+#include "startup_banner.hpp"
 
 using namespace oai::upf::app;
 using namespace oai::config;
@@ -102,11 +103,15 @@ void setup_bpf() {
   std::string sUDPInterface = upf_cfg.n6.if_name;
   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
   Logger::upf_app().info("Non-GTP interface: %s", sUDPInterface.c_str());
+  Logger::upf_app().info(
+      "Configured UPF interfaces : N3 (GTP) = %s, N6 (Non-GTP) = %s, N4 (PFCP) "
+      "= %s",
+      sGTPInterface.c_str(), sUDPInterface.c_str(), upf_cfg.n4.if_name.c_str());
 
-  UserPlaneComponent::getInstance().setup(sGTPInterface, sUDPInterface);
+  UserPlaneComponent::GetInstance().Setup(sGTPInterface, sUDPInterface);
 
-  auto pUPF_XDPProgram = UserPlaneComponent::getInstance().getUPF_XDPProgram();
-  pUPF_XDPProgram->setFramedRouting(upf_cfg.enable_fr);
+  auto pUPF_XDPProgram = UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
+  pUPF_XDPProgram->SetFramedRouting(upf_cfg.enable_fr);
 }
 
 //------------------------------------------------------------------------------
@@ -137,6 +142,8 @@ int main(int argc, char** argv) {
   Logger::set_lttng(static_cast<bool>(lttng_config_yaml->is_lttng_active()));
 
   Logger::init("upf", Options::getlogStdout(), Options::getlogRotFilelog());
+
+  DisplayStartupBanner();
 
   Logger::upf_app().startup("Options parsed");
 
@@ -192,6 +199,7 @@ int main(int argc, char** argv) {
 
   if (isBpfAccelerationEnabled) {
     setup_bpf();
+    // DisplayDataPlaneStatus(upf_cfg);
   }
   // once all udp servers initialized
   io_service.run();

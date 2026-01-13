@@ -1,12 +1,24 @@
-#if !defined(IE_IE_BASE_H)
-#define IE_IE_BASE_H
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 
-#include "linux/custom_types.h"
+#ifndef _PFCP_IE_BASE_H
+#define _PFCP_IE_BASE_H
 
-#define GTPV1U_MSG_HEADER_MIN_SIZE 8
-typedef struct ie_base {
-  u16 type;
-  u16 length;
-} ie_base_t;
+#include <linux/types.h>
 
-#endif  // IE_IE_BASE_H
+/**
+ * struct ie_base - Base structure for all Information Elements
+ * @type: IE type identifier (network byte order)
+ * @length: Length of IE value in octets, excluding the 4-byte header (network
+ * byte order)
+ *
+ * All PFCP IEs start with this 4-byte header structure.
+ * Reference: 3GPP TS 29.244
+ */
+struct ie_base {
+  __u16 type;
+  __u16 length;
+} __attribute__((packed));
+
+#endif /* _PFCP_IE_BASE_H */

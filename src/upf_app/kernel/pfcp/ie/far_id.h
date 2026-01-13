@@ -1,14 +1,28 @@
-#ifndef __FAR_ID_H__
-#define __FAR_ID_H__
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 
-#include "linux/custom_types.h"
-#include "ie/ie_base.h"
+/*
+ * PFCP FAR ID (Forwarding Action Rule ID)
+ * Reference: 3GPP TS 29.244 Section 8.2.74
+ */
 
-//-------------------------------------
-// 8.2.74 FAR ID
-typedef struct far_id {
-  ie_base_t base;
-  u32 far_id;
-} far_id_t;
+#ifndef _PFCP_FAR_ID_H
+#define _PFCP_FAR_ID_H
 
-#endif  // __FAR_ID_H__
+#include <linux/types.h>
+#include "ie_base.h"
+
+/**
+ * struct far_id - Forwarding Action Rule ID
+ * @base: Common IE header
+ * @far_id: FAR identifier (network byte order)
+ *
+ * Uniquely identifies a Forwarding Action Rule within a PFCP session.
+ */
+struct far_id {
+  // struct ie_base base;
+  __u32 far_id;
+} __attribute__((packed));
+
+#endif /* _PFCP_FAR_ID_H */

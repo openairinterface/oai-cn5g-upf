@@ -1,21 +1,30 @@
 /*
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
+
+/**
+ * @file BPFProgram.cpp
+ * @brief Implementation of BPF program base class
+ */
+
 #include "BPFProgram.h"
 #include "logger.hpp"
 
-/*---------------------------------------------------------------------------------------------------------------*/
-u_int32_t BPFProgram::sIdCounter = 1;
-BPFProgram::BPFProgram(/* args */) : mId(sIdCounter) {
-  sIdCounter++;
-  Logger::upf_app().info("BPFProgram %d is created!!!", mId);
+// Initialize static ID counter starting from 1
+uint32_t BPFProgram::id_counter_ = 1;
+
+//------------------------------------------------------------------------------
+BPFProgram::BPFProgram() : id_(id_counter_) {
+  id_counter_++;
+  Logger::upf_app().info("BPF Program %u created", id_);
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-BPFProgram::~BPFProgram() {}
-
-/*---------------------------------------------------------------------------------------------------------------*/
-uint32_t BPFProgram::getId() const {
-  return mId;
+//------------------------------------------------------------------------------
+BPFProgram::~BPFProgram() {
+  Logger::upf_app().debug("BPF Program %u destroyed", id_);
 }
-/*---------------------------------------------------------------------------------------------------------------*/
+
+//------------------------------------------------------------------------------
+uint32_t BPFProgram::GetId() const {
+  return id_;
+}

@@ -1,14 +1,28 @@
-#ifndef __QER_ID_H__
-#define __QER_ID_H__
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 
-#include "linux/custom_types.h"
-#include "ie/ie_base.h"
+/*
+ * PFCP QER ID
+ * Reference: 3GPP TS 29.244 Section 8.2.75
+ */
 
-//-------------------------------------
-// 8.2.75 QER ID
-typedef struct qer_id {
-  ie_base_t base;
-  u32 qer_id;
-} qer_id_t;
+#ifndef _PFCP_QER_ID_H
+#define _PFCP_QER_ID_H
 
-#endif  // __QER_ID_H__
+#include <linux/types.h>
+#include "ie_base.h"
+
+/**
+ * struct qer_id - QoS Enforcement Rule ID
+ * @base: Common IE header
+ * @qer_id: QER identifier (network byte order)
+ *
+ * Uniquely identifies a QoS Enforcement Rule within a PFCP session.
+ */
+struct qer_id {
+  // struct ie_base base;
+  __u32 qer_id;
+} __attribute__((packed));
+
+#endif /* _PFCP_QER_ID_H */

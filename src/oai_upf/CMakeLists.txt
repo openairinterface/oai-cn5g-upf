@@ -192,9 +192,13 @@ if(GIT_FOUND)
   )
 endif()
 
+string(TIMESTAMP BUILD_DATE "%Y-%m-%d")
+string(TIMESTAMP BUILD_TIME "%H:%M:%S")
 
 add_definitions("-DPACKAGE_VERSION=\"Branch: ${GIT_BRANCH} Abrev. Hash: ${GIT_COMMIT_HASH} Date: ${GIT_COMMIT_DATE}\"")
 add_definitions("-DPACKAGE_BUGREPORT=\"openaircn-user@lists.eurecom.fr\"")
+add_definitions("-DBUILD_DATE=\"${BUILD_DATE}\"")
+add_definitions("-DBUILD_TIME=\"${BUILD_TIME}\"")
 
 ###############################################################################
 # Include CMake modules to find other library
@@ -284,6 +288,7 @@ include_directories(${SRC_TOP_DIR}/upf_app/kernel/pfcp)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel/xdp)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel/include)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
+include_directories(${SRC_TOP_DIR}/upf_app/utils)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/upf_app/framed_routing)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
@@ -303,6 +308,7 @@ link_directories(${SRC_TOP_DIR}/../build/ext/libbpf/src)
 
 add_executable(upf
   ${SRC_TOP_DIR}/oai_upf/main.cpp
+  ${SRC_TOP_DIR}/upf_app/utils/startup_banner.cpp
   ${SRC_TOP_DIR}/oai_upf/options.cpp
   ${SRC_TOP_DIR}/itti/itti.cpp
   ${SRC_TOP_DIR}/itti/itti_msg.cpp

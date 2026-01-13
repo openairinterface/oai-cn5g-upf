@@ -43,20 +43,14 @@ xdp(upf)
 function(tc arg)
   if (${arg} STREQUAL "qer")
   set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/tc")
-  elseif (${arg} STREQUAL "far")
-    set(source_dir "${CMAKE_CURRENT_SOURCE_DIR}/rules/far")
-  else()
-    message(FATAL_ERROR "Invalid arg: ${arg}")
-  endif()
-
-  add_library(${arg}_tc STATIC ${source_dir}/${arg}_tc_kernel.c)
+  add_library(${arg}_tc STATIC ${source_dir}/${arg}_tc_kern.c)
   add_custom_command(
     TARGET ${arg}_tc
     PRE_LINK
     COMMAND ${CMAKE_COMMAND} -E make_directory ${OPENAIRCN_DIR}/build/upf/build/skel
-    COMMAND bpftool gen skeleton $<TARGET_OBJECTS:${arg}_tc> > ${OPENAIRCN_DIR}/build/upf/build/skel/${arg}_tc_kernel_skel.h
-    COMMAND sed -i '9i\#define typeof\(x\) __typeof__\(x\)' ${OPENAIRCN_DIR}/build/upf/build/skel/${arg}_tc_kernel_skel.h
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${arg}_tc_kernel.c
+    COMMAND bpftool gen skeleton $<TARGET_OBJECTS:${arg}_tc> > ${OPENAIRCN_DIR}/build/upf/build/skel/${arg}_tc_kern_skel.h
+    COMMAND sed -i '9i\#define typeof\(x\) __typeof__\(x\)' ${OPENAIRCN_DIR}/build/upf/build/skel/${arg}_tc_kern_skel.h
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${arg}_tc_kern.c
   )
 endfunction()
 
