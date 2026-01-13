@@ -142,7 +142,7 @@ install_libbpf_from_git() {
 #-------------------------------------------------------------------------------
 check_enable_bpf_datapath() {
   # Parse the YAML Config file and check if enable_bpf_datapath is set to yes
-  enable_bpf_datapath=$(grep -A 3 "upf:" $CONFIG_FILE | grep "enable_bpf_datapath:" | awk '{print $2}')
+  enable_bpf_datapath=$(grep -A 50 "upf:" $CONFIG_FILE | grep "enable_bpf_datapath:" | head -1 | awk '{print $2}')
   if [ "$enable_bpf_datapath" == "yes" ]; then
     return 0
   else
@@ -154,7 +154,7 @@ check_enable_bpf_datapath() {
 #-------------------------------------------------------------------------------
 check_enable_qos() {
   # Parse the YAML Config file and check if enable_qos is set to yes
-  enable_qos=$(grep -A 3 "upf:" $CONFIG_FILE | grep "enable_qos:" | awk '{print $2}')
+  enable_qos=$(grep -A 50 "upf:" $CONFIG_FILE | grep "enable_qos:" | head -1 | awk '{print $2}')
   if [ "$enable_qos" == "yes" ]; then
     return 0
   else
