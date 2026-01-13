@@ -25,13 +25,15 @@ include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model.cmake)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel/include)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel/pfcp)
+include_directories(${SRC_TOP_DIR}/upf_app/utils)
 
-
+set(CMAKE_C_FLAGS "-Wno-gnu-variable-sized-type-not-at-end")
 ##############################################################
 #                          XDP                               #
 ##############################################################
 include_directories(${SRC_TOP_DIR}/upf_app/kernel/xdp)
 include_directories(${SRC_TOP_DIR}/upf_app/control)
+include_directories(${SRC_TOP_DIR}/upf_app/include)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 
 set(GTP_INTERFACE $ENV{GTP_INTERFACE})
