@@ -1,77 +1,1092 @@
+/*
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this
+ * file except in compliance with the License. You may obtain a copy of the
+ * License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
+ */
+
+/**
+ * @file SessionManager.cpp
+ * @brief PFCP Session Manager Implementation
+ * @author OpenAirInterface
+ * @date 2025
+ *
+ * Implements complete CRUD operations for PFCP sessions, PDRs, FARs, and QERs
+ * according to 3GPP TS 29.244 specifications.
+ */
+
 #include "SessionManager.h"
-#include <SessionProgramManager.h>
+#include "SessionProgramManager.h"
 #include <upf_xdp_user.h>
-#include <bits/stdc++.h>  //sort
-//#include <pfcp/pfcp_session.h>
+#include <algorithm>
+#include <inttypes.h>
 #include <wrappers/BPFMaps.h>
 #include "logger.hpp"
 #include "upf_config.hpp"
+#include "pfcp_session.hpp"
+#include "pfcp_pdr.hpp"
+#include "pfcp_far.hpp"
+#include "pfcp_qer.hpp"
+#include "itti_msg_n4.hpp"
 
 using namespace oai::config;
 extern upf_config upf_cfg;
 
-//---------------------------------------------------------------------------------------------------------------
-enum class Direction { Uplink, Downlink };
-
-//---------------------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Constructors & Destructor
+//------------------------------------------------------------------------------
 SessionManager::SessionManager() {}
 
-//---------------------------------------------------------------------------------------------------------------
-SessionManager::~SessionManager() {}
+//------------------------------------------------------------------------------
+SessionManager::SessionManager(
+    std::shared_ptr<SessionProgramManager> session_program_manager)
+    : session_program_manager_(session_program_manager) {
+  if (!session_program_manager) {
+    throw std::invalid_argument(
+        "Session Manager: program_manager cannot be null");
+  }
 
-//---------------------------------------------------------------------------------------------------------------
-// Helper function to find the Uplink TEID to update
-uint64_t SessionManager::findUplinkTeid(
-    uint64_t seid,
-    const std::vector<std::shared_ptr<pfcp::pfcp_session>>& sessions) {
-  for (const auto& session : sessions) {
-    if (session->get_up_seid() != seid) {
-      continue;  // Skip to the next session if not matching seid
+  Logger::upf_app().debug("Session Manager initialized");
+}
+
+//------------------------------------------------------------------------------
+SessionManager::~SessionManager() {
+  std::lock_guard<std::mutex> lock(sessions_mutex_);
+  sessions_.clear();
+  seid_to_session_.clear();
+  Logger::upf_app().debug("Session Manager destroyed");
+}
+
+//------------------------------------------------------------------------------
+// Session Lifecycle Management
+// Reference: 3GPP TS 29.244 Section 5.2
+//------------------------------------------------------------------------------
+
+SessionOperationResult SessionManager::CreateSession(
+    std::shared_ptr<pfcp::pfcp_session> session) {
+  if (!session) {
+    Logger::upf_app().error(
+        "[N4] Create Session: Invalid session pointer (null)");
+    return SessionOperationResult(false, "Invalid session pointer", 0);
+  }
+
+  uint64_t seid = session->get_up_seid();
+  Logger::upf_app().debug(
+      "[N4] Create session: seid " SEID_FMT " - Validating session context",
+      seid);
+
+  try {
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+
+    // Check if session already exists
+    if (seid_to_session_.find(seid) != seid_to_session_.end()) {
+      Logger::upf_app().error(
+          "[N4] Create Session: seid " SEID_FMT
+          "- Session already exists in registry",
+          seid);
+      return SessionOperationResult(false, "Session already exists", seid);
     }
 
-    for (const auto& pdr : session->pdrs) {
-      pfcp::pdi pdi;
-      if (pdr->get(pdi)) {
-        pfcp::source_interface_t sourceInterface;
-        if (pdi.get(sourceInterface) &&
-            sourceInterface.interface_value == INTERFACE_VALUE_ACCESS) {
-          return session->teid_uplink.teid;
+    // Store session
+    sessions_.push_back(session);
+    seid_to_session_[seid] = session;
+
+    // Categorize and sort PDRs (3GPP TS 29.244 Section 8.2.29 - Precedence)
+    CategorizePdrs(session);
+    SortPdrs(session->pdrs_uplink);
+    SortPdrs(session->pdrs_downlink);
+
+    // Log session creation (TEIDs are per-PDR/FAR, not per-session)
+    Logger::upf_app().debug(
+        "[N4] Create Session: seid " SEID_FMT
+        " - Creating eBPF data-path pipeline",
+        seid);
+
+    // Log uplink PDRs and their TEIDs
+    if (!session->pdrs_uplink.empty()) {
+      Logger::upf_app().debug(
+          "  → Uplink PDRs (%zu rules):", session->pdrs_uplink.size());
+
+      for (const auto& pdr : session->pdrs_uplink) {
+        uint32_t teid_ul = GetUplinkTeidFromPdr(pdr);
+        uint16_t pdr_id  = pdr->pdr_id.rule_id;
+
+        if (teid_ul != 0) {
+          Logger::upf_app().debug(
+              "    • PDR %u: Local F-TEID " TEID_FMT " (UPF listens on N3)",
+              pdr_id, teid_ul);
+        } else {
+          Logger::upf_app().warn(
+              "    • PDR %u: No F-TEID found (possible configuration issue)",
+              pdr_id);
         }
       }
     }
-  }
+    // Log downlink PDRs and their associated FAR TEIDs
+    if (!session->pdrs_downlink.empty()) {
+      Logger::upf_app().debug(
+          "  → Downlink PDRs (%zu rules):", session->pdrs_downlink.size());
 
-  return 0;  // Return 0 if teidToUpdate is not found
+      for (const auto& pdr : session->pdrs_downlink) {
+        uint16_t pdr_id = pdr->pdr_id.rule_id;
+
+        // Get associated FAR
+        std::shared_ptr<pfcp::pfcp_far> far;
+        if (GetFarForPdr(session, pdr, far)) {
+          uint32_t far_id = far->far_id.far_id;
+          uint32_t teid   = GetDownlinkTeidFromFar(far);
+
+          if (teid != 0) {
+            Logger::upf_app().debug(
+                "    • PDR %u → FAR %u: Remote F-TEID " TEID_FMT
+                " (send to gNB on N3)",
+                pdr_id, far_id, teid);
+          } else {
+            Logger::upf_app().debug(
+                "    • PDR %u → FAR %u: No GTP-U encapsulation (forwarding to "
+                "N6)",
+                pdr_id, far_id);
+          }
+        } else {
+          Logger::upf_app().warn(
+              "    • PDR %u: No associated FAR found", pdr_id);
+        }
+      }
+    }
+
+    // Create BPF pipeline
+    session_program_manager_->CreatePipeline(session);
+
+    Logger::upf_app().info(
+        "[N4] Create Session: seid 0x%lx - eBPF data-path pipeline created "
+        "successfully",
+        seid);
+    return SessionOperationResult(true, "Session created", seid);
+
+  } catch (const std::exception& e) {
+    Logger::upf_app().error(
+        "[N4] Create Session: seid 0x%lx - Exception: %s", seid, e.what());
+    return SessionOperationResult(
+        false, std::string("Exception: ") + e.what(), seid);
+  }
 }
 
-//---------------------------------------------------------------------------------------------------------------
-void SessionManager::categorizePDRs(
+//------------------------------------------------------------------------------
+SessionOperationResult SessionManager::UpdateSession(
     std::shared_ptr<pfcp::pfcp_session> session) {
-  auto& logger = Logger::upf_n4();
+  if (!session) {
+    Logger::upf_app().error(
+        "[N4] Update Session: Invalid session pointer (null)");
+    return SessionOperationResult(false, "Invalid session pointer", 0);
+  }
 
+  uint64_t seid = session->get_up_seid();
+
+  try {
+    // Find existing session
+    auto it = seid_to_session_.find(seid);
+    if (it == seid_to_session_.end()) {
+      Logger::upf_app().error(
+          "[N4] Update Session: seid " SEID_FMT " - Session not found", seid);
+      return SessionOperationResult(false, "Session not found", seid);
+    }
+
+    // Update session reference
+    it->second = session;
+
+    // Recategorize and sort PDRs
+    CategorizePdrs(session);
+    SortPdrs(session->pdrs_uplink);
+    SortPdrs(session->pdrs_downlink);
+
+    Logger::upf_app().debug(
+        "[N4] Update Session: seid " SEID_FMT
+        " - Modifying eBPF data-path pipeline",
+        seid);
+
+    // uint32_t teid_dl = RetrieveDownlinkTeid(session);
+    // uint32_t teid_ul = FindUplinkTeid(seid);
+
+    // Log updated PDR/FAR rules
+    if (!session->pdrs_uplink.empty()) {
+      Logger::upf_app().debug(
+          "  → Updated Uplink PDRs (%zu rules):", session->pdrs_uplink.size());
+
+      for (const auto& pdr : session->pdrs_uplink) {
+        uint32_t teid   = GetUplinkTeidFromPdr(pdr);
+        uint16_t pdr_id = pdr->pdr_id.rule_id;
+
+        if (teid != 0) {
+          Logger::upf_app().debug(
+              "    • PDR %u: F-TEID " TEID_FMT, pdr_id, teid);
+        }
+      }
+    }
+
+    if (!session->pdrs_downlink.empty()) {
+      Logger::upf_app().debug(
+          "  → Updated Downlink PDRs (%zu rules):",
+          session->pdrs_downlink.size());
+
+      for (const auto& pdr : session->pdrs_downlink) {
+        uint16_t pdr_id = pdr->pdr_id.rule_id;
+        std::shared_ptr<pfcp::pfcp_far> far;
+
+        if (GetFarForPdr(session, pdr, far)) {
+          uint32_t teid   = GetDownlinkTeidFromFar(far);
+          uint32_t far_id = far->far_id.far_id;
+
+          if (teid != 0) {
+            Logger::upf_app().debug(
+                "    • PDR %u → FAR %u: TEID " TEID_FMT, pdr_id, far_id, teid);
+          }
+        }
+      }
+    }
+
+    // Modify BPF pipeline (pass the entire session, not individual TEIDs)
+    session_program_manager_->ModifyPipeline(session);
+
+    Logger::upf_app().info(
+        "[N4] Update Session: seid " SEID_FMT
+        " - eBPF data-path pipeline updated successfully",
+        seid);
+
+    return SessionOperationResult(true, "Session updated", seid);
+
+  } catch (const std::exception& e) {
+    Logger::upf_app().error(
+        "[N4] Update Session: seid " SEID_FMT " - Exception: %s", seid,
+        e.what());
+    return SessionOperationResult(false, e.what(), seid);
+  }
+}
+//------------------------------------------------------------------------------
+SessionOperationResult SessionManager::DeleteSession(uint64_t seid) {
+  try {
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+
+    auto it = seid_to_session_.find(seid);
+    if (it == seid_to_session_.end()) {
+      Logger::upf_app().warn(
+          "[N4] Delete Session: seid " SEID_FMT "-Session not found", seid);
+      return SessionOperationResult(false, "Session not found", seid);
+    }
+
+    auto session = it->second;
+
+    // Log deletion with PDR/FAR details
+    Logger::upf_app().debug(
+        "[N4] Delete Session: seid " SEID_FMT
+        " - Deleting eBPF data-path pipeline",
+        seid);
+
+    // Log what's being deleted
+    int uplink_pdrs   = session->pdrs_uplink.size();
+    int downlink_pdrs = session->pdrs_downlink.size();
+    int total_pdrs    = session->pdrs.size();
+    int total_fars    = session->fars.size();
+    int total_qers    = session->qers.size();
+
+    Logger::upf_app().debug(
+        "  → Removing: %d PDR(s) (%d UL, %d DL), %d FAR(s), %d QER(s)",
+        total_pdrs, uplink_pdrs, downlink_pdrs, total_fars, total_qers);
+
+    // Log TEIDs being removed (for debugging)
+    for (const auto& pdr : session->pdrs_uplink) {
+      uint32_t teid = GetUplinkTeidFromPdr(pdr);
+      if (teid != 0) {
+        Logger::upf_app().debug(
+            "    • Removing uplink TEID " TEID_FMT " (PDR %u)", teid,
+            pdr->pdr_id.rule_id);
+      }
+    }
+
+    for (const auto& pdr : session->pdrs_downlink) {
+      std::shared_ptr<pfcp::pfcp_far> far;
+      if (GetFarForPdr(session, pdr, far)) {
+        uint32_t teid = GetDownlinkTeidFromFar(far);
+        if (teid != 0) {
+          Logger::upf_app().debug(
+              "    • Removing downlink TEID " TEID_FMT " (PDR %u → FAR %u)",
+              teid, pdr->pdr_id.rule_id, far->far_id.far_id);
+        }
+      }
+    }
+
+    // Remove from BPF pipeline
+    Logger::upf_app().info(
+        "[eBPF] Remove Pipeline - Cleaning up pipeline for session " SEID_FMT,
+        seid);
+
+    session_program_manager_->RemovePipeline(seid);
+
+    Logger::upf_app().info(
+        "[N4] Delete Session: seid " SEID_FMT
+        " - eBPF data-path pipeline deleted successfully",
+        seid);
+
+    // Remove from maps
+    seid_to_session_.erase(it);
+
+    // Remove from vector
+    sessions_.erase(
+        std::remove_if(
+            sessions_.begin(), sessions_.end(),
+            [seid](const std::shared_ptr<pfcp::pfcp_session>& s) {
+              return s->get_up_seid() == seid;
+            }),
+        sessions_.end());
+
+    Logger::upf_app().info(
+        "[N4] Delete Session: seid " SEID_FMT
+        " - Session removed from registry",
+        seid);
+
+    return SessionOperationResult(true, "Session deleted", seid);
+
+  } catch (const std::exception& e) {
+    Logger::upf_app().error(
+        "[N4] Delete Session: seid " SEID_FMT " - Exception: %s", seid,
+        e.what());
+    return SessionOperationResult(
+        false, std::string("Exception: ") + e.what(), seid);
+  }
+}
+
+//------------------------------------------------------------------------------
+std::shared_ptr<pfcp::pfcp_session> SessionManager::GetSession(
+    uint64_t seid) const {
+  std::lock_guard<std::mutex> lock(sessions_mutex_);
+  auto it = seid_to_session_.find(seid);
+  return (it != seid_to_session_.end()) ? it->second : nullptr;
+}
+
+//------------------------------------------------------------------------------
+std::vector<std::shared_ptr<pfcp::pfcp_session>>
+SessionManager::GetAllSessions() const {
+  std::lock_guard<std::mutex> lock(sessions_mutex_);
+  return sessions_;
+}
+
+//------------------------------------------------------------------------------
+// N4 Message Handlers
+// Reference: 3GPP TS 29.244 Section 6
+//------------------------------------------------------------------------------
+
+SessionOperationResult SessionManager::EstablishSession(
+    std::shared_ptr<pfcp::pfcp_session> session,
+    itti_n4_session_establishment_request* est_req,
+    itti_n4_session_modification_request* mod_req,
+    itti_n4_session_deletion_request* del_req) {
+  // Logger::upf_app().error(
+  //     "EstablishSession START: this=%p, session_program_manager_=%p,
+  //     xdp_program_=%p", (void*) this, (void*) session_program_manager_.get(),
+  //     (void*) xdp_program_.get());
+  uint64_t seid = session->get_up_seid();
+  Logger::upf_app().debug("Establish Session seid " SEID_FMT, seid);
+
+  if (session->pdrs.empty()) {
+    Logger::upf_app().error("No PDRs found in session " SEID_FMT, seid);
+    return SessionOperationResult(false, "No PDRs in session", seid);
+  }
+
+  return CreateSession(session);
+}
+
+//------------------------------------------------------------------------------
+// 3GPP TS 29.244 Section 7.5.4.2 - PFCP Session Modification Request
+SessionOperationResult SessionManager::ModifySession(
+    std::shared_ptr<pfcp::pfcp_session> session,
+    itti_n4_session_establishment_request* est_req,
+    itti_n4_session_modification_request* mod_req,
+    itti_n4_session_deletion_request* del_req) {
+  if (!mod_req) {
+    return SessionOperationResult(false, "Modification request is null", 0);
+  }
+
+  uint64_t seid = session->get_up_seid();
+  Logger::upf_app().debug("ModifySession() seid " SEID_FMT, seid);
+
+  try {
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+
+    auto it = seid_to_session_.find(seid);
+    if (it == seid_to_session_.end()) {
+      return SessionOperationResult(false, "Session not found", seid);
+    }
+
+    // Handle Create operations (3GPP TS 29.244 Section 8.2.2, 8.2.3, 8.2.4)
+    // (already done in pfcp_switch)
+    // if (!mod_req->pfcp_ies.create_pdrs.empty())
+    // {
+    //   Logger::upf_app().debug(
+    //       "Adding %zu new PDRs", mod_req->pfcp_ies.create_pdrs.size());
+    //   for (const auto& pdr : mod_req->pfcp_ies.create_pdrs) {
+    //     session->pdrs.push_back(std::make_shared<pfcp::pfcp_pdr>(pdr));
+    //   }
+    // }
+
+    // if (!mod_req->pfcp_ies.create_fars.empty()) {
+    //   Logger::upf_app().debug(
+    //       "Adding %zu new FARs", mod_req->pfcp_ies.create_fars.size());
+    //   for (const auto& far : mod_req->pfcp_ies.create_fars) {
+    //     session->fars.push_back(std::make_shared<pfcp::pfcp_far>(far));
+    //   }
+    // }
+
+    // if (!mod_req->pfcp_ies.create_qers.empty()) {
+    //   Logger::upf_app().debug(
+    //       "Adding %zu new QERs", mod_req->pfcp_ies.create_qers.size());
+    //   for (const auto& qer : mod_req->pfcp_ies.create_qers) {
+    //     session->qers.push_back(std::make_shared<pfcp::pfcp_qer>(qer));
+    //   }
+    // }
+
+    // Handle Update operations (3GPP TS 29.244 Section 8.2.9, 8.2.10, 8.2.11)
+    size_t updated_pdrs = HandlePdrUpdates(session, mod_req);
+    size_t updated_fars = HandleFarUpdates(session, mod_req);
+    size_t updated_qers = HandleQerUpdates(session, mod_req);
+
+    // Handle Remove operations (3GPP TS 29.244 Section 8.2.16, 8.2.17, 8.2.18)
+    size_t removed_pdrs = HandlePdrRemoval(session, mod_req);
+    size_t removed_fars = HandleFarRemoval(session, mod_req);
+    size_t removed_qers = HandleQerRemoval(session, mod_req);
+
+    Logger::upf_app().info("[N4] Session Modification: seid 0x%lx", seid);
+
+    // Show created rules
+    if (mod_req->pfcp_ies.create_pdrs.size() > 0 ||
+        mod_req->pfcp_ies.create_fars.size() > 0 ||
+        mod_req->pfcp_ies.create_qers.size() > 0) {
+      Logger::upf_app().info(
+          "  └─ Created: %zu PDRs, %zu FARs, %zu QERs",
+          mod_req->pfcp_ies.create_pdrs.size(),
+          mod_req->pfcp_ies.create_fars.size(),
+          mod_req->pfcp_ies.create_qers.size());
+    }
+
+    // Show updated rules
+    if (updated_pdrs > 0 || updated_fars > 0 || updated_qers > 0) {
+      Logger::upf_app().info(
+          "  └─ Updated: %zu PDRs, %zu FARs, %zu QERs", updated_pdrs,
+          updated_fars, updated_qers);
+    }
+
+    // Show removed rules
+    if (removed_pdrs > 0 || removed_fars > 0 || removed_qers > 0) {
+      Logger::upf_app().info(
+          "  └─ Removed: %zu PDRs, %zu FARs, %zu QERs", removed_pdrs,
+          removed_fars, removed_qers);
+    }
+    // Update the session
+    Logger::upf_app().debug(
+        "[N4] Session Modification: seid 0x%lx - Applying pipeline updates",
+        seid);
+
+    auto result = UpdateSession(session);
+
+    if (result.success) {
+      Logger::upf_app().info(
+          "[N4] Session Modification: seid 0x%lx - "
+          "Completed successfully [Status: %s]",
+          seid, result.message.c_str());
+    } else {
+      Logger::upf_app().error(
+          "[N4] Session Modification: seid 0x%lx - "
+          "Failed [Reason: %s]",
+          seid, result.message.c_str());
+    }
+
+    return result;
+
+  } catch (const std::exception& e) {
+    Logger::upf_app().error(
+        "Failed to modify session " SEID_FMT ": %s", seid, e.what());
+    return SessionOperationResult(
+        false, std::string("Exception: ") + e.what(), seid);
+  }
+}
+//------------------------------------------------------------------------------
+// 3GPP TS 29.244 Section 7.5.5.2 - PFCP Session Deletion Request
+SessionOperationResult SessionManager::RemoveSession(
+    std::shared_ptr<pfcp::pfcp_session> session,
+    itti_n4_session_establishment_request* est_req,
+    itti_n4_session_modification_request* mod_req,
+    itti_n4_session_deletion_request* del_req) {
+  uint64_t seid = session->get_up_seid();
+  Logger::upf_app().info("RemoveSession() seid " SEID_FMT, seid);
+
+  return DeleteSession(seid);
+}
+
+//------------------------------------------------------------------------------
+// PDR Management - CRUD Operations
+// Reference: 3GPP TS 29.244 Section 5.2.1 - Packet Detection Rule
+//------------------------------------------------------------------------------
+
+// 3GPP TS 29.244 Section 8.2.2 - Create PDR
+bool SessionManager::AddPdr(
+    uint64_t seid, std::shared_ptr<pfcp::pfcp_pdr> pdr) {
+  if (!pdr) {
+    Logger::upf_app().error("AddPdr: null PDR");
+    return false;
+  }
+
+  try {
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+
+    auto session = GetSession(seid);
+    if (!session) {
+      Logger::upf_app().error("AddPdr: session " SEID_FMT " not found", seid);
+      return false;
+    }
+
+    // Add PDR to session
+    session->pdrs.push_back(pdr);
+
+    // Re-categorize and sort by precedence
+    CategorizePdrs(session);
+    SortPdrs(session->pdrs_uplink);
+    SortPdrs(session->pdrs_downlink);
+
+    // Update BPF maps
+    session_program_manager_->CreatePipeline(session);
+
+    Logger::upf_app().info(
+        "Added PDR %u to session " SEID_FMT, pdr->pdr_id.rule_id, seid);
+    return true;
+
+  } catch (const std::exception& e) {
+    Logger::upf_app().error("AddPdr failed: %s", e.what());
+    return false;
+  }
+}
+
+//------------------------------------------------------------------------------
+// 3GPP TS 29.244 Section 8.2.9 - Update PDR
+bool SessionManager::UpdatePdr(
+    uint64_t seid, std::shared_ptr<pfcp::pfcp_pdr> pdr) {
+  if (!pdr) {
+    Logger::upf_app().error("UpdatePdr: null PDR");
+    return false;
+  }
+
+  try {
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+
+    auto session = GetSession(seid);
+    if (!session) {
+      Logger::upf_app().error(
+          "UpdatePdr: session " SEID_FMT " not found", seid);
+      return false;
+    }
+
+    // Find and update PDR
+    uint16_t pdr_id = pdr->pdr_id.rule_id;
+    bool found      = false;
+
+    for (auto& existing_pdr : session->pdrs) {
+      if (existing_pdr->pdr_id.rule_id == pdr_id) {
+        existing_pdr = pdr;
+        found        = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      Logger::upf_app().error(
+          "UpdatePdr: PDR %u not found in session " SEID_FMT, pdr_id, seid);
+      return false;
+    }
+
+    // Re-categorize and update BPF maps
+    CategorizePdrs(session);
+    SortPdrs(session->pdrs_uplink);
+    SortPdrs(session->pdrs_downlink);
+    session_program_manager_->ModifyPipeline(session);
+
+    Logger::upf_app().info("Updated PDR %u in session " SEID_FMT, pdr_id, seid);
+    return true;
+
+  } catch (const std::exception& e) {
+    Logger::upf_app().error("UpdatePdr failed: %s", e.what());
+    return false;
+  }
+}
+
+//------------------------------------------------------------------------------
+// 3GPP TS 29.244 Section 8.2.16 - Remove PDR
+bool SessionManager::RemovePdr(uint64_t seid, uint16_t pdr_id) {
+  try {
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+
+    auto session = GetSession(seid);
+    if (!session) {
+      Logger::upf_app().error(
+          "RemovePdr: session " SEID_FMT " not found", seid);
+      return false;
+    }
+
+    // Remove PDR from all lists
+    auto remove_from = [pdr_id](auto& vec) {
+      vec.erase(
+          std::remove_if(
+              vec.begin(), vec.end(),
+              [pdr_id](const auto& p) { return p->pdr_id.rule_id == pdr_id; }),
+          vec.end());
+    };
+
+    remove_from(session->pdrs);
+    remove_from(session->pdrs_uplink);
+    remove_from(session->pdrs_downlink);
+
+    // Update BPF maps
+    SortPdrs(session->pdrs_uplink);
+    SortPdrs(session->pdrs_downlink);
+    session_program_manager_->ModifyPipeline(session);
+
+    Logger::upf_app().info(
+        "Removed PDR %u from session " SEID_FMT, pdr_id, seid);
+    return true;
+
+  } catch (const std::exception& e) {
+    Logger::upf_app().error("RemovePdr failed: %s", e.what());
+    return false;
+  }
+}
+
+//------------------------------------------------------------------------------
+// FAR Management - CRUD Operations
+// Reference: 3GPP TS 29.244 Section 5.2.2 - Forwarding Action Rule
+//------------------------------------------------------------------------------
+
+// 3GPP TS 29.244 Section 8.2.3 - Create FAR
+bool SessionManager::AddFar(
+    uint64_t seid, std::shared_ptr<pfcp::pfcp_far> far) {
+  if (!far) {
+    Logger::upf_app().error("AddFar: null FAR");
+    return false;
+  }
+
+  try {
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+
+    auto session = GetSession(seid);
+    if (!session) {
+      Logger::upf_app().error("AddFar: session " SEID_FMT " not found", seid);
+      return false;
+    }
+
+    session->fars.push_back(far);
+
+    // Update BPF maps
+    session_program_manager_->CreatePipeline(session);
+
+    Logger::upf_app().info(
+        "Added FAR %u to session " SEID_FMT, far->far_id.far_id, seid);
+    return true;
+
+  } catch (const std::exception& e) {
+    Logger::upf_app().error("AddFar failed: %s", e.what());
+    return false;
+  }
+}
+
+//------------------------------------------------------------------------------
+// 3GPP TS 29.244 Section 8.2.10 - Update FAR
+bool SessionManager::UpdateFar(
+    uint64_t seid, std::shared_ptr<pfcp::pfcp_far> far) {
+  if (!far) {
+    Logger::upf_app().error("UpdateFar: null FAR");
+    return false;
+  }
+
+  try {
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+
+    auto session = GetSession(seid);
+    if (!session) {
+      Logger::upf_app().error(
+          "UpdateFar: session " SEID_FMT " not found", seid);
+      return false;
+    }
+
+    // Find and update FAR
+    uint32_t far_id = far->far_id.far_id;
+    bool found      = false;
+
+    for (auto& existing_far : session->fars) {
+      if (existing_far->far_id.far_id == far_id) {
+        existing_far = far;
+        found        = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      Logger::upf_app().error(
+          "UpdateFar: FAR %u not found in session " SEID_FMT, far_id, seid);
+      return false;
+    }
+
+    // Update BPF maps
+    session_program_manager_->ModifyPipeline(session);
+
+    Logger::upf_app().info("Updated FAR %u in session " SEID_FMT, far_id, seid);
+    return true;
+
+  } catch (const std::exception& e) {
+    Logger::upf_app().error("UpdateFar failed: %s", e.what());
+    return false;
+  }
+}
+
+//------------------------------------------------------------------------------
+// 3GPP TS 29.244 Section 8.2.17 - Remove FAR
+bool SessionManager::RemoveFar(uint64_t seid, uint32_t far_id) {
+  try {
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+
+    auto session = GetSession(seid);
+    if (!session) {
+      Logger::upf_app().error(
+          "RemoveFar: session " SEID_FMT " not found", seid);
+      return false;
+    }
+
+    // Remove FAR
+    session->fars.erase(
+        std::remove_if(
+            session->fars.begin(), session->fars.end(),
+            [far_id](const auto& f) { return f->far_id.far_id == far_id; }),
+        session->fars.end());
+
+    // Update BPF maps
+    session_program_manager_->ModifyPipeline(session);
+
+    Logger::upf_app().info(
+        "Removed FAR %u from session " SEID_FMT, far_id, seid);
+    return true;
+
+  } catch (const std::exception& e) {
+    Logger::upf_app().error("RemoveFar failed: %s", e.what());
+    return false;
+  }
+}
+
+//------------------------------------------------------------------------------
+// QER Management - CRUD Operations
+// Reference: 3GPP TS 29.244 Section 5.2.4 - QoS Enforcement Rule
+//------------------------------------------------------------------------------
+
+// 3GPP TS 29.244 Section 8.2.4 - Create QER
+bool SessionManager::AddQer(
+    uint64_t seid, std::shared_ptr<pfcp::pfcp_qer> qer) {
+  if (!qer) {
+    Logger::upf_app().error("AddQer: null QER");
+    return false;
+  }
+
+  try {
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+
+    auto session = GetSession(seid);
+    if (!session) {
+      Logger::upf_app().error("AddQer: session " SEID_FMT " not found", seid);
+      return false;
+    }
+
+    session->qers.push_back(qer);
+
+    // Re-categorize to update uplink/downlink QERs
+    CategorizePdrs(session);
+
+    // Update BPF maps
+    session_program_manager_->CreatePipeline(session);
+
+    Logger::upf_app().info(
+        "Added QER %u to session " SEID_FMT, qer->qer_id.second.qer_id, seid);
+    return true;
+
+  } catch (const std::exception& e) {
+    Logger::upf_app().error("AddQer failed: %s", e.what());
+    return false;
+  }
+}
+
+//------------------------------------------------------------------------------
+// 3GPP TS 29.244 Section 8.2.11 - Update QER
+bool SessionManager::UpdateQer(
+    uint64_t seid, std::shared_ptr<pfcp::pfcp_qer> qer) {
+  if (!qer) {
+    Logger::upf_app().error("UpdateQer: null QER");
+    return false;
+  }
+
+  try {
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+
+    auto session = GetSession(seid);
+    if (!session) {
+      Logger::upf_app().error(
+          "UpdateQer: session " SEID_FMT " not found", seid);
+      return false;
+    }
+
+    // Find and update QER
+    uint32_t qer_id = qer->qer_id.second.qer_id;
+    bool found      = false;
+
+    for (auto& existing_qer : session->qers) {
+      if (existing_qer->qer_id.second.qer_id == qer_id) {
+        existing_qer = qer;
+        found        = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      Logger::upf_app().error(
+          "UpdateQer: QER %u not found in session " SEID_FMT, qer_id, seid);
+      return false;
+    }
+
+    // Re-categorize and update BPF maps
+    CategorizePdrs(session);
+    session_program_manager_->ModifyPipeline(session);
+
+    Logger::upf_app().info("Updated QER %u in session " SEID_FMT, qer_id, seid);
+    return true;
+
+  } catch (const std::exception& e) {
+    Logger::upf_app().error("UpdateQer failed: %s", e.what());
+    return false;
+  }
+}
+
+//------------------------------------------------------------------------------
+// 3GPP TS 29.244 Section 8.2.18 - Remove QER
+bool SessionManager::RemoveQer(uint64_t seid, uint32_t qer_id) {
+  try {
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+
+    auto session = GetSession(seid);
+    if (!session) {
+      Logger::upf_app().error(
+          "RemoveQer: session " SEID_FMT " not found", seid);
+      return false;
+    }
+
+    // Remove QER from all lists
+    auto remove_from = [qer_id](auto& vec) {
+      vec.erase(
+          std::remove_if(
+              vec.begin(), vec.end(),
+              [qer_id](const auto& q) {
+                return q->qer_id.second.qer_id == qer_id;
+              }),
+          vec.end());
+    };
+
+    remove_from(session->qers);
+    remove_from(session->qers_uplink);
+    remove_from(session->qers_downlink);
+
+    // Update BPF maps
+    session_program_manager_->ModifyPipeline(session);
+
+    Logger::upf_app().info(
+        "Removed QER %u from session " SEID_FMT, qer_id, seid);
+    return true;
+
+  } catch (const std::exception& e) {
+    Logger::upf_app().error("RemoveQer failed: %s", e.what());
+    return false;
+  }
+}
+
+//------------------------------------------------------------------------------
+// Helper Methods
+//------------------------------------------------------------------------------
+
+bool SessionManager::GetFarForPdr(
+    std::shared_ptr<pfcp::pfcp_session> session,
+    std::shared_ptr<pfcp::pfcp_pdr> pdr,
+    std::shared_ptr<pfcp::pfcp_far>& out_far) const {
+  pfcp::far_id_t far_id;
+  return (pdr->get(far_id) && session->get(far_id.far_id, out_far));
+}
+
+//------------------------------------------------------------------------------
+bool SessionManager::GetQerForPdr(
+    std::shared_ptr<pfcp::pfcp_session> session,
+    std::shared_ptr<pfcp::pfcp_pdr> pdr,
+    std::shared_ptr<pfcp::pfcp_qer>& out_qer) const {
+  pfcp::qer_id_t qer_id;
+  return (pdr->get(qer_id) && session->get(qer_id.qer_id, out_qer));
+}
+
+//------------------------------------------------------------------------------
+std::shared_ptr<pfcp::pfcp_qer> SessionManager::FindQer(
+    std::shared_ptr<pfcp::pfcp_session> session, uint32_t qer_id) const {
+  for (auto& qer : session->qers) {
+    if (qer->qer_id.second.qer_id == qer_id) {
+      return qer;
+    }
+  }
+  return nullptr;
+}
+
+//------------------------------------------------------------------------------
+// Extract uplink TEID directly from PDR (3GPP TS 29.244 Section 8.2.3)
+// This gets the local F-TEID that the UPF listens on for uplink traffic
+//------------------------------------------------------------------------------
+uint32_t SessionManager::GetUplinkTeidFromPdr(
+    std::shared_ptr<pfcp::pfcp_pdr> pdr) {
+  if (!pdr) {
+    Logger::upf_app().error("GetUplinkTeidFromPdr: null PDR pointer");
+    return 0;
+  }
+
+  pfcp::pdi pdi;
+  if (!pdr->get(pdi)) {
+    Logger::upf_app().debug(
+        "GetUplinkTeidFromPdr: PDR %u has no PDI", pdr->pdr_id.rule_id);
+    return 0;
+  }
+
+  // Check if this is an uplink PDR (source interface = ACCESS)
+  pfcp::source_interface_t si;
+  if (!pdi.get(si)) {
+    Logger::upf_app().debug(
+        "GetUplinkTeidFromPdr: PDR %u has no source interface",
+        pdr->pdr_id.rule_id);
+    return 0;
+  }
+
+  if (si.interface_value != pfcp::INTERFACE_VALUE_ACCESS) {
+    // This is not an uplink PDR, return 0
+    return 0;
+  }
+
+  // Get F-TEID from PDI (local F-TEID that UPF listens on)
+  pfcp::fteid_t fteid;
+  if (pdi.get(fteid)) {
+    return fteid.teid;
+  }
+
+  Logger::upf_app().warn(
+      "GetUplinkTeidFromPdr: PDR %u is uplink but has no F-TEID",
+      pdr->pdr_id.rule_id);
+  return 0;
+}
+
+//------------------------------------------------------------------------------
+// Extract downlink TEID directly from FAR (3GPP TS 29.244 Section 8.2.74)
+// This gets the remote F-TEID to use when sending GTP-U packets to gNB
+//------------------------------------------------------------------------------
+uint32_t SessionManager::GetDownlinkTeidFromFar(
+    std::shared_ptr<pfcp::pfcp_far> far) {
+  if (!far) {
+    Logger::upf_app().error("GetDownlinkTeidFromFar: null FAR pointer");
+    return 0;
+  }
+
+  pfcp::forwarding_parameters fwd_params;
+  if (!far->get(fwd_params)) {
+    Logger::upf_app().debug(
+        "GetDownlinkTeidFromFar: FAR %u has no forwarding parameters",
+        far->far_id.far_id);
+    return 0;
+  }
+
+  // Check destination interface (should be ACCESS for downlink)
+  pfcp::destination_interface_t di;
+  if (!fwd_params.get(di)) {
+    Logger::upf_app().debug(
+        "GetDownlinkTeidFromFar: FAR %u has no destination interface",
+        far->far_id.far_id);
+    return 0;
+  }
+
+  if (di.interface_value != pfcp::INTERFACE_VALUE_ACCESS) {
+    // This is not a downlink FAR, return 0
+    return 0;
+  }
+
+  // Get outer header creation TEID (remote F-TEID to send to gNB)
+  if (fwd_params.outer_header_creation.first) {
+    uint32_t teid = fwd_params.outer_header_creation.second.teid;
+    // Logger::upf_app().debug(
+    //     "GetDownlinkTeidFromFar: FAR %u has downlink TEID " TEID_FMT
+    //     " (for gNB)",
+    //     far->far_id.far_id, teid);
+    return teid;
+  }
+
+  Logger::upf_app().debug(
+      "GetDownlinkTeidFromFar: FAR %u is downlink but has no outer header "
+      "creation",
+      far->far_id.far_id);
+  return 0;
+}
+
+//------------------------------------------------------------------------------
+// const std::vector<std::shared_ptr<pfcp::pfcp_session>>&
+// SessionManager::GetSessions() const {
+//   // Note: Returning const reference to internal vector
+//   // No mutex needed for const access to the vector itself
+//   // (mutations to vector are protected by mutex in other methods)
+//   return sessions_;
+// }
+
+//------------------------------------------------------------------------------
+// Internal Methods - Categorize and Sort PDRs
+// Reference: 3GPP TS 29.244 Section 8.2.29 - Precedence
+//------------------------------------------------------------------------------
+
+void SessionManager::CategorizePdrs(
+    std::shared_ptr<pfcp::pfcp_session> session) {
   for (auto& pdr : session->pdrs) {
     pfcp::pdi pdi;
-    pfcp::source_interface_t sourceInterface;
+    pfcp::source_interface_t source_interface;
 
-    if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
-      throw std::runtime_error(
-          "Missing Mandatory IE in PDR: " +
-          std::to_string(pdr->pdr_id.rule_id));
+    if (!(pdr->get(pdi) && pdi.get(source_interface))) {
+      Logger::upf_app().warn(
+          "PDR %u missing mandatory IE", pdr->pdr_id.rule_id);
+      continue;
     }
 
     std::shared_ptr<pfcp::pfcp_qer> qer;
+    bool has_qer = GetQerForPdr(session, pdr, qer);
 
-    switch (sourceInterface.interface_value) {
+    // 3GPP TS 29.244 Section 8.2.62 - Source Interface
+    switch (source_interface.interface_value) {
       case INTERFACE_VALUE_ACCESS: {
         session->pdrs_uplink.push_back(pdr);
-        if (getQer(session, pdr, qer)) {
+        if (has_qer) {
           session->qers_uplink.push_back(qer);
         }
         break;
       }
       case INTERFACE_VALUE_CORE: {
         session->pdrs_downlink.push_back(pdr);
-        if (getQer(session, pdr, qer)) {
+        if (has_qer) {
           session->qers_downlink.push_back(qer);
         }
         break;
@@ -87,420 +1102,497 @@ void SessionManager::categorizePDRs(
       default:
         Logger::upf_n4().warn(
             "Unknown source interface value: " +
-            std::to_string(sourceInterface.interface_value));
+            std::to_string(source_interface.interface_value));
         break;
     }
   }
 }
 
-//---------------------------------------------------------------------------------------------------------------
-std::shared_ptr<pfcp::pfcp_qer> SessionManager::findQER(
-    std::shared_ptr<pfcp::pfcp_session> session, uint32_t qer_id) {
-  for (auto& qer : session->qers) {
-    if (qer->qer_id.second.qer_id == qer_id) {
-      return qer;
-    }
-  }
-  return nullptr;
-}
-
-//---------------------------------------------------------------------------------------------------------------
-bool SessionManager::getQer(
-    std::shared_ptr<pfcp::pfcp_session> session,
-    std::shared_ptr<pfcp::pfcp_pdr> pdr,
-    std::shared_ptr<pfcp::pfcp_qer>& outQer) {
-  pfcp::qer_id_t qerId;
-
-  return (pdr->get(qerId) && session->get(qerId.qer_id, outQer));
-}
-
-//---------------------------------------------------------------------------------------------------------------
-void SessionManager::sortPDRs(
+//------------------------------------------------------------------------------
+void SessionManager::SortPdrs(
     std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs) {
-  std::sort(pdrs.begin(), pdrs.end(), comparePDR);
+  std::sort(pdrs.begin(), pdrs.end(), ComparePdrPrecedence);
 }
 
-//---------------------------------------------------------------------------------------------------------------
-bool SessionManager::getFar(
+//------------------------------------------------------------------------------
+bool SessionManager::ComparePdrPrecedence(
+    const std::shared_ptr<pfcp::pfcp_pdr>& first,
+    const std::shared_ptr<pfcp::pfcp_pdr>& second) {
+  pfcp::precedence_t prec1, prec2;
+  first->get(prec1);
+  second->get(prec2);
+  return prec1.precedence < prec2.precedence;  // Lower value = higher priority
+}
+
+//------------------------------------------------------------------------------
+// Internal Removal Handlers
+//------------------------------------------------------------------------------
+
+size_t SessionManager::HandlePdrRemoval(
     std::shared_ptr<pfcp::pfcp_session> session,
-    std::shared_ptr<pfcp::pfcp_pdr> pdr,
-    std::shared_ptr<pfcp::pfcp_far>& outFar) {
-  pfcp::far_id_t farId;
+    itti_n4_session_modification_request* mod_req) {
+  size_t removed_count = 0;
 
-  return (pdr->get(farId) && session->get(farId.far_id, outFar));
-}
-
-//---------------------------------------------------------------------------------------------------------------
-uint32_t SessionManager::retrieveTeid(
-    std::shared_ptr<pfcp::pfcp_session> session) {
-  uint32_t ret = 0;  // Default TEID value
-
-  std::shared_ptr<pfcp::pfcp_far> far;
-  pfcp::forwarding_parameters forwardingParams;
-
-  Logger::upf_app().debug(
-      "Retrieving teid from session seid " SEID_FMT " ",
-      session->get_up_seid());
-
-  for (const auto& pdr : session->pdrs_downlink) {
-    pfcp::pdi pdi;
-    pfcp::source_interface_t sourceInterface;
-
-    if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
-      Logger::upf_app().error(
-          "Missing Mandatory IE in pdr: %d", pdr->pdr_id.rule_id);
-      throw std::runtime_error("Missing Mandatory ie in pdr");
-    }
-
-    if (!getFar(session, pdr, far)) {
-      Logger::upf_app().error(
-          "Failed to retrieve far for pdr: %d", pdr->pdr_id.rule_id);
-      throw std::runtime_error("Failed to retrieve far for pdr");
-    }
-
-    if (far->get(forwardingParams) &&
-        forwardingParams.outer_header_creation.first) {
-      ret = forwardingParams.outer_header_creation.second.teid;
-      Logger::upf_app().debug(
-          "Session seid " SEID_FMT " has teid " TEID_FMT " ",
-          session->get_up_seid(), ret);
-      break;
-    }
-  }
-
-  return ret;
-}
-
-//---------------------------------------------------------------------------------------------------------------
-void SessionManager::createBpfSession(
-    std::shared_ptr<pfcp::pfcp_session> session,
-    itti_n4_session_establishment_request* est_req,
-    itti_n4_session_modification_request* mod_req,
-    itti_n4_session_deletion_request* del_req) {
-  auto& logger  = Logger::upf_app();
-  uint64_t seid = session->get_up_seid();
-  sessions.push_back(session);
-  logger.debug("sessionManager::createBpfSession() seid " SEID_FMT " ", seid);
-
-  categorizePDRs(session);
-  if (session->pdrs_uplink.empty() && session->pdrs_downlink.empty()) {
-    logger.error("No pdr found in session seid " SEID_FMT " ", seid);
-    throw std::runtime_error("Session creation failed: No pdr found.");
-  }
-
-  sortPDRs(session->pdrs_uplink);
-  sortPDRs(session->pdrs_downlink);
-
-  // for (auto direction : {Direction::Uplink, Direction::Downlink}) {
-  //   auto& pdrs = (direction == Direction::Uplink) ? session->pdrs_uplink :
-  //                                                   session->pdrs_downlink;
-  //   if (pdrs.empty()) {
-  //     logger.warn(
-  //         "NO PDR available for %s direction",
-  //         (direction == Direction::Uplink) ? "Uplink" : "Downlink");
-  //     continue;
-  //   }
-
-  //   auto pdr = pdrs.front();
-  //   pfcp::pdi pdi;
-  //   pfcp::fteid_t fteid;
-  //   pfcp::ue_ip_address_t ueIpAddress;
-  //   pfcp::source_interface_t sourceInterface;
-  //   uint16_t pdr_id = pdr->pdr_id.rule_id;
-
-  //   if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
-  //     throw std::runtime_error(
-  //         "Missing Mandatory IE in PDR: " + std::to_string(pdr_id));
-  //   }
-
-  //   if (!pdi.get(fteid)) {
-  //     fteid.teid = -1;
-  //     logger.warn(
-  //         "FTEID is missing for PDR %d. CH bit: %s", pdr_id,
-  //         fteid.ch ? "Set" : "Not Set");
-  //   }
-
-  //   if (!pdi.get(ueIpAddress)) {
-  //     ueIpAddress.ipv4_address.s_addr = 0;
-  //     logger.warn("UE IP Address is missing for PDR %d", pdr_id);
-  //   }
-
-  //   logger.debug("Processing PDR %d", pdr_id);
-  //   std::shared_ptr<pfcp::pfcp_far> pFar;
-  //   if (!getFar(session, pdr, pFar)) {
-  //     throw std::runtime_error(
-  //         "Error retrieving FAR for PDR ID: " + std::to_string(pdr_id));
-  //   }
-
-  //   std::vector<std::shared_ptr<pfcp::pfcp_qer>> qers =
-  //       (direction == Direction::Downlink) ?
-  //           session->qers_downlink :
-  //           std::vector<std::shared_ptr<pfcp::pfcp_qer>>{};
-
-  SessionProgramManager::getInstance().createPipeline(session);
-
-  // SessionProgramManager::getInstance().createPipeline(
-  //     seid, fteid.teid, sourceInterface.interface_value,
-  //     ueIpAddress.ipv4_address.s_addr, pFar, qers, pdrs, false, 0);
-
-  // setupEbpfPipeline(session, session->pdrs_uplink, Direction::Uplink);
-  // setupEbpfPipeline(session, session->pdrs_downlink, Direction::Downlink);
-
-  mSeidToSession[seid] = session;
-
-  logger.debug("Session seid " SEID_FMT " successfully created", seid);
-}
-
-//---------------------------------------------------------------------------------------------------------------
-void SessionManager::modifyBpfSession(
-    std::shared_ptr<pfcp::pfcp_session> session,
-    itti_n4_session_establishment_request* est_req,
-    itti_n4_session_modification_request* mod_req,
-    itti_n4_session_deletion_request* del_req) {
-  auto& logger  = Logger::upf_app();
-  uint64_t seid = session->get_up_seid();
-
-  logger.debug("sessionManager::modifyBpfSession() seid " SEID_FMT " ", seid);
-
-  // Handle creation of PDRs
-  if (!mod_req->pfcp_ies.create_pdrs.empty()) {
-    logger.debug("modifyBpfSession:: add(pdr)");
-    pfcp::fteid_t allocated_fteid = {};
-    pfcp::far_id_t far_id         = {};
-
-    categorizePDRs(session);
-
-    if (session->pdrs_uplink.empty() && session->pdrs_downlink.empty()) {
-      logger.error("No pdr found in session seid " SEID_FMT " ", seid);
-      throw std::runtime_error("Session modification failed: No pdr found.");
-    }
-
-    sortPDRs(session->pdrs_uplink);
-    sortPDRs(session->pdrs_downlink);
-
-    pfcp::pdi pdi;
-    pfcp::fteid_t fteid;
-    pfcp::ue_ip_address_t ueIpAddress;
-    pfcp::source_interface_t sourceInterface;
-
-    uint32_t teid_dl = retrieveTeid(session);
-    uint32_t teid_ul = findUplinkTeid(
-        seid, sessions);  // should be saved in ebpf_session at establishment
-    if (teid_dl) {
-      if (teid_ul) {
-        SessionProgramManager::getInstance().modifyPipeline(
-            session, teid_ul, teid_dl);
-      } else {
-        SessionProgramManager::getInstance().modifyPipeline(
-            session, 0, teid_dl);
-      }
-    } else {
-      Logger::upf_app().warn(
-          "No valid teid found for session seid " SEID_FMT " ", seid);
-      // Ethernet PDU Session
-    }
-  }
-
-  if (!mod_req->pfcp_ies.create_fars.empty()) {
-    logger.debug("modifyBpfSession:: add(far)");
-    for (const auto& it : mod_req->pfcp_ies.create_fars) {
-      /*
-       * TODO: What should be done for FARs?
-       *    1. Update Maching rules map
-       *    2. Anything else ?
-       */
-    }
-  }
-
-  if (!mod_req->pfcp_ies.create_qers.empty()) {
-    logger.debug("modifyBpfSession:: add(qer)");
-    for (const auto& it : mod_req->pfcp_ies.create_qers) {
-      /*
-       * TODO: What should be done for QERs?
-       *    1. Update Maching rules map
-       *    2. Anything else ?
-       */
-    }
-  }
-
-  if (!mod_req->pfcp_ies.update_pdrs.empty()) {
-    logger.debug("modifyBpfSession:: update(pdr)");
-    for (const auto& it : mod_req->pfcp_ies.update_pdrs) {
-      /*
-       * TODO: What should be done for pdrs?
-       *    1. Update Maching rules map
-       *    2. Anything else ?
-       */
-    }
-  }
-
-  if (!mod_req->pfcp_ies.update_fars.empty()) {
-    logger.debug("modifyBpfSession:: update(far)");
-    for (const auto& it : mod_req->pfcp_ies.update_fars) {
-      /*
-       * TODO: What should be done for QERs?
-       *    1. Update Maching rules map
-       *    2. Anything else ?
-       */
-      pfcp::fteid_t allocated_fteid = {};
-      pfcp::far_id_t far_id         = {};
-
-      categorizePDRs(session);
-
-      if (session->pdrs_uplink.empty() && session->pdrs_downlink.empty()) {
-        logger.error("No pdr found in session seid " SEID_FMT " ", seid);
-        throw std::runtime_error("Session modification failed: No pdr found.");
-      }
-
-      sortPDRs(session->pdrs_uplink);
-      sortPDRs(session->pdrs_downlink);
-
-      pfcp::pdi pdi;
-      pfcp::fteid_t fteid;
-      pfcp::ue_ip_address_t ueIpAddress;
-      pfcp::source_interface_t sourceInterface;
-
-      uint32_t teid_dl = retrieveTeid(session);
-      uint32_t teid_ul = findUplinkTeid(
-          seid, sessions);  // should be saved in ebpf_session at establishment
-      if (teid_dl) {
-        if (teid_ul) {
-          SessionProgramManager::getInstance().modifyPipeline(
-              session, teid_ul, teid_dl);
-        } else {
-          SessionProgramManager::getInstance().modifyPipeline(
-              session, 0, teid_dl);
-        }
-      } else {
-        Logger::upf_app().warn(
-            "No valid teid found for session seid " SEID_FMT " ", seid);
-        // Ethernet PDU Session
-      }
-    }
-  }
-
-  if (!mod_req->pfcp_ies.update_qers.empty()) {
-    logger.debug("modifyBpfSession:: update(qer)");
-    for (const auto& it : mod_req->pfcp_ies.update_qers) {
-      /*
-       * TODO: What should be done for QERs?
-       *    1. Update Maching rules map
-       *    2. Anything else ?
-       */
-    }
-  }
-
-  // Handle PDR removal requests (for modification or deletion)
-  for (auto it : mod_req->pfcp_ies.remove_pdrs) {
-    Logger::upf_app().debug("Delete pdr");
-    Logger::upf_app().debug(
-        "pdr and far map entries are obsolete and need to be deleted");
-
+  for (const auto& remove_pdr : mod_req->pfcp_ies.remove_pdrs) {
     pfcp::pdr_id_t pdr_id;
-    if (it.get(pdr_id)) {
-      Logger::upf_app().debug("Remove PDR with id %u", pdr_id.rule_id);
-      for (auto pdr : session->pdrs) {
-        if (pdr_id.rule_id == pdr->pdr_id.rule_id) {
-          Logger::upf_app().debug(
-              "Found PDR with id %u in list 'pdrs'", pdr_id.rule_id);
-          // TODO:
-          /*
-          *
-          * remove pdrs from session->pdrs; session->uplink_pdrs;
-         session->downlink_pdrs;
-         * sort pdrs, uplink_pdrs; downlink_pdrs
-         * update maps: getRulesMatchPdrMap, getSessionPdrsMap
-         * remove fars from session->fars; session->uplink_fars;
-         session->downlink_fars;
-         * remove qers from session->qers; session->uplink_qers;
-         session->downlink_qers;
-          */
-          // if (upf_cfg.enable_fr) {
-          //   pfcp::pdi pdi;
-          //   if (pdr->get(pdi)) {
-          //     std::vector<pfcp::framed_route_t> framedRoutes;
-          //     if (pdi.get(framedRoutes)) {
-          //       SessionProgramManager::getInstance().removeFramedRoutes(
-          //           framedRoutes);
-          //     }
-          //   }
-          // }
-        }
+    if (remove_pdr.get(pdr_id)) {
+      if (RemovePdr(session->get_up_seid(), pdr_id.rule_id)) {
+        removed_count++;
       }
     }
   }
 
-  if (!mod_req->pfcp_ies.remove_fars.empty()) {
-    logger.debug("modifBpfSession:: remove(far)");
-    for (const auto& it : mod_req->pfcp_ies.remove_fars) {
-      /*
-       * TODO: What should be done for QERs?
-       *    1. Update Maching rules map
-       *    2. Anything else ?
-       */
+  return removed_count;
+}
+
+//------------------------------------------------------------------------------
+size_t SessionManager::HandleFarRemoval(
+    std::shared_ptr<pfcp::pfcp_session> session,
+    itti_n4_session_modification_request* mod_req) {
+  size_t removed_count = 0;
+
+  for (const auto& remove_far : mod_req->pfcp_ies.remove_fars) {
+    pfcp::far_id_t far_id;
+    if (remove_far.get(far_id)) {
+      if (RemoveFar(session->get_up_seid(), far_id.far_id)) {
+        removed_count++;
+      }
     }
   }
 
-  if (!mod_req->pfcp_ies.remove_qers.empty()) {
-    logger.debug("modifBpfSession:: remove(qer)");
-    for (const auto& it : mod_req->pfcp_ies.remove_qers) {
-      /*
-       * TODO: What should be done for QERs?
-       *    1. Update Maching rules map
-       *    2. Anything else ?
-       */
+  return removed_count;
+}
+
+//------------------------------------------------------------------------------
+size_t SessionManager::HandleQerRemoval(
+    std::shared_ptr<pfcp::pfcp_session> session,
+    itti_n4_session_modification_request* mod_req) {
+  size_t removed_count = 0;
+
+  for (const auto& remove_qer : mod_req->pfcp_ies.remove_qers) {
+    pfcp::qer_id_t qer_id;
+    if (remove_qer.get(qer_id)) {
+      if (RemoveQer(session->get_up_seid(), qer_id.qer_id)) {
+        removed_count++;
+      }
     }
   }
+
+  return removed_count;
 }
 
-//---------------------------------------------------------------------------------------------------------------
-void SessionManager::removeBpfSession(
-    std::shared_ptr<pfcp::pfcp_session> pSession,
-    itti_n4_session_establishment_request* est_req,
-    itti_n4_session_modification_request* mod_req,
-    itti_n4_session_deletion_request* del_req) {
-  uint64_t seid = pSession->get_up_seid();
-  Logger::upf_app().info("Session %lu will be deleted from Data-Path", seid);
+//------------------------------------------------------------------------------
+size_t SessionManager::HandlePdrUpdates(
+    std::shared_ptr<pfcp::pfcp_session> session,
+    itti_n4_session_modification_request* mod_req) {
+  size_t updated_count = 0;
 
-  if (mSeidToSession.find(seid) == mSeidToSession.end()) {
-    Logger::upf_app().error(
-        "Session %d Does Not Exist. It Cannot be Removed", seid);
-    // throw std::runtime_error("Session Does Not Exist. It Cannot be
-    // Removed");
+  for (const auto& update_pdr : mod_req->pfcp_ies.update_pdrs) {
+    // Extract PDR ID
+    pfcp::pdr_id_t pdr_id_ie;
+    if (!update_pdr.get(pdr_id_ie)) {
+      Logger::upf_app().error("HandlePdrUpdates: PDR ID missing");
+      continue;
+    }
+    uint16_t pdr_id = pdr_id_ie.rule_id;
+
+    // Find existing PDR
+    std::shared_ptr<pfcp::pfcp_pdr> existing_pdr = nullptr;
+    for (auto& pdr : session->pdrs) {
+      if (pdr && pdr->pdr_id.rule_id == pdr_id) {
+        existing_pdr = pdr;
+        break;
+      }
+    }
+
+    if (!existing_pdr) {
+      Logger::upf_app().error(
+          "HandlePdrUpdates: PDR %u not found in session " SEID_FMT, pdr_id,
+          session->get_up_seid());
+      continue;
+    }
+
+    // Update only fields present in update_pdr
+    // All PFCP fields use std::pair<bool, T> where .first=present,
+    // .second=value
+    pfcp::precedence_t precedence;
+    if (update_pdr.get(precedence)) {
+      existing_pdr->precedence.first  = true;
+      existing_pdr->precedence.second = precedence;
+    }
+
+    pfcp::pdi pdi;
+    if (update_pdr.get(pdi)) {
+      existing_pdr->pdi.first = true;
+
+      pfcp::source_interface_t source_if;
+      if (pdi.get(source_if)) {
+        existing_pdr->pdi.second.source_interface.first  = true;
+        existing_pdr->pdi.second.source_interface.second = source_if;
+      }
+
+      pfcp::fteid_t fteid;
+      if (pdi.get(fteid)) {
+        existing_pdr->pdi.second.local_fteid.first  = true;
+        existing_pdr->pdi.second.local_fteid.second = fteid;
+      }
+
+      pfcp::ue_ip_address_t ue_ip;
+      if (pdi.get(ue_ip)) {
+        existing_pdr->pdi.second.ue_ip_address.first  = true;
+        existing_pdr->pdi.second.ue_ip_address.second = ue_ip;
+      }
+
+      pfcp::network_instance_t network_instance;
+      if (pdi.get(network_instance)) {
+        existing_pdr->pdi.second.network_instance.first  = true;
+        existing_pdr->pdi.second.network_instance.second = network_instance;
+      }
+
+      pfcp::sdf_filter_t sdf_filter;
+      if (pdi.get(sdf_filter)) {
+        existing_pdr->pdi.second.sdf_filter.first  = true;
+        existing_pdr->pdi.second.sdf_filter.second = sdf_filter;
+      }
+    }
+
+    pfcp::outer_header_removal_t ohr;
+    if (update_pdr.get(ohr)) {
+      existing_pdr->outer_header_removal.first  = true;
+      existing_pdr->outer_header_removal.second = ohr;
+    }
+
+    pfcp::far_id_t far_id;
+    if (update_pdr.get(far_id)) {
+      existing_pdr->far_id.first  = true;
+      existing_pdr->far_id.second = far_id;
+    }
+
+    pfcp::qer_id_t qer_id;
+    if (update_pdr.get(qer_id)) {
+      existing_pdr->qer_id.first  = true;
+      existing_pdr->qer_id.second = qer_id;
+    }
+
+    // Handle Activate Predefined Rules (3GPP TS 29.244 Table 7.5.4.2-1)
+    if (update_pdr.has_activate_predefined_rules()) {
+      const auto& activate_rules = update_pdr.get_activate_predefined_rules();
+      for (const auto& rule : activate_rules) {
+        Logger::upf_app().info(
+            "Activating predefined rule '%s' for PDR %u in session " SEID_FMT,
+            rule.predefined_rules_name.c_str(), pdr_id, session->get_up_seid());
+
+        // TODO: Implement predefined rule activation logic
+        // This typically involves:
+        // 1. Looking up the predefined rule in configuration
+        // 2. Applying the rule's policies to the PDR
+        // 3. Updating BPF maps with the rule's parameters
+
+        // Store the activation request in the PDR
+        if (existing_pdr->activate_predefined_rules.first) {
+          Logger::upf_app().warn(
+              "PDR %u: Multiple activate_predefined_rules - implementation "
+              "needed",
+              pdr_id);
+        } else {
+          existing_pdr->activate_predefined_rules.first  = true;
+          existing_pdr->activate_predefined_rules.second = rule;
+        }
+      }
+    }
+
+    // Handle Deactivate Predefined Rules (3GPP TS 29.244 Table 7.5.4.2-1)
+    if (update_pdr.has_deactivate_predefined_rules()) {
+      const auto& deactivate_rules =
+          update_pdr.get_deactivate_predefined_rules();
+      for (const auto& rule : deactivate_rules) {
+        Logger::upf_app().info(
+            "Deactivating predefined rule '%s' for PDR %u in "
+            "session " SEID_FMT,
+            rule.predefined_rules_name.c_str(), pdr_id, session->get_up_seid());
+
+        // TODO: Implement predefined rule deactivation logic
+        // This typically involves:
+        // 1. Looking up the currently active predefined rule
+        // 2. Removing the rule's policies from the PDR
+        // 3. Updating BPF maps to remove the rule's parameters
+
+        // Check if this rule is currently activated
+        if (existing_pdr->activate_predefined_rules.first &&
+            existing_pdr->activate_predefined_rules.second
+                    .predefined_rules_name == rule.predefined_rules_name) {
+          // Deactivate by clearing the field
+          existing_pdr->activate_predefined_rules.first = false;
+          Logger::upf_app().info(
+              "Deactivated predefined rule '%s' for PDR %u",
+              rule.predefined_rules_name.c_str(), pdr_id);
+        } else {
+          Logger::upf_app().warn(
+              "PDR %u: Predefined rule '%s' not found for deactivation", pdr_id,
+              rule.predefined_rules_name.c_str());
+        }
+      }
+
+      pfcp::urr_id_t urr_id;
+      if (update_pdr.get(urr_id)) {
+        existing_pdr->urr_id.first  = true;
+        existing_pdr->urr_id.second = urr_id;
+      }
+
+      updated_count++;
+    }
+
+    // Re-categorize and update BPF maps
+    if (updated_count > 0) {
+      CategorizePdrs(session);
+      SortPdrs(session->pdrs_uplink);
+      SortPdrs(session->pdrs_downlink);
+      session_program_manager_->ModifyPipeline(session);
+    }
+
+    return updated_count;
+  }
+  return updated_count;
+}
+
+//------------------------------------------------------------------------------
+size_t SessionManager::HandleFarUpdates(
+    std::shared_ptr<pfcp::pfcp_session> session,
+    itti_n4_session_modification_request* mod_req) {
+  size_t updated_count = 0;
+
+  for (const auto& update_far : mod_req->pfcp_ies.update_fars) {
+    // Extract FAR ID
+    pfcp::far_id_t far_id_ie;
+    if (!update_far.get(far_id_ie)) {
+      Logger::upf_app().error("HandleFarUpdates: FAR ID missing");
+      continue;
+    }
+    uint32_t far_id = far_id_ie.far_id;
+
+    // Find existing FAR
+    std::shared_ptr<pfcp::pfcp_far> existing_far = nullptr;
+    for (auto& far : session->fars) {
+      if (far && far->far_id.far_id == far_id) {
+        existing_far = far;
+        break;
+      }
+    }
+
+    if (!existing_far) {
+      Logger::upf_app().error(
+          "HandleFarUpdates: FAR %u not found in session " SEID_FMT, far_id,
+          session->get_up_seid());
+      continue;
+    }
+
+    // Update only fields present in update_far
+    // All PFCP fields use std::pair<bool, T> where .first=present,
+    // .second=value
+
+    pfcp::apply_action_t apply_action;
+    if (update_far.get(apply_action)) {
+      existing_far->apply_action = apply_action;
+    }
+
+    pfcp::update_forwarding_parameters update_fp;
+    if (update_far.get(update_fp)) {
+      existing_far->forwarding_parameters.first = true;
+
+      pfcp::destination_interface_t dest_if;
+      if (update_fp.get(dest_if)) {
+        existing_far->forwarding_parameters.second.destination_interface.first =
+            true;
+        existing_far->forwarding_parameters.second.destination_interface
+            .second = dest_if;
+      }
+
+      pfcp::network_instance_t network_instance;
+      if (update_fp.get(network_instance)) {
+        existing_far->forwarding_parameters.second.network_instance.first =
+            true;
+        existing_far->forwarding_parameters.second.network_instance.second =
+            network_instance;
+      }
+
+      pfcp::outer_header_creation_t ohc;
+      if (update_fp.get(ohc)) {
+        existing_far->forwarding_parameters.second.outer_header_creation.first =
+            true;
+        existing_far->forwarding_parameters.second.outer_header_creation
+            .second = ohc;
+      }
+
+      pfcp::transport_level_marking_t tlm;
+      if (update_fp.get(tlm)) {
+        existing_far->forwarding_parameters.second.transport_level_marking
+            .first = true;
+        existing_far->forwarding_parameters.second.transport_level_marking
+            .second = tlm;
+      }
+
+      pfcp::forwarding_policy_t fwd_policy;
+      if (update_fp.get(fwd_policy)) {
+        existing_far->forwarding_parameters.second.forwarding_policy.first =
+            true;
+        existing_far->forwarding_parameters.second.forwarding_policy.second =
+            fwd_policy;
+      }
+
+      pfcp::header_enrichment_t header_enrich;
+      if (update_fp.get(header_enrich)) {
+        existing_far->forwarding_parameters.second.header_enrichment.first =
+            true;
+        existing_far->forwarding_parameters.second.header_enrichment.second =
+            header_enrich;
+      }
+    }
+
+    pfcp::update_duplicating_parameters update_dp;
+    if (update_far.get(update_dp)) {
+      existing_far->duplicating_parameters.first = true;
+
+      pfcp::destination_interface_t dest_if;
+      if (update_dp.get(dest_if)) {
+        existing_far->duplicating_parameters.second.destination_interface
+            .first = true;
+        existing_far->duplicating_parameters.second.destination_interface
+            .second = dest_if;
+      }
+
+      pfcp::outer_header_creation_t ohc;
+      if (update_dp.get(ohc)) {
+        existing_far->duplicating_parameters.second.outer_header_creation
+            .first = true;
+        existing_far->duplicating_parameters.second.outer_header_creation
+            .second = ohc;
+      }
+
+      pfcp::transport_level_marking_t tlm;
+      if (update_dp.get(tlm)) {
+        existing_far->duplicating_parameters.second.transport_level_marking
+            .first = true;
+        existing_far->duplicating_parameters.second.transport_level_marking
+            .second = tlm;
+      }
+
+      pfcp::forwarding_policy_t fp;
+      if (update_dp.get(fp)) {
+        existing_far->duplicating_parameters.second.forwarding_policy.first =
+            true;
+        existing_far->duplicating_parameters.second.forwarding_policy.second =
+            fp;
+      }
+    }
+
+    pfcp::bar_id_t bar_id;
+    if (update_far.get(bar_id)) {
+      existing_far->bar_id.first  = true;
+      existing_far->bar_id.second = bar_id;
+    }
+
+    updated_count++;
   }
 
-  // if (upf_cfg.enable_fr) {
-  //   // Remove framed route to ue_ip mapping
-  //   for (auto pdr : pSession->pdrs) {
-  //     pfcp::pdi pdi;
-  //     if (pdr->get(pdi)) {
-  //       std::vector<pfcp::framed_route_t> framedRoutes;
-  //       if (pdi.get(framedRoutes)) {
-  //         SessionProgramManager::getInstance().removeFramedRoutes(framedRoutes);
-  //       }
-  //     }
-  //   }
-  // }
+  // Update BPF maps
+  if (updated_count > 0) {
+    session_program_manager_->ModifyPipeline(session);
+  }
 
-  SessionProgramManager::getInstance().removePipeline(seid);
-  Logger::upf_app().debug("Session 0x%x Has Been Removed Successfully", seid);
+  return updated_count;
 }
 
-//---------------------------------------------------------------------------------------------------------------
-bool SessionManager::comparePDR(
-    const std::shared_ptr<pfcp::pfcp_pdr>& pFirst,
-    const std::shared_ptr<pfcp::pfcp_pdr>& pSecond) {
-  pfcp::precedence_t precedenceFirst, precedenceSecond;
-  // TODO: Check if exists.
-  pFirst->get(precedenceFirst);
-  pSecond->get(precedenceSecond);
-  return precedenceFirst.precedence < precedenceSecond.precedence;
-}
+//------------------------------------------------------------------------------
+size_t SessionManager::HandleQerUpdates(
+    std::shared_ptr<pfcp::pfcp_session> session,
+    itti_n4_session_modification_request* mod_req) {
+  size_t updated_count = 0;
 
-//---------------------------------------------------------------------------------------------------------------
-void SessionManager::removeSession(uint64_t seid) {
-  SessionProgramManager::getInstance().remove(seid);
-  Logger::upf_app().debug("Session %d has been removed", seid);
-}
+  for (const auto& update_qer : mod_req->pfcp_ies.update_qers) {
+    // Extract QER ID
+    pfcp::qer_id_t qer_id_ie;
+    if (!update_qer.get(qer_id_ie)) {
+      Logger::upf_app().error("HandleQerUpdates: QER ID missing");
+      continue;
+    }
+    uint32_t qer_id = qer_id_ie.qer_id;
 
-//---------------------------------------------------------------------------------------------------------------
+    // Find existing QER
+    std::shared_ptr<pfcp::pfcp_qer> existing_qer = nullptr;
+    for (auto& qer : session->qers) {
+      if (qer && qer->qer_id.second.qer_id == qer_id) {
+        existing_qer = qer;
+        break;
+      }
+    }
+
+    if (!existing_qer) {
+      Logger::upf_app().error(
+          "HandleQerUpdates: QER %u not found in session " SEID_FMT, qer_id,
+          session->get_up_seid());
+      continue;
+    }
+
+    // Update only fields present in update_qer
+    // All PFCP fields use std::pair<bool, T> where .first=present,
+    // .second=value
+
+    pfcp::qer_correlation_id_t qer_corr_id;
+    if (update_qer.get(qer_corr_id)) {
+      existing_qer->qer_correlation_id.first  = true;
+      existing_qer->qer_correlation_id.second = qer_corr_id;
+    }
+
+    pfcp::gate_status_t gate_status;
+    if (update_qer.get(gate_status)) {
+      existing_qer->gate_status.first  = true;
+      existing_qer->gate_status.second = gate_status;
+    }
+
+    pfcp::mbr_t mbr;
+    if (update_qer.get(mbr)) {
+      existing_qer->maximum_bitrate.first  = true;
+      existing_qer->maximum_bitrate.second = mbr;
+    }
+
+    pfcp::gbr_t gbr;
+    if (update_qer.get(gbr)) {
+      existing_qer->guaranteed_bitrate.first  = true;
+      existing_qer->guaranteed_bitrate.second = gbr;
+    }
+
+    pfcp::qfi_t qfi;
+    if (update_qer.get(qfi)) {
+      existing_qer->qos_flow_id.first  = true;
+      existing_qer->qos_flow_id.second = qfi;
+    }
+
+    pfcp::rqi_t rqi;
+    if (update_qer.get(rqi)) {
+      existing_qer->reflective_qos.first  = true;
+      existing_qer->reflective_qos.second = rqi;
+    }
+
+    pfcp::paging_policy_indicator_t ppi;
+    if (update_qer.get(ppi)) {
+      existing_qer->paging_policy_indicator.first  = true;
+      existing_qer->paging_policy_indicator.second = ppi;
+    }
+
+    pfcp::averaging_window_t avg_window;
+    if (update_qer.get(avg_window)) {
+      existing_qer->averaging_window.first  = true;
+      existing_qer->averaging_window.second = avg_window;
+    }
+
+    updated_count++;
+  }
+
+  // Re-categorize and update BPF maps
+  if (updated_count > 0) {
+    CategorizePdrs(session);
+    session_program_manager_->ModifyPipeline(session);
+  }
+
+  return updated_count;
+}

@@ -4,6 +4,57 @@
 #include "linux/custom_types.h"
 
 /*---------------------------------------------------------------------------------------------------------------*/
+// /**
+//  * @brief Generate unique minor ID for TC classid
+//  *
+//  * Creates a 16-bit minor ID from session ID (seid) and QFI using a
+//  * simple hash function. This ID is used as the minor number in the
+//  * TC classid (handle) to uniquely identify each QoS flow.
+//  *
+//  * Hash Algorithm:
+//  * - Extracts lower 48 bits of seid (upper bits rarely change)
+//  * - Combines with QFI using XOR and rotation
+//  * - Ensures value fits in 16 bits (0-65535)
+//  *
+//  * @param seid Session ID (64-bit PFCP session identifier)
+//  * @param qfi QoS Flow Identifier (8-bit, typically 1-63)
+//  * @return 16-bit minor ID for TC classid
+//  *
+//  * Example:
+//  * ```c
+//  * u64 seid = 0x123456789ABCDEF0;
+//  * u8 qfi = 5;
+//  * u16 minor = generate_minor_id(seid, qfi);
+//  * u32 classid = TC_H_MAKE(HTB_ROOT_MAJOR, minor);
+//  * skb->tc_classid = classid;  // e.g., 0x00010A3F
+//  * ```
+//  *
+//  * Note: Hash collisions are possible but rare in practice. If collision
+//  * handling is needed, consider using a map to track assignments.
+//  */
+// static __always_inline u16 generate_minor_id(u64 seid, u8 qfi) {
+//   /* Extract lower 48 bits of seid (typical SEID format) */
+//   u64 seid_lower = seid & 0x0000FFFFFFFFFFFF;
+
+//   /* Combine with QFI using XOR and bit rotation for better distribution */
+//   u32 hash = (u32) ((seid_lower >> 16) ^ (seid_lower & 0xFFFF));
+//   hash ^= (qfi << 8) | qfi;
+
+//   /* Additional mixing to reduce collisions */
+//   hash ^= (hash >> 16);
+//   hash *= 0x85EBCA6B;  /* Multiplicative hash constant */
+//   hash ^= (hash >> 13);
+
+//   /* Ensure result fits in 16 bits and avoid reserved values */
+//   u16 minor = (u16) (hash & 0xFFFF);
+
+//   /* Avoid minor ID 0 (reserved) */
+//   if (minor == 0) {
+//     minor = 1;
+//   }
+
+//   return minor;
+// }
 
 static inline u16 generate_minor_id(u64 seid, u8 qfi) {
   u16 hash     = (seid ^ (seid >> 16) ^ (seid >> 32) ^ (seid >> 48));

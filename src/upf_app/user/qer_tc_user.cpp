@@ -1,59 +1,64 @@
+/*
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this
+ * file except in compliance with the License. You may obtain a copy of the
+ * License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
+ */
+
+/**
+ * @file qer_tc_user.cpp
+ * @brief Implementation of QER TC-BPF program
+ * @author OpenAirInterface
+ * @date 2025
+ */
+
 #include "qer_tc_user.h"
-#include <SessionManager.h>
-#include <bpf/bpf.h>  // bpf calls
-#include <iostream>   // cout
-#include <stdexcept>  // exception
+#include <bpf/bpf.h>
+#include <stdexcept>
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
-#include <chrono>
-#include <iostream>
 #include "interfaces.h"
 #include "logger.hpp"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include "helpers/GetNicInformation.hpp"
 #include "helpers/CmdRunner.hpp"
-
-#include <errno.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <time.h>
-#include <net/if.h>
-
-#include <getopt.h>
-#include <linux/in6.h>
-#include <arpa/inet.h>
-#include <linux/bpf.h>
-
-#include <bpf/libbpf.h>
-#include <bpf/bpf.h>
-#include "sdf_filter.h"
-
 #include "utils/net_utils.hpp"
 #include "utils/bpf_utils.hpp"
+#include "UserPlaneComponent.h"
+#include "sdf_filter.h"
+#include "startup_banner.hpp"
+#include "number_utils.hpp"
 
 using namespace oai::utils::bpf;
 using namespace oai::utils::net;
+using namespace oai::utils;
 
-static int verbose = 1;
-
-/*---------------------------------------------------------------------------------------------------------------*/
-void QERProgram::configureQerMaps(
-    struct qer_tc_kernel_c* skel, const upf_config& upf_cfg) {
+//------------------------------------------------------------------------------
+void QERProgram::ConfigureQerMaps(
+    struct qer_tc_kern_c* skel, const upf_config& upf_cfg) {
   if (!skel) {
-    Logger::upf_app().error(
-        "Null skeleton in configure_pfcp_session_lookup_maps");
+    Logger::upf_app().error("Null skeleton in ConfigureQerMaps");
     return;
   }
 
-  int num_ifaces = count_available_interfaces();
-  if (upf_cfg.max_upf_interfaces > num_ifaces) {
+  int num_ifaces = CountAvailableInterfaces();
+  if (upf_cfg.max_upf_interfaces > static_cast<uint32_t>(num_ifaces)) {
     Logger::upf_app().warn(
         "Configured max_upf_interfaces (%u) exceeds available system "
-        "interfaces (%d). "
-        "Clamping to %d.",
+        "interfaces (%d). Clamping to %d.",
         upf_cfg.max_upf_interfaces, num_ifaces, num_ifaces);
   }
 
@@ -69,347 +74,422 @@ void QERProgram::configureQerMaps(
   // Compute derived limits
   uint32_t max_egress_interfaces = upf_cfg.max_upf_redirect_interfaces;
 
-  bool ok = configure_map_max_entries(
-      skel->maps.m_egress_ifindex, "m_egress_ifindex", max_egress_interfaces);
+  bool ok = ConfigureMapMaxEntries(
+      skel->maps.egress_ifindex, "egress_ifindex", max_egress_interfaces);
 
   if (!ok) {
     Logger::upf_app().error(
-        "m_egress_ifindex BPF map configuration failed for QER Program");
+        "egress_ifindex BPF map configuration failed for QER Program");
     throw std::runtime_error("QER Program map configuration failed");
   }
 
   // Configure .rodata constants (if available)
   if (skel->rodata) {
-    skel->rodata->max_egress_interfaces = max_egress_interfaces;
+    skel->rodata->MAX_EGRESS_INTERFACES = max_egress_interfaces;
   }
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//------------------------------------------------------------------------------
 QERProgram::QERProgram(const upf_config& upf_cfg)
     : BPFProgram(),
-      m_default_class_handle(65535),
-      m_default_class_rate(1024),
-      m_default_class_ceil(2048),
-      m_r2q_root(40) {
-  struct qer_tc_kernel_c* skel = nullptr;
-  int ret                      = -1;
-
+      default_class_handle_(65535),
+      default_class_rate_(1024),
+      default_class_ceil_(2048),
+      r2q_root_(1000) {
   Logger::upf_app().info("Initializing QER TC BPF program...");
 
   // Define the 'open' lambda for the QER skeleton
-  auto open_fn = [&upf_cfg, this]() -> qer_tc_kernel_c* {
-    struct qer_tc_kernel_c* skel = qer_tc_kernel_c__open();
+  auto open_fn = [&upf_cfg, this]() -> qer_tc_kern_c* {
+    struct qer_tc_kern_c* skel = qer_tc_kern_c__open();
     if (!skel) {
       Logger::upf_app().error("Failed to open QER TC BPF skeleton");
       return nullptr;
     }
 
     // Configure map sizes and .rodata constants
-    this->configureQerMaps(skel, upf_cfg);
+    this->ConfigureQerMaps(skel, upf_cfg);
     return skel;
   };
 
   // Initialize lifecycle management
-  mpLifeCycle = std::make_shared<QERProgramLifeCycle>(
+  lifecycle_ = std::make_shared<QERProgramLifeCycle>(
       open_fn,
-      /* load */ qer_tc_kernel_c__load,
-      /* attach */ qer_tc_kernel_c__attach,
-      /* destroy */ qer_tc_kernel_c__destroy);
+      /* load */ qer_tc_kern_c__load,
+      /* attach */ qer_tc_kern_c__attach,
+      /* destroy */ qer_tc_kern_c__destroy);
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
+//------------------------------------------------------------------------------
 QERProgram::~QERProgram() {}
 
-/*---------------------------------------------------------------------------------------------------------------*/
-bool QERProgram::no_htb_root_qdisc(const std::string interface) {
-  std::string cmd = {};
-  uint32_t ret    = 0;
-
-  cmd = fmt::format(
+//------------------------------------------------------------------------------
+bool QERProgram::NoHtbRootQdisc(const std::string& interface) {
+  std::string cmd = fmt::format(
       "tc qdisc show dev {} | awk '/htb/ {{found=1; print 1}} END {{if "
       "(!found) print 0}}'",
       interface);
-  ret = std::stoi(CmdRunner::exec(cmd).c_str());
+  uint32_t ret = std::stoi(CmdRunner::exec(cmd).c_str());
   return ret ? false : true;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-bool QERProgram::no_htb_default_class(const std::string interface) {
-  std::string cmd = {};
-  uint32_t ret    = 0;
-
-  cmd = fmt::format(
-      "tc qdisc show dev {} | awk '/htb/ && /default/ {{found=1; print 1}} END "
-      "{{if "
-      "(!found) print 0}}'",
+//------------------------------------------------------------------------------
+bool QERProgram::NoHtbDefaultClass(const std::string& interface) {
+  std::string cmd = fmt::format(
+      "tc qdisc show dev {} | awk '/htb/ && /default/ {{found=1; print 1}} "
+      "END {{if (!found) print 0}}'",
       interface);
-  ret = std::stoi(CmdRunner::exec(cmd).c_str());
+  uint32_t ret = std::stoi(CmdRunner::exec(cmd).c_str());
   return ret ? false : true;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<pfcp::pfcp_qer>
-QERProgram::retrive_default_qer_with_default_qfi(
-    std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer) {
-  for (const auto& qer : pQer) {
-    if (!qer->gbr.first && !qer->mbr.first) {
-      Logger::upf_app().debug(
-          "Default QoS Flow: (QER ID, QFI): (%d, %d)",
-          qer->qer_id.second.qer_id, qer->qfi.second.qfi);
+//------------------------------------------------------------------------------
+std::shared_ptr<pfcp::pfcp_qer> QERProgram::RetrieveDefaultQerWithDefaultQfi(
+    std::vector<std::shared_ptr<pfcp::pfcp_qer>> qers) {
+  for (const auto& qer : qers) {
+    if (!qer->guaranteed_bitrate.first && !qer->maximum_bitrate.first) {
       return qer;
     }
   }
-
-  // Return nullptr if no such QER is found
   return nullptr;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-void QERProgram::build_pdr_map(
+//------------------------------------------------------------------------------
+void QERProgram::BuildPdrMap(
     const std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs) {
-  pdr_map.clear();
+  pdr_map_.clear();
   for (const auto& pdr : pdrs) {
     if (pdr && pdr->qer_id.first) {
-      pdr_map[pdr->qer_id.second.qer_id] = pdr;
+      pdr_map_[pdr->qer_id.second.qer_id] = pdr;
     }
   }
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<pfcp::pfcp_pdr> QERProgram::get_pdr_by_qer_id(
+//------------------------------------------------------------------------------
+std::shared_ptr<pfcp::pfcp_pdr> QERProgram::GetPdrByQerId(
     uint32_t qer_id) const {
-  auto it = pdr_map.find(qer_id);
-  return (it != pdr_map.end()) ? it->second : nullptr;
+  auto it = pdr_map_.find(qer_id);
+  return (it != pdr_map_.end()) ? it->second : nullptr;
 }
-bool QERProgram::no_tc_filter_bpf(std::string interface) {
-  std::string cmd = {};
-  uint32_t ret    = 0;
 
-  cmd = fmt::format(
+//------------------------------------------------------------------------------
+bool QERProgram::NoTcFilterBpf(const std::string& interface) {
+  std::string cmd = fmt::format(
       "tc filter show dev {} | awk '/bpf/ {{found=1; print 1}} END {{if "
       "(!found) print 0}}'",
-      interface.c_str());
-  Logger::upf_app().debug("Running command: %s", cmd.c_str());
-  ret = std::stoi(CmdRunner::exec(cmd).c_str());
+      interface);
+  uint32_t ret = std::stoi(CmdRunner::exec(cmd).c_str());
   return ret ? false : true;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-void QERProgram::setup(
-    uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> pQer,
+//------------------------------------------------------------------------------
+void QERProgram::Setup(
+    uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> qers,
     std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs) {
-  const std::string udpIface =
-      UserPlaneComponent::getInstance().getUDPInterface();
-  const std::string gtpIface =
-      UserPlaneComponent::getInstance().getGTPInterface();
+  const std::string udp_iface =
+      UserPlaneComponent::GetInstance().GetUDPInterface();
+  const std::string gtp_iface =
+      UserPlaneComponent::GetInstance().GetGTPInterface();
 
-  const uint32_t default_rate = NicInformationGetter::retrieveRate(gtpIface);
+  const uint32_t default_rate = NicInformationGetter::retrieveRate(gtp_iface);
   const uint32_t max_rate     = default_rate;
-  const uint32_t default_ceil = NicInformationGetter::retrieveCeil(gtpIface);
+  const uint32_t default_ceil = NicInformationGetter::retrieveCeil(gtp_iface);
   const uint32_t max_ceil     = default_ceil;
 
-  spSkeleton = mpLifeCycle->open();
+  skeleton_ = lifecycle_->open();
+  InitializeMaps();
+  lifecycle_->load();
+  lifecycle_->attach();
 
-  initializeMaps();
-  mpLifeCycle->load();
-  mpLifeCycle->attach();
+  std::string cmd;
 
-  std::shared_ptr<pfcp::pfcp_qer> default_qer =
-      retrive_default_qer_with_default_qfi(pQer);
+  uint32_t udp_interface_index = if_nametoindex(udp_iface.c_str());
+  uint32_t gtp_interface_index = if_nametoindex(gtp_iface.c_str());
 
-  std::string cmd = {};
-  int rc          = 0;
-  int if_index    = 0;
-
-  Logger::upf_app().info(
-      "UDP_INTERFACE = %s",
-      UserPlaneComponent::getInstance().getUDPInterface());
-  Logger::upf_app().info("GTP_INTERFACE = %s", gtpIface.c_str());
-
-  uint32_t udpInterfaceIndex = if_nametoindex(udpIface.c_str());
-  uint32_t gtpInterfaceIndex = if_nametoindex(gtpIface.c_str());
-
-  if (udpInterfaceIndex == 0 || gtpInterfaceIndex == 0) {
+  if (udp_interface_index == 0 || gtp_interface_index == 0) {
     Logger::upf_app().error("Failed to retrieve interface indices");
     throw std::runtime_error("Invalid network interface index");
   }
 
-  uint32_t uplinkId   = static_cast<uint32_t>(FlowDirection::UPLINK);
-  uint32_t downlinkId = static_cast<uint32_t>(FlowDirection::DOWNLINK);
+  uint32_t uplink_id   = static_cast<uint32_t>(FlowDirection::UPLINK);
+  uint32_t downlink_id = static_cast<uint32_t>(FlowDirection::DOWNLINK);
 
-  mpEgressIfindexMap->update(uplinkId, udpInterfaceIndex, BPF_ANY);
-  mpEgressIfindexMap->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
+  egress_ifindex_map_->Update(uplink_id, udp_interface_index, BPF_ANY);
+  egress_ifindex_map_->Update(downlink_id, gtp_interface_index, BPF_ANY);
 
-  if (!pQer.empty()) {
+  if (!qers.empty()) {
+    // Start QoS Setup Banner
+    LogQosSetupStart(seid, gtp_iface);
+
+    Logger::upf_app().info(
+        "  ┌─ N6 Interface (Non-GTP): %s", udp_iface.c_str());
+    Logger::upf_app().info(
+        "  └─ N3 Interface (GTP):     %s", gtp_iface.c_str());
+
+    std::shared_ptr<pfcp::pfcp_qer> default_qer =
+        RetrieveDefaultQerWithDefaultQfi(qers);
+
+    if (default_qer) {
+      Logger::upf_app().debug(
+          "  → Default QoS Flow detected: QER=%u, QFI=%u",
+          default_qer->qer_id.second.qer_id,
+          default_qer->qos_flow_id.second.qfi);
+    }
+
+    std::vector<QosFlowInfo> qos_flows;
+    bool has_errors = false;
+
     // Configure Root Qdisc if not already present
-    if (no_htb_root_qdisc(gtpIface)) {
+    if (NoHtbRootQdisc(gtp_iface)) {
       Logger::upf_app().info(
-          "Create Root qdisc on interface %s with Default Class: %d, and r2q: "
-          "%d",
-          gtpIface.c_str(), getDefaultClassHandle(), getR2qRoot());
+          "  ┌─ Creating Root HTB Qdisc on %s", gtp_iface.c_str());
+      Logger::upf_app().info(
+          "  │  • Default Class: %u", GetDefaultClassHandle());
+      Logger::upf_app().info("  │  • r2q Parameter: %u", GetR2qRoot());
+      Logger::upf_app().debug(
+          " │  • Max DL Rate:   %s kbps", FormatNumber(max_rate).c_str());
+      Logger::upf_app().debug(
+          " │  • Max DL Ceil:   %s kbps", FormatNumber(max_ceil).c_str());
 
       cmd = fmt::format(
-          "tc qdisc add dev {} root handle 1:0 htb default {} r2q {}", gtpIface,
-          getDefaultClassHandle(), getR2qRoot());
+          "tc qdisc add dev {} root handle 1:0 htb default {} r2q {}",
+          gtp_iface, GetDefaultClassHandle(), GetR2qRoot());
 
       if (system(cmd.c_str()) != 0) {
-        Logger::upf_app().error("Failed command: %s", cmd);
-        return;
+        Logger::upf_app().error(
+            "  └─ ✗ Failed to create root qdisc %s on %s", cmd.c_str(),
+            gtp_iface.c_str());
+        has_errors = true;
+      } else {
+        Logger::upf_app().info(
+            "  └─ ✓ Root qdisc created successfully on interface: %s",
+            gtp_iface.c_str());
       }
-
-      Logger::upf_app().debug("QDISC Root DL Rate (GBR) : %dkbps", max_rate);
-      Logger::upf_app().debug("QDISC Root DL Ceil (MBR) : %dkbps", max_ceil);
     } else {
       Logger::upf_app().debug(
-          "HTB Root qdisc on interface %s already created", gtpIface.c_str());
+          "HTB Root qdisc on interface: %s, already created",
+          gtp_iface.c_str());
     }
 
     // Create PDU Session Class
     uint16_t casted_seid = static_cast<uint16_t>(seid);
+    uint64_t rate_bytes  = ((uint64_t) max_rate * 1000) / 8;
+    uint32_t pdu_quantum = rate_bytes / GetR2qRoot();
 
+    Logger::upf_app().info("  ┌─ Creating PDU Session Class 1:%x", casted_seid);
     Logger::upf_app().info(
-        "Create PDU Session Class 1:%d with rate: %d", seid, max_rate);
+        "  │  • Session Rate: %s kbps", FormatNumber(max_rate).c_str());
     cmd = fmt::format(
-        "tc class add dev {} parent 1: classid 1:{:x} htb rate {}kbit",
-        gtpIface, casted_seid, max_rate);
+        "tc class add dev {} parent 1: classid 1:{:x} htb rate {}kbit quantum "
+        "{}",
+        gtp_iface, casted_seid, max_rate, pdu_quantum);
 
     if (system(cmd.c_str()) != 0) {
-      Logger::upf_app().error("Failed command: %s", cmd);
+      Logger::upf_app().error(
+          "  └─ ✗ Failed to create PDU session class 1:%x", casted_seid);
+      has_errors = true;
+    } else {
+      Logger::upf_app().info(
+          "  └─ ✓ PDU session class  1:%x created successfully", casted_seid);
     }
 
     // Process each QER
-    build_pdr_map(pdrs);
+    BuildPdrMap(pdrs);
 
-    for (const auto& qer : pQer) {
-      uint8_t qfi    = qer->qfi.second.qfi;
+    for (const auto& qer : qers) {
+      uint8_t qfi    = qer->qos_flow_id.second.qfi;
       uint16_t minor = generate_minor_id(seid, qfi);
-
+      // Handle default QER
       if (qer == default_qer) {
-        uint16_t default_minor = (getDefaultClassHandle() - minor) % 10000;
+        uint16_t default_minor = (GetDefaultClassHandle() - minor) % 10000;
         //(ntohs(seid) * 256) + (getDefaultClassHandle() * 251 % 256);
 
         Logger::upf_app().info(
-            "Create Default Class 1:%d Child of Parent 1:%d", default_minor,
-            seid);
-        Logger::upf_app().info(
-            "The Default Class 1:%d is of Rate: %d kbit and Ceil: %d kbit",
-            default_minor, getDefaultClassRate(), getDefaultClassCeil());
+            "  ┌─ Creating Default Class 1:%d Child of Parent 1:%d",
+            default_minor, seid);
 
-        cmd = fmt::format(
+        Logger::upf_app().debug(
+            " │  • Rate:   %s kbps",
+            FormatNumber(GetDefaultClassRate()).c_str());
+        Logger::upf_app().debug(
+            " │  • Ceil:   %s kbps",
+            FormatNumber(GetDefaultClassCeil()).c_str());
+
+        uint64_t default_rate_bytes =
+            ((uint64_t) GetDefaultClassRate() * 1000) / 8;
+        uint32_t default_quantum = default_rate_bytes / GetR2qRoot();
+        cmd                      = fmt::format(
             "tc class add dev {} parent 1:{:x} classid 1:{:x} htb rate {}kbit "
-            "ceil "
-            "{}kbit",
-            gtpIface, casted_seid, default_minor, getDefaultClassRate(),
-            getDefaultClassCeil());
+            "ceil {}kbit quantum {}",
+            gtp_iface, casted_seid, default_minor, GetDefaultClassRate(),
+            GetDefaultClassCeil(), default_quantum);
 
         if (system(cmd.c_str()) != 0) {
-          Logger::upf_app().error("Failed command: %s", cmd);
+          Logger::upf_app().error(
+              "  └─ ✗ Failed to create default class 1:%x", default_minor);
+          has_errors = true;
         } else {
           Logger::upf_app().info(
-              "Create PFIFO default class %d: Child of Parent 1:%d", minor,
-              default_minor, seid);
+              "  └─ ✓ Default class  1:%x created successfully", default_minor);
+
+          Logger::upf_app().info(
+              "  ┌─ Creating PFIFO default class %d: Child of Parent 1:%d",
+              minor, default_minor, seid);
           cmd = fmt::format(
               "tc class add dev {} parent 1:{:x} classid 1:{:x} htb rate "
-              "{}kbit "
-              "ceil {}kbit",
-              gtpIface, default_minor, minor, getDefaultClassRate(),
-              getDefaultClassCeil());
+              "{}kbit ceil {}kbit quantum {}",
+              gtp_iface, default_minor, minor, GetDefaultClassRate(),
+              GetDefaultClassCeil(), default_quantum);
+
+          /*
+          cmd = fmt::format(
+           "tc qdisc add dev {} parent 1:{:x} handle {:x}: pfifo", gtp_iface,
+           default_minor, minor);
+          */
 
           if (system(cmd.c_str()) != 0) {
-            Logger::upf_app().error("Failed command: %s", cmd);
+            Logger::upf_app().error(
+                "  └─ ✗ Failed to create PFIFO for default class");
+            has_errors = true;
+          } else {
+            Logger::upf_app().info(
+                "  └─ ✓ PFIFO default class  1:%d created successfully", minor);
           }
+
+          // Add default flow to table
+          QosFlowInfo flow;
+          flow.qer_id           = qer->qer_id.second.qer_id;
+          flow.qfi              = qfi;
+          flow.rate_kbps        = GetDefaultClassRate();
+          flow.ceil_kbps        = GetDefaultClassCeil();
+          flow.class_id         = default_minor;
+          flow.flow_description = "Default QoS Flow";
+          qos_flows.push_back(flow);
         }
         continue;
       }
 
-      if (qer->mbr.first) {
-        uint32_t qer_id = qer->qer_id.second.qer_id;
-        Logger::upf_app().debug(
-            "qer->mbr.second.dl_mbr = %d", qer->mbr.second.dl_mbr);
-        Logger::upf_app().debug(
-            "qer->mbr.second.ul_mbr = %d", qer->mbr.second.ul_mbr);
-        uint64_t dl_ceil = std::max(qer->mbr.second.dl_mbr, 1UL);
-        Logger::upf_app().debug("dl_ceil = %d", dl_ceil);
-        uint8_t dl_gate = qer->gate_status.second.dl_gate;
+      // Handle GBR/MBR QERs
+      if (qer->maximum_bitrate.first) {
+        uint32_t qer_id  = qer->qer_id.second.qer_id;
+        uint64_t dl_ceil = std::max(qer->maximum_bitrate.second.dl_mbr, 1UL);
+        uint8_t dl_gate  = qer->gate_status.second.dl_gate;
 
         uint64_t dl_rate = 1;
-        if (qer->gbr.first) {
-          dl_rate = std::max(qer->gbr.second.dl_gbr, 1UL);
-          Logger::upf_app().debug("dl_rate = %d", dl_rate);
-          Logger::upf_app().debug(
-              "qer->gbr.second.ul_gbr = %d", qer->gbr.second.ul_gbr);
-          Logger::upf_app().debug(
-              "qer->gbr.second.dl_gbr = %d", qer->gbr.second.dl_gbr);
+
+        if (qer->guaranteed_bitrate.first) {
+          // GBR present: use the SMF-provided GBR value
+          dl_rate = std::max(qer->guaranteed_bitrate.second.dl_gbr, 1UL);
+        } else {
+          // GBR absent: fallback to 80% of MBR
+          dl_rate = std::max(static_cast<unsigned long>(dl_ceil * 0.8), 1UL);
+          Logger::upf_app().warn("QoS Flow missing GBR: set it to 0.8 x MBR");
         }
 
         Logger::upf_app().info(
-            "Create QoS Flow Class 1:%d for PDU Session Parent 1:%d", minor,
-            seid);
+            "  ┌─ Createing QoS Flow Class 1:%d for PDU Session Parent 1:%d",
+            minor, seid);
+        Logger::upf_app().info(
+            "  │  • QoS Flow Rate (GBR): %s kbps",
+            FormatNumber(dl_rate).c_str());
+        Logger::upf_app().info(
+            "  │  • QoS Flow Ceil (MBR): %s kbps",
+            FormatNumber(dl_ceil).c_str());
 
         cmd = fmt::format(
             "tc class add dev {} parent 1:{:x} classid 1:{:x} htb rate {}kbit "
-            "ceil "
-            "{}kbit",
-            gtpIface, casted_seid, minor, dl_rate, dl_ceil);
+            "ceil {}kbit",
+            gtp_iface, casted_seid, minor, dl_rate, dl_ceil);
 
         if (system(cmd.c_str()) != 0) {
-          Logger::upf_app().error("Failed command: %s", cmd);
-        }
+          Logger::upf_app().error(
+              "  └─ ✗ Failed to create QoS flow class for QER %u", qer_id);
+          has_errors = true;
+        } else {
+          // Add flow to table
+          QosFlowInfo flow;
+          flow.qer_id    = qer_id;
+          flow.qfi       = qfi;
+          flow.rate_kbps = dl_rate;
+          flow.ceil_kbps = dl_ceil;
+          flow.class_id  = minor;
 
-        Logger::upf_app().debug(
-            "    HTB Class ID (QER) ........... %d", qer_id);
-        Logger::upf_app().debug("         Class QFI:      %d", qfi);
-        Logger::upf_app().debug("         Class DL Rate:     %dkbps", dl_rate);
-        Logger::upf_app().debug("         Class DL Ceil:     %dkbps", dl_ceil);
+          // Get flow description from associated PDR
+          auto pdr = GetPdrByQerId(qer_id);
+          if (pdr) {
+            pfcp::pdi pdi;
+            if (pdr->get(pdi)) {
+              pfcp::sdf_filter_t sdf;
+              if (pdi.get(sdf) && sdf.fd &&
+                  sdf.length_of_flow_description > 0) {
+                flow.flow_description = sdf.flow_description;
+              }
+            }
+          }
+          if (flow.flow_description.empty()) {
+            flow.flow_description = "permit out ip from any to any";
+          }
+
+          qos_flows.push_back(flow);
+          Logger::upf_app().info(
+              "  └─ ✓ QoS Flow class  1:%d created successfully for QER %u",
+              minor, qer_id);
+        }
       }
     }
 
-    if (no_tc_filter_bpf(gtpIface)) {
+    // Attach TC BPF filter (silent)
+    if (NoTcFilterBpf(gtp_iface)) {
       Logger::upf_app().info(
           "Attach Section tc_filter_traffic to gtp interface");
-      // Create tc filter for the GTP interface
       cmd = fmt::format(
           "tc filter add dev {} parent 1:0 protocol ip bpf obj "
-          "/openair-upf/bin/qer_tc_kernel.c.o classid 1: direct-action",
-          gtpIface.c_str());
-      Logger::upf_app().debug("Running command: %s", cmd.c_str());
+          "/openair-upf/bin/qer_tc_kern.c.o classid 1: direct-action",
+          gtp_iface.c_str());
       if (system(cmd.c_str()) != 0) {
-        Logger::upf_app().error("Failed command: %s", cmd.c_str());
+        Logger::upf_app().error("Failed to attach TC BPF filter");
+        has_errors = true;
       }
     }
 
+    // Attach TC redirect to UDP interface
     Logger::upf_app().info("Attach Section tc_redirect to udp interface");
-    mpLifeCycle->tcAttachIngress("tc_redirect_traffic", udpIface.c_str());
+    lifecycle_->tcAttachIngress("tc_redirect_traffic", udp_iface.c_str());
+
+    // Display QoS Flow Table
+    if (!qos_flows.empty()) {
+      DisplayQosFlowTable(seid, qos_flows);
+    }
+
+    // End QoS Setup Banner
+    LogQosSetupComplete(seid, qos_flows.size(), has_errors);
   }
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMaps> QERProgram::getMaps() {
-  return mpMaps;
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMaps> QERProgram::GetMaps() {
+  return maps_;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-// TODO: Check when kill when running.
-// It was noted the infinity loop.
-void QERProgram::tearDown() {
-  mpLifeCycle->tearDown();
+//------------------------------------------------------------------------------
+void QERProgram::TearDown() {
+  lifecycle_->tearDown();
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> QERProgram::get5GQoSFlowParamsMap() const {
-  return mp5GQoSFlowParamsMap;
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> QERProgram::Get5GQoSFlowParamsMap() const {
+  return qos_flow_params_map_;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-std::shared_ptr<BPFMap> QERProgram::getEgressIfindexMap() const {
-  return mpEgressIfindexMap;
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> QERProgram::GetEgressIfindexMap() const {
+  return egress_ifindex_map_;
 }
 
-/*---------------------------------------------------------------------------------------------------------------*/
-void QERProgram::initializeMaps() {
-  // Store all maps available in the program.
-  mpMaps = std::make_shared<BPFMaps>(mpLifeCycle->getBPFSkeleton()->skeleton);
+//------------------------------------------------------------------------------
+void QERProgram::InitializeMaps() {
+  // Store all maps available in the program
+  maps_ = std::make_shared<BPFMaps>(lifecycle_->getBPFSkeleton()->skeleton);
 
-  mpEgressIfindexMap =
-      std::make_shared<BPFMap>(mpMaps->getMap("m_egress_ifindex"));
+  egress_ifindex_map_ =
+      std::make_shared<BPFMap>(maps_->GetMap("egress_ifindex"));
 }

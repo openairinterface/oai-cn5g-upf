@@ -48,7 +48,9 @@
 #include <linux/if_tun.h>
 #include <stdexcept>
 
-static std::shared_ptr<SessionManager> spSessionManager;
+#include <iomanip>
+
+std::shared_ptr<SessionManager> session_manager;
 
 using namespace pfcp;
 using namespace gtpv1u;
@@ -699,32 +701,43 @@ void pfcp_switch::call_datapath(
     itti_n4_session_modification_request* modification_request,
     itti_n4_session_deletion_request* deletion_request, pfcp::pfcp_session* s,
     std::shared_ptr<SessionManager> obj,
-    void (SessionManager::*crud_func)(
+    SessionOperationResult (SessionManager::*crud_func)(
         std::shared_ptr<pfcp::pfcp_session>,
         itti_n4_session_establishment_request* est_req,
         itti_n4_session_modification_request* mod_req,
         itti_n4_session_deletion_request* del_req)) {
   std::shared_ptr<pfcp::pfcp_session> pSession =
       std::make_shared<pfcp::pfcp_session>(*s);
-  obj = UserPlaneComponent::getInstance().getSessionManager();
+  // // obj = UserPlaneComponent::GetInstance().GetSessionManager();
 
-  itti_n4_session_establishment_request* est_req = establishment_request;
-  itti_n4_session_modification_request* mod_req  = modification_request;
-  itti_n4_session_deletion_request* del_req      = deletion_request;
+  // itti_n4_session_establishment_request* est_req = establishment_request;
+  // itti_n4_session_modification_request* mod_req  = modification_request;
+  // itti_n4_session_deletion_request* del_req      = deletion_request;
 
-  if (!del_req) {
-    obj->sessions.push_back(pSession);
-    (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
-  } else {
-    uint64_t seid  = pSession->get_up_seid();
-    auto& sessions = obj->sessions;
+  // if (!del_req) {
+  //   obj->sessions_.push_back(pSession);
+  //   (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
+  // } else {
+  //   uint64_t seid  = pSession->get_up_seid();
+  //   auto& sessions = obj->sessions_;
 
-    // for (auto it = sessions.begin(); it != sessions.end(); ++it) {
-    //   if ((it->get())->get_up_seid() == seid){
-    //     sessions.erase(it);
-    //   }
-    // }
-    (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
+  //   // for (auto it = sessions.begin(); it != sessions.end(); ++it) {
+  //   //   if ((it->get())->get_up_seid() == seid){
+  //   //     sessions.erase(it);
+  //   //   }
+  //   // }
+  //   (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
+  // }
+
+  // Just call the CRUD method - it handles EVERYTHING internally!
+  SessionOperationResult result = (obj.get()->*crud_func)(
+      pSession, establishment_request, modification_request, deletion_request);
+
+  // Optional: Log errors
+  if (!result.success) {
+    Logger::pfcp_switch().error(
+        "Datapath operation failed: %s (SEID: 0x%lx)", result.message.c_str(),
+        result.seid);
   }
 }
 
@@ -828,8 +841,8 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
       if (isBpfAccelerationEnabled) {
         Logger::upf_app().info("Establish datapath: create(pdr(s) & far(s))");
         call_datapath(
-            req, NULL, NULL, session, spSessionManager,
-            &SessionManager::createBpfSession);
+            req, NULL, NULL, session, session_manager,
+            &SessionManager::EstablishSession);
       }
 
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
@@ -863,39 +876,47 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
     resp->pfcp_ies.set(offending_ie);
   }
 
+  //   if (Logger::should_log(spdlog::level::debug)) {
+  //     std::cout <<
+  //     "\n+----------------------------------------------------------"
+  //                  "--------"
+  //                  "-------------------------------------------------------------"
+  //                  "--------"
+  //                  "-----------------------------------------------------------+"
+  //               << std::endl;
+  //     std::cout
+  //         << "| PFCP switch Packet Detection Rule list ordered by established
+  //         "
+  //            "sessions: " "  " " |"
+  //         << std::endl;
+  //     std::cout <<
+  //     "+----------------+----+--------+--------+------------+-------"
+  //                  "--------"
+  //                  "------------------------+----------------------+-------------"
+  //                  "---+----"
+  //                  "---------------------------------------------------------+"
+  //               << std::endl;
+  //     std::cout << "|  SEID          |pdr |  far   |predence|   action   | "
+  //                  " create "
+  //                  "outer hdr         tun id| rmv outer hdr  tun id|    UE
+  //                  IPv4  " "   |    " " |"
+  //               << std::endl;
+  //     std::cout <<
+  //     "+----------------+----+--------+--------+------------+-------"
+  //                  "--------"
+  //                  "------------------------+----------------------+-------------"
+  //                  "---+----"
+  //                  "---------------------------------------------------------+"
+  //               << std::endl;
+  //     for (const auto& it : up_seid2pfcp_sessions) {
+  //       std::cout << it.second->to_string() << std::endl;
+  //     }
+  //   }
+  // }
   if (Logger::should_log(spdlog::level::debug)) {
-    std::cout << "\n+----------------------------------------------------------"
-                 "--------"
-                 "-------------------------------------------------------------"
-                 "--------"
-                 "-----------------------------------------------------------+"
-              << std::endl;
-    std::cout
-        << "| PFCP switch Packet Detection Rule list ordered by established "
-           "sessions:                                                          "
-           "  "
-           "                                                              |"
-        << std::endl;
-    std::cout << "+----------------+----+--------+--------+------------+-------"
-                 "--------"
-                 "------------------------+----------------------+-------------"
-                 "---+----"
-                 "---------------------------------------------------------+"
-              << std::endl;
-    std::cout << "|  SEID          |pdr |  far   |predence|   action   |       "
-                 " create "
-                 "outer hdr         tun id| rmv outer hdr  tun id|    UE IPv4  "
-                 "   |    "
-                 "                                                         |"
-              << std::endl;
-    std::cout << "+----------------+----+--------+--------+------------+-------"
-                 "--------"
-                 "------------------------+----------------------+-------------"
-                 "---+----"
-                 "---------------------------------------------------------+"
-              << std::endl;
+    // Print PDU session rules table
     for (const auto& it : up_seid2pfcp_sessions) {
-      std::cout << it.second->to_string() << std::endl;
+      std::cout << it.second->to_string();
     }
   }
 }
@@ -932,9 +953,9 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       if (isBpfAccelerationEnabled) {
         Logger::upf_app().info("Modify datapath:remove(pdr)");
         call_datapath(
-            NULL, req, NULL, session, spSessionManager,
+            NULL, req, NULL, session, session_manager,
             &SessionManager::SessionManager::
-                modifyBpfSession /*&SessionManager::updateBpfSession*/);
+                ModifySession /*&SessionManager::updateBpfSession*/);
       }
 
       remove_pdr& pdr = it;
@@ -955,9 +976,9 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         if (isBpfAccelerationEnabled) {
           Logger::upf_app().info("Modify datapath: remove(far)");
           call_datapath(
-              NULL, req, NULL, session, spSessionManager,
+              NULL, req, NULL, session, session_manager,
               &SessionManager::
-                  modifyBpfSession /*&SessionManager::updateBpfSession*/);
+                  ModifySession /*&SessionManager::updateBpfSession*/);
         }
 
         remove_far& far = it;
@@ -982,9 +1003,9 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         for (auto it : req->pfcp_ies.remove_qers) {
           Logger::upf_app().info("Modify datapath: remove(qer)");
           call_datapath(
-              NULL, req, NULL, session, spSessionManager,
+              NULL, req, NULL, session, session_manager,
               &SessionManager::
-                  modifyBpfSession /*&SessionManager::updateBpfSession*/);
+                  ModifySession /*&SessionManager::updateBpfSession*/);
 
           remove_qer& qer = it;
 
@@ -1012,9 +1033,9 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       if (isBpfAccelerationEnabled) {
         // Logger::upf_app().info("Modify datapath: add(far)");
         // call_datapath(
-        //     NULL, req, NULL, session, spSessionManager,
+        //     NULL, req, NULL, session, session_manager,
         //     &SessionManager::
-        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
+        //         ModifySession /*&SessionManager::updateBpfSession*/);
       }
     }
 
@@ -1058,9 +1079,9 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       if (isBpfAccelerationEnabled) {
         // Logger::upf_app().info("Modify datapath: add(pdr)");
         // call_datapath(
-        //     NULL, req, NULL, session, spSessionManager,
+        //     NULL, req, NULL, session, session_manager,
         //     &SessionManager::
-        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
+        //         ModifySession /*&SessionManager::updateBpfSession*/);
       }
     }
 
@@ -1078,9 +1099,9 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
         // Logger::upf_app().info("Modify datapath: add(qer)");
         // call_datapath(
-        //     NULL, req, NULL, session, spSessionManager,
+        //     NULL, req, NULL, session, session_manager,
         //     &SessionManager::
-        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
+        //         ModifySession /*&SessionManager::updateBpfSession*/);
       }
     }
 
@@ -1099,9 +1120,9 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       if (isBpfAccelerationEnabled) {
         // Logger::upf_app().info("Modify datapath: update(pdr)");
         // call_datapath(
-        //     NULL, req, NULL, session, spSessionManager,
+        //     NULL, req, NULL, session, session_manager,
         //     &SessionManager::
-        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
+        //         ModifySession /*&SessionManager::updateBpfSession*/);
       }
 
       for (auto it : req->pfcp_ies.update_fars) {
@@ -1119,9 +1140,9 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       if (isBpfAccelerationEnabled) {
         // Logger::upf_app().info("Modify datapath: update(far)");
         // call_datapath(
-        //     NULL, req, NULL, session, spSessionManager,
+        //     NULL, req, NULL, session, session_manager,
         //     &SessionManager::
-        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
+        //         ModifySession /*&SessionManager::updateBpfSession*/);
       }
 
       /*
@@ -1140,18 +1161,17 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
         // Logger::upf_app().info("Modify datapath: update(qer)");
         // call_datapath(
-        //     NULL, req, NULL, session, spSessionManager,
+        //     NULL, req, NULL, session, session_manager,
         //     &SessionManager::
-        //         modifyBpfSession /*&SessionManager::updateBpfSession*/);
+        //         ModifySession /*&SessionManager::updateBpfSession*/);
       }
     }
 
     if (isBpfAccelerationEnabled) {
       Logger::upf_app().info("Modify datapath");
       call_datapath(
-          NULL, req, NULL, session, spSessionManager,
-          &SessionManager::
-              modifyBpfSession /*&SessionManager::updateBpfSession*/);
+          NULL, req, NULL, session, session_manager,
+          &SessionManager::ModifySession /*&SessionManager::updateBpfSession*/);
     }
   }
   resp->pfcp_ies.set(cause);
@@ -1160,39 +1180,47 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     resp->pfcp_ies.set(offending_ie);
   }
 
+  //   if (Logger::should_log(spdlog::level::debug)) {
+  //     std::cout <<
+  //     "\n+----------------------------------------------------------"
+  //                  "--------"
+  //                  "-------------------------------------------------------------"
+  //                  "--------"
+  //                  "-----------------------------------------------------------+"
+  //               << std::endl;
+  //     std::cout
+  //         << "| PFCP switch Packet Detection Rule list ordered by established
+  //         "
+  //            "sessions: " "  " " |"
+  //         << std::endl;
+  //     std::cout <<
+  //     "+----------------+----+--------+--------+------------+-------"
+  //                  "--------"
+  //                  "------------------------+----------------------+-------------"
+  //                  "---+----"
+  //                  "---------------------------------------------------------+"
+  //               << std::endl;
+  //     std::cout << "|  SEID          |pdr |  far   |predence|   action   | "
+  //                  " create "
+  //                  "outer hdr         tun id| rmv outer hdr  tun id|    UE
+  //                  IPv4  " "   |    " " |"
+  //               << std::endl;
+  //     std::cout <<
+  //     "+----------------+----+--------+--------+------------+-------"
+  //                  "--------"
+  //                  "------------------------+----------------------+-------------"
+  //                  "---+----"
+  //                  "---------------------------------------------------------+"
+  //               << std::endl;
+  //     for (const auto& it : up_seid2pfcp_sessions) {
+  //       std::cout << it.second->to_string() << std::endl;
+  //     }
+  //   }
+  // }
   if (Logger::should_log(spdlog::level::debug)) {
-    std::cout << "\n+----------------------------------------------------------"
-                 "--------"
-                 "-------------------------------------------------------------"
-                 "--------"
-                 "-----------------------------------------------------------+"
-              << std::endl;
-    std::cout
-        << "| PFCP switch Packet Detection Rule list ordered by established "
-           "sessions:                                                          "
-           "  "
-           "                                                              |"
-        << std::endl;
-    std::cout << "+----------------+----+--------+--------+------------+-------"
-                 "--------"
-                 "------------------------+----------------------+-------------"
-                 "---+----"
-                 "---------------------------------------------------------+"
-              << std::endl;
-    std::cout << "|  SEID          |pdr |  far   |predence|   action   |       "
-                 " create "
-                 "outer hdr         tun id| rmv outer hdr  tun id|    UE IPv4  "
-                 "   |    "
-                 "                                                         |"
-              << std::endl;
-    std::cout << "+----------------+----+--------+--------+------------+-------"
-                 "--------"
-                 "------------------------+----------------------+-------------"
-                 "---+----"
-                 "---------------------------------------------------------+"
-              << std::endl;
+    // Print PDU session rules table
     for (const auto& it : up_seid2pfcp_sessions) {
-      std::cout << it.second->to_string() << std::endl;
+      std::cout << it.second->to_string();
     }
   }
 }
@@ -1220,8 +1248,8 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
     if (isBpfAccelerationEnabled) {
       Logger::upf_app().info("Delete datapath");
       call_datapath(
-          NULL, NULL, req, session, spSessionManager,
-          &SessionManager::removeBpfSession);
+          NULL, NULL, req, session, session_manager,
+          &SessionManager::RemoveSession);
     }
 
     remove_pfcp_session(s);
@@ -1229,39 +1257,48 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
   pfcp_associations::get_instance().notify_del_session(fseid);
   resp->pfcp_ies.set(cause);
 
+  //   if (Logger::should_log(spdlog::level::debug)) {
+  //     std::cout <<
+  //     "\n+----------------------------------------------------------"
+  //                  "--------"
+  //                  "-------------------------------------------------------------"
+  //                  "--------"
+  //                  "-----------------------------------------------------------+"
+  //               << std::endl;
+  //     std::cout
+  //         << "| PFCP switch Packet Detection Rule list ordered by established
+  //         "
+  //            "sessions: " "  " " |"
+  //         << std::endl;
+  //     std::cout <<
+  //     "+----------------+----+--------+--------+------------+-------"
+  //                  "--------"
+  //                  "------------------------+----------------------+-------------"
+  //                  "---+----"
+  //                  "---------------------------------------------------------+"
+  //               << std::endl;
+  //     std::cout << "|  SEID          |pdr |  far   |predence|   action   | "
+  //                  " create "
+  //                  "outer hdr         tun id| rmv outer hdr  tun id|    UE
+  //                  IPv4  " "   |    " " |"
+  //               << std::endl;
+  //     std::cout <<
+  //     "+----------------+----+--------+--------+------------+-------"
+  //                  "--------"
+  //                  "------------------------+----------------------+-------------"
+  //                  "---+----"
+  //                  "---------------------------------------------------------+"
+  //               << std::endl;
+  //     for (const auto& it : up_seid2pfcp_sessions) {
+  //       std::cout << it.second->to_string() << std::endl;
+  //     }
+  //   }
+  // }
+
   if (Logger::should_log(spdlog::level::debug)) {
-    std::cout << "\n+----------------------------------------------------------"
-                 "--------"
-                 "-------------------------------------------------------------"
-                 "--------"
-                 "-----------------------------------------------------------+"
-              << std::endl;
-    std::cout
-        << "| PFCP switch Packet Detection Rule list ordered by established "
-           "sessions:                                                          "
-           "  "
-           "                                                              |"
-        << std::endl;
-    std::cout << "+----------------+----+--------+--------+------------+-------"
-                 "--------"
-                 "------------------------+----------------------+-------------"
-                 "---+----"
-                 "---------------------------------------------------------+"
-              << std::endl;
-    std::cout << "|  SEID          |pdr |  far   |predence|   action   |       "
-                 " create "
-                 "outer hdr         tun id| rmv outer hdr  tun id|    UE IPv4  "
-                 "   |    "
-                 "                                                         |"
-              << std::endl;
-    std::cout << "+----------------+----+--------+--------+------------+-------"
-                 "--------"
-                 "------------------------+----------------------+-------------"
-                 "---+----"
-                 "---------------------------------------------------------+"
-              << std::endl;
+    // Print PDU session rules table
     for (const auto& it : up_seid2pfcp_sessions) {
-      std::cout << it.second->to_string() << std::endl;
+      std::cout << it.second->to_string();
     }
   }
 }
