@@ -1,456 +1,1112 @@
-#include "SessionProgramManager.h"
-#include <qer_tc_user.h>
-#include "SessionPrograms.h"
-#include <upf_xdp_user.h>
-#include <UserPlaneComponent.h>
-#include <net/if.h>  // if_nametoindex
-#include <framed_routing/FramedRouting.hpp>
-#include <framed_routing_bpf.h>
+/*
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this
+ * file except in compliance with the License. You may obtain a copy of the
+ * License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
+ */
 
-#include <observer/OnStateChangeSessionProgramObserver.h>
-#include <spdlog/fmt/ostr.h>
+/**
+ * @file SessionProgramManager.cpp
+ * @brief BPF Program Manager Implementation
+ * @author OpenAirInterface
+ * @date 2025
+ *
+ * Implements BPF/eBPF program management and PFCP IE to BPF structure
+ * conversion according to 3GPP TS 29.244 specifications.
+ */
+
+#include "SessionProgramManager.h"
+#include "SessionPrograms.h"
+#include "UserPlaneComponent.h"
+#include "upf_xdp_limits.h"
+#include <upf_xdp_user.h>
+#include <qer_tc_user.h>
 #include <wrappers/BPFMap.hpp>
-#include "logger.hpp"
-#include "helpers/NextHopFinder.hpp"
-#include <errno.h>
+#include <utils/compiler_hints.h>
+#include <utils/endian_utils.h>
+#include <helpers/NextHopFinder.hpp>
+#include <helpers/SdfFilterParser.hpp>
+#include <net/if.h>
 #include <arpa/inet.h>
+#include "observer/SessionObserver.h"
+#include <errno.h>
 #include <arp_table.h>
 #include <session_id.h>
-#include "upf_config.hpp"
-#include <thread>
 #include <rules_matching_pdr.h>
-#include "helpers/SdfFilterParser.hpp"
-#include "helpers/ConfigLoader.hpp"
-#include "sdf_filter.h"
+#include "logger.hpp"
+#include "upf_config.hpp"
+#include "pfcp_session.hpp"
+#include "pfcp_pdr.hpp"
+#include "pfcp_far.hpp"
+#include "pfcp_qer.hpp"
+#include <pfcp_pdr.h>  // BPF PDR structure
+#include <pfcp_far.h>  // BPF FAR structure
+#include <pfcp_qer.h>  // BPF QER structure
+#include <sdf_filter.h>
 
 using namespace oai::config;
+using namespace upf::utils;
 extern upf_config upf_cfg;
 
-#define EMPTY_SLOT -1l
+static constexpr int64_t kEmptySlot = -1;
 
-#define likely(x) __builtin_expect(!!(x), 1)
-#define unlikely(x) __builtin_expect(!!(x), 0)
+//------------------------------------------------------------------------------
+// Constructor & Destructor
+//------------------------------------------------------------------------------
 
-#define MAX_PDRS_SESSION 32
-//---------------------------------------------------------------------------------------------------------------
-int is_little_endian() {
-  uint32_t value = 1;
-  uint8_t* byte  = (uint8_t*) &value;
-  return (*byte == 1);
+SessionProgramManager::SessionProgramManager(size_t max_sessions)
+    : max_sessions_(max_sessions), session_observer_(nullptr) {
+  program_array_.fill(kEmptySlot);
+  pfcp_programs = std::make_shared<std::vector<PfcpProgramInfo>>();
+  Logger::upf_app().debug("SessionProgramManager initialized");
 }
 
-// int is_little_endian() {
-//   struct utsname buf;
-//   uname(&buf);
-//   return (
-//       strstr(buf.machine, "x86_64") || strstr(buf.machine, "i386") ||
-//       strstr(buf.machine, "armv7") || strstr(buf.machine, "aarch64"));
-// }
-//---------------------------------------------------------------------------------------------------------------
-// std::ostream& operator<<(
-//     std::ostream& Str, struct next_rule_prog_index_key const& v) {
-//   Str << "TEID: " << v.teid << " SOURCE INTERFACE: " << v.source_value
-//       << "IPv4 ADDRESS: " << v.ipv4_address;
-//   return Str;
-// }
-
-//---------------------------------------------------------------------------------------------------------------
-SessionProgramManager::SessionProgramManager() {
-  for (auto& item : mProgramArray) {
-    item = EMPTY_SLOT;
-  }
-  pfcpPrograms = std::make_shared<std::vector<pfcpprograms>>();
-}
-
-//---------------------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 SessionProgramManager::~SessionProgramManager() {
-  removeAll();
+  RemoveAllSessions();
+  Logger::upf_app().debug("SessionProgramManager destroyed");
 }
 
-//---------------------------------------------------------------------------------------------------------------
-SessionProgramManager& SessionProgramManager::getInstance() {
-  static SessionProgramManager sInstance;
-  return sInstance;
+//------------------------------------------------------------------------------
+// Singleton Access
+//------------------------------------------------------------------------------
+
+SessionProgramManager& SessionProgramManager::GetInstance() {
+  static SessionProgramManager instance;
+  return instance;
 }
 
-//---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::setTeidSessionMap(
-    std::shared_ptr<BPFMap> pProgramsMaps) {
-  mpTeidSessionMap = pProgramsMaps;
+//------------------------------------------------------------------------------
+// Session Lifecycle Management
+//------------------------------------------------------------------------------
+
+void SessionProgramManager::CreateSession(uint64_t seid) {
+  std::lock_guard<std::mutex> lock(mutex_);
+
+  Logger::upf_app().info("Creating session " SEID_FMT, seid);
+
+  // Session-specific initialization if needed
+  // The actual BPF maps will be updated in CreatePipeline()
 }
 
-//---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::addPFCPProgram(
-    uint64_t seid, std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram) {
-  pfcpprograms pfcpprogam    = {};
-  pfcpprogam.seid            = seid;
-  pfcpprogam.pUPF_XDPProgram = pUPF_XDPProgram;
+//------------------------------------------------------------------------------
+void SessionProgramManager::RemoveSession(uint64_t seid) {
+  std::lock_guard<std::mutex> lock(mutex_);
 
-  pfcpPrograms->push_back(pfcpprogam);
-}
+  Logger::upf_app().info("Removing session " SEID_FMT, seid);
 
-//---------------------------------------------------------------------------------------------------------------
-uint32_t SessionProgramManager::getRemoteIP(uint32_t upfIP, uint32_t remoteIP) {
-  uint32_t ipnexthop = 0;
-  if (not NextHopFinder::sameSubnet(upfIP, remoteIP)) {
-    Logger::upf_app().debug(" same subnet");
-    ipnexthop = NextHopFinder::retrieveNextHopIP(remoteIP);
-  } else {
-    Logger::upf_app().debug("The same subnet");
-    ipnexthop = remoteIP;
-  }
-  return ipnexthop;
-}
-
-//---------------------------------------------------------------------------------------------------------------
-pfcp_far_t SessionProgramManager::createFar(
-    std::shared_ptr<pfcp::pfcp_far> pFar) {
-  pfcp_far_t far;
-
-  far.far_id.far_id = pFar->far_id.far_id;
-
-  far.forwarding_parameters.destination_interface.interface_value =
-      pFar->forwarding_parameters.second.destination_interface.second
-          .interface_value;
-
-  far.forwarding_parameters.outer_header_creation.teid =
-      pFar->forwarding_parameters.second.outer_header_creation.second.teid;
-
-  far.forwarding_parameters.outer_header_creation.port_number =
-      pFar->forwarding_parameters.second.outer_header_creation.second
-          .port_number;
-
-  far.forwarding_parameters.outer_header_creation
-      .outer_header_creation_description =
-      pFar->forwarding_parameters.second.outer_header_creation.second
-          .outer_header_creation_description;
-
-  far.forwarding_parameters.outer_header_creation.ipv4_address.s_addr =
-      pFar->forwarding_parameters.second.outer_header_creation.second
-          .ipv4_address.s_addr;
-
-  memcpy(&far.apply_action, &pFar->apply_action, sizeof(apply_action_t));
-
-  return far;
-}
-
-//---------------------------------------------------------------------------------------------------------------
-
-pfcp_pdr_t SessionProgramManager::createPdr(
-    std::shared_ptr<pfcp::pfcp_pdr> pPdr) {
-  pfcp_pdr_t pdr;
-
-  pdr.pdr_id.rule_id        = pPdr->pdr_id.rule_id;
-  pdr.precedence.precedence = pPdr->precedence.second.precedence;
-
-  pdr.far_id.far_id = pPdr->far_id.second.far_id;
-  pdr.qer_id.qer_id = pPdr->qer_id.second.qer_id;
-  pdr.urr_id.urr_id = pPdr->urr_id.second.urr_id;
-
-  pdr.pdi.source_interface.interface_value =
-      pPdr->pdi.second.source_interface.second.interface_value;
-  pdr.pdi.fteid.teid = pPdr->pdi.second.local_fteid.second.teid;
-  // pdr.pdi.network_instance    = pPdr->pdi.second.network_instance;
-  pdr.pdi.ue_ip_address.ipv4_address =
-      pPdr->pdi.second.ue_ip_address.second.ipv4_address.s_addr;
-  //  pdr.pdi.traffic_endpoint_id = pPdr->pdi.second.traffic_endpoint_id;
-  pdr.pdi.sdf_filter.length_of_flow_description =
-      pPdr->pdi.second.sdf_filter.second.length_of_flow_description;
-  Logger::upf_app().debug(
-      "SDF Filter Lengh (%d)", pdr.pdi.sdf_filter.length_of_flow_description);
-
-  try {
-    if (pdr.pdi.sdf_filter.length_of_flow_description >=
-        sizeof(pdr.pdi.sdf_filter.flow_description)) {
-      Logger::upf_app().debug(
-          "SDF Filter Lengh (%d) exceeds buffer size (%d), Truncating data.",
-          pdr.pdi.sdf_filter.length_of_flow_description,
-          sizeof(pdr.pdi.sdf_filter.flow_description));
-
-      throw std::runtime_error("SDF filter length exceeds buffer size.");
-    }
-
-    memcpy(
-        pdr.pdi.sdf_filter.flow_description,
-        pPdr->pdi.second.sdf_filter.second.flow_description.c_str(),
-        pdr.pdi.sdf_filter.length_of_flow_description);
-  } catch (const std::bad_alloc& e) {
-    // Handle memory allocation failure
-    Logger::upf_app().error(
-        "Memory allocation failed while copying SDF filter: {}", e.what());
-
-    throw;  // Rethrow the exception
-  } catch (const std::exception& e) {
-    // Catch any other exception
-    Logger::upf_app().error(
-        "An error occurred while processing the SDF filter: {}", e.what());
-
-    throw;  // Rethrow the exception
-  } catch (...) {
-    // Catch all other unspecified errors
-    Logger::upf_app().error(
-        "An unexpected error occurred while copying the SDF filter.");
-
-    throw std::runtime_error(
-        "Unexpected error occurred while copying SDF filter.");
+  // Remove from session programs map
+  auto it = session_programs_map_.find(seid);
+  if (it != session_programs_map_.end()) {
+    session_programs_map_.erase(it);
   }
 
-  // pdr.pdi.application_id      = pPdr->pdi.second.application_id;
-  // pdr.pdi.ethernet_pdu_session_information =
-  //   pPdr->pdi.second.ethernet_packet_filter;
-  pdr.pdi.qfi.qfi = pPdr->pdi.second.qfi.second.qfi;
-
-  // pdr.pdi.framed_route.framed_route = pPdr->pdi.second.framed_route.second;
-  // pdr.pdi.framed_routing.framed_routing =
-  //     pPdr->pdi.second.framed_routing.second;
-  // pdr.pdi.framed_ipv6_route = pPdr->pdi.second.framed_ipv6_route;
-
-  memcpy(
-      &pdr.activate_predefined_rules, &pPdr->activate_predefined_rules,
-      sizeof(activate_predefined_rules_t));
-  // memcpy(&pdr.pdi, &pPdr->pdi, sizeof(pdi_t));
-  memcpy(
-      &pdr.outer_header_removal, &pPdr->outer_header_removal,
-      sizeof(outer_header_removal_t));
-
-  return pdr;
+  // Remove from pfcp_programs vector
+  pfcp_programs->erase(
+      std::remove_if(
+          pfcp_programs->begin(), pfcp_programs->end(),
+          [seid](const PfcpProgramInfo& info) { return info.seid == seid; }),
+      pfcp_programs->end());
 }
 
-//---------------------------------------------------------------------------------------------------------------
-// void SessionProgramManager::addFramedRoutes(
-//     uint32_t ueIpAddress,
-//     const std::vector<pfcp::framed_route_t>& framedRoutes) {
-//   auto pUPF_XDPProgram =
-//       UserPlaneComponent::getInstance().getUPF_XDPProgram();
+//------------------------------------------------------------------------------
+void SessionProgramManager::RemoveAllSessions() {
+  std::lock_guard<std::mutex> lock(mutex_);
 
-//   for (const auto& framedRoute : framedRoutes) {
-//     Logger::upf_app().info(
-//         "Add framed route to ue_ip mapping %s to UE IP 0x%x",
-//         framedRoute.framed_route, ueIpAddress);
-//     std::stringstream ss(framedRoute.framed_route);
-//     std::string ipsubnetmask;
-//     while (std::getline(ss, ipsubnetmask, ' ')) {
-//       std::pair<uint32_t, uint32_t> ipCidr =
-//           fr::FramedRouting::extractIPCidr(ipsubnetmask);
-//       auto key = framed_routing_key_for_ip_cidr(ipCidr.first, ipCidr.second);
-//       pUPF_XDPProgram->updateFramedRouteMappingMap(
-//           ueIpAddress, key);
-//     }
-//   }
-// }
+  Logger::upf_app().info("Removing all sessions");
 
-//---------------------------------------------------------------------------------------------------------------
-// void SessionProgramManager::removeFramedRoutes(
-//     const std::vector<pfcp::framed_route_t>& framedRoutes) {
-//   auto pUPF_XDPProgram =
-//       UserPlaneComponent::getInstance().getUPF_XDPProgram();
-//   for (const auto& framedRoute : framedRoutes) {
-//     std::stringstream ss(framedRoute.framed_route);
-//     std::string ipsubnetmask;
-//     Logger::upf_app().info(
-//         "Remove framed route to ue_ip mapping for %s",
-//         framedRoute.framed_route);
-//     while (std::getline(ss, ipsubnetmask, ' ')) {
-//       std::pair<uint32_t, uint32_t> ipCidr =
-//           fr::FramedRouting::extractIPCidr(ipsubnetmask);
-//       auto key = framed_routing_key_for_ip_cidr(ipCidr.first, ipCidr.second);
-//       pUPF_XDPProgram->removeFramedRoute(key);
-//     }
-//   }
-// }
-
-//---------------------------------------------------------------------------------------------------------------
-pfcp_qer_t SessionProgramManager::createQer(
-    std::shared_ptr<pfcp::pfcp_qer> pQer) {
-  pfcp_qer_t qer = {};
-  if (pQer) {
-    qer.qer_id.qer_id = pQer->qer_id.second.qer_id;
-
-    qer.qer_correlation_id.qer_correlation_id =
-        pQer->qer_correlation_id.second.qer_correlation_id;
-
-    qer.gate_status.ul_gate = pQer->gate_status.second.ul_gate;
-    qer.gate_status.dl_gate = pQer->gate_status.second.dl_gate;
-
-    qer.maximum_bitrate.ul_mbr = pQer->mbr.second.ul_mbr;
-    qer.maximum_bitrate.dl_mbr = pQer->mbr.second.dl_mbr;
-
-    qer.guaranteed_bitrate.ul_gbr = pQer->gbr.second.ul_gbr;
-    qer.guaranteed_bitrate.dl_gbr = pQer->gbr.second.dl_gbr;
-
-    // qer.packet_rate.dlpr = pQer->
-
-    // qer.dl_flow_level_marking.sci = pQer->
-    qer.qos_flow_identifier.qfi = pQer->qfi.second.qfi;
-
-    qer.reflective_qos.rqi = pQer->rqi.second.rqi;
-  }
-  return qer;
+  session_programs_map_.clear();
+  pfcp_programs->clear();
+  program_array_.fill(kEmptySlot);
 }
 
-// qfi_t qos_flow_identifier;
-// rqi_t reflective_qos;
+//------------------------------------------------------------------------------
+// BPF Map Management
+//------------------------------------------------------------------------------
 
-//---------------------------------------------------------------------------------------------------------------
-// Helper function to initialize the key for the FARProgram
-// void SessionProgramManager::initializeNextRuleProgIndexKey(
-//     next_rule_prog_index_key& key, uint32_t teid, uint32_t ueIpAddress,
-//     uint8_t sourceInterface) {
-//   __builtin_memset(&key, 0, sizeof(struct next_rule_prog_index_key));
+void SessionProgramManager::SetTeidSessionMap(std::shared_ptr<BpfMap> map) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  teid_session_map_ = map;
+}
 
-//   if (likely(is_little_endian())) {
-//     key.teid         = htonl(teid);
-//     key.ipv4_address = htonl(ueIpAddress);
-//   } else {
-//     key.teid         = teid;
-//     key.ipv4_address = ueIpAddress;
-//   }
+//------------------------------------------------------------------------------
+void SessionProgramManager::SetArpTableMap(std::shared_ptr<BpfMap> map) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  arp_table_map_ = map;
+}
 
-//   key.source_value = sourceInterface;
-// }
-
-//---------------------------------------------------------------------------------------------------------------
-// Helper function to store Session mapping
-void SessionProgramManager::storePduSessionInMap(
-    std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram, uint32_t ue_ip_addr,
+//------------------------------------------------------------------------------
+// 3GPP TS 29.281 - Store PDU Session in BPF Map
+void SessionProgramManager::StorePduSessionInMap(
+    std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t ue_ip,
     uint32_t teid_ul, uint32_t teid_dl, uint64_t seid) {
-  // Normalize TEIDs and SEID for little-endian systems
-  if (likely(is_little_endian())) {
-    ue_ip_addr = htonl(ue_ip_addr);
-    teid_ul    = htonl(teid_ul);
-    teid_dl    = htonl(teid_dl);
-    seid       = seid;  // TODO: verify if correct
+  if (!xdp_program) {
+    Logger::upf_app().error("StorePduSessionInMap: null XDP program");
+    return;
   }
 
-  struct session_id session = {0};
-  uint32_t key              = ue_ip_addr;
-
-  // Perform the lookup
-  int ret = pUPF_XDPProgram->getSessionMappingMap()->lookup(key, &session);
-
-  // If the session exists, update the relevant fields
-  if (ret == 0) {
-    if (session.teid_ul == 0) {
-      if (teid_ul != 0) {
-        session.teid_ul = teid_ul;
-      } else if (teid_dl != 0) {
-        session.teid_ul = teid_dl;
-      }
+  try {
+    // Normalize TEIDs and SEID for little-endian systems
+    if (likely(IsLittleEndian())) {
+      ue_ip   = htonl(ue_ip);
+      teid_ul = htonl(teid_ul);
+      teid_dl = htonl(teid_dl);
+      // seid    = seid;     SEID stays host-endian (64-bit opaque ID)
     }
 
-    if (session.teid_dl == 0) {
-      if (teid_dl != 0) {
-        session.teid_dl = teid_dl;
-      } else if (teid_ul != 0) {
-        session.teid_dl = teid_ul;
-      }
+    // Perform the lookup
+    // auto session_map = xdp_program->GetMapByName("session_map");
+    // if (session_map) {
+
+    auto session_map = xdp_program->GetSessionMappingMap();
+    if (!session_map) {
+      Logger::upf_app().error("session_by_ue_ip_map is null");
+      return;
     }
-  } else {
-    // If no session is found, initialize it with the provided values
-    session.teid_ul = teid_ul;
-    session.teid_dl = teid_dl;
-    session.seid    = seid;
+
+    struct session_id session = {0};
+
+    // Lookup session entry for UE IP
+    const bool exists = (session_map->Lookup(ue_ip, &session) == 0);
+    // If the session exists, update the relevant fields
+    if (exists) {
+      // Only fill missing TEIDs
+      if (session.teid_ul == 0) {
+        session.teid_ul = (teid_ul != 0 ? teid_ul : teid_dl);
+      }
+      if (session.teid_dl == 0) {
+        session.teid_dl = (teid_dl != 0 ? teid_dl : teid_ul);
+      }
+      // Keep existing SEID
+    } else {
+      // Create new mapping entry
+      session.teid_ul = teid_ul;
+      session.teid_dl = teid_dl;
+      session.seid    = seid;
+    }
+
+    // Update map
+    int ret = session_map->Update(ue_ip, session, BPF_ANY);
+    if (ret != 0) {
+      Logger::upf_app().error(
+          "Failed to update session_by_ue_ip_map for UE_IP=%pI4 (ret=%d)",
+          ue_ip, ret);
+      return;
+    }
+    Logger::upf_app().debug(
+        "Stored PDU session: (ue_ip, seid, teid_ul, teid_dl) : (%pI4," SEID_FMT,
+        TEID_FMT, TEID_FMT ")", ue_ip, seid, teid_ul, teid_dl);
+  } catch (const std::exception& e) {
+    Logger::upf_app().error("StorePduSessionInMap failed: %s", e.what());
   }
-
-  // Update the map with the session data
-  pUPF_XDPProgram->getSessionMappingMap()->update(key, session, BPF_ANY);
 }
 
-//---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::updateARPTableForN6(
-    std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram, uint32_t dnIP,
-    uint32_t upfn6IP) {
+//------------------------------------------------------------------------------
+// Pipeline Management - 3GPP TS 29.244 Section 5.2
+//------------------------------------------------------------------------------
+/**
+ * @brief Create BPF pipeline for a new PFCP session
+ *
+ * Processes all PDRs in the session and configures BPF maps for packet
+ * processing. This includes:
+ * - Validating PDR count against system limits
+ * - Extracting PDI (Packet Detection Information) from each PDR
+ * - Creating FAR (Forwarding Action Rules) and QER (QoS Enforcement Rules)
+ * - Updating BPF maps for session lookup, PDR matching, and ARP resolution
+ * - Launching async ARP table updates for N3/N6 interfaces
+ *
+ * @param session PFCP session containing PDRs, FARs, QERs
+ * @throws std::runtime_error if PDR count exceeds MAX_PDRS_SESSION or
+ *         mandatory IEs are missing
+ *
+ * 3GPP References:
+ * - TS 29.244: PFCP session establishment
+ * - TS 23.501 Section 5.8: User Plane function
+ */
+
+void SessionProgramManager::CreatePipeline(
+    std::shared_ptr<pfcp::pfcp_session> session) {
+  if (!session) {
+    Logger::upf_app().error(
+        "[eBPF] Create Pipeline: Invalid session pointer (null)");
+    return;
+  }
+
+  const uint64_t seid = session->get_up_seid();
+  auto& logger        = Logger::upf_app();
+
+  logger.info(
+      "[eBPF] Create Pipeline - Creating pipeline for session " SEID_FMT, seid);
+
   try {
-    // uint32_t remoteN6 = getRemoteIP(upfn6IP, dnIP);
-    uint32_t ipnexremoteN6hop = (likely(is_little_endian())) ?
-                                    htole32(getRemoteIP(upfn6IP, dnIP)) :
-                                    getRemoteIP(upfn6IP, dnIP);
+    // Validate PDR count against system limits
 
-    auto remoteN6MAC = NextHopFinder::retrieveNextHopMAC(ipnexremoteN6hop);
+    if (session->pdrs.size() > MAX_PDRS_PER_PDU_SESSION_LIMIT) {
+      logger.error(
+          "[eBPF] Create Pipeline - Session " SEID_FMT
+          " has %zu PDRs, exceeds limit of %d",
+          seid, session->pdrs.size(), MAX_PDRS_PER_PDU_SESSION_LIMIT);
+      throw std::runtime_error(
+          "Number of requested PDRs exceeds the allocated size for PDRs "
+          "vector");
+    }
 
-    struct arp_entry map_table;
-    memset(&map_table, 0, sizeof(struct arp_entry));
-    memcpy(map_table.mac_address, remoteN6MAC, 6);
-    map_table.ipv4_address = ipnexremoteN6hop;
-    pUPF_XDPProgram->getArpTableMap()->update(upfn6IP, map_table, BPF_ANY);
+    // Get BPF program handle
+    auto upf_xdp_program =
+        UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
+    if (!upf_xdp_program) {
+      logger.error("[eBPF] Create Pipeline - XDP program not available");
+      throw std::runtime_error("UPF XDP program not available");
+    }
+
+    // Initialize PDR array for BPF map
+    struct pfcp_pdr pdrs[MAX_PDRS_PER_PDU_SESSION_LIMIT] = {0};
+    int pdr_index                                        = 0;
+
+    // Get network configuration for ARP updates
+    const uint32_t dn_ip     = upf_cfg.remote_n6.s_addr;
+    const uint32_t upf_n3_ip = upf_cfg.n3.addr4.s_addr;
+    const uint32_t upf_n6_ip = upf_cfg.n6.addr4.s_addr;
+
+    pfcp::pdi pdi;
+    pfcp::fteid_t fteid;
+    pfcp::ue_ip_address_t ue_ip_address;
+    pfcp::source_interface_t source_interface;
+    uint16_t pdr_id;
+
+    // Process each PDR in the session
+    for (const auto& pdr : session->pdrs) {
+      pdr_id = pdr->pdr_id.rule_id;
+      logger.debug(
+          "[eBPF] Create Pipeline: seid 0x%lx - Starting PDR rule %u "
+          "establishment",
+          seid, pdr_id);
+
+      // Extract PDI (Packet Detection Information) - mandatory
+      if (!(pdr->get(pdi) && pdi.get(source_interface))) {
+        throw std::runtime_error(
+            "Missing mandatory IE (PDI or Source Interface) in PDR " +
+            std::to_string(pdr_id));
+      }
+
+      // Extract F-TEID (Fully Qualified TEID)
+      if (!pdi.get(fteid)) {
+        fteid.teid = 0;
+        logger.warn(
+            "F-TEID missing for PDR %u (CH bit: %s)", pdr_id,
+            fteid.ch ? "Set" : "Not Set");
+        // TODO: Implement logic for CHOOSE mode (CH bit set)
+      }
+
+      // Extract UE IP address
+      if (!pdi.get(ue_ip_address)) {
+        ue_ip_address.ipv4_address.s_addr = 0;
+        logger.warn("UE IP address missing for PDR %u", pdr_id);
+        // TODO: Implement IP allocation when UE IP is not provided
+      }
+
+      // Store PDU session mapping (UE IP -> TEID -> SEID)
+      StorePduSessionInMap(
+          upf_xdp_program, ue_ip_address.ipv4_address.s_addr, fteid.teid, 0,
+          seid);
+
+      // Retrieve associated FAR
+      std::shared_ptr<pfcp::pfcp_far> far;
+      if (!GetFarForPdr(session, pdr, far)) {
+        throw std::runtime_error(
+            "FAR not found for PDR " + std::to_string(pdr_id));
+      }
+
+      // Retrieve associated QER (optional)
+      std::shared_ptr<pfcp::pfcp_qer> qer = nullptr;
+      if (!GetQerForPdr(session, pdr, qer)) {
+        logger.debug("No QER associated with PDR %u", pdr_id);
+      }
+
+      // Create BPF structures
+      struct pfcp_pdr bpf_pdr = ConvertPdr(pdr);
+      struct pfcp_far bpf_far = ConvertFar(far);
+      struct pfcp_qer bpf_qer = ConvertQer(qer);
+
+      // Update rules_match_pdr map (PDR ID + SEID -> FAR + QER)
+      struct rules_match_pdr rules = {0};
+      rules.far                    = bpf_far;
+      rules.qer                    = bpf_qer;
+
+      struct pdrs_per_session pdr_key = {0};
+      pdr_key.pdr_id                  = pdr_id;
+      pdr_key.seid                    = seid;
+
+      auto rules_map = upf_xdp_program->GetMapByName("rules_match_pdr_map");
+      if (rules_map) {
+        rules_map->Update(pdr_key, rules, BPF_ANY);
+      }
+
+      // Launch async ARP table updates based on source interface
+      if (source_interface.interface_value == INTERFACE_VALUE_ACCESS) {
+        // Uplink PDR - update N6 ARP (toward Data Network)
+        if (dn_ip > 0) {
+          std::thread update_arp_n6(
+              [this, upf_xdp_program, dn_ip, upf_n6_ip, pdr_id, seid]() {
+                try {
+                  char buf_upf_n6_ip[INET_ADDRSTRLEN];
+                  char buf_dn_ip[INET_ADDRSTRLEN];
+
+                  struct in_addr addr_upf_n6_ip = {.s_addr = upf_n6_ip};
+                  struct in_addr addr_dn_ip     = {.s_addr = dn_ip};
+
+                  inet_ntop(
+                      AF_INET, &addr_upf_n6_ip, buf_upf_n6_ip, INET_ADDRSTRLEN);
+                  inet_ntop(AF_INET, &addr_dn_ip, buf_dn_ip, INET_ADDRSTRLEN);
+                  UpdateArpTableForN6(upf_xdp_program, dn_ip, upf_n6_ip);
+                  Logger::upf_app().debug(
+                      "N6 ARP updated (upf_n6_ip -> dn_ip) : (%s -> %s) "
+                      "[PDR=%u, SEID=%" PRIu64 "]",
+                      buf_upf_n6_ip, buf_dn_ip, pdr_id, seid);
+                } catch (const std::exception& ex) {
+                  Logger::upf_app().error(
+                      "N6 ARP update failed for PDR %u: %s", pdr_id, ex.what());
+                }
+              });
+          update_arp_n6.detach();
+        }
+      } else if (source_interface.interface_value == INTERFACE_VALUE_CORE) {
+        // Downlink PDR - update N3 ARP (toward gNodeB)
+        uint32_t gnb_ip = RetrieveGnbIp(session);
+        if (gnb_ip > 0) {
+          std::thread update_arp_n3(
+              [this, upf_xdp_program, gnb_ip, upf_n3_ip, pdr_id, seid]() {
+                try {
+                  char buf_upf_n3_ip[INET_ADDRSTRLEN];
+                  char buf_gnb_ip[INET_ADDRSTRLEN];
+
+                  struct in_addr addr_upf_n3_ip = {.s_addr = upf_n3_ip};
+                  struct in_addr addr_gnb_ip    = {.s_addr = gnb_ip};
+
+                  inet_ntop(
+                      AF_INET, &addr_upf_n3_ip, buf_upf_n3_ip, INET_ADDRSTRLEN);
+                  inet_ntop(AF_INET, &addr_gnb_ip, buf_gnb_ip, INET_ADDRSTRLEN);
+                  UpdateArpTableForN3(upf_xdp_program, gnb_ip, upf_n3_ip, seid);
+                  Logger::upf_app().debug(
+                      "N3 ARP updated: (upf_n3_ip -> gnb_ip) : (%s -> %s) "
+                      "[PDR=%u, SEID=%" PRIu64 "]",
+                      buf_upf_n3_ip, buf_gnb_ip, pdr_id, seid);
+                } catch (const std::exception& ex) {
+                  Logger::upf_app().error(
+                      "N3 ARP update failed for PDR %u: %s", pdr_id, ex.what());
+                }
+              });
+          update_arp_n3.detach();
+        }
+      }
+      // Store PDR in array for batch update
+      pdrs[pdr_index] = bpf_pdr;
+      pdr_index++;
+    }
+    // Store all PDRs in session map (batch update)
+    auto session_pdrs_map =
+        upf_xdp_program->GetMapByName("pdrs_per_session_map");
+    if (session_pdrs_map) {
+      session_pdrs_map->Update(seid, pdrs, BPF_ANY);
+    }
+
+    logger.info(
+        "Pipeline created for session " SEID_FMT " with %d PDRs", seid,
+        pdr_index);
+
+  } catch (const std::exception& e) {
+    logger.error(
+        "CreatePipeline failed for session " SEID_FMT ": %s", seid, e.what());
+    throw;
+  }
+}
+
+//------------------------------------------------------------------------------
+// Pipeline Modification - 3GPP TS 29.244 Section 7.5.4
+//------------------------------------------------------------------------------
+/**
+ * @brief Modify BPF pipeline for an existing PFCP session
+ *
+ * Updates BPF maps to reflect session modifications. This includes:
+ * - Validating PDR count against system limits
+ * - Updating PDU session mapping (UE IP <-> TEIDs <-> SEID)
+ * - Re-creating PDR/FAR/QER structures for all PDRs in session
+ * - Updating BPF maps: session_pdrs, rules_match_pdr, sdf_filters
+ * - Launching async ARP table updates for modified endpoints
+ * - Enabling QoS enforcement if downlink QERs present
+ *
+ * @param session PFCP session containing updated PDRs, FARs, QERs
+ * @param teid_ul Uplink TEID (0 if unchanged)
+ * @param teid_dl Downlink TEID (0 if unchanged)
+ * @throws std::runtime_error if PDR count exceeds limits, mandatory IEs
+ * missing, or UE/gNB IP addresses not found
+ *
+ * 3GPP References:
+ * - TS 29.244 Section 7.5.4: PFCP Session Modification
+ * - TS 29.244 Section 8.2.9-11: Update PDR/FAR/QER
+ */
+void SessionProgramManager::ModifyPipeline(
+    std::shared_ptr<pfcp::pfcp_session> session, uint32_t teid_ul,
+    uint32_t teid_dl) {
+  if (!session) {
+    Logger::upf_app().error("ModifyPipeline: null session");
+    return;
+  }
+
+  const uint64_t seid = session->get_up_seid();
+  auto& logger        = Logger::upf_app();
+
+  logger.info(
+      "Modifying pipeline for session " SEID_FMT " (TEID_UL=%u, TEID_DL=%u)",
+      seid, teid_ul, teid_dl);
+
+  try {
+    // Validate PDR count against system limits
+    if (session->pdrs.size() > MAX_PDRS_PER_PDU_SESSION_LIMIT) {
+      logger.error(
+          "Session " SEID_FMT " has %zu PDRs, exceeds limit of %d", seid,
+          session->pdrs.size(), MAX_PDRS_PER_PDU_SESSION_LIMIT);
+      throw std::runtime_error(
+          "Number of requested PDRs exceeds the allocated size for PDRs "
+          "vector");
+    }
+
+    // Get BPF program handle
+    auto upf_xdp_program =
+        UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
+    if (!upf_xdp_program) {
+      throw std::runtime_error("UPF XDP program not available");
+    }
+
+    // Initialize PDR array for BPF map
+    struct pfcp_pdr pdrs[MAX_PDRS_PER_PDU_SESSION_LIMIT] = {0};
+    int pdr_index                                        = 0;
+
+    // Get network configuration for ARP updates
+    const uint32_t dn_ip     = upf_cfg.remote_n6.s_addr;
+    const uint32_t upf_n3_ip = upf_cfg.n3.addr4.s_addr;
+    const uint32_t upf_n6_ip = upf_cfg.n6.addr4.s_addr;
+
+    // Retrieve UE and gNB IPs (mandatory for modification)
+    uint32_t ue_ip = RetrieveUeIp(session);
+    if (!ue_ip) {
+      logger.error(
+          "Missing UE IP Address. Handeling this case not implemented yet!");
+      throw std::runtime_error(
+          "Missing UE IP Address in session " + std::to_string(seid));
+    }
+
+    uint32_t gnb_ip = RetrieveGnbIp(session);
+    if (!gnb_ip) {
+      logger.error("Missing gnb IP. Handeling this case not implemented yet!");
+      throw std::runtime_error(
+          "Missing gNB IP in session " + std::to_string(seid));
+    }
+
+    pfcp::pdi pdi;
+    // pfcp::fteid_t fteid;
+    // pfcp::ue_ip_address_t ue_ip_address;
+    pfcp::source_interface_t source_interface;
+    uint16_t pdr_id = 0;
+
+    // Check for QoS enforcement
+    bool has_downlink_qer                = !session->qers_downlink.empty();
+    const bool ebpf_acceleration_enabled = upf_cfg.enable_bpf_datapath;
+    const bool qos_enforcement_enabled =
+        ebpf_acceleration_enabled && upf_cfg.enable_qos;
+
+    if (qos_enforcement_enabled && has_downlink_qer) {
+      uint32_t value       = 1;
+      auto enabled_qos_map = upf_xdp_program->GetQosEnablingMap();
+      if (enabled_qos_map) {
+        enabled_qos_map->Update(seid, value, BPF_ANY);
+      }
+
+      Logger::upf_app().debug("Instantiate a new QER Program on Downlink");
+      std::shared_ptr<QERProgram> qer_program =
+          std::make_shared<QERProgram>(upf_cfg);
+      qer_program->Setup(seid, session->qers_downlink, session->pdrs_downlink);
+    }
+
+    // Update PDU session mapping (UE IP -> TEID -> SEID)
+    logger.debug(
+        "Updating PDU session mapping: UE= %pI4 -> [ TEID_UL=%u, TEID_DL=%u, "
+        "SEID= ]" SEID_FMT,
+        ue_ip, teid_ul, teid_dl, seid);
+    StorePduSessionInMap(upf_xdp_program, ue_ip, teid_ul, teid_dl, seid);
+
+    // Process each PDR in the session
+    for (const auto& pdr : session->pdrs) {
+      pdr_id = pdr->pdr_id.rule_id;
+      logger.debug("Processing PDR %u on Modification", pdr_id);
+
+      // Extract PDI (Packet Detection Information)
+      if (!(pdr->get(pdi) && pdi.get(source_interface))) {
+        logger.warn(
+            "Missing PDI or Source Interface for PDR %u, skipping ARP update",
+            pdr_id);
+        // Continue processing - PDI might not be updated in modification
+      }
+
+      // Retrieve associated FAR
+      std::shared_ptr<pfcp::pfcp_far> far;
+      if (!GetFarForPdr(session, pdr, far)) {
+        throw std::runtime_error(
+            "FAR not found for PDR " + std::to_string(pdr_id));
+      }
+
+      // Retrieve associated QER (optional)
+      std::shared_ptr<pfcp::pfcp_qer> qer = nullptr;
+      if (!GetQerForPdr(session, pdr, qer)) {
+        logger.debug("No QER associated with PDR %u", pdr_id);
+      }
+
+      // Create BPF structures
+      struct pfcp_pdr bpf_pdr = ConvertPdr(pdr);
+      struct pfcp_far bpf_far = ConvertFar(far);
+      struct pfcp_qer bpf_qer = ConvertQer(qer);
+
+      // Update rules_match_pdr map (PDR ID + SEID -> FAR + QER)
+      struct rules_match_pdr rules = {0};
+      rules.far                    = bpf_far;
+      rules.qer                    = bpf_qer;
+
+      struct pdrs_per_session pdr_key = {0};
+      pdr_key.pdr_id                  = pdr_id;
+      pdr_key.seid                    = seid;
+
+      auto rules_map = upf_xdp_program->GetRulesMatchPdrMap();
+      if (rules_map) {
+        rules_map->Update(pdr_key, rules, BPF_ANY);
+        logger.debug(
+            "Updated rules_match_pdr: PDR=%u, SEID=" SEID_FMT, pdr_id, seid);
+      }
+
+      // Launch async ARP table updates based on source interface
+      if (source_interface.interface_value == INTERFACE_VALUE_ACCESS) {
+        // Uplink PDR - update N6 ARP (toward Data Network)
+        if (dn_ip > 0) {
+          std::thread update_arp_n6(
+              [this, upf_xdp_program, dn_ip, upf_n6_ip, pdr_id, seid]() {
+                try {
+                  char buf_upf_n6_ip[INET_ADDRSTRLEN];
+                  char buf_dn_ip[INET_ADDRSTRLEN];
+
+                  struct in_addr addr_upf_n6_ip = {.s_addr = upf_n6_ip};
+                  struct in_addr addr_dn_ip     = {.s_addr = dn_ip};
+
+                  inet_ntop(
+                      AF_INET, &addr_upf_n6_ip, buf_upf_n6_ip, INET_ADDRSTRLEN);
+                  inet_ntop(AF_INET, &addr_dn_ip, buf_dn_ip, INET_ADDRSTRLEN);
+
+                  UpdateArpTableForN6(upf_xdp_program, dn_ip, upf_n6_ip);
+                  Logger::upf_app().debug(
+                      "N6 ARP updated (upf_n6_ip -> dn_ip) : (%s -> %s) "
+                      "[PDR=%u, SEID=%" PRIu64 "]",
+                      buf_upf_n6_ip, buf_dn_ip, pdr_id, seid);
+                } catch (const std::exception& ex) {
+                  Logger::upf_app().error(
+                      "N6 ARP update failed for PDR %u: %s", pdr_id, ex.what());
+                }
+              });
+          update_arp_n6.detach();
+        }
+      } else if (source_interface.interface_value == INTERFACE_VALUE_CORE) {
+        // Downlink PDR - update N3 ARP (toward gNodeB)
+        if (gnb_ip > 0) {
+          std::thread update_arp_n3(
+              [this, upf_xdp_program, gnb_ip, upf_n3_ip, pdr_id, seid]() {
+                try {
+                  char buf_upf_n3_ip[INET_ADDRSTRLEN];
+                  char buf_gnb_ip[INET_ADDRSTRLEN];
+
+                  struct in_addr addr_upf_n3_ip = {.s_addr = upf_n3_ip};
+                  struct in_addr addr_gnb_ip    = {.s_addr = gnb_ip};
+
+                  inet_ntop(
+                      AF_INET, &addr_upf_n3_ip, buf_upf_n3_ip, INET_ADDRSTRLEN);
+                  inet_ntop(AF_INET, &addr_gnb_ip, buf_gnb_ip, INET_ADDRSTRLEN);
+
+                  UpdateArpTableForN3(upf_xdp_program, gnb_ip, upf_n3_ip, seid);
+                  Logger::upf_app().debug(
+                      "N3 ARP updated (upf_n3_ip -> gnb_ip) : (%s -> %s) "
+                      "[PDR=%u, SEID=%" PRIu64 "]",
+                      buf_upf_n3_ip, buf_gnb_ip, pdr_id, seid);
+                } catch (const std::exception& ex) {
+                  Logger::upf_app().error(
+                      "N3 ARP update failed for PDR %u: %s", pdr_id, ex.what());
+                }
+              });
+          update_arp_n3.detach();
+        }
+      }
+
+      // Parse SDF Filter for traffic classification (if QER present)
+      if (pdr->qer_id.first) {
+        pfcp::sdf_filter_t sdf;
+        struct sdf_filtr sdf_filter;
+        std::string flow_description;
+
+        if (pdr->get(pdi) && pdi.get(sdf)) {
+          if (sdf.fd && sdf.length_of_flow_description > 0)
+            flow_description = sdf.flow_description;
+
+          // Get QFI from QER
+          uint32_t qfi = 0;
+          if (qer && qer->qos_flow_id.first) {
+            qfi = qer->qos_flow_id.second.qfi;
+            logger.debug(
+                "PDR %u has QFI=%u from QER %u", pdr_id, qfi,
+                pdr->qer_id.second.qer_id);
+          }
+
+          // Inject QFI into PDI if available
+          if (qfi != 0) {
+            pdi.qfi.first      = true;
+            pdi.qfi.second.qfi = qfi;
+            pdr->set(pdi);
+          }
+
+          // Parse and store SDF filter
+          auto filter_info = SdfFilterParser::ParseSdfFilter(flow_description);
+          if (filter_info) {
+            sdf_filter              = *filter_info;
+            sdf_filter.session.seid = seid;
+            sdf_filter.session.qfi  = qfi;
+
+            struct session_qfi sdf_key = {0};
+            sdf_key.qfi                = qfi;
+            sdf_key.seid               = seid;
+
+            auto sdf_map = upf_xdp_program->GetSdfFilterMap();
+            if (sdf_map) {
+              sdf_map->Update(sdf_key, sdf_filter, BPF_ANY);
+              logger.debug(
+                  "Updated SDF filter: SEID=" SEID_FMT ", QFI=%u, Flow='%s'",
+                  seid, qfi, flow_description.c_str());
+            }
+          } else {
+            logger.warn(
+                "Failed to parse SDF filter for PDR %u: '%s'", pdr_id,
+                flow_description.c_str());
+          }
+        }
+      }
+
+      // Store PDR in array for batch update
+      pdrs[pdr_index] = bpf_pdr;
+      pdr_index++;
+    }
+
+    // Store all PDRs in session map (batch update)
+    auto session_pdrs_map = upf_xdp_program->GetSessionPdrsMap();
+    if (session_pdrs_map) {
+      session_pdrs_map->Update(seid, pdrs, BPF_ANY);
+      logger.debug(
+          "Updated session_pdrs map: SEID=" SEID_FMT " with %d PDRs", seid,
+          pdr_index);
+    }
+
+    logger.info(
+        "Pipeline modified for session " SEID_FMT
+        " with %d PDRs "
+        "(TEID_UL=%u, TEID_DL=%u)",
+        seid, pdr_index, teid_ul, teid_dl);
+
+  } catch (const std::exception& e) {
+    logger.error(
+        "ModifyPipeline failed for session " SEID_FMT ": %s", seid, e.what());
+    throw;  // Re-throw to caller
+  }
+}
+
+//------------------------------------------------------------------------------
+void SessionProgramManager::RemovePipeline(uint64_t seid) {
+  Logger::upf_app().info("Removing pipeline for session " SEID_FMT, seid);
+
+  try {
+    RemoveSession(seid);
+
+    Logger::upf_app().info("Pipeline removed for session " SEID_FMT, seid);
+
+  } catch (const std::exception& e) {
+    Logger::upf_app().error(
+        "RemovePipeline failed for session " SEID_FMT ": %s", seid, e.what());
+  }
+}
+
+//------------------------------------------------------------------------------
+// PFCP IE to BPF Conversion - 3GPP TS 29.244 Section 8.2
+//------------------------------------------------------------------------------
+
+// 3GPP TS 29.244 Section 8.2.3 - FAR Conversion
+struct pfcp_far SessionProgramManager::ConvertFar(
+    std::shared_ptr<pfcp::pfcp_far> far) const {
+  struct pfcp_far bpf_far = {};
+
+  if (!far) return bpf_far;
+
+  // FAR ID (3GPP TS 29.244 Section 8.2.74)
+  bpf_far.far_id.far_id = far->far_id.far_id;
+
+  // Apply Action (3GPP TS 29.244 Section 8.2.26)
+  memcpy(
+      &bpf_far.apply_action, &far->apply_action, sizeof(struct apply_action));
+
+  // Forwarding Parameters (3GPP TS 29.244 Section 8.2.74)
+  if (far->forwarding_parameters.first) {
+    bpf_far.forwarding_parameters.destination_interface.interface_value =
+        far->forwarding_parameters.second.destination_interface.second
+            .interface_value;
+
+    // Outer Header Creation (3GPP TS 29.244 Section 8.2.74)
+    if (far->forwarding_parameters.second.outer_header_creation.first) {
+      bpf_far.forwarding_parameters.outer_header_creation.teid =
+          far->forwarding_parameters.second.outer_header_creation.second.teid;
+
+      bpf_far.forwarding_parameters.outer_header_creation.port_number =
+          far->forwarding_parameters.second.outer_header_creation.second
+              .port_number;
+
+      bpf_far.forwarding_parameters.outer_header_creation.description =
+          far->forwarding_parameters.second.outer_header_creation.second
+              .outer_header_creation_description;
+
+      bpf_far.forwarding_parameters.outer_header_creation.ipv4_address.s_addr =
+          far->forwarding_parameters.second.outer_header_creation.second
+              .ipv4_address.s_addr;
+    }
+  }
+
+  return bpf_far;
+}
+
+//------------------------------------------------------------------------------
+// 3GPP TS 29.244 Section 8.2.2 - PDR Conversion
+struct pfcp_pdr SessionProgramManager::ConvertPdr(
+    std::shared_ptr<pfcp::pfcp_pdr> pdr) const {
+  struct pfcp_pdr bpf_pdr = {};
+
+  if (!pdr) return bpf_pdr;
+
+  // PDR ID and Precedence (3GPP TS 29.244 Section 8.2.29)
+  bpf_pdr.pdr_id.rule_id        = pdr->pdr_id.rule_id;
+  bpf_pdr.precedence.precedence = pdr->precedence.second.precedence;
+
+  // Associated rule IDs
+  bpf_pdr.far_id.far_id = pdr->far_id.second.far_id;
+  bpf_pdr.qer_id.qer_id = pdr->qer_id.second.qer_id;
+  bpf_pdr.urr_id.urr_id = pdr->urr_id.second.urr_id;
+
+  // PDI (Packet Detection Information)
+  if (pdr->pdi.first) {
+    // Source Interface (3GPP TS 29.244 Section 8.2.62)
+    bpf_pdr.pdi.source_interface.interface_value =
+        pdr->pdi.second.source_interface.second.interface_value;
+
+    // F-TEID (3GPP TS 29.244 Section 8.2.3)
+    if (pdr->pdi.second.local_fteid.first) {
+      bpf_pdr.pdi.fteid.teid = pdr->pdi.second.local_fteid.second.teid;
+    }
+
+    // UE IP Address (3GPP TS 29.244 Section 8.2.62)
+    if (pdr->pdi.second.ue_ip_address.first) {
+      bpf_pdr.pdi.ue_ip_address.ipv4_address.s_addr =
+          pdr->pdi.second.ue_ip_address.second.ipv4_address.s_addr;
+    }
+
+    // SDF Filter (3GPP TS 29.244 Section 8.2.5)
+    if (pdr->pdi.second.sdf_filter.first) {
+      bpf_pdr.pdi.sdf_filter.flow_desc_len =
+          pdr->pdi.second.sdf_filter.second.length_of_flow_description;
+
+      try {
+        if (bpf_pdr.pdi.sdf_filter.flow_desc_len >=
+            sizeof(bpf_pdr.pdi.sdf_filter.flow_description)) {
+          Logger::upf_app().debug(
+              "SDF Filter Lengh (%d) exceeds buffer size (%d), Truncating "
+              "data.",
+              bpf_pdr.pdi.sdf_filter.flow_desc_len,
+              sizeof(pdr->pdi.second.sdf_filter.second.flow_description));
+
+          throw std::runtime_error("SDF filter length exceeds buffer size.");
+        }
+
+        memcpy(
+            bpf_pdr.pdi.sdf_filter.flow_description,
+            pdr->pdi.second.sdf_filter.second.flow_description.c_str(),
+            bpf_pdr.pdi.sdf_filter.flow_desc_len);
+        Logger::upf_app().debug(
+            "PDR %u SDF Filter:", bpf_pdr.pdr_id.rule_id,
+            bpf_pdr.pdi.sdf_filter.flow_description);
+
+      } catch (const std::bad_alloc& e) {
+        // Handle memory allocation failure
+        Logger::upf_app().error(
+            "Memory allocation failed while copying SDF filter: {}", e.what());
+
+        throw;  // Rethrow the exception
+      } catch (const std::exception& e) {
+        // Catch any other exception
+        Logger::upf_app().error(
+            "An error occurred while processing the SDF filter: {}", e.what());
+
+        throw;  // Rethrow the exception
+      } catch (...) {
+        // Catch all other unspecified errors
+        Logger::upf_app().error(
+            "An unexpected error occurred while copying the SDF filter.");
+
+        throw std::runtime_error(
+            "Unexpected error occurred while copying SDF filter.");
+      }
+
+      // QFI (3GPP TS 29.244 Section 8.2.89)
+      if (pdr->pdi.second.qfi.first) {
+        bpf_pdr.pdi.qfi.qfi = pdr->pdi.second.qfi.second.qfi;
+      }
+    }
+  }
+
+  if (pdr->activate_predefined_rules.first) {
+    memcpy(
+        &bpf_pdr.activate_predefined_rules, &pdr->activate_predefined_rules,
+        sizeof(struct activate_predefined_rules));
+  }
+
+  if (pdr->outer_header_removal.first) {
+    memcpy(
+        &bpf_pdr.outer_header_removal, &pdr->outer_header_removal,
+        sizeof(struct outer_header_removal));
+  }
+
+  return bpf_pdr;
+}
+
+//------------------------------------------------------------------------------
+// 3GPP TS 29.244 Section 8.2.4 - QER Conversion
+struct pfcp_qer SessionProgramManager::ConvertQer(
+    std::shared_ptr<pfcp::pfcp_qer> qer) const {
+  struct pfcp_qer bpf_qer = {};
+
+  if (!qer) return bpf_qer;
+
+  // QER ID (3GPP TS 29.244 Section 8.2.11)
+  bpf_qer.qer_id.qer_id = qer->qer_id.second.qer_id;
+
+  // Gate Status (3GPP TS 29.244 Section 8.2.25)
+  if (qer->gate_status.first) {
+    bpf_qer.gate_status.ul_gate = qer->gate_status.second.ul_gate;
+    bpf_qer.gate_status.dl_gate = qer->gate_status.second.dl_gate;
+  }
+
+  // MBR - Maximum Bitrate (3GPP TS 29.244 Section 8.2.40)
+  if (qer->maximum_bitrate.first) {
+    bpf_qer.maximum_bitrate.ul_mbr = qer->maximum_bitrate.second.ul_mbr;
+    bpf_qer.maximum_bitrate.dl_mbr = qer->maximum_bitrate.second.dl_mbr;
+  }
+
+  // GBR - Guaranteed Bitrate (3GPP TS 29.244 Section 8.2.41)
+  if (qer->guaranteed_bitrate.first) {
+    bpf_qer.guaranteed_bitrate.ul_gbr = qer->guaranteed_bitrate.second.ul_gbr;
+    bpf_qer.guaranteed_bitrate.dl_gbr = qer->guaranteed_bitrate.second.dl_gbr;
+  }
+
+  // QFI (3GPP TS 29.244 Section 8.2.89)
+  if (qer->qos_flow_id.first) {
+    bpf_qer.qos_flow_identifier.qfi = qer->qos_flow_id.second.qfi;
+  }
+
+  if (qer->qer_correlation_id.first) {
+    bpf_qer.qer_correlation_id.qer_correlation_id =
+        qer->qer_correlation_id.second.qer_correlation_id;
+  }
+
+  if (qer->reflective_qos.first) {
+    bpf_qer.reflective_qos.rqi = qer->reflective_qos.second.rqi;
+  }
+
+  return bpf_qer;
+}
+
+//------------------------------------------------------------------------------
+// ARP Table Management - RFC 826
+//------------------------------------------------------------------------------
+
+// 3GPP TS 23.501 Section 5.8.2.3 - N6 Interface
+void SessionProgramManager::UpdateArpTableForN6(
+    std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t dn_ip,
+    uint32_t upf_n6_ip) {
+  if (!xdp_program) {
+    Logger::upf_app().error("UpdateArpTable: no XDP program available");
+    return;
+  }
+
+  try {
+    // Get next hop IP (remote endpoint or gateway)
+    uint32_t remote_ip = GetNextHopIp(upf_n6_ip, dn_ip);
+
+    // Convert to proper endianness for MAC lookup
+    uint32_t ip_for_mac_lookup =
+        (likely(IsLittleEndian())) ? htole32(remote_ip) : remote_ip;
+
+    // Retrieve MAC address from ARP cache/routing table
+    auto remote_mac = NextHopFinder::retrieveNextHopMAC(ip_for_mac_lookup);
+
+    // Populate ARP entry structure
+    struct arp_entry entry;
+    memset(&entry, 0, sizeof(struct arp_entry));
+    memcpy(entry.mac_address, remote_mac,
+           ETH_ALEN);  // Copy 6-byte MAC address
+    entry.ipv4_address = ip_for_mac_lookup;
+
+    // Update ARP table in BPF map
+    // xdp_program->GetArpTableMap()->Update(upf_n6_ip, entry, BPF_ANY);
+    auto arp_table_map = xdp_program->GetMapByName("arp_table_map");
+    if (arp_table_map) {
+      arp_table_map->Update(upf_n6_ip, entry, BPF_ANY);
+    } else {
+      Logger::upf_app().error("UpdateArpTable: arp_table map not found");
+    }
+
   } catch (const std::exception& ex) {
     Logger::upf_app().error(
-        "Error: The ARP table was not updated for N6 Next HOP");
+        "Error: The ARP table was not updated for N6 Next HOP: %s", ex.what());
   }
 }
 
-//---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::updateARPTableForN3(
-    std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram, uint32_t gNodeBIP,
-    uint32_t upfn3IP, uint32_t seid) {
+//------------------------------------------------------------------------------
+// 3GPP TS 23.501 Section 5.8.2.2 - N3 Interface
+void SessionProgramManager::UpdateArpTableForN3(
+    std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t gnb_ip,
+    uint32_t upf_n3_ip, uint64_t seid) {
+  if (!xdp_program) {
+    Logger::upf_app().error("UpdateArpTable: no XDP program available");
+    return;
+  }
+
   try {
-    // uint32_t remoteN3 = getRemoteIP(upfn3IP, gNodeBIP);
+    // Get next hop IP (gNB or gateway)
+    uint32_t remote_ip = GetNextHopIp(upf_n3_ip, gnb_ip);
 
-    uint32_t ipnexremoteN3hop = (likely(is_little_endian())) ?
-                                    htole32(getRemoteIP(upfn3IP, gNodeBIP)) :
-                                    getRemoteIP(upfn3IP, gNodeBIP);
-    auto remoteN3MAC = NextHopFinder::retrieveNextHopMAC(ipnexremoteN3hop);
+    // Convert to proper endianness for MAC lookup
+    uint32_t ip_for_mac_lookup =
+        (likely(IsLittleEndian())) ? htole32(remote_ip) : remote_ip;
 
-    struct arp_entry map_table;
-    memset(&map_table, 0, sizeof(struct arp_entry));
-    memcpy(map_table.mac_address, remoteN3MAC, 6);
-    map_table.ipv4_address = ipnexremoteN3hop;
-    pUPF_XDPProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
+    // Retrieve MAC address from ARP cache/routing table
+    auto remote_mac = NextHopFinder::retrieveNextHopMAC(ip_for_mac_lookup);
 
-    for (auto it = pfcpPrograms->begin(); it != pfcpPrograms->end(); ++it) {
+    // Populate ARP entry structure
+    struct arp_entry entry;
+    memset(&entry, 0, sizeof(struct arp_entry));
+    memcpy(entry.mac_address, remote_mac,
+           ETH_ALEN);  // Copy 6-byte MAC address
+    entry.ipv4_address = ip_for_mac_lookup;
+
+    // Update ARP table in BPF map
+    // xdp_program->GetArpTableMap()->Update(upf_n3_ip, entry, BPF_ANY);
+    auto arp_table_map = xdp_program->GetMapByName("arp_table_map");
+    if (arp_table_map) {
+      arp_table_map->Update(upf_n3_ip, entry, BPF_ANY);
+    }
+
+    for (auto it = pfcp_programs->begin(); it != pfcp_programs->end(); ++it) {
       // Access the members of the 'farprograms' struct
-      uint64_t savedSeid                              = it->seid;
-      std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram = it->pUPF_XDPProgram;
+      uint64_t savedSeid                          = it->seid;
+      std::shared_ptr<UPF_XDPProgram> xdp_program = it->xdp_program;
 
       if (savedSeid == seid) {
-        pUPF_XDPProgram->getArpTableMap()->update(upfn3IP, map_table, BPF_ANY);
+        // xdp_program->GetArpTableMap()->Update(upf_n3_ip, entry, BPF_ANY);
+        auto arp_table_map = xdp_program->GetMapByName("arp_table_map");
+        if (arp_table_map) {
+          arp_table_map->Update(upf_n3_ip, entry, BPF_ANY);
+        } else {
+          Logger::upf_app().error("UpdateArpTable: arp_table map not found");
+        }
       }
     }
   } catch (const std::exception& ex) {
-    // Handle the exception here or log it for debugging
-    // Note: It's better to handle exceptions rather than ignoring them.
     Logger::upf_app().error(
-        "Error: The ARP table was not updated for N3 Next HOP");
+        "Error: The ARP table was not updated for N3 Next HOP: %s", ex.what());
   }
 }
 
-//---------------------------------------------------------------------------------------------------------------
-// // Helper function to save SEID with FAR program
-// void SessionProgramManager::saveSeidWithinFARProgram(
-//     uint64_t seid,
-//     std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram,
-//     const next_rule_prog_index_key& key) {
-//   // Map the deployed pipeline to the seid.
-//   // The seid will be used to destroy the pipeline.
-//   mSessionProgramsMap[seid] =
-//       std::make_shared<SessionPrograms>(key, pUPF_XDPProgram);
-//   addPFCPProgram(seid, pUPF_XDPProgram);
-// }
+//------------------------------------------------------------------------------
+uint32_t SessionProgramManager::GetNextHopIp(
+    uint32_t local_ip, uint32_t remote_ip) const {
+  if (NextHopFinder::sameSubnet(local_ip, remote_ip)) {
+    return remote_ip;  // Direct connection
+  } else {
+    return NextHopFinder::retrieveNextHopIP(remote_ip);  // Via gateway
+  }
+}
 
-//---------------------------------------------------------------------------------------------------------------
-uint32_t SessionProgramManager::getGnodebIp(
-    std::shared_ptr<pfcp::pfcp_far> pFar) {
-  pfcp::forwarding_parameters foward_param;
+//------------------------------------------------------------------------------
+// Session Query Methods
+//------------------------------------------------------------------------------
 
-  if (not pFar->get(foward_param)) {
+void SessionProgramManager::AddPfcpProgram(
+    uint64_t seid, std::shared_ptr<UPF_XDPProgram> xdp_program) {
+  // std::lock_guard<std::mutex> lock(mutex_);
+
+  PfcpProgramInfo pfcp_prgm;
+  pfcp_prgm.seid        = seid;
+  pfcp_prgm.xdp_program = xdp_program;
+
+  pfcp_programs->push_back(pfcp_prgm);
+}
+
+//------------------------------------------------------------------------------
+std::shared_ptr<SessionPrograms> SessionProgramManager::FindSessionPrograms(
+    uint64_t seid) const {
+  // std::lock_guard<std::mutex> lock(mutex_);
+
+  auto it = session_programs_map_.find(seid);
+  return (it != session_programs_map_.end()) ? it->second : nullptr;
+}
+
+//------------------------------------------------------------------------------
+// 3GPP TS 29.244 Section 8.2.74 - Get gNodeB IP from Outer Header Creation
+uint32_t SessionProgramManager::GetGnodebIp(
+    std::shared_ptr<pfcp::pfcp_far> far) const {
+  if (!far) return 0;
+
+  pfcp::forwarding_parameters forward_param;
+
+  if (!far->get(forward_param)) {
     Logger::upf_app().error(
         "Could not retrieve the forwarding parameters from FAR");
     throw std::runtime_error("gNodeB IP cannot be retrieved");
   }
 
-  pfcp::ue_ip_address_t gNBIpAddress;
-  gNBIpAddress.v4 = 1;
-  gNBIpAddress.ipv4_address =
-      foward_param.outer_header_creation.second.ipv4_address;
+  if ((forward_param.outer_header_creation.first)) {
+    return far->forwarding_parameters.second.outer_header_creation.second
+        .ipv4_address.s_addr;
+  }
 
-  return gNBIpAddress.ipv4_address.s_addr;
+  return 0;
 }
 
-//---------------------------------------------------------------------------------------------------------------
-uint32_t SessionProgramManager::retrieveGnbIp(
-    std::shared_ptr<pfcp::pfcp_session> session) {
-  pfcp::forwarding_parameters forward_param;
+//------------------------------------------------------------------------------
+uint32_t SessionProgramManager::RetrieveGnbIp(
+    std::shared_ptr<pfcp::pfcp_session> session) const {
+  if (!session) return 0;
 
+  pfcp::forwarding_parameters forward_param;
   for (const auto& far : session->fars) {
     if (!far->get(forward_param)) {
       continue;
@@ -470,436 +1126,60 @@ uint32_t SessionProgramManager::retrieveGnbIp(
   return 0;
 }
 
-//---------------------------------------------------------------------------------------------------------------
-uint32_t SessionProgramManager::retrieveUeIp(
-    std::shared_ptr<pfcp::pfcp_session> session) {
+//------------------------------------------------------------------------------
+uint32_t SessionProgramManager::RetrieveUeIp(
+    std::shared_ptr<pfcp::pfcp_session> session) const {
+  if (!session) return 0;
+
   pfcp::pdi pdi;
-  pfcp::ue_ip_address_t ueIpAddress;
-  uint32_t ueIp = 0;
+  pfcp::ue_ip_address_t ue_ip_address;
 
   for (const auto& pdr : session->pdrs) {
-    if (pdr->get(pdi) && pdi.get(ueIpAddress)) {
-      ueIp = ueIpAddress.ipv4_address.s_addr;
-      break;
+    if ((pdr->get(pdi)) && (pdi.get(ue_ip_address))) {
+      return ue_ip_address.ipv4_address.s_addr;
     }
   }
 
-  return ueIp;
+  return 0;
 }
 
-//---------------------------------------------------------------------------------------------------------------
-bool SessionProgramManager::getFar(
+//------------------------------------------------------------------------------
+bool SessionProgramManager::GetFarForPdr(
     std::shared_ptr<pfcp::pfcp_session> session,
     std::shared_ptr<pfcp::pfcp_pdr> pdr,
-    std::shared_ptr<pfcp::pfcp_far>& outFar) {
-  pfcp::far_id_t farId;
-  return (pdr->get(farId) && session->get(farId.far_id, outFar));
+    std::shared_ptr<pfcp::pfcp_far>& out_far) const {
+  pfcp::far_id_t far_id;
+  return (pdr->get(far_id) && session->get(far_id.far_id, out_far));
 }
 
-//---------------------------------------------------------------------------------------------------------------
-bool SessionProgramManager::getQer(
+//------------------------------------------------------------------------------
+bool SessionProgramManager::GetQerForPdr(
     std::shared_ptr<pfcp::pfcp_session> session,
     std::shared_ptr<pfcp::pfcp_pdr> pdr,
-    std::shared_ptr<pfcp::pfcp_qer>& outQer) {
-  pfcp::qer_id_t qerId;
-
-  return (pdr->get(qerId) && session->get(qerId.qer_id, outQer));
+    std::shared_ptr<pfcp::pfcp_qer>& out_qer) const {
+  pfcp::qer_id_t qer_id;
+  return (pdr->get(qer_id) && session->get(qer_id.qer_id, out_qer));
 }
 
-//---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::createPipeline(
-    std::shared_ptr<pfcp::pfcp_session> session) {
-  auto& logger     = Logger::upf_app();
-  uint32_t dnIP    = upf_cfg.remote_n6.s_addr;
-  uint32_t upfn3IP = upf_cfg.n3.addr4.s_addr;
-  uint32_t upfn6IP = upf_cfg.n6.addr4.s_addr;
+//------------------------------------------------------------------------------
+// Observer Pattern
+//------------------------------------------------------------------------------
 
-  if (session->pdrs.size() > MAX_PDRS_SESSION) {
-    logger.error(
-        "Number of PDRs within a PDU session exceeds %d, please either "
-        "increase this number or remove some PDRs",
-        MAX_PDRS_SESSION);
-    throw std::runtime_error(
-        "Number of requested PDRs exceeds the allocated size for PDRs "
-        "vector:");
-  }
-
-  pfcp::pdi pdi;
-  pfcp::fteid_t fteid;
-  pfcp::ue_ip_address_t ueIpAddress;
-  pfcp::source_interface_t sourceInterface;
-  uint16_t pdr_id;
-  uint32_t far_id;
-  // next_rule_prog_index_key key;
-  session_id pduSession;
-  uint64_t seid = session->get_up_seid();
-
-  auto pUPF_XDPProgram = UserPlaneComponent::getInstance().getUPF_XDPProgram();
-
-  pfcp_pdr_t pdrs[MAX_PDRS_SESSION] = {0};
-  int i                             = 0;
-
-  // Handle Uplink PDRs
-  for (const auto pdr : session->pdrs) {
-    pdr_id = pdr->pdr_id.rule_id;
-    logger.debug("Processing PDR %d on establishment", pdr_id);
-
-    if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
-      throw std::runtime_error(
-          "Missing Mandatory IE in PDR: " + std::to_string(pdr_id));
-    }
-
-    if (!pdi.get(fteid)) {
-      fteid.teid = 0;
-      logger.warn(
-          "FTEID is missing for PDR %d. CH bit: %s", pdr_id,
-          fteid.ch ? "Set" : "Not Set");
-      /*
-       * TODO: Implement the logic when fteid is not present
-       */
-    }
-    if (!pdi.get(ueIpAddress)) {
-      ueIpAddress.ipv4_address.s_addr = 0;
-      logger.warn("UE IP Address is missing for PDR %d", pdr_id);
-
-      /*
-       * TODO: Implement the logic when ipv4_address.s_addr is not present
-       */
-    }
-    // sessionIds(pduSession, seid, fteid.teid, 0);
-
-    storePduSessionInMap(
-        pUPF_XDPProgram, ueIpAddress.ipv4_address.s_addr, fteid.teid, 0, seid);
-
-    std::shared_ptr<pfcp::pfcp_far> far;
-    if (!getFar(session, pdr, far)) {
-      throw std::runtime_error(
-          "Error retrieving FAR for PDR ID: " + std::to_string(pdr_id));
-    }
-
-    /*
-     * On the Uplink see if there is QER applied for downlink
-     */
-    std::shared_ptr<pfcp::pfcp_qer> qer = nullptr;
-    if (!getQer(session, pdr, qer)) {
-      logger.debug("Missing qer for pdr %d", pdr_id);
-    }
-
-    struct rules_match_pdr rules = {0};
-    rules.far                    = createFar(far);
-    rules.qer                    = createQer(qer);
-
-    struct pdrs_per_session pdr_key = {0};
-    pdr_key.pdr_id                  = pdr_id;
-    pdr_key.seid                    = seid;
-
-    pUPF_XDPProgram->getRulesMatchPdrMap()->update(pdr_key, rules, BPF_ANY);
-
-    // far_id = far->far_id.far_id;
-    // initializeNextRuleProgIndexKey(key, teid1, ueIpAddress,
-    // sourceInterface);
-
-    // storeFarProgramIndexInNextProgRuleIndexMap(
-    //     far, key, pUPF_XDPProgram);
-
-    std::thread arpUpdateThread(
-        [this, pUPF_XDPProgram, dnIP, upfn6IP, pdr_id]() {
-          char buf_upfn6IP[INET_ADDRSTRLEN];
-          char buf_dnIP[INET_ADDRSTRLEN];
-
-          struct in_addr addr_upfn6IP = {.s_addr = upfn6IP};
-          struct in_addr addr_dnIP    = {.s_addr = dnIP};
-
-          inet_ntop(AF_INET, &addr_upfn6IP, buf_upfn6IP, INET_ADDRSTRLEN);
-          inet_ntop(AF_INET, &addr_dnIP, buf_dnIP, INET_ADDRSTRLEN);
-
-          Logger::upf_app().debug(
-              "(upf_n6_ip, dn_ip ) : (%s, %s) For PDR %d", buf_upfn6IP,
-              buf_dnIP, pdr_id);
-
-          updateARPTableForN6(pUPF_XDPProgram, dnIP, upfn6IP);
-        });
-    arpUpdateThread.detach();
-    // saveSeidWithinFARProgram(seid, pUPF_XDPProgram, key);
-    /*
-    TO BE CONTINUED
-    ..................
-    */
-
-    // if ((upf_cfg.enable_fr) &&
-    //     (sourceInterface.interface_value == INTERFACE_VALUE_CORE)) {
-    //   if (ueIpAddress.v4) {
-    //     std::vector<pfcp::framed_route_t> framedRoutes;
-    //     if (pdi.get(framedRoutes)) {
-    //       SessionProgramManager::getInstance().addFramedRoutes(
-    //           ueIpAddress.ipv4_address.s_addr, framedRoutes);
-    //     }
-    //   } else {
-    //     Logger::upf_app().warn("Framed Route is not yet supported for Ipv6");
-    //   }
-    // }
-
-    pdrs[i] = createPdr(pdr);
-    i++;
-  }
-
-  pUPF_XDPProgram->getSessionPdrsMap()->update(seid, pdrs, BPF_ANY);
-  /*
-  TO BE CONTINUED: We Shall treat the case where there are downlink PDRs in
-  the establishment request. To be done later
-  ..................
-  */
+void SessionProgramManager::SetSessionObserver(ISessionObserver* observer) {
+  // std::lock_guard<std::mutex> lock(mutex_);
+  session_observer_ = observer;
+  Logger::upf_app().debug("Session observer set");
 }
 
-//---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::modifyPipeline(
-    std::shared_ptr<pfcp::pfcp_session> session, uint32_t teid_ul,
-    uint32_t teid_dl) {
-  auto& logger = Logger::upf_app();
+//------------------------------------------------------------------------------
+// Internal Methods
+//------------------------------------------------------------------------------
 
-  uint32_t dnIp    = upf_cfg.remote_n6.s_addr;
-  uint32_t upfn3Ip = upf_cfg.n3.addr4.s_addr;
-  uint32_t upfn6Ip = upf_cfg.n6.addr4.s_addr;
-
-  uint64_t seid   = session->get_up_seid();
-  uint32_t pdr_id = 0;
-
-  uint32_t ueIp  = retrieveUeIp(session);
-  uint32_t gnbIp = retrieveGnbIp(session);
-
-  pfcp::pdi pdi;
-  pfcp::source_interface_t sourceInterface;
-
-  if (!ueIp) {
-    logger.error(
-        "Missing UE IP Address. Handeling this case not implemented yet!");
-    throw std::runtime_error(
-        "Missing UE IP Address. Use case not Yet implemented");
-  }
-
-  if (!gnbIp) {
-    logger.error("Missing gnb IP. Handeling this case not implemented yet!");
-    throw std::runtime_error("Missing gnb IP. Use case not Yet implemented");
-  }
-
-  if (session->pdrs.size() > MAX_PDRS_SESSION) {
-    logger.error(
-        "Number of PDRs within a PDU session exceeds %d, please either "
-        "increase this number or remove some PDRs",
-        MAX_PDRS_SESSION);
-    throw std::runtime_error(
-        "Number of requested PDRs exceeds the allocated size for PDRs "
-        "vector:");
-  }
-
-  bool enforcing_qos                  = !session->qers_downlink.empty();
-  const bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
-  const bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
-  auto pUPF_XDPProgram = UserPlaneComponent::getInstance().getUPF_XDPProgram();
-
-  if (isQosEnabled && enforcing_qos) {
-    uint32_t value = 1;
-    pUPF_XDPProgram->getQosEnablingMap()->update(seid, value, BPF_ANY);
-
-    logger.debug("Instantiate a new QERProgram");
-    std::shared_ptr<QERProgram> pQERProgram =
-        std::make_shared<QERProgram>(upf_cfg);
-    pQERProgram->setup(seid, session->qers_downlink, session->pdrs_downlink);
-  }
-
-  storePduSessionInMap(pUPF_XDPProgram, ueIp, teid_ul, teid_dl, seid);
-
-  pfcp_pdr_t pdrs[MAX_PDRS_SESSION] = {0};
-  int i                             = 0;
-
-  for (const auto& pdr : session->pdrs) {
-    pdr_id = pdr->pdr_id.rule_id;
-    logger.debug("Processing PDR %d on Modification", pdr_id);
-    std::shared_ptr<pfcp::pfcp_far> far;
-    std::shared_ptr<pfcp::pfcp_qer> qer;
-
-    std::thread arpUpdateThread([this, pUPF_XDPProgram, seid, gnbIp, dnIp,
-                                 upfn3Ip, upfn6Ip, pdr_id]() {
-      try {
-        char buf_upfn6Ip[INET_ADDRSTRLEN];
-        char buf_upfn3Ip[INET_ADDRSTRLEN];
-        char buf_dnIp[INET_ADDRSTRLEN];
-        char buf_gnbIp[INET_ADDRSTRLEN];
-
-        struct in_addr addr_upfn6Ip = {.s_addr = upfn6Ip};
-        struct in_addr addr_upfn3Ip = {.s_addr = upfn3Ip};
-        struct in_addr addr_dnIp    = {.s_addr = dnIp};
-        struct in_addr addr_gnbIp   = {.s_addr = gnbIp};
-
-        inet_ntop(AF_INET, &addr_upfn6Ip, buf_upfn6Ip, INET_ADDRSTRLEN);
-        inet_ntop(AF_INET, &addr_upfn3Ip, buf_upfn3Ip, INET_ADDRSTRLEN);
-        inet_ntop(AF_INET, &addr_dnIp, buf_dnIp, INET_ADDRSTRLEN);
-        inet_ntop(AF_INET, &addr_gnbIp, buf_gnbIp, INET_ADDRSTRLEN);
-
-        Logger::upf_app().debug(
-            "(upf_n6_ip, dn_ip ) : (%s, %s) For PDR %d", buf_upfn6Ip, buf_dnIp,
-            pdr_id);
-        Logger::upf_app().debug(
-            "(upf_n3_ip, gnb_ip ) : (%s, %s) For PDR %d", buf_upfn3Ip,
-            buf_gnbIp, pdr_id);
-
-        updateARPTableForN6(pUPF_XDPProgram, dnIp, upfn6Ip);
-
-        updateARPTableForN3(pUPF_XDPProgram, gnbIp, upfn3Ip, seid);
-      } catch (const std::exception& e) {
-        Logger::upf_app().error("ARP update thread exception: {}", e.what());
-      } catch (...) {
-        Logger::upf_app().error("Unknown exception in ARP update thread");
-      }
-    });
-
-    arpUpdateThread.detach();
-
-    if (!getFar(session, pdr, far)) {
-      throw std::runtime_error(
-          "Error retrieving FAR for PDR ID: " + std::to_string(pdr_id));
+int32_t SessionProgramManager::GetEmptySlot() {
+  for (size_t i = 0; i < program_array_.size(); ++i) {
+    if (program_array_[i] == kEmptySlot) {
+      return static_cast<int32_t>(i);
     }
-
-    if (!getQer(session, pdr, qer)) {
-      logger.debug("Missing qer for pdr %d", pdr_id);
-    }
-
-    struct rules_match_pdr rules = {0};
-    rules.far                    = createFar(far);
-    rules.qer                    = createQer(qer);
-
-    struct pdrs_per_session pdr_key = {0};
-    pdr_key.pdr_id                  = pdr_id;
-    pdr_key.seid                    = seid;
-
-    pUPF_XDPProgram->getRulesMatchPdrMap()->update(pdr_key, rules, BPF_ANY);
-
-    // Parse the SDF Flow Description
-    if (pdr->qer_id.first) {
-      pfcp::sdf_filter_t sdf;
-      struct sdf_filtr sdfFilter;
-      std::string flowDescription;
-
-      if (pdr->get(pdi) && pdi.get(sdf)) {
-        if (sdf.fd && sdf.length_of_flow_description > 0)
-          flowDescription = sdf.flow_description;
-
-        uint32_t qfi = getQer(session, pdr, qer) ? qer->qfi.second.qfi : 0;
-
-        if (qfi != 0) {
-          pdi.qfi.first      = true;
-          pdi.qfi.second.qfi = qfi;
-          pdr->set(pdi);
-        }
-        auto filterInfo = SdfFilterParser::ParseSdfFilter(flowDescription);
-        if (filterInfo) {
-          sdfFilter              = *filterInfo;
-          sdfFilter.session.seid = seid;
-          sdfFilter.session.qfi  = qfi;
-
-          // struct sdfs_per_session sdf_key = {0};
-          // sdf_key.qer_id                  = pdr->qer_id.second.qer_id;
-          // sdf_key.seid                    = seid;
-          struct session_qfi sdf_key = {0};
-          sdf_key.qfi                = qfi;
-          sdf_key.seid               = seid;
-
-          pUPF_XDPProgram->getSdfFilterMap()->update(
-              sdf_key, sdfFilter, BPF_ANY);
-        }
-      }
-    }
-
-    // if ((upf_cfg.enable_fr) &&
-    //     (pdr->get(pdi) && pdi.get(sourceInterface) &&
-    //      (sourceInterface.interface_value == INTERFACE_VALUE_CORE))) {
-    //   std::vector<pfcp::framed_route_t> framedRoutes;
-    //   if (pdi.get(framedRoutes)) {
-    //     SessionProgramManager::getInstance().addFramedRoutes(
-    //         ueIp, framedRoutes);
-    //   }
-    // }
-
-    pdrs[i] = createPdr(pdr);
-    i++;
   }
-
-  pUPF_XDPProgram->getSessionPdrsMap()->update(seid, pdrs, BPF_ANY);
-}
-
-//---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::removePipeline(uint64_t seid) {
-  Logger::upf_app().debug("Clean the different eBPF maps");
-  auto it = mSessionProgramsMap.find(seid);
-
-  if (it == mSessionProgramsMap.end()) {
-    Logger::upf_app().error("Session with SEID: %lu Does Not Exist", seid);
-  }
-
-  Logger::upf_app().debug(
-      "Delete the SessionPrograms object. It will release the pipeline");
-
-  Logger::upf_app().debug("Clean PDU Session from the entry program's map");
-}
-
-//---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::remove(uint64_t seid) {
-  //   auto sessionProgram = findSessionProgram(seid);
-  //   if (!sessionProgram) {
-  //     Logger::upf_app().error(
-  //         "The PDU session %d does not exist. Cannot be removed", seid);
-  //     throw std::runtime_error("The session does not exist. Cannot be
-  //     removed");
-  //   }
-  //   sessionProgram->tearDown();
-  //   mSessionProgramMap.erase(seid);
-
-  // TODO: UPdate this code with keysight
-}
-
-//---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::removeAll() {
-  //   for (auto pair : mSessionProgramMap) {
-  //     pair.second->tearDown();
-
-  //     // Notify observer that a PFCP_Session_PDR_LookupProgram was
-  //     removed.
-  //     mpOnNewSessionProgramObserver->onDestroySessionProgram(pair.first);
-  //   }
-  //   mSessionProgramMap.clear();
-  /*
-   * TODO: CHECK WITH Keysight
-   */
-}
-
-//---------------------------------------------------------------------------------------------------------------
-void SessionProgramManager::setOnNewSessionObserver(
-    OnStateChangeSessionProgramObserver* pObserver) {
-  mpOnNewSessionProgramObserver = pObserver;
-}
-
-//---------------------------------------------------------------------------------------------------------------
-std::shared_ptr<SessionPrograms> SessionProgramManager::findSessionPrograms(
-    uint64_t seid) {
-  std::shared_ptr<SessionPrograms> pSessionPrograms;
-
-  auto it = mSessionProgramsMap.find(seid);
-  if (it != mSessionProgramsMap.end()) {
-    pSessionPrograms = it->second;
-  }
-
-  return pSessionPrograms;
-}
-
-//---------------------------------------------------------------------------------------------------------------
-int32_t SessionProgramManager::getEmptySlot() {
-  auto it = std::find(mProgramArray.begin(), mProgramArray.end(), EMPTY_SLOT);
-  if (it != mProgramArray.end()) {
-    auto index = it - mProgramArray.begin();
-    Logger::upf_app().error("Element with index %d is empty", index);
-    return index;
-  } else {
-    Logger::upf_app().error("No Space Available");
-    throw std::runtime_error("No Space Available");
-  }
+  return -1;
 }
