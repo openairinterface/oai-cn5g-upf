@@ -135,7 +135,7 @@ WORKDIR /openair-upf/bin
 COPY --from=oai-upf-builder \
     /usr/local/sbin/bpftool \
     /openair-upf/build/upf/build/oai_upf \
-    /openair-upf/build/upf/build/upf_app/kernel/CMakeFiles/qer_tc.dir/tc/qer_tc_kernel.c.o \
+    /openair-upf/build/upf/build/upf_app/kernel/CMakeFiles/qer_tc.dir/tc/qer_tc_kern.c.o \
     /openair-upf/scripts/healthcheck.sh \
     /openair-upf/scripts/entrypoint.sh \
     ./
