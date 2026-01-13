@@ -70,6 +70,18 @@ bool pfcp_session::get(
 }
 
 //------------------------------------------------------------------------------
+bool pfcp_session::get(
+    const uint32_t urr_id, std::shared_ptr<pfcp::pfcp_urr>& urr) const {
+  for (auto it : urrs) {
+    if (it->urr_id.urr_id == urr_id) {
+      urr = it;
+      return true;
+    }
+  }
+  return false;
+}
+
+//------------------------------------------------------------------------------
 void pfcp_session::add(std::shared_ptr<pfcp::pfcp_far> far) {
   Logger::upf_n4().info("pfcp_session::add(far) seid " SEID_FMT " ", seid);
 
@@ -99,6 +111,12 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_pdr> pdr) {
 void pfcp_session::add(std::shared_ptr<pfcp::pfcp_qer> qer) {
   Logger::upf_n4().info("pfcp_session::add(qer) seid " SEID_FMT " ", seid);
   qers.push_back(qer);
+}
+
+//------------------------------------------------------------------------------
+void pfcp_session::add(std::shared_ptr<pfcp::pfcp_urr> urr) {
+  Logger::upf_n4().info("pfcp_session::add(urr) seid " SEID_FMT " ", seid);
+  urrs.push_back(urr);
 }
 
 //------------------------------------------------------------------------------
@@ -150,6 +168,24 @@ bool pfcp_session::remove(const pfcp::qer_id_t& qer_id, uint8_t& cause_value) {
 }
 
 //------------------------------------------------------------------------------
+/**
+ * Remove URR
+ */
+bool pfcp_session::remove(const pfcp::urr_id_t& urr_id, uint8_t& cause_value) {
+  for (std::vector<std::shared_ptr<pfcp::pfcp_urr>>::iterator it = urrs.begin();
+       it != urrs.end(); ++it) {
+    if ((*it)->urr_id.urr_id == urr_id.urr_id) {
+      Logger::upf_n4().info(
+          "pfcp_session::remove(urr) seid " SEID_FMT " ", seid);
+      urrs.erase(it);
+      return true;
+    }
+  }
+  cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;  //??
+  return false;
+}
+
+//------------------------------------------------------------------------------
 bool pfcp_session::update(
     const pfcp::update_far& update, uint8_t& cause_value) {
   std::shared_ptr<pfcp::pfcp_far> far = {};
@@ -165,7 +201,7 @@ bool pfcp_session::update(
 
 //------------------------------------------------------------------------------
 /**
- * Update QER
+ * Update PDR
  */
 bool pfcp_session::update(
     const pfcp::update_pdr& update, uint8_t& cause_value) {
@@ -181,11 +217,31 @@ bool pfcp_session::update(
 }
 
 //------------------------------------------------------------------------------
+/**
+ * Update QER
+ */
 bool pfcp_session::update(
     const pfcp::update_qer& update, uint8_t& cause_value) {
   std::shared_ptr<pfcp::pfcp_qer> qer = {};
   if (get(update.qer_id.second.qer_id, qer)) {
     if (qer->update(update, cause_value)) {
+      return true;
+    }
+    return false;
+  }
+  cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  return false;
+}
+
+//------------------------------------------------------------------------------
+/**
+ * Update URR
+ */
+bool pfcp_session::update(
+    const pfcp::update_urr& update, uint8_t& cause_value) {
+  std::shared_ptr<pfcp::pfcp_urr> urr = {};
+  if (get(update.urr_id.urr_id, urr)) {
+    if (urr->update(update, cause_value)) {
       return true;
     }
     return false;
@@ -239,13 +295,7 @@ bool pfcp_session::create(
   if (not cr_pdr.pdr_id.first) {
     // should be caught in lower layer
     cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-    offending_ie      = PFCP_IE_PACKET_DETECTION_RULE_ID;
-    return false;
-  }
-  if (not cr_pdr.pdi.first) {
-    // should be caught in lower layer
-    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-    offending_ie      = PFCP_IE_PDI;
+    offending_ie      = PFCP_IE_PDR_ID;
     return false;
   }
   if (not cr_pdr.precedence.first) {
@@ -254,94 +304,38 @@ bool pfcp_session::create(
     offending_ie      = PFCP_IE_PRECEDENCE;
     return false;
   }
-  const pdi& pdi = cr_pdr.pdi.second;
-  if (not pdi.source_interface.first) {
+  if (not cr_pdr.pdi.first) {
     // should be caught in lower layer
     cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-    offending_ie      = PFCP_IE_SOURCE_INTERFACE;
-    return false;
-  }
-  // already checked but !!! keep this code in comment !!!
-  //  pfcp::far_id_t    far_id = {};
-  //  if (not cr_pdr.get(far_id)) {
-  //    //should be caught in lower layer
-  //    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-  //    offending_ie = PFCP_IE_FAR_ID;
-  //    return false;
-  //  }
-
-  if (pdi.traffic_endpoint_id.first) {
-    cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
-    Logger::upf_n4().info("Do not support IE traffic_endpoint_id yet!");
+    offending_ie      = PFCP_IE_PDI;
     return false;
   }
 
-  // source interface of the incoming packet
-  if (pdi.source_interface.second.interface_value == INTERFACE_VALUE_ACCESS ||
-      pdi.source_interface.second.interface_value ==
-          INTERFACE_VALUE_CP_FUNCTION) {
-    // Uplink traffic
-    if (not pdi.local_fteid.first) {
-      cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-      offending_ie      = PFCP_IE_F_TEID;
-      return false;
-    }
-    const pfcp::fteid_t& local_fteid = pdi.local_fteid.second;
-    allocated_fteid                  = {};
-    if (local_fteid.ch) {
-      // TODO if (local_fteid.choose_id) {
-      allocated_fteid = pfcp_switch_inst->generate_fteid_n3();
-    } else {
-      // cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
-      allocated_fteid = pdi.local_fteid.second;
-      /*Logger::upf_n4().info(
-          "Do not support IE FTEID managed by CP entity! Rejecting "
-          "PFCP_XXX_REQUEST");
-          */
-      Logger::upf_n4().info(
-          "TEID " TEID_FMT " received from CP", allocated_fteid.teid);
-      // return false;
-    }
-    pfcp_pdr* pdr = new pfcp_pdr(cr_pdr);
-    if (local_fteid.ch) {
-      pdr->pdi.second.set(allocated_fteid);
-    }
+  pfcp_pdr* pdr                  = new pfcp_pdr(cr_pdr);
+  std::shared_ptr<pfcp_pdr> spdr = std::shared_ptr<pfcp_pdr>(pdr);
 
-    std::shared_ptr<pfcp_pdr> spdr = std::shared_ptr<pfcp_pdr>(pdr);
-    if (pfcp_switch_inst->create_packet_in_access(
-            spdr, allocated_fteid, cause.cause_value)) {
-      pdr->set(get_up_seid());
-      add(spdr);
-    } else {
-      cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
-      Logger::upf_n4().info(
-          "Could not create_packet_in_access ! Rejecting "
-          "PFCP_SESSION_ESTABLISHMENT_REQUEST");
-      return false;
+  if ((spdr->pdi.first) && (spdr->pdi.second.source_interface.first)) {
+    if (spdr->pdi.second.source_interface.second.interface_value ==
+        INTERFACE_VALUE_ACCESS) {
+      // Have to chose an TEID for F-TEID
+      if (spdr->pdi.second.local_fteid.first) {
+        pfcp_switch_inst->create_teid(
+            spdr->pdi.second.local_fteid.second.teid, seid, spdr);
+        allocated_fteid = spdr->pdi.second.local_fteid.second;
+      }
+    } else if (
+        spdr->pdi.second.source_interface.second.interface_value ==
+        INTERFACE_VALUE_CORE) {
+      if ((spdr->pdi.second.ue_ip_address.first) &&
+          (spdr->pdi.second.ue_ip_address.second.v4)) {
+        pfcp_switch_inst->add_pfcp_dl_pdr_by_ue_ip(
+            be32toh(spdr->pdi.second.ue_ip_address.second.ipv4_address.s_addr),
+            seid, spdr);
+      }
     }
-  } else if (
-      pdi.source_interface.second.interface_value == INTERFACE_VALUE_CORE) {
-    pfcp_pdr* pdr                  = new pfcp_pdr(cr_pdr);
-    std::shared_ptr<pfcp_pdr> spdr = std::shared_ptr<pfcp_pdr>(pdr);
-    pdr->set(get_up_seid());
-    if ((pdi.ue_ip_address.first) && (pdi.ue_ip_address.second.v4)) {
-      pfcp_switch_inst->add_pfcp_dl_pdr_by_ue_ip(
-          be32toh(pdi.ue_ip_address.second.ipv4_address.s_addr), spdr);
-    } else {
-      cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
-      Logger::upf_n4().info(
-          "Could not create_packet_in_access, cause accept only IPv4 UE IP "
-          "address! Rejecting PFCP_XXX_REQUEST");
-      return false;
-    }
-    add(spdr);
-  } else {
-    cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
-    Logger::upf_n4().info(
-        "Do not actually support other interface type value as ACCESS and CORE "
-        "in PFCP_XXX_REQUEST! Rejecting PFCP_XXX_REQUEST");
-    return false;
   }
+
+  add(spdr);
   return true;
 }
 
@@ -350,66 +344,17 @@ bool pfcp_session::create(
     const pfcp::create_qer& cr_qer, pfcp::cause_t& cause,
     uint16_t& offending_ie) {
   if (not cr_qer.qer_id.first) {
-    cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
+    // should be caught in lower layer
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
     offending_ie      = PFCP_IE_QER_ID;
-    // return false;
-  }
-
-  /*
-  if (not cr_qer.qer_correlation_id.first) {
-    cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
-    offending_ie      = PFCP_IE_QER_CORRELATION_ID;
     return false;
   }
-  */
-
   if (not cr_qer.gate_status.first) {
-    cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
+    // should be caught in lower layer
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
     offending_ie      = PFCP_IE_GATE_STATUS;
-    // return false;
-  }
-
-  if (not cr_qer.maximum_bitrate.first) {
-    cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
-    offending_ie      = PFCP_IE_MBR;
-    // return false;
-  }
-
-  if (not cr_qer.guaranteed_bitrate.first) {
-    cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
-    offending_ie      = PFCP_IE_GBR;
-    // return false;
-  }
-
-  /*
-  if (not cr_qer.packet_rate.first) {
-    cause.cause_value = CAUSE_VALUE_SERVICE_NOT_SUPPORTED;
-    offending_ie      = PFCP_IE_PACKET_RATE;
     return false;
   }
-  */
-
-  /*
-  if (not cr_qer.dl_flow_level_marking.first) {
-    cause.cause_value = CAUSE_VALUE_SERVICE_NOT_SUPPORTED;
-    offending_ie      = PFCP_IE_DL_FLOW_LEVEL_MARKING;
-    return false;
-  }
-  */
-
-  if (not cr_qer.qos_flow_identifier.first) {
-    cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
-    offending_ie      = PFCP_IE_QFI;
-    // return false;
-  }
-
-  /*
-  if (not cr_qer.reflective_qos.first) {
-    cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
-    offending_ie      = PFCP_IE_RQI;
-    return false;
-  }
-  */
 
   pfcp_qer* qer                  = new pfcp_qer(cr_qer);
   std::shared_ptr<pfcp_qer> sqer = std::shared_ptr<pfcp_qer>(qer);
@@ -418,42 +363,104 @@ bool pfcp_session::create(
 }
 
 //------------------------------------------------------------------------------
+/**
+ * Create URR
+ */
+bool pfcp_session::create(
+    const pfcp::create_urr& cr_urr, pfcp::cause_t& cause,
+    uint16_t& offending_ie) {
+  if (not cr_urr.urr_id.first) {
+    // should be caught in lower layer
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_URR_ID;
+    return false;
+  }
+  if (not cr_urr.measurement_method.first) {
+    // should be caught in lower layer
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_MEASUREMENT_METHOD;
+    return false;
+  }
+
+  pfcp_urr* urr                  = new pfcp_urr(cr_urr);
+  std::shared_ptr<pfcp_urr> surr = std::shared_ptr<pfcp_urr>(urr);
+  add(surr);
+  return true;
+}
+
+//------------------------------------------------------------------------------
 bool pfcp_session::remove(
     const pfcp::remove_far& rm_far, pfcp::cause_t& cause,
     uint16_t& offending_ie) {
+  uint8_t cv = 0;
   if (not rm_far.far_id.first) {
     // should be caught in lower layer
     cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
     offending_ie      = PFCP_IE_FAR_ID;
     return false;
   }
-  return remove(rm_far.far_id.second, cause.cause_value);
+  if (remove(rm_far.far_id.second, cv)) {
+    return true;
+  }
+  cause.cause_value = cv;
+  return false;
 }
 
 //------------------------------------------------------------------------------
 bool pfcp_session::remove(
     const pfcp::remove_pdr& rm_pdr, pfcp::cause_t& cause,
     uint16_t& offending_ie) {
+  uint8_t cv = 0;
   if (not rm_pdr.pdr_id.first) {
     // should be caught in lower layer
     cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-    offending_ie      = PFCP_IE_PACKET_DETECTION_RULE_ID;
+    offending_ie      = PFCP_IE_PDR_ID;
     return false;
   }
-  return remove(rm_pdr.pdr_id.second, cause.cause_value);
+  if (remove(rm_pdr.pdr_id.second, cv)) {
+    return true;
+  }
+  cause.cause_value = cv;
+  return false;
 }
 
 //------------------------------------------------------------------------------
 bool pfcp_session::remove(
     const pfcp::remove_qer& rm_qer, pfcp::cause_t& cause,
     uint16_t& offending_ie) {
+  uint8_t cv = 0;
   if (not rm_qer.qer_id.first) {
     // should be caught in lower layer
     cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
     offending_ie      = PFCP_IE_QER_ID;
     return false;
   }
-  return remove(rm_qer.qer_id.second, cause.cause_value);
+  if (remove(rm_qer.qer_id.second, cv)) {
+    return true;
+  }
+  cause.cause_value = cv;
+  return false;
+}
+
+//------------------------------------------------------------------------------
+/**
+ * Remove URR
+ */
+bool pfcp_session::remove(
+    const pfcp::remove_urr& rm_urr, pfcp::cause_t& cause,
+    uint16_t& offending_ie) {
+  uint8_t cv = 0;
+  if (not rm_urr.urr_id.first) {
+    // should be caught in lower layer
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_URR_ID;
+    return false;
+  }
+  if (remove(rm_urr.urr_id.second, cv)) {
+    return true;
+  }
+  cause.cause_value = cv;
+  return false;
 }
 
 //------------------------------------------------------------------------------
@@ -480,6 +487,8 @@ void pfcp_session::cleanup() {
   }
   fars.clear();
   pdrs.clear();
+  qers.clear();
+  urrs.clear();
 }
 
 //------------------------------------------------------------------------------
