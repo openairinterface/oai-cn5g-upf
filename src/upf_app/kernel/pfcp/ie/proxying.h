@@ -20,26 +20,33 @@
  */
 
 /*
- * PFCP QER Correlation ID
- * Reference: 3GPP TS 29.244 Section 8.2.10
+ * PFCP Proxying
+ * Reference: 3GPP TS 29.244 Section 8.2.97
  */
-
-#ifndef _PFCP_QER_CORRELATION_ID_H
-#define _PFCP_QER_CORRELATION_ID_H
+#ifndef _PFCP_PROXYING_H
+#define _PFCP_PROXYING_H
 
 #include <linux/types.h>
 #include "ie_base.h"
 
 /**
- * struct qer_correlation_id - QER Correlation ID IE
+ * struct proxying - Proxying IE
  * @base: Common IE header
- * @qer_correlation_id: Correlation ID (network byte order)
+ * @arp: ARP proxying enabled
+ * @ins: IPv6 Neighbor Solicitation proxying enabled
+ * @spare: Spare bits
  *
- * Correlates QERs across different PFCP sessions or nodes.
+ * Indicates whether UPF should perform ARP/ND proxying for UE.
+ *
+ * Flags layout:
+ *   7   6   5   4   3   2   1   0
+ * +---+---+---+---+---+---+---+---+
+ * |    spare              |ins|arp|
+ * +---+---+---+---+---+---+---+---+
  */
-struct qer_correlation_id {
+struct proxying {
   struct ie_base base;
-  __u32 qer_correlation_id;
+  __u8 spare : 6, ins : 1, arp : 1;
 } __attribute__((packed));
 
-#endif /* _PFCP_QER_CORRELATION_ID_H */
+#endif /* _PFCP_PROXYING_H */

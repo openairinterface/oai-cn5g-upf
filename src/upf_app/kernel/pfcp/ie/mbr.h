@@ -20,26 +20,29 @@
  */
 
 /*
- * PFCP QER Correlation ID
- * Reference: 3GPP TS 29.244 Section 8.2.10
+ * PFCP MBR (Maximum Bit Rate)
+ * Reference: 3GPP TS 29.244 Section 8.2.8
  */
 
-#ifndef _PFCP_QER_CORRELATION_ID_H
-#define _PFCP_QER_CORRELATION_ID_H
+#ifndef _PFCP_MBR_H
+#define _PFCP_MBR_H
 
 #include <linux/types.h>
 #include "ie_base.h"
 
 /**
- * struct qer_correlation_id - QER Correlation ID IE
+ * struct mbr - Maximum Bit Rate IE
  * @base: Common IE header
- * @qer_correlation_id: Correlation ID (network byte order)
+ * @ul_mbr: Uplink MBR in kilobits per second (network byte order)
+ * @dl_mbr: Downlink MBR in kilobits per second (network byte order)
  *
- * Correlates QERs across different PFCP sessions or nodes.
+ * Specifies the maximum bit rate for uplink and downlink.
+ * Values are in kbps (kilobits per second).
  */
-struct qer_correlation_id {
+struct mbr {
   struct ie_base base;
-  __u32 qer_correlation_id;
+  __u64 ul_mbr;
+  __u64 dl_mbr;
 } __attribute__((packed));
 
-#endif /* _PFCP_QER_CORRELATION_ID_H */
+#endif /* _PFCP_MBR_H */

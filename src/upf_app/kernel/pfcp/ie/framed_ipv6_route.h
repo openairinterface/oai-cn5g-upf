@@ -20,26 +20,28 @@
  */
 
 /*
- * PFCP QER Correlation ID
- * Reference: 3GPP TS 29.244 Section 8.2.10
+ * PFCP Framed-IPv6-Route
+ * Reference: 3GPP TS 29.244 Section 8.2.111
  */
 
-#ifndef _PFCP_QER_CORRELATION_ID_H
-#define _PFCP_QER_CORRELATION_ID_H
+#ifndef _PFCP_FRAMED_IPV6_ROUTE_H
+#define _PFCP_FRAMED_IPV6_ROUTE_H
 
 #include <linux/types.h>
 #include "ie_base.h"
+#include "pfcp_limits.h"
 
 /**
- * struct qer_correlation_id - QER Correlation ID IE
+ * struct framed_ipv6_route - Framed-IPv6-Route IE
  * @base: Common IE header
- * @qer_correlation_id: Correlation ID (network byte order)
+ * @framed_ipv6_route: IPv6 routing information (variable length)
  *
- * Correlates QERs across different PFCP sessions or nodes.
+ * Contains IPv6 routing information for the UE.
+ * Format as per RFC 3162 (RADIUS IPv6).
  */
-struct qer_correlation_id {
+struct framed_ipv6_route {
   struct ie_base base;
-  __u32 qer_correlation_id;
+  char framed_ipv6_route[PFCP_FRAMED_IPV6_ROUTE_MAX_LEN];
 } __attribute__((packed));
 
-#endif /* _PFCP_QER_CORRELATION_ID_H */
+#endif /* _PFCP_FRAMED_IPV6_ROUTE_H */

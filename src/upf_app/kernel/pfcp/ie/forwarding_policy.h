@@ -20,26 +20,29 @@
  */
 
 /*
- * PFCP QER Correlation ID
- * Reference: 3GPP TS 29.244 Section 8.2.10
+ * PFCP Forwarding Policy
+ * Reference: 3GPP TS 29.244 Section 8.2.23
  */
 
-#ifndef _PFCP_QER_CORRELATION_ID_H
-#define _PFCP_QER_CORRELATION_ID_H
+#ifndef _PFCP_FORWARDING_POLICY_H
+#define _PFCP_FORWARDING_POLICY_H
 
 #include <linux/types.h>
 #include "ie_base.h"
+#include "pfcp_limits.h"
 
 /**
- * struct qer_correlation_id - QER Correlation ID IE
+ * struct forwarding_policy - Forwarding Policy IE
  * @base: Common IE header
- * @qer_correlation_id: Correlation ID (network byte order)
+ * @forwarding_policy_id_len: Length of policy identifier
+ * @forwarding_policy_id: Forwarding policy identifier string
  *
- * Correlates QERs across different PFCP sessions or nodes.
+ * Identifies a forwarding policy to be applied to matching traffic.
  */
-struct qer_correlation_id {
+struct forwarding_policy {
   struct ie_base base;
-  __u32 qer_correlation_id;
+  __u8 forwarding_policy_id_len;
+  char forwarding_policy_id[PFCP_FORWARDING_POLICY_ID_MAX_LEN];
 } __attribute__((packed));
 
-#endif /* _PFCP_QER_CORRELATION_ID_H */
+#endif /* _PFCP_FORWARDING_POLICY_H */
