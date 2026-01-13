@@ -135,7 +135,7 @@ void upf_app_task(void* args_p) {
 
 //------------------------------------------------------------------------------
 upf_app::upf_app(const std::string& config_file) {
-  Logger::upf_app().startup("Starting...");
+  Logger::upf_app().startup("UPF initialization started");
   upf_cfg.execute();
 
   if (itti_inst->create_task(
@@ -170,7 +170,7 @@ upf_app::upf_app(const std::string& config_file) {
     Logger::upf_app().error("Cannot create UPF_NRF: %s", e.what());
     throw;
   }
-  Logger::upf_app().startup("Started");
+  //Logger::upf_app().startup("Started");
 }
 
 //------------------------------------------------------------------------------
