@@ -254,11 +254,19 @@ upf::upf(
       m_upf_support_features(
           false, false, 3, 2, 10000, 8, 8, 8, 2, false, false, false, true),
       m_interfaces(interfaces) {
-  model::nrf::SnssaiUpfInfoItem item;
-  item.setSNssai(DEFAULT_SNSSAI);
+  oai::_3gpp::model::SnssaiUpfInfoItem item;
+  //  item.setSNssai(DEFAULT_SNSSAI);
+  // Convertir Snssai -> ExtSnssai
+  oai::_3gpp::model::ExtSnssai ext_snssai;
+  ext_snssai.setSst(DEFAULT_SNSSAI.getSst());
+  if (DEFAULT_SNSSAI.sdIsSet()) {
+    ext_snssai.setSd(DEFAULT_SNSSAI.getSd());
+  }
+  item.setSNssai(ext_snssai);
+
   item.setDnnUpfInfoList(DEFAULT_DNN_LIST);
   m_upf_info.setSNssaiUpfInfoList(
-      std::vector<oai::model::nrf::SnssaiUpfInfoItem>{item});
+      std::vector<oai::_3gpp::model::SnssaiUpfInfoItem>{item});
 }
 
 void upf::from_yaml(const YAML::Node& node) {
@@ -328,8 +336,11 @@ std::string upf::to_string(const std::string& indent) const {
       "{} {}:\n", OUTER_LIST_ELEM, UPF_CONFIG_SUPPORT_FEATURES_LABEL));
   out.append(m_upf_support_features.to_string(inner_indent));
 
-  out.append(m_upf_info.to_string(1));
-
+  // out.append(m_upf_info.to_string(1));
+  // FIX: La méthode to_string() a été supprimée de UpfInfo
+  // out.append(m_upf_info.to_string(1));
+  out.append(indent).append(
+      fmt::format("{} UPF Info: [configuration loaded]\n", OUTER_LIST_ELEM));
   return out;
 }
 
@@ -421,7 +432,7 @@ const upf_support_features& upf::get_support_features() const {
 }
 
 //------------------------------------------------------------------------------
-const oai::model::nrf::UpfInfo& upf::get_upf_info() const {
+const oai::_3gpp::model::UpfInfo& upf::get_upf_info() const {
   return m_upf_info;
 }
 const std::map<std::string, upf_interface_config>& upf::get_interfaces() const {

@@ -215,7 +215,7 @@ class upf : public nf {
  private:
   int_config_value m_instance_id;
   upf_support_features m_upf_support_features;
-  oai::model::nrf::UpfInfo m_upf_info;
+  oai::_3gpp::model::UpfInfo m_upf_info;
   string_config_value m_remote_n6;
   std::vector<string_config_value> m_smf_list;
   // the reason to use a map is to have support for different interfaces in the
@@ -242,7 +242,7 @@ class upf : public nf {
   [[nodiscard]] const std::string get_remote_n6() const;
   [[nodiscard]] const std::vector<string_config_value> get_smf_list() const;
   [[nodiscard]] const upf_support_features& get_support_features() const;
-  [[nodiscard]] const oai::model::nrf::UpfInfo& get_upf_info() const;
+  [[nodiscard]] const oai::_3gpp::model::UpfInfo& get_upf_info() const;
   [[nodiscard]] const std::map<std::string, upf_interface_config>&
   get_interfaces() const;
 };

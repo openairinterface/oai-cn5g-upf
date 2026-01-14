@@ -51,10 +51,16 @@
 
 constexpr auto UPF_CONFIG_OPTION_YES_STR = "Yes";
 constexpr auto UPF_CONFIG_OPTION_NO_STR  = "No";
+// oai::_3gpp::model
+const oai::_3gpp::model::Snssai DEFAULT_SNSSAI{1};
+// const std::vector<oai::_3gpp::model::DnnUpfInfoItem> DEFAULT_DNN_LIST = {
+//     oai::_3gpp::model::DnnUpfInfoItem("default")};
+const std::vector<oai::_3gpp::model::DnnUpfInfoItem> DEFAULT_DNN_LIST = {[]() {
+  oai::_3gpp::model::DnnUpfInfoItem item;
+  item.setDnn("default");
+  return item;
+}()};
 
-const oai::model::common::Snssai DEFAULT_SNSSAI{1};
-const std::vector<oai::model::nrf::DnnUpfInfoItem> DEFAULT_DNN_LIST = {
-    oai::model::nrf::DnnUpfInfoItem("default")};
 using namespace libconfig;
 using namespace oai::common::sbi;
 
