@@ -29,7 +29,7 @@
 #---------------------------------------------------------------------
 # BASE IMAGE
 #---------------------------------------------------------------------
-ARG BASE_IMAGE=ubuntu:jammy
+ARG BASE_IMAGE=ubuntu:noble
 FROM $BASE_IMAGE AS oai-upf-base
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -66,6 +66,23 @@ RUN ./build_upf --install-deps --force
 FROM oai-upf-base AS oai-upf-builder
 # Copy the rest of source code
 COPY . /openair-upf
+
+
+# Remove the deprecated NPN argument to add support for Ubuntu 24.04
+RUN sed -i \
+  's/cpr::ssl::ALPN{false}, cpr::ssl::NPN{false}/cpr::ssl::ALPN{false}/g' \
+  /openair-upf/src/common-src/http/http_client.cpp
+
+# Ubuntu 24.04 - <cstdint> is no longer implicitly included by standard headers
+RUN sed -i '1i #include <cstdint>' \
+  /openair-upf/src/common-src/utils/fqdn.hpp
+
+RUN sed -i '1i #include <cstdint>' \
+  /openair-upf/src/common-src/utils/output_wrapper.hpp
+
+RUN sed -i '1i #include <cstdint>' \
+  /openair-upf/src/common-src/utils/mime_parser.hpp
+
 # Building UPF
 WORKDIR /openair-upf/build/scripts
 ARG BUILD_ARGS=""
@@ -111,12 +128,14 @@ RUN apt-get update && \
       netbase \
 # Ubuntu 20 --> libasan5
 # Ubuntu 22 --> libasan6
+# Ubuntu 24 --> libasan8
 #      libasan? \
       libgssapi-krb5-2 \
 # Ubuntu 20 --> libldap-2.4-2
 # Ubuntu 22 --> libldap-2.5-0
+# Ubuntu 24 --> libldap-2.6-7
       libldap-2.?-? \
-      libgoogle-glog0v5 \
+      libgoogle-glog0v6 \
       libdouble-conversion3 \
       libconfig++9v5 \
       librtmp1 \
@@ -125,7 +144,8 @@ RUN apt-get update && \
       libcurl?-gnutls \
 # Ubuntu 20 --> boost71
 # Ubuntu 22 --> boost74
-      libboost-thread1.7?.0 \
+# Ubuntu 24 --> boost83
+      libboost-thread1.83.0 \
 # lttng
   && if [ "$ENABLE_LTTNG" = "true" ]; then DEBIAN_FRONTEND=noninteractive apt-get install --yes liblttng-ust-dev; fi \
   && rm -rf /var/lib/apt/lists/*
@@ -144,11 +164,11 @@ WORKDIR /usr/local/lib
 COPY --from=oai-upf-builder \
     /usr/local/lib/libfmt.so \
     /usr/local/lib/libyaml-cpp.so.0.? \
-    /usr/local/lib/libcpr.so.1 \    
+    /usr/local/lib/libcpr.so.1* \
 # Ubuntu 20 --> libbfd-2.34
 # Ubuntu 22 --> libbfd-2.38
-    /usr/lib/?-linux-gnu/libbfd-2.3?-system.so \
-    /usr/lib/?-linux-gnu/libopcodes-2.3?-system.so \
+    /usr/lib/?-linux-gnu/libbfd-2.*?-system.so \
+    /usr/lib/?-linux-gnu/libopcodes-2.*?-system.so \
     /openair-upf/build/ext/libbpf/src/libbpf.so.1 \
     # /openair-upf/build/upf/build/upf_app/utils/libupfutils.so \
     ./
