@@ -300,6 +300,9 @@ check_install_upf_deps() {
       "ubuntu20.04")
         specific_packages="libconfig++-dev libasio-dev libboost-all-dev libasan5"
         ;;
+      "ubuntu24.04")
+        specific_packages="libconfig++-dev libasio-dev libboost-all-dev libasan8"
+        ;;
       *)
         specific_packages="libconfig++-dev libasio-dev libboost-all-dev libasan?"
         ;;
@@ -418,6 +421,12 @@ check_install_upf_deps() {
         install_libyaml_cpp_from_git $1 $2
         ret=$?;[[ $ret -ne 0 ]] && return $ret
         ;;
+      "ubuntu24.04")
+        # probably 0.8.0
+        #$SUDO $INSTALLER install $OPTION libyaml-cpp0.8 libyaml-cpp-dev
+        install_libyaml_cpp_from_git $1 $2
+        ret=$?;[[ $ret -ne 0 ]] && return $ret
+        ;;
     esac
   elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
     # definitely, 0.6.2 as PPA installed is not enough
@@ -523,8 +532,9 @@ get_distribution_release() {
 
 check_platform_for_lttng() {
   local distribution=$(get_distribution_release)
-  if [[ "$distribution" == "ubuntu18.04" || "$distribution" == "ubuntu20.04" || "$distribution" == "ubuntu22.04" ]]; then
+  if [[ "$distribution" == "ubuntu18.04" || "$distribution" == "ubuntu20.04" || "$distribution" == "ubuntu22.04" || "$distribution" == "ubuntu24.04" ]]; then
       return 1
   fi
   return 0
 }
+
