@@ -75,8 +75,7 @@ void PFCP_Session_LookupProgram::configurePfcpSessionLookupMaps(
       skel->maps.m_session_mapping, "m_session_mapping",
       upf_cfg.max_pdu_session);
   ok &= configure_map_max_entries(
-      skel->maps.m_session_pdrs, "m_session_pdrs",
-      upf_cfg.max_pdu_session);
+      skel->maps.m_session_pdrs, "m_session_pdrs", upf_cfg.max_pdu_session);
   ok &= configure_map_max_entries(
       skel->maps.m_sdf_filter, "m_sdf_filter",
       upf_cfg.max_sdf_filters_per_pdu_session);

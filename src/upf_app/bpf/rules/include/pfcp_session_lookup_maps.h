@@ -26,19 +26,22 @@ const volatile int max_arp_entries SEC(".rodata");
 const volatile int max_qos_enabling SEC(".rodata");
 
 /**
- * m_upf_interfaces: Stores network interface configuration for UPF reference points
+ * m_upf_interfaces: Stores network interface configuration for UPF reference
+ * points
  *
- * Purpose: Maps 5G reference points (N3, N4, N6, N9) to their physical network interfaces.
- *          Used to determine which interface to use for sending/receiving packets based
- *          on the traffic direction and purpose.
+ * Purpose: Maps 5G reference points (N3, N4, N6, N9) to their physical network
+ * interfaces. Used to determine which interface to use for sending/receiving
+ * packets based on the traffic direction and purpose.
  *
  * Type: BPF_MAP_TYPE_HASH - Hash table for fast interface lookup
  *
  * Max Entries: max_upf_interfaces (default: 3)
  *   Rationale: Typical UPF deployment uses 3 main interfaces:
- *              - N3: Interface toward RAN (Radio Access Network) for user plane traffic
+ *              - N3: Interface toward RAN (Radio Access Network) for user plane
+ * traffic
  *              - N4: Interface toward SMF for PFCP control messages
- *              - N6: Interface toward Data Network (internet/enterprise networks)
+ *              - N6: Interface toward Data Network (internet/enterprise
+ * networks)
  *              - N9: (Optional) Interface for inter-UPF communication
  *
  * Key: e_reference_point (enum)
@@ -56,17 +59,18 @@ struct {
 } m_upf_interfaces SEC(".maps");
 
 /**
- * m_sdf_filter: Stores Service Data Flow (SDF) filters for traffic classification
+ * m_sdf_filter: Stores Service Data Flow (SDF) filters for traffic
+ * classification
  *
- * Purpose: Contains packet filtering rules to classify and differentiate traffic flows
- *          within a PDU session based on IP 5-tuple (src/dst IP, src/dst port, protocol).
- *          SDF filters enable application-specific QoS treatment.
+ * Purpose: Contains packet filtering rules to classify and differentiate
+ * traffic flows within a PDU session based on IP 5-tuple (src/dst IP, src/dst
+ * port, protocol). SDF filters enable application-specific QoS treatment.
  *
  * Type: BPF_MAP_TYPE_HASH - Hash table for efficient filter lookup
  *
  * Max Entries: max_sdf_filters_per_pdu_session (default: 8)
- *   Rationale: Limits the number of distinct traffic flows that can be classified
- *              per session.
+ *   Rationale: Limits the number of distinct traffic flows that can be
+ * classified per session.
  *
  * Key: struct session_qfi
  *   - Composite key: <QFI (QoS Flow Identifier), SEID>
@@ -87,15 +91,17 @@ struct {
 /**
  * m_session_mapping: Maps UE IP addresses to session identifiers and TEIDs
  *
- * Purpose: Primary lookup table for incoming packets to find the associated session.
- *          Enables fast resolution from UE IP address to session context (SEID and TEIDs).
- *          Critical for both uplink (from UE) and downlink (to UE) packet processing.
+ * Purpose: Primary lookup table for incoming packets to find the associated
+ * session. Enables fast resolution from UE IP address to session context (SEID
+ * and TEIDs). Critical for both uplink (from UE) and downlink (to UE) packet
+ * processing.
  *
  * Type: BPF_MAP_TYPE_HASH - Hash table for O(1) IP-to-session lookup
  *
  * Max Entries: max_pdu_session (default: 10,000)
  *   Rationale: One entry per PDU session. Each UE typically has 1-2 sessions
- *              (e.g., internet + IMS), so this supports thousands of concurrent UEs.
+ *              (e.g., internet + IMS), so this supports thousands of concurrent
+ * UEs.
  *
  * Key: u32 ue_ip_address
  *   - IPv4 address assigned to the UE for this PDU session
@@ -117,15 +123,16 @@ struct {
 /**
  * m_session_pdrs: Stores all Packet Detection Rules (PDRs) for each PDU session
  *
- * Purpose: This is the primary map for fast lookup of PDRs during packet processing.
- *          For each session (identified by SEID), it stores an array of all PDRs
- *          that apply to that session, sorted by precedence (lower value = higher priority).
+ * Purpose: This is the primary map for fast lookup of PDRs during packet
+ * processing. For each session (identified by SEID), it stores an array of all
+ * PDRs that apply to that session, sorted by precedence (lower value = higher
+ * priority).
  *
  * Type: BPF_MAP_TYPE_HASH - Hash table for O(1) lookup by SEID
  *
  * Max Entries: max_pdu_session
- *   Rationale: One entry per PDU session. Each UE can have one or more sessions,
- *              and the UPF must support up to max_pdu_session concurrent sessions.
+ *   Rationale: One entry per PDU session. Each UE can have one or more
+ * sessions, and the UPF must support up to max_pdu_session concurrent sessions.
  *
  * Key: u64 seid (Session Endpoint Identifier)
  *   - Unique identifier for each PDU session
@@ -145,21 +152,22 @@ struct {
 } m_session_pdrs SEC(".maps");
 
 /**
- * m_rules_match_pdr: Associates PDRs with their corresponding action rules (FAR, QER, etc.)
+ * m_rules_match_pdr: Associates PDRs with their corresponding action rules
+ * (FAR, QER, etc.)
  *
- * Purpose: Links each Packet Detection Rule (PDR) to its enforcement rules. When a packet
- *          matches a PDR, this map provides the actions to take:
+ * Purpose: Links each Packet Detection Rule (PDR) to its enforcement rules.
+ * When a packet matches a PDR, this map provides the actions to take:
  *          - FAR (Forwarding Action Rule): forward, drop, buffer, or duplicate
  *          - QER (QoS Enforcement Rule): rate limiting, packet marking
  *          - URR (Usage Reporting Rule): accounting and statistics (future)
  *
  * Type: BPF_MAP_TYPE_HASH - Hash table for fast rule lookup
  *
- * Max Entries: max_pdrs_per_pdu_session * max_pdu_session (default: 8 * 10,000 = 80,000)
- *   Rationale: One entry per PDR across all sessions. Each session has up to
- *              max_pdrs_per_pdu_session PDRs, so total capacity is:
- *              (8 PDRs/session) × (10,000 sessions) = 80,000 entries
- *              This ensures every PDR can have associated enforcement rules.
+ * Max Entries: max_pdrs_per_pdu_session * max_pdu_session (default: 8 * 10,000
+ * = 80,000) Rationale: One entry per PDR across all sessions. Each session has
+ * up to max_pdrs_per_pdu_session PDRs, so total capacity is: (8 PDRs/session) ×
+ * (10,000 sessions) = 80,000 entries This ensures every PDR can have associated
+ * enforcement rules.
  *
  * Key: struct pdrs_per_session
  *   - Composite key: <pdr_id, seid>
@@ -181,8 +189,8 @@ struct {
  *
  * Purpose: Flag map to enable/disable QoS processing on a per-session basis.
  *          When enabled, the UPF applies rate limiting, traffic shaping, and
- *          prioritization based on QERs. When disabled, packets bypass QoS logic
- *          for better performance.
+ *          prioritization based on QERs. When disabled, packets bypass QoS
+ * logic for better performance.
  *
  * Type: BPF_MAP_TYPE_HASH - Hash table for per-session QoS control
  *
@@ -209,16 +217,16 @@ struct {
 /**
  * m_framed_route_mapping: Maps framed routing keys to UE IP addresses
  *
- * Purpose: Supports framed routing scenarios (RFC 2865) where routing information
- *          is provided by AAA (RADIUS/Diameter) servers. Used in enterprise/fixed
- *          wireless scenarios where routing tables need to be dynamically updated
- *          based on subscriber authentication attributes.
+ * Purpose: Supports framed routing scenarios (RFC 2865) where routing
+ * information is provided by AAA (RADIUS/Diameter) servers. Used in
+ * enterprise/fixed wireless scenarios where routing tables need to be
+ * dynamically updated based on subscriber authentication attributes.
  *
  * Type: BPF_MAP_TYPE_HASH - Hash table for routing key lookups
  *
  * Max Entries: 1 (placeholder, resized at runtime if needed)
- *   Rationale: Framed routing is an optional feature, rarely used in mobile networks.
- *              Most deployments use standard IP routing, so minimal allocation.
+ *   Rationale: Framed routing is an optional feature, rarely used in mobile
+ * networks. Most deployments use standard IP routing, so minimal allocation.
  *              Can be increased for fixed wireless or enterprise deployments.
  *
  * Key: u32 hash_framed_routing_key
@@ -239,9 +247,9 @@ struct {
 /**
  * framed_routing_flag: Global flag to enable/disable framed routing feature
  *
- * Purpose: Master switch to enable or disable framed routing functionality across
- *          the entire UPF instance. When disabled, framed routing lookups are skipped
- *          to avoid performance overhead in standard mobile network deployments.
+ * Purpose: Master switch to enable or disable framed routing functionality
+ * across the entire UPF instance. When disabled, framed routing lookups are
+ * skipped to avoid performance overhead in standard mobile network deployments.
  *
  * Type: BPF_MAP_TYPE_HASH - Simple key-value store
  *
@@ -266,12 +274,14 @@ struct {
 } framed_routing_flag SEC(".maps");
 
 /**
- * m_mac_pdu_session: Maps MAC addresses to PDU session information for Ethernet PDU sessions
+ * m_mac_pdu_session: Maps MAC addresses to PDU session information for Ethernet
+ * PDU sessions
  *
- * Purpose: Supports Ethernet PDU session type (as opposed to IP PDU sessions). Used in
- *          5G LAN-type service scenarios where UEs communicate using Ethernet frames
- *          (Layer 2) rather than just IP packets. Enables bridging/switching behavior
- *          in the UPF for private networks, industrial IoT, and enterprise LANs.
+ * Purpose: Supports Ethernet PDU session type (as opposed to IP PDU sessions).
+ * Used in 5G LAN-type service scenarios where UEs communicate using Ethernet
+ * frames (Layer 2) rather than just IP packets. Enables bridging/switching
+ * behavior in the UPF for private networks, industrial IoT, and enterprise
+ * LANs.
  *
  * Type: BPF_MAP_TYPE_HASH - Hash table for MAC address lookups
  *
