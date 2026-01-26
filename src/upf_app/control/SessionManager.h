@@ -453,14 +453,29 @@ class SessionManager {
    * @param session Session to query
    * @return TEID value, or 0 if not found
    */
-  uint32_t RetrieveTeid(std::shared_ptr<pfcp::pfcp_session> session) const;
+  //   uint32_t RetrieveDownlinkTeid(
+  //       std::shared_ptr<pfcp::pfcp_session> session) const;
 
-  /**
-   * @brief Find uplink TEID for a session
-   * @param vector of Sessions Endpoint Identifier
-   * @return Uplink TEID, or 0 if not found
-   */
-  uint64_t FindUplinkTeid(uint64_t seid) const;
+  //   /**
+  //    * @brief Find uplink TEID for a session
+  //    * @param seid  session id to query
+  //    * @return Uplink TEID, or 0 if not found
+  //    */
+  //   uint32_t FindUplinkTeid(uint64_t seid) const;
+
+  //   /**
+  //    * @brief Retrieve uplink TEID for a session
+  //    * @param session Session to query
+  //    * @return Uplink TEID, or 0 if not found
+  //    */
+  //   uint32_t RetrieveUplinkTeid(
+  //       std::shared_ptr<pfcp::pfcp_session> session) const;
+
+  // Extract uplink TEID from a specific PDR
+  static uint32_t GetUplinkTeidFromPdr(std::shared_ptr<pfcp::pfcp_pdr> pdr);
+
+  // Extract downlink TEID from a specific FAR
+  static uint32_t GetDownlinkTeidFromFar(std::shared_ptr<pfcp::pfcp_far> far);
 
  private:
   // ==========================================================================

@@ -30,6 +30,7 @@
  */
 
 #include "SessionProgramManager.h"
+#include "SessionManager.h"
 #include "SessionPrograms.h"
 #include "UserPlaneComponent.h"
 #include "upf_xdp_limits.h"
@@ -199,17 +200,23 @@ void SessionProgramManager::StorePduSessionInMap(
       session.seid    = seid;
     }
 
+    char ue_ip_str[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &ue_ip, ue_ip_str, sizeof(ue_ip_str));
+
     // Update map
     int ret = session_map->Update(ue_ip, session, BPF_ANY);
     if (ret != 0) {
       Logger::upf_app().error(
-          "Failed to update session_by_ue_ip_map for UE_IP=%pI4 (ret=%d)",
-          ue_ip, ret);
+          "Failed to update session_by_ue_ip_map for UE_IP=%s (ret=%d)",
+          ue_ip_str, ret);
       return;
     }
-    Logger::upf_app().debug(
-        "Stored PDU session: (ue_ip, seid, teid_ul, teid_dl) : (%pI4," SEID_FMT,
-        TEID_FMT, TEID_FMT ")", ue_ip, seid, teid_ul, teid_dl);
+    // Logger::upf_app().debug(
+    //     "Stored PDU session: (ue_ip, seid, teid_ul, teid_dl) : (%s, "
+    //     SEID_FMT
+    //     ", " TEID_FMT ", " TEID_FMT ")",
+    //     ue_ip_str, seid, teid_ul, teid_dl);
+
   } catch (const std::exception& e) {
     Logger::upf_app().error("StorePduSessionInMap failed: %s", e.what());
   }
@@ -450,18 +457,23 @@ void SessionProgramManager::CreatePipeline(
  * - Enabling QoS enforcement if downlink QERs present
  *
  * @param session PFCP session containing updated PDRs, FARs, QERs
- * @param teid_ul Uplink TEID (0 if unchanged)
- * @param teid_dl Downlink TEID (0 if unchanged)
+ * @param teid_ul DEPRECATED - not used (kept for backward compatibility)
+ * @param teid_dl DEPRECATED - not used (kept for backward compatibility)
  * @throws std::runtime_error if PDR count exceeds limits, mandatory IEs
  * missing, or UE/gNB IP addresses not found
  *
  * 3GPP References:
  * - TS 29.244 Section 7.5.4: PFCP Session Modification
  * - TS 29.244 Section 8.2.9-11: Update PDR/FAR/QER
+ *
+ * NOTE: TEIDs are now extracted from individual PDRs/FARs, not passed as
+ * parameters
  */
 void SessionProgramManager::ModifyPipeline(
-    std::shared_ptr<pfcp::pfcp_session> session, uint32_t teid_ul,
-    uint32_t teid_dl) {
+    std::shared_ptr<pfcp::pfcp_session> session,
+    uint32_t teid_ul,    // DEPRECATED - ignored
+    uint32_t teid_dl) {  // DEPRECATED - ignored
+
   if (!session) {
     Logger::upf_app().error("ModifyPipeline: null session");
     return;
@@ -471,8 +483,7 @@ void SessionProgramManager::ModifyPipeline(
   auto& logger        = Logger::upf_app();
 
   logger.info(
-      "Modifying pipeline for session " SEID_FMT " (TEID_UL=%u, TEID_DL=%u)",
-      seid, teid_ul, teid_dl);
+      "[eBPF] Modify Pipeline - Updating pipeline for session " SEID_FMT, seid);
 
   try {
     // Validate PDR count against system limits
@@ -505,23 +516,17 @@ void SessionProgramManager::ModifyPipeline(
     uint32_t ue_ip = RetrieveUeIp(session);
     if (!ue_ip) {
       logger.error(
-          "Missing UE IP Address. Handeling this case not implemented yet!");
+          "Missing UE IP Address. Handling this case not implemented yet!");
       throw std::runtime_error(
           "Missing UE IP Address in session " + std::to_string(seid));
     }
 
     uint32_t gnb_ip = RetrieveGnbIp(session);
     if (!gnb_ip) {
-      logger.error("Missing gnb IP. Handeling this case not implemented yet!");
+      logger.error("Missing gNB IP. Handling this case not implemented yet!");
       throw std::runtime_error(
           "Missing gNB IP in session " + std::to_string(seid));
     }
-
-    pfcp::pdi pdi;
-    // pfcp::fteid_t fteid;
-    // pfcp::ue_ip_address_t ue_ip_address;
-    pfcp::source_interface_t source_interface;
-    uint16_t pdr_id = 0;
 
     // Check for QoS enforcement
     bool has_downlink_qer                = !session->qers_downlink.empty();
@@ -536,26 +541,91 @@ void SessionProgramManager::ModifyPipeline(
         enabled_qos_map->Update(seid, value, BPF_ANY);
       }
 
-      Logger::upf_app().debug("Instantiate a new QER Program on Downlink");
+      logger.debug("Instantiate a new QER Program on Downlink");
       std::shared_ptr<QERProgram> qer_program =
           std::make_shared<QERProgram>(upf_cfg);
       qer_program->Setup(seid, session->qers_downlink, session->pdrs_downlink);
     }
 
-    // Update PDU session mapping (UE IP -> TEID -> SEID)
-    logger.debug(
-        "Updating PDU session mapping: UE= %pI4 -> [ TEID_UL=%u, TEID_DL=%u, "
-        "SEID= ]" SEID_FMT,
-        ue_ip, teid_ul, teid_dl, seid);
-    StorePduSessionInMap(upf_xdp_program, ue_ip, teid_ul, teid_dl, seid);
+    // Extract TEIDs from uplink PDRs
+    std::vector<uint32_t> uplink_teids;
+    for (const auto& pdr : session->pdrs_uplink) {
+      uint32_t teid = SessionManager::GetUplinkTeidFromPdr(pdr);
+      if (teid != 0) {
+        uplink_teids.push_back(teid);
+        logger.debug(
+            "  • Uplink PDR %u: F-TEID " TEID_FMT, pdr->pdr_id.rule_id, teid);
+      }
+    }
+
+    // Extract TEIDs from downlink FARs
+    std::vector<uint32_t> downlink_teids;
+    for (const auto& pdr : session->pdrs_downlink) {
+      std::shared_ptr<pfcp::pfcp_far> far;
+      if (GetFarForPdr(session, pdr, far)) {
+        uint32_t teid = SessionManager::GetDownlinkTeidFromFar(far);
+        if (teid != 0) {
+          downlink_teids.push_back(teid);
+          logger.debug(
+              "  • Downlink PDR %u → FAR %u: TEID " TEID_FMT,
+              pdr->pdr_id.rule_id, far->far_id.far_id, teid);
+        }
+      }
+    }
+
+    // Update PDU session mapping for each TEID
+    // Note: If your BPF map supports only one TEID per session, you'll need to
+    // pick the primary TEID or update your BPF map structure
+    if (!uplink_teids.empty() || !downlink_teids.empty()) {
+      // Use first TEID of each direction for PDU session mapping
+      // (This maintains backward compatibility with single-TEID maps)
+      uint32_t primary_teid_ul = uplink_teids.empty() ? 0 : uplink_teids[0];
+      uint32_t primary_teid_dl = downlink_teids.empty() ? 0 : downlink_teids[0];
+
+      char ue_ip_str[INET_ADDRSTRLEN];
+      inet_ntop(AF_INET, &ue_ip, ue_ip_str, sizeof(ue_ip_str));
+
+      logger.debug(
+          "Updating PDU session mapping: UE IP %s, Primary TEIDs: "
+          "UL=" TEID_FMT ", DL=" TEID_FMT ", SEID=" SEID_FMT,
+          ue_ip_str, primary_teid_ul, primary_teid_dl, seid);
+
+      StorePduSessionInMap(
+          upf_xdp_program, ue_ip, primary_teid_ul, primary_teid_dl, seid);
+
+      // Log if there are multiple TEIDs (warning about BPF map limitation)
+      if (uplink_teids.size() > 1) {
+        logger.warn(
+            "Session " SEID_FMT
+            " has %zu uplink TEIDs, but PDU session map "
+            "stores only primary TEID " TEID_FMT,
+            seid, uplink_teids.size(), primary_teid_ul);
+      }
+      if (downlink_teids.size() > 1) {
+        logger.warn(
+            "Session " SEID_FMT
+            " has %zu downlink TEIDs, but PDU session map "
+            "stores only primary TEID " TEID_FMT,
+            seid, downlink_teids.size(), primary_teid_dl);
+      }
+    } else {
+      logger.warn(
+          "Session " SEID_FMT " has no TEIDs - PDU session mapping not updated",
+          seid);
+    }
 
     // Process each PDR in the session
+    pfcp::pdi pdi;
+    pfcp::source_interface_t source_interface;
+    uint16_t pdr_id = 0;
+
     for (const auto& pdr : session->pdrs) {
       pdr_id = pdr->pdr_id.rule_id;
       logger.debug("Processing PDR %u on Modification", pdr_id);
 
       // Extract PDI (Packet Detection Information)
-      if (!(pdr->get(pdi) && pdi.get(source_interface))) {
+      bool has_pdi = pdr->get(pdi) && pdi.get(source_interface);
+      if (!has_pdi) {
         logger.warn(
             "Missing PDI or Source Interface for PDR %u, skipping ARP update",
             pdr_id);
@@ -597,61 +667,63 @@ void SessionProgramManager::ModifyPipeline(
       }
 
       // Launch async ARP table updates based on source interface
-      if (source_interface.interface_value == INTERFACE_VALUE_ACCESS) {
-        // Uplink PDR - update N6 ARP (toward Data Network)
-        if (dn_ip > 0) {
-          std::thread update_arp_n6(
-              [this, upf_xdp_program, dn_ip, upf_n6_ip, pdr_id, seid]() {
-                try {
-                  char buf_upf_n6_ip[INET_ADDRSTRLEN];
-                  char buf_dn_ip[INET_ADDRSTRLEN];
+      if (has_pdi) {
+        if (source_interface.interface_value == INTERFACE_VALUE_ACCESS) {
+          // Uplink PDR - update N6 ARP (toward Data Network)
+          if (dn_ip > 0) {
+            std::thread update_arp_n6([this, upf_xdp_program, dn_ip, upf_n6_ip,
+                                       pdr_id, seid]() {
+              try {
+                char buf_upf_n6_ip[INET_ADDRSTRLEN];
+                char buf_dn_ip[INET_ADDRSTRLEN];
 
-                  struct in_addr addr_upf_n6_ip = {.s_addr = upf_n6_ip};
-                  struct in_addr addr_dn_ip     = {.s_addr = dn_ip};
+                struct in_addr addr_upf_n6_ip = {.s_addr = upf_n6_ip};
+                struct in_addr addr_dn_ip     = {.s_addr = dn_ip};
 
-                  inet_ntop(
-                      AF_INET, &addr_upf_n6_ip, buf_upf_n6_ip, INET_ADDRSTRLEN);
-                  inet_ntop(AF_INET, &addr_dn_ip, buf_dn_ip, INET_ADDRSTRLEN);
+                inet_ntop(
+                    AF_INET, &addr_upf_n6_ip, buf_upf_n6_ip, INET_ADDRSTRLEN);
+                inet_ntop(AF_INET, &addr_dn_ip, buf_dn_ip, INET_ADDRSTRLEN);
 
-                  UpdateArpTableForN6(upf_xdp_program, dn_ip, upf_n6_ip);
-                  Logger::upf_app().debug(
-                      "N6 ARP updated (upf_n6_ip -> dn_ip) : (%s -> %s) "
-                      "[PDR=%u, SEID=%" PRIu64 "]",
-                      buf_upf_n6_ip, buf_dn_ip, pdr_id, seid);
-                } catch (const std::exception& ex) {
-                  Logger::upf_app().error(
-                      "N6 ARP update failed for PDR %u: %s", pdr_id, ex.what());
-                }
-              });
-          update_arp_n6.detach();
-        }
-      } else if (source_interface.interface_value == INTERFACE_VALUE_CORE) {
-        // Downlink PDR - update N3 ARP (toward gNodeB)
-        if (gnb_ip > 0) {
-          std::thread update_arp_n3(
-              [this, upf_xdp_program, gnb_ip, upf_n3_ip, pdr_id, seid]() {
-                try {
-                  char buf_upf_n3_ip[INET_ADDRSTRLEN];
-                  char buf_gnb_ip[INET_ADDRSTRLEN];
+                UpdateArpTableForN6(upf_xdp_program, dn_ip, upf_n6_ip);
+                Logger::upf_app().debug(
+                    "N6 ARP updated (upf_n6_ip -> dn_ip) : (%s -> %s) "
+                    "[PDR=%u, SEID=%" PRIu64 "]",
+                    buf_upf_n6_ip, buf_dn_ip, pdr_id, seid);
+              } catch (const std::exception& ex) {
+                Logger::upf_app().error(
+                    "N6 ARP update failed for PDR %u: %s", pdr_id, ex.what());
+              }
+            });
+            update_arp_n6.detach();
+          }
+        } else if (source_interface.interface_value == INTERFACE_VALUE_CORE) {
+          // Downlink PDR - update N3 ARP (toward gNodeB)
+          if (gnb_ip > 0) {
+            std::thread update_arp_n3([this, upf_xdp_program, gnb_ip, upf_n3_ip,
+                                       pdr_id, seid]() {
+              try {
+                char buf_upf_n3_ip[INET_ADDRSTRLEN];
+                char buf_gnb_ip[INET_ADDRSTRLEN];
 
-                  struct in_addr addr_upf_n3_ip = {.s_addr = upf_n3_ip};
-                  struct in_addr addr_gnb_ip    = {.s_addr = gnb_ip};
+                struct in_addr addr_upf_n3_ip = {.s_addr = upf_n3_ip};
+                struct in_addr addr_gnb_ip    = {.s_addr = gnb_ip};
 
-                  inet_ntop(
-                      AF_INET, &addr_upf_n3_ip, buf_upf_n3_ip, INET_ADDRSTRLEN);
-                  inet_ntop(AF_INET, &addr_gnb_ip, buf_gnb_ip, INET_ADDRSTRLEN);
+                inet_ntop(
+                    AF_INET, &addr_upf_n3_ip, buf_upf_n3_ip, INET_ADDRSTRLEN);
+                inet_ntop(AF_INET, &addr_gnb_ip, buf_gnb_ip, INET_ADDRSTRLEN);
 
-                  UpdateArpTableForN3(upf_xdp_program, gnb_ip, upf_n3_ip, seid);
-                  Logger::upf_app().debug(
-                      "N3 ARP updated (upf_n3_ip -> gnb_ip) : (%s -> %s) "
-                      "[PDR=%u, SEID=%" PRIu64 "]",
-                      buf_upf_n3_ip, buf_gnb_ip, pdr_id, seid);
-                } catch (const std::exception& ex) {
-                  Logger::upf_app().error(
-                      "N3 ARP update failed for PDR %u: %s", pdr_id, ex.what());
-                }
-              });
-          update_arp_n3.detach();
+                UpdateArpTableForN3(upf_xdp_program, gnb_ip, upf_n3_ip, seid);
+                Logger::upf_app().debug(
+                    "N3 ARP updated (upf_n3_ip -> gnb_ip) : (%s -> %s) "
+                    "[PDR=%u, SEID=%" PRIu64 "]",
+                    buf_upf_n3_ip, buf_gnb_ip, pdr_id, seid);
+              } catch (const std::exception& ex) {
+                Logger::upf_app().error(
+                    "N3 ARP update failed for PDR %u: %s", pdr_id, ex.what());
+              }
+            });
+            update_arp_n3.detach();
+          }
         }
       }
 
@@ -722,14 +794,14 @@ void SessionProgramManager::ModifyPipeline(
     }
 
     logger.info(
-        "Pipeline modified for session " SEID_FMT
-        " with %d PDRs "
-        "(TEID_UL=%u, TEID_DL=%u)",
-        seid, pdr_index, teid_ul, teid_dl);
+        "[eBPF] Modify Pipeline - Pipeline modified for session " SEID_FMT
+        " with %d PDRs (%zu uplink TEIDs, %zu downlink TEIDs)",
+        seid, pdr_index, uplink_teids.size(), downlink_teids.size());
 
   } catch (const std::exception& e) {
     logger.error(
-        "ModifyPipeline failed for session " SEID_FMT ": %s", seid, e.what());
+        "[eBPF] Modify Pipeline - Failed for session " SEID_FMT ": %s", seid,
+        e.what());
     throw;  // Re-throw to caller
   }
 }

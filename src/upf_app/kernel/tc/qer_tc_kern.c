@@ -288,7 +288,7 @@ int tc_filter_traffic(struct __sk_buff* skb) {
  * // Set egress interface index (N3 interface)
  * int key = DOWNLINK;
  * int ifindex = if_nametoindex("eth0");  // N3 interface
- * bpf_map_update_elem(m_egress_ifindex_fd, &key, &ifindex, BPF_ANY);
+ * bpf_map_update_elem(egress_ifindex_fd, &key, &ifindex, BPF_ANY);
  * ```
  *
  * @param skb Socket buffer containing packet data and metadata
@@ -329,7 +329,7 @@ int tc_redirect_traffic(struct __sk_buff* skb) {
 
       /* Look up egress interface index */
       int key      = DOWNLINK;
-      int* ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
+      int* ifindex = bpf_map_lookup_elem(&egress_ifindex, &key);
 
       if (ifindex) {
         bpf_debug("TC Ingress: Redirecting to interface %d (N3)", *ifindex);

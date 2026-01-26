@@ -48,7 +48,7 @@
  * @brief Maximum number of egress interfaces for packet redirection
  *
  * Volatile constant set from userspace. Controls the size of the
- * m_egress_ifindex DEVMAP used for redirecting packets to different
+ * egress_ifindex DEVMAP used for redirecting packets to different
  * network interfaces.
  *
  * Typical values:
@@ -71,7 +71,7 @@ const volatile int MAX_EGRESS_INTERFACES SEC(".rodata");
  * Usage:
  * ```c
  * int key = DOWNLINK;
- * int *ifindex = bpf_map_lookup_elem(&m_egress_ifindex, &key);
+ * int *ifindex = bpf_map_lookup_elem(&egress_ifindex, &key);
  * if (ifindex) {
  *     return bpf_redirect(*ifindex, 0);
  * }
@@ -85,6 +85,6 @@ struct {
   __uint(max_entries, 1); /* MAX_EGRESS_INTERFACES */
   __type(key, u32);       /* Interface direction/ID */
   __type(value, u32);     /* Network interface index */
-} m_egress_ifindex SEC(".maps");
+} egress_ifindex SEC(".maps");
 
 #endif  // __QER_MAPS_H__

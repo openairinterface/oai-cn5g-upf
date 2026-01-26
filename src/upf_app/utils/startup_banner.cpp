@@ -27,6 +27,10 @@
 #include <net/if.h>
 #include <spdlog/spdlog.h>
 
+#include <sstream>
+#include <iomanip>
+#include <vector>
+
 using namespace oai::config;
 
 //------------------------------------------------------------------------------
@@ -346,4 +350,153 @@ void DisplayReadyMessage() {
       "========================================================================"
       "========");
   Logger::upf_app().startup("");
+}
+
+//------------------------------------------------------------------------------
+
+/*
+ * QOS VISUALIZATION -
+ */
+
+// void DisplayQosFlowTable(
+//     uint64_t seid, const std::vector<QosFlowInfo>& qos_flows) {
+//   auto& logger = Logger::upf_app();
+
+//   logger.info("");
+//   logger.info(
+//       "  "
+//       "┌───────────────────────────────────────────────────────────────────────"
+//       "───────────────────────────────┐");
+//   logger.info(
+//       "  │                                    QoS FLOWS - Session " SEID_FMT
+//       "                                         │",
+//       seid);
+//   logger.info(
+//       "  "
+//       "├──────┬─────┬──────────────┬────────────┬────────────┬────────────────"
+//       "─"
+//       "─"
+//       "────────────────────────┤");
+//   logger.info(
+//       "  │ QER  │ QFI │    Class     │    GBR     │    MBR     │ Flow "
+//       "Description                         │");
+//   logger.info(
+//       "  │      │     │              │   (kbps)   │   (kbps)   │ " " " " │");
+//   logger.info(
+//       "  "
+//       "├──────┼─────┼──────────────┼────────────┼────────────┼────────────────"
+//       "─"
+//       "─"
+//       "────────────────────────┤");
+
+//   for (const auto& flow : qos_flows) {
+//     std::string desc = flow.flow_description;
+//     if (desc.empty()) {
+//       desc = "Default QoS Flow";
+//     }
+//     if (desc.length() > 50) {
+//       desc = desc.substr(0, 47) + "...";
+//     }
+
+//     logger.info(
+//         "  │ %-4u │ %-3u │    1:%-5u   │ %10u │ %10u │ %-50s │", flow.qer_id,
+//         flow.qfi,
+//         flow.class_id,  // Just the minor number (38, 5460, etc.)
+//         flow.rate_kbps, flow.ceil_kbps, desc.c_str());
+//   }
+
+//   logger.info(
+//       "  "
+//       "└──────┴─────┴──────────────┴────────────┴────────────┴─────────────────"
+//       "─"
+//       "────────────────────────┘");
+//   logger.info("");
+// }
+void DisplayQosFlowTable(
+    uint64_t seid, const std::vector<QosFlowInfo>& qos_flows) {
+  auto& logger = Logger::upf_app();
+
+  logger.info("");
+  logger.info(
+      "  "
+      "┌───────────────────────────────────────────────────────────────────────"
+      "───────────────────────────────────┐");
+  logger.info(
+      "  │                                      QoS FLOWS - Session " SEID_FMT
+      "                                             │",
+      seid);
+  logger.info(
+      "  "
+      "├──────┬─────┬──────────────┬────────────┬────────────┬─────────────────"
+      "───────────────────────────────────┤");
+  logger.info(
+      "  │ QER  │ QFI │    Class     │ GBR (kbps) │ MBR (kbps) │               "
+      "   Flow "
+      "Description                  │");
+  logger.info(
+      "  "
+      "├──────┼─────┼──────────────┼────────────┼────────────┼─────────────────"
+      "───────────────────────────────────┤");
+
+  for (const auto& flow : qos_flows) {
+    std::string desc = flow.flow_description;
+    if (desc.empty()) {
+      desc = "Default QoS Flow";
+    }
+    if (desc.length() > 50) {
+      desc = desc.substr(0, 47) + "...";
+    }
+
+    // logger.info("  │ %-4u │ %-3u │ 1:%-5u     │ %-10u  │ %-10u │ %-50s │",
+    // flow.qer_id, flow.qfi, flow.class_id, flow.rate_kbps, flow.ceil_kbps,
+    // desc.c_str());
+    logger.info(
+        "  │ %-4u │ %-3u │ 1:%-5u      │ %-10u │ %-10u │ %-50s │", flow.qer_id,
+        flow.qfi, flow.class_id, flow.rate_kbps, flow.ceil_kbps, desc.c_str());
+  }
+
+  logger.info(
+      "  "
+      "└──────┴─────┴──────────────┴────────────┴────────────┴─────────────────"
+      "───────────────────────────────────┘");
+  logger.info("");
+}
+
+//------------------------------------------------------------------------------
+void LogQosSetupStart(uint64_t seid, const std::string& interface) {
+  Logger::upf_app().info("");
+  Logger::upf_app().info(
+      "  ┌───────────────────────────────────────────────────┐");
+  Logger::upf_app().info(
+      "  │            QoS ENFORCEMENT SETUP                  │");
+  Logger::upf_app().info(
+      "  │       Session: " SEID_FMT ", Interface: %-14s     │", seid,
+      interface.c_str());
+  Logger::upf_app().info(
+      "  └───────────────────────────────────────────────────┘");
+}
+
+//------------------------------------------------------------------------------
+void LogQosSetupComplete(uint64_t seid, int num_qos_flows, bool has_errors) {
+  auto& logger = Logger::upf_app();
+
+  if (has_errors) {
+    logger.warn("");
+    logger.warn("  ┌───────────────────────────────────────────────────┐");
+    logger.warn("  │  QoS ENFORCEMENT SETUP - COMPLETED WITH WARNINGS  │");
+    logger.warn(
+        "  │      Session " SEID_FMT ": %d QoS Flow(s) configured        │",
+        seid, num_qos_flows);
+    logger.warn("  │   Some TC operations failed (see warnings above)  │");
+    logger.warn("  └───────────────────────────────────────────────────┘");
+  } else {
+    logger.info("");
+    logger.info("  ┌───────────────────────────────────────────────────┐");
+    logger.info("  │           QoS ENFORCEMENT COMPLETED               │");
+    logger.info(
+        "  │      Session " SEID_FMT ": %d QoS Flow(s) configured        │",
+        seid, num_qos_flows);
+    logger.info("  └───────────────────────────────────────────────────┘");
+  }
+  logger.info("");
 }

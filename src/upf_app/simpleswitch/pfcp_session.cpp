@@ -28,11 +28,15 @@
 #include "pfcp_session.hpp"
 #include "pfcp_switch.hpp"
 #include "logger.hpp"
+#include <sstream>
+#include <arpa/inet.h>
 
 using namespace pfcp;
 using namespace oai::upf::app;
 
 extern pfcp_switch* pfcp_switch_inst;
+
+enum pfcp_gate_status_value { PFCP_GATE_OPEN = 0, PFCP_GATE_CLOSED = 1 };
 
 //------------------------------------------------------------------------------
 bool pfcp_session::get(
@@ -71,126 +75,822 @@ bool pfcp_session::get(
 
 //------------------------------------------------------------------------------
 void pfcp_session::add(std::shared_ptr<pfcp::pfcp_far> far) {
-  Logger::upf_n4().info("pfcp_session::add(far) seid " SEID_FMT " ", seid);
+  uint32_t far_id = far->far_id.far_id;
 
-  // Update (just TEID for now) the FAR if existed
-  for (std::vector<std::shared_ptr<pfcp::pfcp_far>>::iterator it = fars.begin();
-       it != fars.end(); ++it) {
-    if ((*it)->far_id.far_id == far->far_id.far_id) {
+  Logger::upf_n4().info(
+      "pfcp_session::add(far) seid " SEID_FMT " FAR=%u", seid, far_id);
+
+  // Check if FAR already exists (update case)
+  for (auto it = fars.begin(); it != fars.end(); ++it) {
+    if ((*it)->far_id.far_id == far_id) {
       Logger::upf_n4().info(
-          "pfcp_session::update(far) seid " SEID_FMT " ", seid);
-      (*it)->forwarding_parameters.second.outer_header_creation.second.teid =
-          far->forwarding_parameters.second.outer_header_creation.second.teid;
+          "  └─ Updating existing FAR %u in session " SEID_FMT, far_id, seid);
+
+      // Log what's being updated
+      if (far->forwarding_parameters.first &&
+          far->forwarding_parameters.second.outer_header_creation.first) {
+        uint32_t old_teid = (*it)
+                                ->forwarding_parameters.second
+                                .outer_header_creation.second.teid;
+        uint32_t new_teid =
+            far->forwarding_parameters.second.outer_header_creation.second.teid;
+
+        if (old_teid != new_teid) {
+          Logger::upf_n4().debug(
+              "     • TEID update: 0x%x → 0x%x", old_teid, new_teid);
+        }
+
+        (*it)->forwarding_parameters.second.outer_header_creation.second.teid =
+            new_teid;
+      }
       return;
     }
   }
 
-  // Otherwise, add to the list of FARs
+  // Add new FAR
+  Logger::upf_n4().info(
+      "  └─ Adding new FAR %u to session " SEID_FMT, far_id, seid);
+
+  // Log apply action
+  if (far->apply_action.forw || far->apply_action.drop ||
+      far->apply_action.buff || far->apply_action.nocp) {
+    std::ostringstream actions;
+    if (far->apply_action.forw) actions << "FORW ";
+    if (far->apply_action.drop) actions << "DROP ";
+    if (far->apply_action.buff) actions << "BUFF ";
+    if (far->apply_action.nocp) actions << "NOCP";
+    Logger::upf_n4().debug("     • Apply Action: %s", actions.str().c_str());
+  }
+
+  // Log forwarding parameters
+  if (far->forwarding_parameters.first) {
+    auto& params = far->forwarding_parameters.second;
+
+    if (params.destination_interface.first) {
+      uint8_t iface = params.destination_interface.second.interface_value;
+      const char* dest_str = "UNKNOWN";
+      switch (iface) {
+        case INTERFACE_VALUE_ACCESS:
+          dest_str = "ACCESS";
+          break;
+        case INTERFACE_VALUE_CORE:
+          dest_str = "CORE";
+          break;
+        case INTERFACE_VALUE_CP_FUNCTION:
+          dest_str = "CP_FUNCTION";
+          break;
+      }
+      Logger::upf_n4().debug("     • Destination Interface: %s", dest_str);
+
+      if (params.outer_header_creation.first) {
+        uint32_t teid = params.outer_header_creation.second.teid;
+        Logger::upf_n4().debug("     • Outer Header TEID: 0x%x", teid);
+
+        // Log IP address if present
+        if (params.outer_header_creation.second
+                .outer_header_creation_description ==
+            OUTER_HEADER_CREATION_GTPU_UDP_IPV4) {
+          char ip_str[INET_ADDRSTRLEN];
+          inet_ntop(
+              AF_INET, &params.outer_header_creation.second.ipv4_address,
+              ip_str, INET_ADDRSTRLEN);
+          Logger::upf_n4().debug("     • Remote IP: %s", ip_str);
+        }
+      }
+    }
+  }
+
   fars.push_back(far);
+  Logger::upf_n4().debug("     • Total FARs in session: %zu", fars.size());
 }
 
 //------------------------------------------------------------------------------
 void pfcp_session::add(std::shared_ptr<pfcp::pfcp_pdr> pdr) {
-  Logger::upf_n4().info("pfcp_session::add(pdr) seid " SEID_FMT " ", seid);
+  uint16_t pdr_id = pdr->pdr_id.rule_id;
+
+  Logger::upf_n4().info(
+      "pfcp_session::add(pdr) seid " SEID_FMT " PDR=%u", seid, pdr_id);
+
+  // Check for duplicate PDR
+  for (auto& existing_pdr : pdrs) {
+    if (existing_pdr->pdr_id.rule_id == pdr_id) {
+      Logger::upf_n4().warn(
+          "  └─ Skipping duplicate PDR %u in session " SEID_FMT
+          " - already exists",
+          pdr_id, seid);
+      return;
+    }
+  }
+
+  // Add new PDR
+  Logger::upf_n4().info(
+      "  └─ Adding new PDR %u to session " SEID_FMT, pdr_id, seid);
+
+  // Log PDI (Packet Detection Information)
+  if (pdr->pdi.first) {
+    auto& pdi = pdr->pdi.second;
+
+    // Source interface
+    if (pdi.source_interface.first) {
+      uint8_t iface       = pdi.source_interface.second.interface_value;
+      const char* dir_str = "UNKNOWN";
+      switch (iface) {
+        case INTERFACE_VALUE_ACCESS:
+          dir_str = "ACCESS (Uplink)";
+          break;
+        case INTERFACE_VALUE_CORE:
+          dir_str = "CORE (Downlink)";
+          break;
+        case INTERFACE_VALUE_CP_FUNCTION:
+          dir_str = "CP_FUNCTION";
+          break;
+      }
+      Logger::upf_n4().debug("     • Source Interface: %s", dir_str);
+    }
+
+    // Local F-TEID (for uplink)
+    if (pdi.local_fteid.first) {
+      uint32_t teid = pdi.local_fteid.second.teid;
+      Logger::upf_n4().debug("     • Local F-TEID: 0x%x", teid);
+    }
+
+    // UE IP address (for downlink)
+    if (pdi.ue_ip_address.first && pdi.ue_ip_address.second.v4) {
+      char ip_str[INET_ADDRSTRLEN];
+      inet_ntop(
+          AF_INET, &pdi.ue_ip_address.second.ipv4_address, ip_str,
+          INET_ADDRSTRLEN);
+      Logger::upf_n4().debug("     • UE IP Address: %s", ip_str);
+    }
+  }
+
+  // Log precedence
+  if (pdr->precedence.first) {
+    Logger::upf_n4().debug(
+        "     • Precedence: %u", pdr->precedence.second.precedence);
+  }
+
+  // Log linked FAR
+  if (pdr->far_id.first) {
+    Logger::upf_n4().debug("     • Linked FAR: %u", pdr->far_id.second.far_id);
+  }
+
+  // Log linked QER
+  if (pdr->qer_id.first) {
+    Logger::upf_n4().debug("     • Linked QER: %u", pdr->qer_id.second.qer_id);
+  }
+
+  // Log linked URR
+  if (pdr->urr_id.first) {
+    Logger::upf_n4().debug("     • Linked URR: %u", pdr->urr_id.second.urr_id);
+  }
+
   pdrs.push_back(pdr);
+  Logger::upf_n4().debug("     • Total PDRs in session: %zu", pdrs.size());
 }
 
 //------------------------------------------------------------------------------
 void pfcp_session::add(std::shared_ptr<pfcp::pfcp_qer> qer) {
-  Logger::upf_n4().info("pfcp_session::add(qer) seid " SEID_FMT " ", seid);
+  uint32_t qer_id = qer->qer_id.second.qer_id;
+  uint8_t qfi     = qer->qos_flow_id.second.qfi;
+
+  Logger::upf_n4().info(
+      "pfcp_session::add(qer) seid " SEID_FMT " QER=%u", seid, qer_id);
+
+  // Check for duplicate QER
+  for (auto& existing_qer : qers) {
+    if (existing_qer->qer_id.second.qer_id == qer_id) {
+      Logger::upf_n4().warn(
+          "  └─ Skipping duplicate QER %u (QFI %u) in session " SEID_FMT
+          " - already exists",
+          qer_id, qfi, seid);
+      return;
+    }
+  }
+
+  // Add new QER
+  Logger::upf_n4().info(
+      "  └─ Adding new QER %u to session " SEID_FMT, qer_id, seid);
+
+  // Log QoS Flow Identifier
+  Logger::upf_n4().debug("     • QFI (QoS Flow ID): %u", qfi);
+
+  // Log Gate Status
+  if (qer->gate_status.first) {
+    const char* ul_gate =
+        (qer->gate_status.second.ul_gate == PFCP_GATE_OPEN) ? "OPEN" : "CLOSED";
+    const char* dl_gate =
+        (qer->gate_status.second.dl_gate == PFCP_GATE_OPEN) ? "OPEN" : "CLOSED";
+
+    Logger::upf_n4().debug(
+        "     • Gate Status: UL=%s, DL=%s", ul_gate, dl_gate);
+  }
+
+  // Log Guaranteed Bit Rate (GBR)
+  if (qer->guaranteed_bitrate.first) {
+    uint64_t gbr_ul = qer->guaranteed_bitrate.second.ul_gbr;
+    uint64_t gbr_dl = qer->guaranteed_bitrate.second.dl_gbr;
+    Logger::upf_n4().debug(
+        "     • GBR: UL=%llu kbps, DL=%llu kbps", gbr_ul, gbr_dl);
+  }
+
+  // Log Maximum Bit Rate (MBR)
+  if (qer->maximum_bitrate.first) {
+    uint64_t mbr_ul = qer->maximum_bitrate.second.ul_mbr;
+    uint64_t mbr_dl = qer->maximum_bitrate.second.dl_mbr;
+    Logger::upf_n4().debug(
+        "     • MBR: UL=%llu kbps, DL=%llu kbps", mbr_ul, mbr_dl);
+  }
+
+  // Log QER Correlation ID
+  if (qer->qer_correlation_id.first) {
+    Logger::upf_n4().debug(
+        "     • QER Correlation ID: %u",
+        qer->qer_correlation_id.second.qer_correlation_id);
+  }
+
+  // Log Reflective QoS
+  if (qer->reflective_qos.first) {
+    Logger::upf_n4().debug(
+        "     • Reflective QoS: %s",
+        qer->reflective_qos.second.rqi ? "Enabled" : "Disabled");
+  }
+
+  // Log Paging Policy Indicator
+  if (qer->paging_policy_indicator.first) {
+    Logger::upf_n4().debug(
+        "     • Paging Policy Indicator: %u",
+        qer->paging_policy_indicator.second.ppi_value);
+  }
+
+  // Log Averaging Window
+  if (qer->averaging_window.first) {
+    Logger::upf_n4().debug(
+        "     • Averaging Window: %u ms",
+        qer->averaging_window.second.averaging_window);
+  }
+
   qers.push_back(qer);
+  Logger::upf_n4().debug("     • Total QERs in session: %zu", qers.size());
 }
+// //------------------------------------------------------------------------------
+// bool pfcp_session::update(
+//     const pfcp::update_far& update, uint8_t& cause_value) {
+//   std::shared_ptr<pfcp::pfcp_far> far = {};
+//   if (get(update.far_id.far_id, far)) {
+//     if (far->update(update, cause_value)) {
+//       return true;
+//     }
+//     return false;
+//   }
+//   cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+//   return false;
+// }
+
+// //------------------------------------------------------------------------------
+
+// bool pfcp_session::update(
+//     const pfcp::update_pdr& update, uint8_t& cause_value) {
+//   std::shared_ptr<pfcp::pfcp_pdr> pdr = {};
+//   if (get(update.pdr_id.rule_id, pdr)) {
+//     if (pdr->update(update, cause_value)) {
+//       return true;
+//     }
+//     return false;
+//   }
+//   cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+//   return false;
+// }
+
+// //------------------------------------------------------------------------------
+// bool pfcp_session::update(
+//     const pfcp::update_qer& update, uint8_t& cause_value) {
+//   std::shared_ptr<pfcp::pfcp_qer> qer = {};
+//   if (get(update.qer_id.second.qer_id, qer)) {
+//     if (qer->update(update, cause_value)) {
+//       return true;
+//     }
+//     return false;
+//   }
+//   cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+//   return false;
+// }
 
 //------------------------------------------------------------------------------
-bool pfcp_session::remove(const pfcp::far_id_t& far_id, uint8_t& cause_value) {
-  for (std::vector<std::shared_ptr<pfcp::pfcp_far>>::iterator it = fars.begin();
-       it != fars.end(); ++it) {
-    if ((*it)->far_id.far_id == far_id.far_id) {
+bool pfcp_session::update(
+    const pfcp::update_pdr& pdr_update, uint8_t& cause_value) {
+  uint16_t pdr_id = pdr_update.pdr_id.rule_id;
+
+  Logger::upf_n4().info(
+      "pfcp_session::update(pdr) seid " SEID_FMT " PDR=%u", seid, pdr_id);
+
+  // Find the PDR to update
+  for (auto& existing_pdr : pdrs) {
+    if (existing_pdr->pdr_id.rule_id == pdr_id) {
       Logger::upf_n4().info(
-          "pfcp_session::remove(far) seid " SEID_FMT " ", seid);
-      fars.erase(it);
+          "  └─ Updating PDR %u in session " SEID_FMT, pdr_id, seid);
+
+      // Track what changed
+      bool has_changes = false;
+
+      // Update FAR ID
+      if (pdr_update.far_id.first) {
+        uint32_t old_far =
+            existing_pdr->far_id.first ? existing_pdr->far_id.second.far_id : 0;
+        uint32_t new_far = pdr_update.far_id.second.far_id;
+
+        if (old_far != new_far) {
+          Logger::upf_n4().debug("     • FAR ID: %u → %u", old_far, new_far);
+          has_changes = true;
+        }
+        existing_pdr->far_id = pdr_update.far_id;
+      }
+
+      // Update QER ID
+      if (pdr_update.qer_id.first) {
+        uint32_t old_qer =
+            existing_pdr->qer_id.first ? existing_pdr->qer_id.second.qer_id : 0;
+        uint32_t new_qer = pdr_update.qer_id.second.qer_id;
+
+        if (old_qer != new_qer) {
+          Logger::upf_n4().debug("     • QER ID: %u → %u", old_qer, new_qer);
+          has_changes = true;
+        }
+        existing_pdr->qer_id = pdr_update.qer_id;
+      }
+
+      // Update precedence
+      if (pdr_update.precedence.first) {
+        uint32_t old_prec = existing_pdr->precedence.first ?
+                                existing_pdr->precedence.second.precedence :
+                                0;
+        uint32_t new_prec = pdr_update.precedence.second.precedence;
+
+        if (old_prec != new_prec) {
+          Logger::upf_n4().debug(
+              "     • Precedence: %u → %u", old_prec, new_prec);
+          has_changes = true;
+        }
+        existing_pdr->precedence = pdr_update.precedence;
+      }
+
+      // Update PDI (Packet Detection Information)
+      if (pdr_update.pdi.first) {
+        Logger::upf_n4().debug("     • Updated PDI");
+        existing_pdr->pdi = pdr_update.pdi;
+        has_changes       = true;
+      }
+
+      if (!has_changes) {
+        Logger::upf_n4().debug("     • No actual changes detected");
+      }
+
+      cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
       return true;
     }
   }
-  cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;  //??
+
+  // PDR not found
+  Logger::upf_n4().warn(
+      "  └─ PDR %u not found in session " SEID_FMT " - cannot update", pdr_id,
+      seid);
+
+  cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
   return false;
 }
 
 //------------------------------------------------------------------------------
-bool pfcp_session::remove(const pfcp::pdr_id_t& pdr_id, uint8_t& cause_value) {
-  for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it = pdrs.begin();
-       it != pdrs.end(); ++it) {
-    if ((*it)->pdr_id.rule_id == pdr_id.rule_id) {
+bool pfcp_session::update(
+    const pfcp::update_far& far_update, uint8_t& cause_value) {
+  uint32_t far_id = far_update.far_id.far_id;
+
+  Logger::upf_n4().info(
+      "pfcp_session::update(far) seid " SEID_FMT " FAR=%u", seid, far_id);
+
+  // Find the FAR to update
+  for (auto& existing_far : fars) {
+    if (existing_far->far_id.far_id == far_id) {
       Logger::upf_n4().info(
-          "pfcp_session::remove(pdr) seid " SEID_FMT " ", seid);
+          "  └─ Updating FAR %u in session " SEID_FMT, far_id, seid);
+
+      bool has_changes = false;
+
+      // Update apply action
+      if (far_update.apply_action.first) {
+        std::ostringstream old_actions, new_actions;
+
+        // Old actions
+        if (existing_far->apply_action.forw) old_actions << "FORW ";
+        if (existing_far->apply_action.drop) old_actions << "DROP ";
+        if (existing_far->apply_action.buff) old_actions << "BUFF ";
+        if (existing_far->apply_action.nocp) old_actions << "NOCP";
+
+        // New actions
+        if (far_update.apply_action.second.forw) new_actions << "FORW ";
+        if (far_update.apply_action.second.drop) new_actions << "DROP ";
+        if (far_update.apply_action.second.buff) new_actions << "BUFF ";
+        if (far_update.apply_action.second.nocp) new_actions << "NOCP";
+
+        if (old_actions.str() != new_actions.str()) {
+          Logger::upf_n4().debug(
+              "     • Apply Action: %s → %s", old_actions.str().c_str(),
+              new_actions.str().c_str());
+          has_changes = true;
+        }
+
+        existing_far->apply_action = far_update.apply_action.second;
+      }
+
+      if (far_update.update_forwarding_parameters.first) {
+        auto& new_params = far_update.update_forwarding_parameters.second;
+
+        // Update destination interface
+        if (new_params.destination_interface.first) {
+          uint8_t old_iface =
+              existing_far->forwarding_parameters.first ?
+                  existing_far->forwarding_parameters.second
+                      .destination_interface.second.interface_value :
+                  0;
+          uint8_t new_iface =
+              new_params.destination_interface.second.interface_value;
+
+          if (old_iface != new_iface) {
+            const char* old_str =
+                (old_iface == INTERFACE_VALUE_ACCESS) ? "ACCESS" :
+                (old_iface == INTERFACE_VALUE_CORE)   ? "CORE" :
+                                                        "UNKNOWN";
+            const char* new_str =
+                (new_iface == INTERFACE_VALUE_ACCESS) ? "ACCESS" :
+                (new_iface == INTERFACE_VALUE_CORE)   ? "CORE" :
+                                                        "UNKNOWN";
+            Logger::upf_n4().debug(
+                "     • Destination: %s → %s", old_str, new_str);
+            has_changes = true;
+          }
+
+          // Copy destination interface
+          existing_far->forwarding_parameters.first = true;
+          existing_far->forwarding_parameters.second.destination_interface =
+              new_params.destination_interface;
+        }
+
+        // Update outer header (TEID)
+        if (new_params.outer_header_creation.first) {
+          uint32_t old_teid = (existing_far->forwarding_parameters.first &&
+                               existing_far->forwarding_parameters.second
+                                   .outer_header_creation.first) ?
+                                  existing_far->forwarding_parameters.second
+                                      .outer_header_creation.second.teid :
+                                  0;
+          uint32_t new_teid = new_params.outer_header_creation.second.teid;
+
+          if (old_teid != new_teid) {
+            Logger::upf_n4().debug(
+                "     • Outer Header TEID: 0x%x → 0x%x", old_teid, new_teid);
+            has_changes = true;
+
+            // Log new IP if present
+            if (new_params.outer_header_creation.second
+                    .outer_header_creation_description ==
+                OUTER_HEADER_CREATION_GTPU_UDP_IPV4) {
+              char ip_str[INET_ADDRSTRLEN];
+              inet_ntop(
+                  AF_INET,
+                  &new_params.outer_header_creation.second.ipv4_address, ip_str,
+                  INET_ADDRSTRLEN);
+              Logger::upf_n4().debug("     • New Remote IP: %s", ip_str);
+            }
+          }
+
+          // Copy outer header creation
+          existing_far->forwarding_parameters.first = true;
+          existing_far->forwarding_parameters.second.outer_header_creation =
+              new_params.outer_header_creation;
+        }
+
+        // Copy network instance if present
+        if (new_params.network_instance.first) {
+          existing_far->forwarding_parameters.second.network_instance =
+              new_params.network_instance;
+        }
+      }
+
+      if (!has_changes) {
+        Logger::upf_n4().debug("     • No actual changes detected");
+      }
+
+      cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+      return true;
+    }
+  }
+
+  // FAR not found
+  Logger::upf_n4().warn(
+      "  └─ FAR %u not found in session " SEID_FMT " - cannot update", far_id,
+      seid);
+
+  cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  return false;
+}
+
+//------------------------------------------------------------------------------
+bool pfcp_session::update(
+    const pfcp::update_qer& qer_update, uint8_t& cause_value) {
+  uint32_t qer_id = qer_update.qer_id.second.qer_id;
+
+  Logger::upf_n4().info(
+      "pfcp_session::update(qer) seid " SEID_FMT " QER=%u", seid, qer_id);
+
+  // Find the QER to update
+  for (auto& existing_qer : qers) {
+    if (existing_qer->qer_id.second.qer_id == qer_id) {
+      Logger::upf_n4().info(
+          "  └─ Updating QER %u in session " SEID_FMT, qer_id, seid);
+
+      bool has_changes = false;
+
+      // Update Gate Status
+      if (qer_update.gate_status.first) {
+        const char* old_ul =
+            (existing_qer->gate_status.first &&
+             existing_qer->gate_status.second.ul_gate == PFCP_GATE_OPEN) ?
+                "OPEN" :
+                "CLOSED";
+        const char* old_dl =
+            (existing_qer->gate_status.first &&
+             existing_qer->gate_status.second.dl_gate == PFCP_GATE_OPEN) ?
+                "OPEN" :
+                "CLOSED";
+        const char* new_ul =
+            (qer_update.gate_status.second.ul_gate == PFCP_GATE_OPEN) ?
+                "OPEN" :
+                "CLOSED";
+        const char* new_dl =
+            (qer_update.gate_status.second.dl_gate == PFCP_GATE_OPEN) ?
+                "OPEN" :
+                "CLOSED";
+
+        if (strcmp(old_ul, new_ul) != 0 || strcmp(old_dl, new_dl) != 0) {
+          Logger::upf_n4().debug(
+              "     • Gate Status: UL=%s→%s, DL=%s→%s", old_ul, new_ul, old_dl,
+              new_dl);
+          has_changes = true;
+        }
+
+        existing_qer->gate_status = qer_update.gate_status;
+      }
+
+      // Update GBR
+      if (qer_update.guaranteed_bitrate.first) {
+        uint64_t old_gbr_dl =
+            existing_qer->guaranteed_bitrate.first ?
+                existing_qer->guaranteed_bitrate.second.dl_gbr :
+                0;
+        uint64_t new_gbr_dl = qer_update.guaranteed_bitrate.second.dl_gbr;
+
+        if (old_gbr_dl != new_gbr_dl) {
+          Logger::upf_n4().debug(
+              "     • GBR DL: %llu → %llu kbps", old_gbr_dl, new_gbr_dl);
+          has_changes = true;
+        }
+
+        existing_qer->guaranteed_bitrate = qer_update.guaranteed_bitrate;
+      }
+
+      // Update MBR
+      if (qer_update.maximum_bitrate.first) {
+        uint64_t old_mbr_dl = existing_qer->maximum_bitrate.first ?
+                                  existing_qer->maximum_bitrate.second.dl_mbr :
+                                  0;
+        uint64_t new_mbr_dl = qer_update.maximum_bitrate.second.dl_mbr;
+
+        if (old_mbr_dl != new_mbr_dl) {
+          Logger::upf_n4().debug(
+              "     • MBR DL: %llu → %llu kbps", old_mbr_dl, new_mbr_dl);
+          has_changes = true;
+        }
+
+        existing_qer->maximum_bitrate = qer_update.maximum_bitrate;
+      }
+
+      // Update QFI
+      if (qer_update.qos_flow_identifier.first) {
+        uint8_t old_qfi = existing_qer->qos_flow_id.first ?
+                              existing_qer->qos_flow_id.second.qfi :
+                              0;
+        uint8_t new_qfi = qer_update.qos_flow_identifier.second.qfi;
+
+        if (old_qfi != new_qfi) {
+          Logger::upf_n4().debug("     • QFI: %u → %u", old_qfi, new_qfi);
+          has_changes = true;
+        }
+
+        existing_qer->qos_flow_id = qer_update.qos_flow_identifier;
+      }
+
+      if (!has_changes) {
+        Logger::upf_n4().debug("     • No actual changes detected");
+      }
+
+      cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+      return true;
+    }
+  }
+
+  // QER not found
+  Logger::upf_n4().warn(
+      "  └─ QER %u not found in session " SEID_FMT " - cannot update", qer_id,
+      seid);
+
+  cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  return false;
+}
+
+//------------------------------------------------------------------------------
+
+bool pfcp_session::remove(
+    const pfcp::remove_pdr& pdr_removal, pfcp::cause_t& cause,
+    uint16_t& offending_ie) {
+  if (not pdr_removal.pdr_id.first) {
+    // should be caught in lower layer
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_PACKET_DETECTION_RULE_ID;
+    return false;
+  }
+
+  uint16_t pdr_id = pdr_removal.pdr_id.second.rule_id;
+
+  Logger::upf_n4().info(
+      "pfcp_session::remove(pdr) seid " SEID_FMT " PDR=%u", seid, pdr_id);
+
+  // Find and remove the PDR
+  for (auto it = pdrs.begin(); it != pdrs.end(); ++it) {
+    if ((*it)->pdr_id.rule_id == pdr_id) {
+      // Log details before removal
+      Logger::upf_n4().info(
+          "  └─ Removing PDR %u from session " SEID_FMT, pdr_id, seid);
+
+      // Show what we're removing
+      if ((*it)->pdi.first && (*it)->pdi.second.source_interface.first) {
+        uint8_t iface =
+            (*it)->pdi.second.source_interface.second.interface_value;
+        const char* dir = (iface == INTERFACE_VALUE_ACCESS) ? "Uplink" :
+                          (iface == INTERFACE_VALUE_CORE)   ? "Downlink" :
+                                                              "Unknown";
+        Logger::upf_n4().debug("     • Direction: %s", dir);
+      }
+
+      if ((*it)->far_id.first) {
+        Logger::upf_n4().debug(
+            "     • Was linked to FAR %u", (*it)->far_id.second.far_id);
+      }
+
+      if ((*it)->qer_id.first) {
+        Logger::upf_n4().debug(
+            "     • Was linked to QER %u", (*it)->qer_id.second.qer_id);
+      }
+
+      // Remove the PDR
       pdrs.erase(it);
+      Logger::upf_n4().debug("     • Total PDRs remaining: %zu", pdrs.size());
+
+      cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
       return true;
     }
   }
-  cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;  //??
+
+  // PDR not found
+  Logger::upf_n4().warn(
+      "  └─ PDR %u not found in session " SEID_FMT " - cannot remove", pdr_id,
+      seid);
+
+  cause.cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  offending_ie      = PFCP_IE_PACKET_DETECTION_RULE_ID;
   return false;
 }
 
 //------------------------------------------------------------------------------
-/**
- * Remove QER
- */
-bool pfcp_session::remove(const pfcp::qer_id_t& qer_id, uint8_t& cause_value) {
-  for (std::vector<std::shared_ptr<pfcp::pfcp_qer>>::iterator it = qers.begin();
-       it != qers.end(); ++it) {
-    if ((*it)->qer_id.second.qer_id == qer_id.qer_id) {
+bool pfcp_session::remove(
+    const pfcp::remove_far& far_removal, pfcp::cause_t& cause,
+    uint16_t& offending_ie) {
+  if (not far_removal.far_id.first) {
+    // should be caught in lower layer
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_FAR_ID;
+    return false;
+  }
+
+  uint32_t far_id = far_removal.far_id.second.far_id;
+
+  Logger::upf_n4().info(
+      "pfcp_session::remove(far) seid " SEID_FMT " FAR=%u", seid, far_id);
+
+  // Find and remove the FAR
+  for (auto it = fars.begin(); it != fars.end(); ++it) {
+    if ((*it)->far_id.far_id == far_id) {
+      // Log details before removal
       Logger::upf_n4().info(
-          "pfcp_session::remove(qer) seid " SEID_FMT " ", seid);
+          "  └─ Removing FAR %u from session " SEID_FMT, far_id, seid);
+
+      // Show apply action
+      if ((*it)->apply_action.forw || (*it)->apply_action.drop ||
+          (*it)->apply_action.buff || (*it)->apply_action.nocp) {
+        std::ostringstream actions;
+        if ((*it)->apply_action.forw) actions << "FORW ";
+        if ((*it)->apply_action.drop) actions << "DROP ";
+        if ((*it)->apply_action.buff) actions << "BUFF ";
+        if ((*it)->apply_action.nocp) actions << "NOCP";
+        Logger::upf_n4().debug("     • Had Action: %s", actions.str().c_str());
+      }
+
+      // Show destination
+      if ((*it)->forwarding_parameters.first &&
+          (*it)->forwarding_parameters.second.destination_interface.first) {
+        uint8_t iface = (*it)
+                            ->forwarding_parameters.second.destination_interface
+                            .second.interface_value;
+        const char* dest = (iface == INTERFACE_VALUE_ACCESS) ? "ACCESS" :
+                           (iface == INTERFACE_VALUE_CORE)   ? "CORE" :
+                                                               "UNKNOWN";
+        Logger::upf_n4().debug("     • Destination: %s", dest);
+      }
+
+      // Remove the FAR
+      fars.erase(it);
+      Logger::upf_n4().debug("     • Total FARs remaining: %zu", fars.size());
+
+      cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+      return true;
+    }
+  }
+
+  // FAR not found
+  Logger::upf_n4().warn(
+      "  └─ FAR %u not found in session " SEID_FMT " - cannot remove", far_id,
+      seid);
+
+  cause.cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  offending_ie      = PFCP_IE_FAR_ID;
+  return false;
+}
+
+//------------------------------------------------------------------------------
+bool pfcp_session::remove(
+    const pfcp::remove_qer& qer_removal, pfcp::cause_t& cause,
+    uint16_t& offending_ie) {
+  if (not qer_removal.qer_id.first) {
+    // should be caught in lower layer
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_QER_ID;
+    return false;
+  }
+
+  uint32_t qer_id = qer_removal.qer_id.second.qer_id;
+
+  Logger::upf_n4().info(
+      "pfcp_session::remove(qer) seid " SEID_FMT " QER=%u", seid, qer_id);
+
+  // Find and remove the QER
+  for (auto it = qers.begin(); it != qers.end(); ++it) {
+    if ((*it)->qer_id.second.qer_id == qer_id) {
+      // Log details before removal
+      Logger::upf_n4().info(
+          "  └─ Removing QER %u from session " SEID_FMT, qer_id, seid);
+
+      // Show QFI
+      if ((*it)->qos_flow_id.first) {
+        Logger::upf_n4().debug("     • QFI: %u", (*it)->qos_flow_id.second.qfi);
+      }
+
+      // Show GBR/MBR if present
+      if ((*it)->guaranteed_bitrate.first) {
+        Logger::upf_n4().debug(
+            "     • Had GBR: %llu kbps (DL)",
+            (*it)->guaranteed_bitrate.second.dl_gbr / 1000);
+      }
+
+      if ((*it)->maximum_bitrate.first) {
+        Logger::upf_n4().debug(
+            "     • Had MBR: %llu kbps (DL)",
+            (*it)->maximum_bitrate.second.dl_mbr / 1000);
+      }
+
+      // Remove the QER
       qers.erase(it);
-      return true;
-    }
-  }
-  cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;  //??
-  return false;
-}
+      Logger::upf_n4().debug("     • Total QERs remaining: %zu", qers.size());
 
-//------------------------------------------------------------------------------
-bool pfcp_session::update(
-    const pfcp::update_far& update, uint8_t& cause_value) {
-  std::shared_ptr<pfcp::pfcp_far> far = {};
-  if (get(update.far_id.far_id, far)) {
-    if (far->update(update, cause_value)) {
+      cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
       return true;
     }
-    return false;
   }
-  cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
-  return false;
-}
 
-//------------------------------------------------------------------------------
-/**
- * Update QER
- */
-bool pfcp_session::update(
-    const pfcp::update_pdr& update, uint8_t& cause_value) {
-  std::shared_ptr<pfcp::pfcp_pdr> pdr = {};
-  if (get(update.pdr_id.rule_id, pdr)) {
-    if (pdr->update(update, cause_value)) {
-      return true;
-    }
-    return false;
-  }
-  cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
-  return false;
-}
+  // QER not found
+  Logger::upf_n4().warn(
+      "  └─ QER %u not found in session " SEID_FMT " - cannot remove", qer_id,
+      seid);
 
-//------------------------------------------------------------------------------
-bool pfcp_session::update(
-    const pfcp::update_qer& update, uint8_t& cause_value) {
-  std::shared_ptr<pfcp::pfcp_qer> qer = {};
-  if (get(update.qer_id.second.qer_id, qer)) {
-    if (qer->update(update, cause_value)) {
-      return true;
-    }
-    return false;
-  }
-  cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  cause.cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  offending_ie      = PFCP_IE_QER_ID;
   return false;
 }
 
@@ -415,45 +1115,6 @@ bool pfcp_session::create(
   std::shared_ptr<pfcp_qer> sqer = std::shared_ptr<pfcp_qer>(qer);
   add(sqer);
   return true;
-}
-
-//------------------------------------------------------------------------------
-bool pfcp_session::remove(
-    const pfcp::remove_far& rm_far, pfcp::cause_t& cause,
-    uint16_t& offending_ie) {
-  if (not rm_far.far_id.first) {
-    // should be caught in lower layer
-    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-    offending_ie      = PFCP_IE_FAR_ID;
-    return false;
-  }
-  return remove(rm_far.far_id.second, cause.cause_value);
-}
-
-//------------------------------------------------------------------------------
-bool pfcp_session::remove(
-    const pfcp::remove_pdr& rm_pdr, pfcp::cause_t& cause,
-    uint16_t& offending_ie) {
-  if (not rm_pdr.pdr_id.first) {
-    // should be caught in lower layer
-    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-    offending_ie      = PFCP_IE_PACKET_DETECTION_RULE_ID;
-    return false;
-  }
-  return remove(rm_pdr.pdr_id.second, cause.cause_value);
-}
-
-//------------------------------------------------------------------------------
-bool pfcp_session::remove(
-    const pfcp::remove_qer& rm_qer, pfcp::cause_t& cause,
-    uint16_t& offending_ie) {
-  if (not rm_qer.qer_id.first) {
-    // should be caught in lower layer
-    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-    offending_ie      = PFCP_IE_QER_ID;
-    return false;
-  }
-  return remove(rm_qer.qer_id.second, cause.cause_value);
 }
 
 //------------------------------------------------------------------------------
