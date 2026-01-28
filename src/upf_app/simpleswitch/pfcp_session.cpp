@@ -333,48 +333,6 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_qer> qer) {
   qers.push_back(qer);
   Logger::upf_n4().debug("     • Total QERs in session: %zu", qers.size());
 }
-// //------------------------------------------------------------------------------
-// bool pfcp_session::update(
-//     const pfcp::update_far& update, uint8_t& cause_value) {
-//   std::shared_ptr<pfcp::pfcp_far> far = {};
-//   if (get(update.far_id.far_id, far)) {
-//     if (far->update(update, cause_value)) {
-//       return true;
-//     }
-//     return false;
-//   }
-//   cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
-//   return false;
-// }
-
-// //------------------------------------------------------------------------------
-
-// bool pfcp_session::update(
-//     const pfcp::update_pdr& update, uint8_t& cause_value) {
-//   std::shared_ptr<pfcp::pfcp_pdr> pdr = {};
-//   if (get(update.pdr_id.rule_id, pdr)) {
-//     if (pdr->update(update, cause_value)) {
-//       return true;
-//     }
-//     return false;
-//   }
-//   cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
-//   return false;
-// }
-
-// //------------------------------------------------------------------------------
-// bool pfcp_session::update(
-//     const pfcp::update_qer& update, uint8_t& cause_value) {
-//   std::shared_ptr<pfcp::pfcp_qer> qer = {};
-//   if (get(update.qer_id.second.qer_id, qer)) {
-//     if (qer->update(update, cause_value)) {
-//       return true;
-//     }
-//     return false;
-//   }
-//   cause_value = pfcp::CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
-//   return false;
-// }
 
 //------------------------------------------------------------------------------
 bool pfcp_session::update(
@@ -1143,209 +1101,459 @@ void pfcp_session::cleanup() {
   pdrs.clear();
 }
 
+// //------------------------------------------------------------------------------
+// std::string pfcp_session::to_string() const {
+//   std::string s = {};
+//   for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::const_iterator it_pdr =
+//            pdrs.begin();
+//        it_pdr != pdrs.end(); ++it_pdr) {
+//     s.append(fmt::format("|{:016x}", seid));  // TODO continue this line
+//     std::shared_ptr<pfcp::pfcp_pdr> pdr = *it_pdr;
+//     std::shared_ptr<pfcp::pfcp_far> far = {};
+
+//     s.append(fmt::format("|{:04x}", pdr->pdr_id.rule_id));
+//     s.append(fmt::format("|{:08x}", pdr->far_id.second.far_id));
+//     if (pdr->precedence.first) {
+//       std::string f = fmt::format("|{:08x}",
+//       pdr->precedence.second.precedence); s.append(f);
+//     } else {
+//       s.append("|no prece");
+//     }
+//     if (pdr->pdi.first) {
+//       if (pdr->pdi.second.source_interface.first) {
+//         switch (pdr->pdi.second.source_interface.second.interface_value) {
+//           case pfcp::INTERFACE_VALUE_ACCESS:
+//             s.append("|ACC>");
+//             break;
+//           case pfcp::INTERFACE_VALUE_CORE:
+//             s.append("|COR>");
+//             break;
+//           case pfcp::INTERFACE_VALUE_SGI_LAN_N6_LAN:
+//             s.append("|LAN>");
+//             break;
+//           case pfcp::INTERFACE_VALUE_CP_FUNCTION:
+//             s.append("|CPF>");
+//             break;
+//           case pfcp::INTERFACE_VALUE_LI_FUNCTION:
+//             s.append("|LIF>");
+//             break;
+//           default:
+//             s.append("| ? >");
+//         }
+//       } else {
+//         s.append("| ? >");
+//       }
+//     } else {
+//       s.append("| ? >");
+//     }
+
+//     if ((pdr->far_id.first) && (get(pdr->far_id.second.far_id, far))) {
+//       char c = '-';
+//       if (far->apply_action.dupl) {
+//         c = '=';
+//       }
+//       s.append(1, c);
+//       if (far->apply_action.nocp) {
+//         s.append("N");
+//       } else {
+//         s.append(1, c);
+//       }
+//       if (far->apply_action.buff) {
+//         s.append("B");
+//       } else {
+//         s.append(1, c);
+//       }
+//       if (far->apply_action.drop) {
+//         s.append("X");
+//       } else {
+//         s.append(1, c);
+//       }
+//       if (far->apply_action.forw) {
+//         if ((far->forwarding_parameters.first) &&
+//             (far->forwarding_parameters.second.destination_interface.first))
+//             {
+//           switch
+//           (far->forwarding_parameters.second.destination_interface.second
+//                       .interface_value) {
+//             case pfcp::INTERFACE_VALUE_ACCESS:
+//               s.append(">ACC");
+//               break;
+//             case pfcp::INTERFACE_VALUE_CORE:
+//               s.append(">COR");
+//               break;
+//             case pfcp::INTERFACE_VALUE_SGI_LAN_N6_LAN:
+//               s.append(">LAN");
+//               break;
+//             case pfcp::INTERFACE_VALUE_CP_FUNCTION:
+//               s.append(">CPF");
+//               break;
+//             case pfcp::INTERFACE_VALUE_LI_FUNCTION:
+//               s.append(">LIF");
+//               break;
+//             default:
+//               s.append("> ? ");
+//           }
+//         }
+//       } else {
+//         s.append("> ? ");
+//       }
+//       if ((far->forwarding_parameters.first) &&
+//           (far->forwarding_parameters.second.outer_header_creation.first)) {
+//         switch
+//         (far->forwarding_parameters.second.outer_header_creation.second
+//                     .outer_header_creation_description) {
+//           case pfcp::OUTER_HEADER_CREATION_GTPU_UDP_IPV4: {
+//             s.append("|GTPU_UDP_IPV4:");
+//             std::string ip = oai::utils::conv::toString(
+//                 far->forwarding_parameters.second.outer_header_creation.second
+//                     .ipv4_address);
+//             ip.resize(INET_ADDRSTRLEN, ' ');
+//             s.append(ip);
+//             s.append(fmt::format(
+//                 ":{:08x}", far->forwarding_parameters.second
+//                                .outer_header_creation.second.teid));
+//           } break;
+//           case pfcp::OUTER_HEADER_CREATION_GTPU_UDP_IPV6: {
+//             s.append("|GTPU_UDP_IPV6:");
+//             std::string ip = oai::utils::conv::toString(
+//                 far->forwarding_parameters.second.outer_header_creation.second
+//                     .ipv6_address);
+//             ip.resize(INET_ADDRSTRLEN, ' ');
+//             s.append(fmt::format(
+//                 ":{:08x}", far->forwarding_parameters.second
+//                                .outer_header_creation.second.teid));
+//           } break;
+//           case pfcp::OUTER_HEADER_CREATION_UDP_IPV4: {
+//             s.append("|UDP_IPV4     :");
+//             std::string ip = oai::utils::conv::toString(
+//                 far->forwarding_parameters.second.outer_header_creation.second
+//                     .ipv4_address);
+//             ip.resize(INET_ADDRSTRLEN, ' ');
+//             s.append(ip);
+//             s.append(9, ' ');
+//           } break;
+//           case pfcp::OUTER_HEADER_CREATION_UDP_IPV6: {
+//             s.append("|UDP_IPV6     :");
+//             std::string ip = oai::utils::conv::toString(
+//                 far->forwarding_parameters.second.outer_header_creation.second
+//                     .ipv6_address);
+//             ip.resize(INET_ADDRSTRLEN, ' ');
+//             s.append(ip);
+//             s.append(9, ' ');
+//           } break;
+//           default:
+//             s.append("|BAD_VALUE    ");
+//             std::string ip = {};
+//             ip.resize(INET_ADDRSTRLEN, ' ');
+//             s.append(ip);
+//             s.append(9, ' ');
+//         }
+//       } else {
+//         s.append("|none          ");
+//         std::string ip = {};
+//         ip.resize(INET_ADDRSTRLEN, ' ');
+//         s.append(ip);
+//         s.append(9, ' ');
+//       }
+//     }
+//     if (pdr->outer_header_removal.first) {
+//       switch (
+//           pdr->outer_header_removal.second.outer_header_removal_description)
+//           {
+//         case OUTER_HEADER_REMOVAL_GTPU_UDP_IPV4: {
+//           s.append("|GTPU_UDP_IPV4");
+//           s.append(
+//               fmt::format(":{:08x}",
+//               pdr->pdi.second.local_fteid.second.teid));
+//         } break;
+//         case OUTER_HEADER_REMOVAL_GTPU_UDP_IPV6: {
+//           s.append("|GTPU_UDP_IPV6");
+//           s.append(
+//               fmt::format(":{:08x}",
+//               pdr->pdi.second.local_fteid.second.teid));
+//         } break;
+//         case OUTER_HEADER_REMOVAL_UDP_IPV4: {
+//           s.append("|UDP_IPV4     ");
+//           s.append(9, ' ');
+//         } break;
+//         case OUTER_HEADER_REMOVAL_UDP_IPV6: {
+//           s.append("|UDP_IPV6     ");
+//           s.append(9, ' ');
+//         } break;
+//         default:
+//           s.append("|BAD_VALUE    ");
+//           s.append(9, ' ');
+//       }
+//     } else {
+//       s.append("|none         ");
+//       s.append(9, ' ');
+//     }
+//     s.append("|");
+//     if (pdr->pdi.first) {
+//       if (pdr->pdi.second.ue_ip_address.first) {
+//         std::string ip = {};
+//         if (pdr->pdi.second.ue_ip_address.second.v4) {
+//           ip = oai::utils::conv::toString(
+//               pdr->pdi.second.ue_ip_address.second.ipv4_address);
+//         }
+//         ip.resize(INET_ADDRSTRLEN, ' ');
+//         s.append(ip);
+//         // TODO IPv6
+//       }
+//     } else {
+//       std::string ip = {};
+//       ip.resize(INET_ADDRSTRLEN, ' ');
+//       s.append(ip);
+//     }
+//     s.append("|\n");
+//   }
+//   s.append(
+//       "+-----------------------------------------------------------------------"
+//       "------------------------------------------------------------------------"
+//       "---------------------------------+\n");
+//   return s;
+// }
+
 //------------------------------------------------------------------------------
 std::string pfcp_session::to_string() const {
-  std::string s = {};
-  for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::const_iterator it_pdr =
-           pdrs.begin();
-       it_pdr != pdrs.end(); ++it_pdr) {
-    s.append(fmt::format("|{:016x}", seid));  // TODO continue this line
-    std::shared_ptr<pfcp::pfcp_pdr> pdr = *it_pdr;
-    std::shared_ptr<pfcp::pfcp_far> far = {};
+  std::ostringstream oss;
 
-    s.append(fmt::format("|{:04x}", pdr->pdr_id.rule_id));
-    s.append(fmt::format("|{:08x}", pdr->far_id.second.far_id));
-    if (pdr->precedence.first) {
-      std::string f = fmt::format("|{:08x}", pdr->precedence.second.precedence);
-      s.append(f);
-    } else {
-      s.append("|no prece");
+  // Table header
+  oss << "\n";
+  oss << "  "
+         "┌────────────────────────────────────────────────────────────────────"
+         "──────────────────────────────────────────────────────────────────"
+         "─────────────────────────────────┐\n";
+  oss << fmt::format(
+      "  │{:^167}│\n", fmt::format("PDU SESSION RULES - Session {:#x}", seid));
+  oss << "  "
+         "├────────┬───────┬───────┬────────────┬───────────┬─────────────────┬"
+         "────────────┬────────────┬───────┬────────────────────────────────┬──"
+         "──────────────────────────────┤\n";
+  oss << "  │  PDR   │  FAR  │  QER  │ Precedence │ Direction │    UE IPv4     "
+         " │   Action   │  Dest If   │  QFI  │       Create Outer Hdr         "
+         "│       Remove Outer Hdr         │\n";
+  oss << "  "
+         "├────────┼───────┼───────┼────────────┼───────────┼─────────────────┼"
+         "────────────┼────────────┼───────┼────────────────────────────────┼──"
+         "──────────────────────────────┤\n";
+
+  // Process each PDR
+  for (const auto& pdr : pdrs) {
+    std::shared_ptr<pfcp::pfcp_far> far = nullptr;
+    std::shared_ptr<pfcp::pfcp_qer> qer = nullptr;
+
+    // Get associated FAR
+    if (pdr->far_id.first) {
+      get(pdr->far_id.second.far_id, far);
     }
+
+    // Get associated QER
+    if (pdr->qer_id.first) {
+      get(pdr->qer_id.second.qer_id, qer);
+    }
+
+    // PDR ID (left-aligned)
+    oss << fmt::format("  │ {:<6} │", pdr->pdr_id.rule_id);
+
+    // FAR ID (left-aligned)
+    if (far) {
+      oss << fmt::format(" {:<5} │", far->far_id.far_id);
+    } else {
+      oss << " -     │";
+    }
+
+    // QER ID (left-aligned)
+    if (qer) {
+      oss << fmt::format(" {:<5} │", qer->qer_id.second.qer_id);
+    } else {
+      oss << " -     │";
+    }
+
+    // Precedence (left-aligned)
+    if (pdr->precedence.first) {
+      oss << fmt::format(" {:<10} │", pdr->precedence.second.precedence);
+    } else {
+      oss << " -          │";
+    }
+
+    // Direction and UE IP
+    std::string direction = "?";
+    std::string ue_ip     = "";
+
     if (pdr->pdi.first) {
+      // Get UE IP
+      if (pdr->pdi.second.ue_ip_address.first &&
+          pdr->pdi.second.ue_ip_address.second.v4) {
+        char ip_str[INET_ADDRSTRLEN];
+        inet_ntop(
+            AF_INET, &pdr->pdi.second.ue_ip_address.second.ipv4_address, ip_str,
+            INET_ADDRSTRLEN);
+        ue_ip = ip_str;
+      }
+
+      // Determine direction
       if (pdr->pdi.second.source_interface.first) {
         switch (pdr->pdi.second.source_interface.second.interface_value) {
-          case pfcp::INTERFACE_VALUE_ACCESS:
-            s.append("|ACC>");
+          case INTERFACE_VALUE_ACCESS:
+            direction = "UL";
             break;
-          case pfcp::INTERFACE_VALUE_CORE:
-            s.append("|COR>");
+          case INTERFACE_VALUE_CORE:
+            direction = "DL";
             break;
           case pfcp::INTERFACE_VALUE_SGI_LAN_N6_LAN:
-            s.append("|LAN>");
+            direction = "LAN";
             break;
           case pfcp::INTERFACE_VALUE_CP_FUNCTION:
-            s.append("|CPF>");
+            direction = "CP";
             break;
           case pfcp::INTERFACE_VALUE_LI_FUNCTION:
-            s.append("|LIF>");
+            direction = "LI";
             break;
           default:
-            s.append("| ? >");
+            direction = "?";
         }
-      } else {
-        s.append("| ? >");
       }
-    } else {
-      s.append("| ? >");
     }
 
-    if ((pdr->far_id.first) && (get(pdr->far_id.second.far_id, far))) {
-      char c = '-';
-      if (far->apply_action.dupl) {
-        c = '=';
-      }
-      s.append(1, c);
-      if (far->apply_action.nocp) {
-        s.append("N");
-      } else {
-        s.append(1, c);
-      }
-      if (far->apply_action.buff) {
-        s.append("B");
-      } else {
-        s.append(1, c);
-      }
-      if (far->apply_action.drop) {
-        s.append("X");
-      } else {
-        s.append(1, c);
-      }
-      if (far->apply_action.forw) {
-        if ((far->forwarding_parameters.first) &&
-            (far->forwarding_parameters.second.destination_interface.first)) {
-          switch (far->forwarding_parameters.second.destination_interface.second
-                      .interface_value) {
-            case pfcp::INTERFACE_VALUE_ACCESS:
-              s.append(">ACC");
-              break;
-            case pfcp::INTERFACE_VALUE_CORE:
-              s.append(">COR");
-              break;
-            case pfcp::INTERFACE_VALUE_SGI_LAN_N6_LAN:
-              s.append(">LAN");
-              break;
-            case pfcp::INTERFACE_VALUE_CP_FUNCTION:
-              s.append(">CPF");
-              break;
-            case pfcp::INTERFACE_VALUE_LI_FUNCTION:
-              s.append(">LIF");
-              break;
-            default:
-              s.append("> ? ");
-          }
+    // Direction (left-aligned)
+    oss << fmt::format(" {:<9} │", direction);
+    // UE IPv4 (left-aligned)
+    oss << fmt::format(" {:<15} │", ue_ip.empty() ? "-" : ue_ip);
+
+    // Action (from FAR apply_action) - left-aligned
+    std::string action = "";
+    if (far) {
+      std::vector<std::string> actions;
+      if (far->apply_action.forw) actions.push_back("FORW");
+      if (far->apply_action.drop) actions.push_back("DROP");
+      if (far->apply_action.buff) actions.push_back("BUFF");
+      if (far->apply_action.nocp) actions.push_back("NOCP");
+      if (far->apply_action.dupl) actions.push_back("DUPL");
+
+      if (!actions.empty()) {
+        for (size_t i = 0; i < actions.size(); ++i) {
+          action += actions[i];
+          if (i < actions.size() - 1) action += ",";
         }
-      } else {
-        s.append("> ? ");
-      }
-      if ((far->forwarding_parameters.first) &&
-          (far->forwarding_parameters.second.outer_header_creation.first)) {
-        switch (far->forwarding_parameters.second.outer_header_creation.second
-                    .outer_header_creation_description) {
-          case pfcp::OUTER_HEADER_CREATION_GTPU_UDP_IPV4: {
-            s.append("|GTPU_UDP_IPV4:");
-            std::string ip = oai::utils::conv::toString(
-                far->forwarding_parameters.second.outer_header_creation.second
-                    .ipv4_address);
-            ip.resize(INET_ADDRSTRLEN, ' ');
-            s.append(ip);
-            s.append(fmt::format(
-                ":{:08x}", far->forwarding_parameters.second
-                               .outer_header_creation.second.teid));
-          } break;
-          case pfcp::OUTER_HEADER_CREATION_GTPU_UDP_IPV6: {
-            s.append("|GTPU_UDP_IPV6:");
-            std::string ip = oai::utils::conv::toString(
-                far->forwarding_parameters.second.outer_header_creation.second
-                    .ipv6_address);
-            ip.resize(INET_ADDRSTRLEN, ' ');
-            s.append(fmt::format(
-                ":{:08x}", far->forwarding_parameters.second
-                               .outer_header_creation.second.teid));
-          } break;
-          case pfcp::OUTER_HEADER_CREATION_UDP_IPV4: {
-            s.append("|UDP_IPV4     :");
-            std::string ip = oai::utils::conv::toString(
-                far->forwarding_parameters.second.outer_header_creation.second
-                    .ipv4_address);
-            ip.resize(INET_ADDRSTRLEN, ' ');
-            s.append(ip);
-            s.append(9, ' ');
-          } break;
-          case pfcp::OUTER_HEADER_CREATION_UDP_IPV6: {
-            s.append("|UDP_IPV6     :");
-            std::string ip = oai::utils::conv::toString(
-                far->forwarding_parameters.second.outer_header_creation.second
-                    .ipv6_address);
-            ip.resize(INET_ADDRSTRLEN, ' ');
-            s.append(ip);
-            s.append(9, ' ');
-          } break;
-          default:
-            s.append("|BAD_VALUE    ");
-            std::string ip = {};
-            ip.resize(INET_ADDRSTRLEN, ' ');
-            s.append(ip);
-            s.append(9, ' ');
-        }
-      } else {
-        s.append("|none          ");
-        std::string ip = {};
-        ip.resize(INET_ADDRSTRLEN, ' ');
-        s.append(ip);
-        s.append(9, ' ');
       }
     }
+    oss << fmt::format(" {:<10} │", action.empty() ? "-" : action);
+
+    // Destination Interface (from FAR forwarding parameters) - left-aligned
+    std::string dest_if = "";
+    if (far && far->forwarding_parameters.first &&
+        far->forwarding_parameters.second.destination_interface.first) {
+      switch (far->forwarding_parameters.second.destination_interface.second
+                  .interface_value) {
+        case INTERFACE_VALUE_ACCESS:
+          dest_if = "ACCESS";
+          break;
+        case INTERFACE_VALUE_CORE:
+          dest_if = "CORE";
+          break;
+        case INTERFACE_VALUE_SGI_LAN_N6_LAN:
+          dest_if = "SGi-LAN";
+          break;
+        case INTERFACE_VALUE_CP_FUNCTION:
+          dest_if = "CP-FUNC";
+          break;
+        case INTERFACE_VALUE_LI_FUNCTION:
+          dest_if = "LI-FUNC";
+          break;
+        default:
+          dest_if = "?";
+      }
+    }
+    oss << fmt::format(" {:<10} │", dest_if.empty() ? "-" : dest_if);
+
+    // QFI (QoS Flow Identifier from QER) - left-aligned
+    std::string qfi_str = "";
+    if (qer && qer->qos_flow_id.first) {
+      qfi_str = std::to_string(qer->qos_flow_id.second.qfi);
+    }
+    if (!qfi_str.empty()) {
+      oss << fmt::format(" {:<5} │", qfi_str);
+    } else {
+      oss << " -     │";
+    }
+
+    // Create Outer Header (from FAR) - left-aligned, wider column
+    std::string create_hdr = "";
+    if (far && far->forwarding_parameters.first &&
+        far->forwarding_parameters.second.outer_header_creation.first) {
+      auto& ohc =
+          far->forwarding_parameters.second.outer_header_creation.second;
+
+      switch (ohc.outer_header_creation_description) {
+        case OUTER_HEADER_CREATION_GTPU_UDP_IPV4: {
+          char ip_str[INET_ADDRSTRLEN];
+          inet_ntop(AF_INET, &ohc.ipv4_address, ip_str, INET_ADDRSTRLEN);
+          create_hdr = fmt::format("GTP→{}:{:#x}", ip_str, ohc.teid);
+          break;
+        }
+        case OUTER_HEADER_CREATION_GTPU_UDP_IPV6: {
+          char ip_str[INET6_ADDRSTRLEN];
+          inet_ntop(AF_INET6, &ohc.ipv6_address, ip_str, INET6_ADDRSTRLEN);
+          create_hdr = fmt::format("GTP6→{}:{:#x}", ip_str, ohc.teid);
+          break;
+        }
+        case OUTER_HEADER_CREATION_UDP_IPV4: {
+          char ip_str[INET_ADDRSTRLEN];
+          inet_ntop(AF_INET, &ohc.ipv4_address, ip_str, INET_ADDRSTRLEN);
+          create_hdr = fmt::format("UDP→{}", ip_str);
+          break;
+        }
+        case OUTER_HEADER_CREATION_UDP_IPV6: {
+          create_hdr = "UDP6";
+          break;
+        }
+        default:
+          create_hdr = "?";
+      }
+    }
+    oss << fmt::format(" {:<30} │", create_hdr.empty() ? "-" : create_hdr);
+
+    // Remove Outer Header (from PDR) - left-aligned, wider column
+    std::string remove_hdr = "";
     if (pdr->outer_header_removal.first) {
       switch (
           pdr->outer_header_removal.second.outer_header_removal_description) {
-        case OUTER_HEADER_REMOVAL_GTPU_UDP_IPV4: {
-          s.append("|GTPU_UDP_IPV4");
-          s.append(
-              fmt::format(":{:08x}", pdr->pdi.second.local_fteid.second.teid));
-        } break;
-        case OUTER_HEADER_REMOVAL_GTPU_UDP_IPV6: {
-          s.append("|GTPU_UDP_IPV6");
-          s.append(
-              fmt::format(":{:08x}", pdr->pdi.second.local_fteid.second.teid));
-        } break;
-        case OUTER_HEADER_REMOVAL_UDP_IPV4: {
-          s.append("|UDP_IPV4     ");
-          s.append(9, ' ');
-        } break;
-        case OUTER_HEADER_REMOVAL_UDP_IPV6: {
-          s.append("|UDP_IPV6     ");
-          s.append(9, ' ');
-        } break;
+        case OUTER_HEADER_REMOVAL_GTPU_UDP_IPV4:
+          if (pdr->pdi.second.local_fteid.first) {
+            remove_hdr = fmt::format(
+                "GTP TEID:{:#x}", pdr->pdi.second.local_fteid.second.teid);
+          } else {
+            remove_hdr = "GTP/UDP/IPv4";
+          }
+          break;
+        case OUTER_HEADER_REMOVAL_GTPU_UDP_IPV6:
+          if (pdr->pdi.second.local_fteid.first) {
+            remove_hdr = fmt::format(
+                "GTP6 TEID:{:#x}", pdr->pdi.second.local_fteid.second.teid);
+          } else {
+            remove_hdr = "GTP/UDP/IPv6";
+          }
+          break;
+        case OUTER_HEADER_REMOVAL_UDP_IPV4:
+          remove_hdr = "UDP/IPv4";
+          break;
+        case OUTER_HEADER_REMOVAL_UDP_IPV6:
+          remove_hdr = "UDP/IPv6";
+          break;
         default:
-          s.append("|BAD_VALUE    ");
-          s.append(9, ' ');
+          remove_hdr = "?";
       }
-    } else {
-      s.append("|none         ");
-      s.append(9, ' ');
     }
-    s.append("|");
-    if (pdr->pdi.first) {
-      if (pdr->pdi.second.ue_ip_address.first) {
-        std::string ip = {};
-        if (pdr->pdi.second.ue_ip_address.second.v4) {
-          ip = oai::utils::conv::toString(
-              pdr->pdi.second.ue_ip_address.second.ipv4_address);
-        }
-        ip.resize(INET_ADDRSTRLEN, ' ');
-        s.append(ip);
-        // TODO IPv6
-      }
-    } else {
-      std::string ip = {};
-      ip.resize(INET_ADDRSTRLEN, ' ');
-      s.append(ip);
-    }
-    s.append("|\n");
+    oss << fmt::format(" {:<30} │\n", remove_hdr.empty() ? "-" : remove_hdr);
   }
-  s.append(
-      "+-----------------------------------------------------------------------"
-      "------------------------------------------------------------------------"
-      "---------------------------------+\n");
-  return s;
+
+  // Table footer
+  oss << "  "
+         "└────────┴───────┴───────┴────────────┴───────────┴─────────────────┴"
+         "────────────┴────────────┴───────┴────────────────────────────────┴──"
+         "──────────────────────────────┘\n";
+  oss << "\n";
+
+  return oss.str();
 }

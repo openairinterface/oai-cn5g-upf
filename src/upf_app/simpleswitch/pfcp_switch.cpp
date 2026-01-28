@@ -876,39 +876,47 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
     resp->pfcp_ies.set(offending_ie);
   }
 
+  //   if (Logger::should_log(spdlog::level::debug)) {
+  //     std::cout <<
+  //     "\n+----------------------------------------------------------"
+  //                  "--------"
+  //                  "-------------------------------------------------------------"
+  //                  "--------"
+  //                  "-----------------------------------------------------------+"
+  //               << std::endl;
+  //     std::cout
+  //         << "| PFCP switch Packet Detection Rule list ordered by established
+  //         "
+  //            "sessions: " "  " " |"
+  //         << std::endl;
+  //     std::cout <<
+  //     "+----------------+----+--------+--------+------------+-------"
+  //                  "--------"
+  //                  "------------------------+----------------------+-------------"
+  //                  "---+----"
+  //                  "---------------------------------------------------------+"
+  //               << std::endl;
+  //     std::cout << "|  SEID          |pdr |  far   |predence|   action   | "
+  //                  " create "
+  //                  "outer hdr         tun id| rmv outer hdr  tun id|    UE
+  //                  IPv4  " "   |    " " |"
+  //               << std::endl;
+  //     std::cout <<
+  //     "+----------------+----+--------+--------+------------+-------"
+  //                  "--------"
+  //                  "------------------------+----------------------+-------------"
+  //                  "---+----"
+  //                  "---------------------------------------------------------+"
+  //               << std::endl;
+  //     for (const auto& it : up_seid2pfcp_sessions) {
+  //       std::cout << it.second->to_string() << std::endl;
+  //     }
+  //   }
+  // }
   if (Logger::should_log(spdlog::level::debug)) {
-    std::cout << "\n+----------------------------------------------------------"
-                 "--------"
-                 "-------------------------------------------------------------"
-                 "--------"
-                 "-----------------------------------------------------------+"
-              << std::endl;
-    std::cout
-        << "| PFCP switch Packet Detection Rule list ordered by established "
-           "sessions:                                                          "
-           "  "
-           "                                                              |"
-        << std::endl;
-    std::cout << "+----------------+----+--------+--------+------------+-------"
-                 "--------"
-                 "------------------------+----------------------+-------------"
-                 "---+----"
-                 "---------------------------------------------------------+"
-              << std::endl;
-    std::cout << "|  SEID          |pdr |  far   |predence|   action   |       "
-                 " create "
-                 "outer hdr         tun id| rmv outer hdr  tun id|    UE IPv4  "
-                 "   |    "
-                 "                                                         |"
-              << std::endl;
-    std::cout << "+----------------+----+--------+--------+------------+-------"
-                 "--------"
-                 "------------------------+----------------------+-------------"
-                 "---+----"
-                 "---------------------------------------------------------+"
-              << std::endl;
+    // Print PDU session rules table
     for (const auto& it : up_seid2pfcp_sessions) {
-      std::cout << it.second->to_string() << std::endl;
+      std::cout << it.second->to_string();
     }
   }
 }
@@ -1172,39 +1180,47 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     resp->pfcp_ies.set(offending_ie);
   }
 
+  //   if (Logger::should_log(spdlog::level::debug)) {
+  //     std::cout <<
+  //     "\n+----------------------------------------------------------"
+  //                  "--------"
+  //                  "-------------------------------------------------------------"
+  //                  "--------"
+  //                  "-----------------------------------------------------------+"
+  //               << std::endl;
+  //     std::cout
+  //         << "| PFCP switch Packet Detection Rule list ordered by established
+  //         "
+  //            "sessions: " "  " " |"
+  //         << std::endl;
+  //     std::cout <<
+  //     "+----------------+----+--------+--------+------------+-------"
+  //                  "--------"
+  //                  "------------------------+----------------------+-------------"
+  //                  "---+----"
+  //                  "---------------------------------------------------------+"
+  //               << std::endl;
+  //     std::cout << "|  SEID          |pdr |  far   |predence|   action   | "
+  //                  " create "
+  //                  "outer hdr         tun id| rmv outer hdr  tun id|    UE
+  //                  IPv4  " "   |    " " |"
+  //               << std::endl;
+  //     std::cout <<
+  //     "+----------------+----+--------+--------+------------+-------"
+  //                  "--------"
+  //                  "------------------------+----------------------+-------------"
+  //                  "---+----"
+  //                  "---------------------------------------------------------+"
+  //               << std::endl;
+  //     for (const auto& it : up_seid2pfcp_sessions) {
+  //       std::cout << it.second->to_string() << std::endl;
+  //     }
+  //   }
+  // }
   if (Logger::should_log(spdlog::level::debug)) {
-    std::cout << "\n+----------------------------------------------------------"
-                 "--------"
-                 "-------------------------------------------------------------"
-                 "--------"
-                 "-----------------------------------------------------------+"
-              << std::endl;
-    std::cout
-        << "| PFCP switch Packet Detection Rule list ordered by established "
-           "sessions:                                                          "
-           "  "
-           "                                                              |"
-        << std::endl;
-    std::cout << "+----------------+----+--------+--------+------------+-------"
-                 "--------"
-                 "------------------------+----------------------+-------------"
-                 "---+----"
-                 "---------------------------------------------------------+"
-              << std::endl;
-    std::cout << "|  SEID          |pdr |  far   |predence|   action   |       "
-                 " create "
-                 "outer hdr         tun id| rmv outer hdr  tun id|    UE IPv4  "
-                 "   |    "
-                 "                                                         |"
-              << std::endl;
-    std::cout << "+----------------+----+--------+--------+------------+-------"
-                 "--------"
-                 "------------------------+----------------------+-------------"
-                 "---+----"
-                 "---------------------------------------------------------+"
-              << std::endl;
+    // Print PDU session rules table
     for (const auto& it : up_seid2pfcp_sessions) {
-      std::cout << it.second->to_string() << std::endl;
+      std::cout << it.second->to_string();
     }
   }
 }
@@ -1241,39 +1257,48 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
   pfcp_associations::get_instance().notify_del_session(fseid);
   resp->pfcp_ies.set(cause);
 
+  //   if (Logger::should_log(spdlog::level::debug)) {
+  //     std::cout <<
+  //     "\n+----------------------------------------------------------"
+  //                  "--------"
+  //                  "-------------------------------------------------------------"
+  //                  "--------"
+  //                  "-----------------------------------------------------------+"
+  //               << std::endl;
+  //     std::cout
+  //         << "| PFCP switch Packet Detection Rule list ordered by established
+  //         "
+  //            "sessions: " "  " " |"
+  //         << std::endl;
+  //     std::cout <<
+  //     "+----------------+----+--------+--------+------------+-------"
+  //                  "--------"
+  //                  "------------------------+----------------------+-------------"
+  //                  "---+----"
+  //                  "---------------------------------------------------------+"
+  //               << std::endl;
+  //     std::cout << "|  SEID          |pdr |  far   |predence|   action   | "
+  //                  " create "
+  //                  "outer hdr         tun id| rmv outer hdr  tun id|    UE
+  //                  IPv4  " "   |    " " |"
+  //               << std::endl;
+  //     std::cout <<
+  //     "+----------------+----+--------+--------+------------+-------"
+  //                  "--------"
+  //                  "------------------------+----------------------+-------------"
+  //                  "---+----"
+  //                  "---------------------------------------------------------+"
+  //               << std::endl;
+  //     for (const auto& it : up_seid2pfcp_sessions) {
+  //       std::cout << it.second->to_string() << std::endl;
+  //     }
+  //   }
+  // }
+
   if (Logger::should_log(spdlog::level::debug)) {
-    std::cout << "\n+----------------------------------------------------------"
-                 "--------"
-                 "-------------------------------------------------------------"
-                 "--------"
-                 "-----------------------------------------------------------+"
-              << std::endl;
-    std::cout
-        << "| PFCP switch Packet Detection Rule list ordered by established "
-           "sessions:                                                          "
-           "  "
-           "                                                              |"
-        << std::endl;
-    std::cout << "+----------------+----+--------+--------+------------+-------"
-                 "--------"
-                 "------------------------+----------------------+-------------"
-                 "---+----"
-                 "---------------------------------------------------------+"
-              << std::endl;
-    std::cout << "|  SEID          |pdr |  far   |predence|   action   |       "
-                 " create "
-                 "outer hdr         tun id| rmv outer hdr  tun id|    UE IPv4  "
-                 "   |    "
-                 "                                                         |"
-              << std::endl;
-    std::cout << "+----------------+----+--------+--------+------------+-------"
-                 "--------"
-                 "------------------------+----------------------+-------------"
-                 "---+----"
-                 "---------------------------------------------------------+"
-              << std::endl;
+    // Print PDU session rules table
     for (const auto& it : up_seid2pfcp_sessions) {
-      std::cout << it.second->to_string() << std::endl;
+      std::cout << it.second->to_string();
     }
   }
 }
