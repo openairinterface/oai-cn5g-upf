@@ -38,6 +38,7 @@
 
 // Forward declarations
 class UPF_XDPProgram;
+class QERProgram;
 
 /**
  * @class SessionPrograms
@@ -69,9 +70,24 @@ class SessionPrograms {
    */
   std::shared_ptr<UPF_XDPProgram> GetPFCPProgram() const;
 
+  /**
+   * @brief Set QER program reference
+   * @param Shared pointer to QER program
+   */
+  void SetQERProgram(std::shared_ptr<QERProgram> qer_program);
+
+  /**
+   * @brief Get QER program reference
+   * @return Shared pointer to QER program
+   */
+  std::shared_ptr<QERProgram> GetQERProgram() const;
+
  private:
   /// UPF XDP program reference
   std::shared_ptr<UPF_XDPProgram> upf_xdp_program_;
+
+  /// QER program reference
+  std::shared_ptr<QERProgram> qer_program_;
 };
 
 #endif  // SESSION_PROGRAMS_H_

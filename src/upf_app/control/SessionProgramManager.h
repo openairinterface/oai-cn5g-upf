@@ -46,6 +46,7 @@
 #include <memory>
 #include <mutex>
 #include <vector>
+#include <set>
 
 // Forward declarations
 namespace pfcp {
@@ -58,6 +59,7 @@ class pfcp_qer;
 class BpfMap;
 class ISessionObserver;
 class UPF_XDPProgram;
+class QERProgram;
 class SessionPrograms;
 struct pfcp_pdr;
 struct pfcp_far;
@@ -260,6 +262,40 @@ class SessionProgramManager {
   // Reference: RFC 826 - Address Resolution Protocol
   // ==========================================================================
 
+  //   /**
+  //    * @brief Update ARP table for N6 interface (Data Network side)
+  //    *
+  //    * Resolves MAC address for next-hop toward data network and updates
+  //    * ARP table in BPF maps for fast packet forwarding.
+  //    *
+  //    * @param upf_xdp_program Shared pointer to UPF XDP program
+  //    * @param dn_ip Data network IP address
+  //    * @param upf_n6_ip UPF N6 interface IP
+  //    *
+  //    * @see 3GPP TS 23.501 Section 5.8.2.3 - N6 Interface
+  //    */
+  //   void UpdateArpTableForN6(
+  //       std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t dn_ip,
+  //       uint32_t upf_n6_ip);
+
+  //   /**
+  //    * @brief Update ARP table for N3 interface (RAN side)
+  //    *
+  //    * Resolves MAC address for next-hop toward gNodeB and updates
+  //    * ARP table in BPF maps for fast packet forwarding.
+  //    *
+  //    * @param upf_xdp_program Shared pointer to UPF XDP program
+  //    * @param gnb_ip gNodeB IP address
+  //    * @param upf_n3_ip UPF N3 interface IP
+  //    * @param seid Session Endpoint Identifier
+  //    *
+  //    * @see 3GPP TS 23.501 Section 5.8.2.2 - N3 Interface
+  //    */
+  //   void UpdateArpTableForN3(
+  //       std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t gnb_ip,
+  //       uint32_t upf_n3_ip, uint64_t seid);
+
+  /****************************************** */
   /**
    * @brief Update ARP table for N6 interface (Data Network side)
    *
@@ -271,8 +307,9 @@ class SessionProgramManager {
    * @param upf_n6_ip UPF N6 interface IP
    *
    * @see 3GPP TS 23.501 Section 5.8.2.3 - N6 Interface
+   * @return MAC address as string (e.g., "aa:bb:cc:dd:ee:ff")
    */
-  void UpdateArpTableForN6(
+  std::string UpdateArpTableForN6(
       std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t dn_ip,
       uint32_t upf_n6_ip);
 
@@ -288,10 +325,12 @@ class SessionProgramManager {
    * @param seid Session Endpoint Identifier
    *
    * @see 3GPP TS 23.501 Section 5.8.2.2 - N3 Interface
+   * @return MAC address as string (e.g., "aa:bb:cc:dd:ee:ff")
    */
-  void UpdateArpTableForN3(
+  std::string UpdateArpTableForN3(
       std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t gnb_ip,
       uint32_t upf_n3_ip, uint64_t seid);
+  /********************************************* */
 
   /**
    * @brief Get next-hop IP address
@@ -426,6 +465,9 @@ class SessionProgramManager {
   /// Map of SEID to SessionPrograms
   std::map<uint64_t, std::shared_ptr<SessionPrograms>> session_programs_map_;
 
+  /// Map of SEID to QER programs for QoS enforcement
+  std::map<uint64_t, std::shared_ptr<QERProgram>> qer_programs_map_;
+
   /// Array tracking program slots
   std::array<int64_t, 1024> program_array_;
 
@@ -434,6 +476,10 @@ class SessionProgramManager {
 
   /// Mutex for thread-safe access
   mutable std::mutex mutex_;
+
+  /// ARP update tracking (per session)
+  std::map<uint64_t, std::set<uint32_t>> session_n6_arp_cache_;
+  std::map<uint64_t, std::set<uint32_t>> session_n3_arp_cache_;
 };
 
 #endif  // SESSION_PROGRAM_MANAGER_H_

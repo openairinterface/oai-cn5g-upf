@@ -21,6 +21,7 @@
 
 #include "startup_banner.hpp"
 #include "version_utils.h"
+#include "number_utils.hpp"
 #include "logger.hpp"
 #include "upf_config.hpp"
 #include <arpa/inet.h>
@@ -32,7 +33,7 @@
 #include <vector>
 
 using namespace oai::config;
-
+using namespace oai::utils;
 //------------------------------------------------------------------------------
 void DisplayStartupBanner() {
   using namespace oai::upf::utils;
@@ -358,60 +359,6 @@ void DisplayReadyMessage() {
  * QOS VISUALIZATION -
  */
 
-// void DisplayQosFlowTable(
-//     uint64_t seid, const std::vector<QosFlowInfo>& qos_flows) {
-//   auto& logger = Logger::upf_app();
-
-//   logger.info("");
-//   logger.info(
-//       "  "
-//       "┌───────────────────────────────────────────────────────────────────────"
-//       "───────────────────────────────┐");
-//   logger.info(
-//       "  │                                    QoS FLOWS - Session " SEID_FMT
-//       "                                         │",
-//       seid);
-//   logger.info(
-//       "  "
-//       "├──────┬─────┬──────────────┬────────────┬────────────┬────────────────"
-//       "─"
-//       "─"
-//       "────────────────────────┤");
-//   logger.info(
-//       "  │ QER  │ QFI │    Class     │    GBR     │    MBR     │ Flow "
-//       "Description                         │");
-//   logger.info(
-//       "  │      │     │              │   (kbps)   │   (kbps)   │ " " " " │");
-//   logger.info(
-//       "  "
-//       "├──────┼─────┼──────────────┼────────────┼────────────┼────────────────"
-//       "─"
-//       "─"
-//       "────────────────────────┤");
-
-//   for (const auto& flow : qos_flows) {
-//     std::string desc = flow.flow_description;
-//     if (desc.empty()) {
-//       desc = "Default QoS Flow";
-//     }
-//     if (desc.length() > 50) {
-//       desc = desc.substr(0, 47) + "...";
-//     }
-
-//     logger.info(
-//         "  │ %-4u │ %-3u │    1:%-5u   │ %10u │ %10u │ %-50s │", flow.qer_id,
-//         flow.qfi,
-//         flow.class_id,  // Just the minor number (38, 5460, etc.)
-//         flow.rate_kbps, flow.ceil_kbps, desc.c_str());
-//   }
-
-//   logger.info(
-//       "  "
-//       "└──────┴─────┴──────────────┴────────────┴────────────┴─────────────────"
-//       "─"
-//       "────────────────────────┘");
-//   logger.info("");
-// }
 void DisplayQosFlowTable(
     uint64_t seid, const std::vector<QosFlowInfo>& qos_flows) {
   auto& logger = Logger::upf_app();
@@ -447,12 +394,10 @@ void DisplayQosFlowTable(
       desc = desc.substr(0, 47) + "...";
     }
 
-    // logger.info("  │ %-4u │ %-3u │ 1:%-5u     │ %-10u  │ %-10u │ %-50s │",
-    // flow.qer_id, flow.qfi, flow.class_id, flow.rate_kbps, flow.ceil_kbps,
-    // desc.c_str());
     logger.info(
-        "  │ %-4u │ %-3u │ 1:%-5u      │ %-10u │ %-10u │ %-50s │", flow.qer_id,
-        flow.qfi, flow.class_id, flow.rate_kbps, flow.ceil_kbps, desc.c_str());
+        "  │ %-4u │ %-3u │ 1:%-5u      │ %-10s │ %-10s │ %-50s │", flow.qer_id,
+        flow.qfi, flow.class_id, FormatNumber(flow.rate_kbps).c_str(),
+        FormatNumber(flow.ceil_kbps).c_str(), desc.c_str());
   }
 
   logger.info(

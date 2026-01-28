@@ -52,7 +52,6 @@ uint32_t NextHopFinder::retrieveNextHopIP(uint32_t ipDest) {
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-
 ether_addr* NextHopFinder::retrieveNextHopMAC(uint32_t nextHopIp) {
   std::string cmd        = {};
   struct in_addr addr    = {.s_addr = nextHopIp};
@@ -60,19 +59,31 @@ ether_addr* NextHopFinder::retrieveNextHopMAC(uint32_t nextHopIp) {
   std::string nextHopMac = {};
 
   if (ipAddress) {
+    // cmd = fmt::format(
+    //   "sudo arping -c 1 {} | awk '/from/ {{print $4}}'", ipAddress);
+
     cmd = fmt::format(
-        "sudo arping -c 1 {} | awk '/from/ {{print $4}}'", ipAddress);
+        "sudo arping -c 1 {} 2>/dev/null | grep -oE "
+        "'([0-9a-fA-F]{{2}}:){{5}}[0-9a-fA-F]{{2}}' | head -1",
+        ipAddress);
   }
 
   nextHopMac = CmdRunner::exec(cmd);
+
+  // Trim any whitespace/newlines
+  nextHopMac.erase(
+      std::remove_if(
+          nextHopMac.begin(), nextHopMac.end(),
+          [](unsigned char c) { return std::isspace(c); }),
+      nextHopMac.end());
 
   if (nextHopMac.empty()) {
     Logger::upf_app().error("The Next Hop MAC WAS NOT Retrieved");
     throw std::runtime_error("The Next Hop MAC WAS NOT Retrieved");
   }
 
-  Logger::upf_app().debug(
-      "Next Hop <SRC IP, MAC Address> = <%s, %s>", ipAddress, nextHopMac);
+  // Logger::upf_app().debug(
+  //     "Next Hop <%s> → MAC: %s", ipAddress, nextHopMac.c_str());
 
   return ether_aton(nextHopMac.c_str());
 }

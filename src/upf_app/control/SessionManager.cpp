@@ -953,74 +953,6 @@ std::shared_ptr<pfcp::pfcp_qer> SessionManager::FindQer(
 }
 
 //------------------------------------------------------------------------------
-// // 3GPP TS 29.281 - Retrieve TEID from session
-// uint32_t SessionManager::RetrieveDownlinkTeid(
-//     std::shared_ptr<pfcp::pfcp_session> session) const {
-//   uint32_t teid = 0;
-
-//   for (const auto& pdr : session->pdrs_downlink) {
-//     std::shared_ptr<pfcp::pfcp_far> far;
-//     if (GetFarForPdr(session, pdr, far)) {
-//       pfcp::forwarding_parameters fwd_params;
-//       if (far->get(fwd_params) && fwd_params.outer_header_creation.first) {
-//         teid = fwd_params.outer_header_creation.second.teid;
-//         break;
-//       }
-//     }
-//   }
-
-//   return teid;
-// }
-
-//------------------------------------------------------------------------------
-// Helper function to find the Uplink TEID to update uint64_t
-// uint32_t SessionManager::FindUplinkTeid(uint64_t seid) const {
-//   for (const auto& session : sessions_) {
-//     if (session->get_up_seid() != seid) {
-//       continue;  // Skip to the next session if not matching seid
-//     }
-
-//     for (const auto& pdr : session->pdrs) {
-//       pfcp::pdi pdi;
-//       if (pdr->get(pdi)) {
-//         pfcp::source_interface_t source_interface;
-//         if (pdi.get(source_interface) &&
-//             source_interface.interface_value == pfcp::INTERFACE_VALUE_ACCESS)
-//             {
-//           return session->teid_uplink.teid;
-//         }
-//       }
-//     }
-//   }
-
-//   return 0;  // Return 0 if teid_uplink is not found
-// }
-
-// //------------------------------------------------------------------------------
-// uint32_t SessionManager::RetrieveUplinkTeid(
-//     std::shared_ptr<pfcp::pfcp_session> session) const {
-//   uint32_t ret = 0;  // Default TEID value
-
-//   for (const auto& pdr : session->pdrs_uplink) {
-//     pfcp::pdi pdi;
-//     pfcp::source_interface_t sourceInterface;
-
-//     if (!(pdr->get(pdi) && pdi.get(sourceInterface))) {
-//       Logger::upf_app().error(
-//           "Missing Mandatory IE in pdr: %d", pdr->pdr_id.rule_id);
-//       throw std::runtime_error("Missing Mandatory ie in pdr");
-//     }
-
-//     if (pdr->outer_header_removal.first) {
-//       ret                       = pdi.local_fteid.second.teid;
-//       session->teid_uplink.teid = ret;
-//       break;
-//     }
-//   }
-//   return ret;
-// }
-
-//------------------------------------------------------------------------------
 // Extract uplink TEID directly from PDR (3GPP TS 29.244 Section 8.2.3)
 // This gets the local F-TEID that the UPF listens on for uplink traffic
 //------------------------------------------------------------------------------
@@ -1130,11 +1062,6 @@ uint32_t SessionManager::GetDownlinkTeidFromFar(
 
 void SessionManager::CategorizePdrs(
     std::shared_ptr<pfcp::pfcp_session> session) {
-  // session->pdrs_uplink.clear();
-  // session->pdrs_downlink.clear();
-  // session->qers_uplink.clear();
-  // session->qers_downlink.clear();
-
   for (auto& pdr : session->pdrs) {
     pfcp::pdi pdi;
     pfcp::source_interface_t source_interface;

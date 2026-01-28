@@ -110,6 +110,19 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
 
   Logger::upf_app().info("Removing session " SEID_FMT, seid);
 
+  // Remove QER program if it exists
+  auto qer_it = qer_programs_map_.find(seid);
+  if (qer_it != qer_programs_map_.end()) {
+    Logger::upf_app().debug(
+        "Tearing down QER program for seid " SEID_FMT, seid);
+    qer_it->second->TearDown();
+    qer_programs_map_.erase(qer_it);
+  }
+
+  // Clean up ARP caches
+  session_n6_arp_cache_.erase(seid);
+  session_n3_arp_cache_.erase(seid);
+
   // Remove from session programs map
   auto it = session_programs_map_.find(seid);
   if (it != session_programs_map_.end()) {
@@ -130,6 +143,19 @@ void SessionProgramManager::RemoveAllSessions() {
 
   Logger::upf_app().info("Removing all sessions");
 
+  // Remove all QER programs
+  for (auto& [seid, qer_program] : qer_programs_map_) {
+    Logger::upf_app().debug(
+        "Tearing down QER program for seid " SEID_FMT, seid);
+    qer_program->TearDown();
+  }
+  qer_programs_map_.clear();
+
+  // Clear ARP caches
+  session_n6_arp_cache_.clear();
+  session_n3_arp_cache_.clear();
+
+  // Remove session programs
   session_programs_map_.clear();
   pfcp_programs->clear();
   program_array_.fill(kEmptySlot);
@@ -295,6 +321,10 @@ void SessionProgramManager::CreatePipeline(
     pfcp::source_interface_t source_interface;
     uint16_t pdr_id;
 
+    // Get or create the sets for this session
+    auto& n6_ips_updated = session_n6_arp_cache_[seid];
+    auto& n3_ips_updated = session_n3_arp_cache_[seid];
+
     // Process each PDR in the session
     for (const auto& pdr : session->pdrs) {
       pdr_id = pdr->pdr_id.rule_id;
@@ -366,24 +396,22 @@ void SessionProgramManager::CreatePipeline(
       // Launch async ARP table updates based on source interface
       if (source_interface.interface_value == INTERFACE_VALUE_ACCESS) {
         // Uplink PDR - update N6 ARP (toward Data Network)
-        if (dn_ip > 0) {
+        if ((dn_ip > 0) &&
+            (n6_ips_updated.find(dn_ip) == n6_ips_updated.end())) {
+          n6_ips_updated.insert(dn_ip);  // Mark as updated
+
           std::thread update_arp_n6(
               [this, upf_xdp_program, dn_ip, upf_n6_ip, pdr_id, seid]() {
                 try {
-                  char buf_upf_n6_ip[INET_ADDRSTRLEN];
                   char buf_dn_ip[INET_ADDRSTRLEN];
-
-                  struct in_addr addr_upf_n6_ip = {.s_addr = upf_n6_ip};
-                  struct in_addr addr_dn_ip     = {.s_addr = dn_ip};
-
-                  inet_ntop(
-                      AF_INET, &addr_upf_n6_ip, buf_upf_n6_ip, INET_ADDRSTRLEN);
+                  struct in_addr addr_dn_ip = {.s_addr = dn_ip};
                   inet_ntop(AF_INET, &addr_dn_ip, buf_dn_ip, INET_ADDRSTRLEN);
-                  UpdateArpTableForN6(upf_xdp_program, dn_ip, upf_n6_ip);
+
+                  std::string mac =
+                      UpdateArpTableForN6(upf_xdp_program, dn_ip, upf_n6_ip);
                   Logger::upf_app().debug(
-                      "N6 ARP updated (upf_n6_ip -> dn_ip) : (%s -> %s) "
-                      "[PDR=%u, SEID=%" PRIu64 "]",
-                      buf_upf_n6_ip, buf_dn_ip, pdr_id, seid);
+                      "ARP: %s dev %s lladdr %s [SEID=%" PRIu64 "]", buf_dn_ip,
+                      upf_cfg.n6.if_name.c_str(), mac.c_str(), seid);
                 } catch (const std::exception& ex) {
                   Logger::upf_app().error(
                       "N6 ARP update failed for PDR %u: %s", pdr_id, ex.what());
@@ -394,29 +422,27 @@ void SessionProgramManager::CreatePipeline(
       } else if (source_interface.interface_value == INTERFACE_VALUE_CORE) {
         // Downlink PDR - update N3 ARP (toward gNodeB)
         uint32_t gnb_ip = RetrieveGnbIp(session);
-        if (gnb_ip > 0) {
-          std::thread update_arp_n3(
-              [this, upf_xdp_program, gnb_ip, upf_n3_ip, pdr_id, seid]() {
-                try {
-                  char buf_upf_n3_ip[INET_ADDRSTRLEN];
-                  char buf_gnb_ip[INET_ADDRSTRLEN];
+        if ((gnb_ip > 0) &&
+            (n3_ips_updated.find(gnb_ip) == n3_ips_updated.end())) {
+          n3_ips_updated.insert(gnb_ip);  // Mark as updated
 
-                  struct in_addr addr_upf_n3_ip = {.s_addr = upf_n3_ip};
-                  struct in_addr addr_gnb_ip    = {.s_addr = gnb_ip};
+          std::thread update_arp_n3([this, upf_xdp_program, gnb_ip, upf_n3_ip,
+                                     pdr_id, seid]() {
+            try {
+              char buf_gnb_ip[INET_ADDRSTRLEN];
+              struct in_addr addr_gnb_ip = {.s_addr = gnb_ip};
+              inet_ntop(AF_INET, &addr_gnb_ip, buf_gnb_ip, INET_ADDRSTRLEN);
 
-                  inet_ntop(
-                      AF_INET, &addr_upf_n3_ip, buf_upf_n3_ip, INET_ADDRSTRLEN);
-                  inet_ntop(AF_INET, &addr_gnb_ip, buf_gnb_ip, INET_ADDRSTRLEN);
+              std::string mac =
                   UpdateArpTableForN3(upf_xdp_program, gnb_ip, upf_n3_ip, seid);
-                  Logger::upf_app().debug(
-                      "N3 ARP updated: (upf_n3_ip -> gnb_ip) : (%s -> %s) "
-                      "[PDR=%u, SEID=%" PRIu64 "]",
-                      buf_upf_n3_ip, buf_gnb_ip, pdr_id, seid);
-                } catch (const std::exception& ex) {
-                  Logger::upf_app().error(
-                      "N3 ARP update failed for PDR %u: %s", pdr_id, ex.what());
-                }
-              });
+              Logger::upf_app().debug(
+                  "ARP: %s dev %s lladdr %s [SEID=%" PRIu64 "]", buf_gnb_ip,
+                  upf_cfg.n3.if_name.c_str(), mac.c_str(), seid);
+            } catch (const std::exception& ex) {
+              Logger::upf_app().error(
+                  "N3 ARP update failed for PDR %u: %s", pdr_id, ex.what());
+            }
+          });
           update_arp_n3.detach();
         }
       }
@@ -512,6 +538,10 @@ void SessionProgramManager::ModifyPipeline(
     const uint32_t upf_n3_ip = upf_cfg.n3.addr4.s_addr;
     const uint32_t upf_n6_ip = upf_cfg.n6.addr4.s_addr;
 
+    // Get or create the sets for this session
+    auto& n6_ips_updated = session_n6_arp_cache_[seid];
+    auto& n3_ips_updated = session_n3_arp_cache_[seid];
+
     // Retrieve UE and gNB IPs (mandatory for modification)
     uint32_t ue_ip = RetrieveUeIp(session);
     if (!ue_ip) {
@@ -545,6 +575,11 @@ void SessionProgramManager::ModifyPipeline(
       std::shared_ptr<QERProgram> qer_program =
           std::make_shared<QERProgram>(upf_cfg);
       qer_program->Setup(seid, session->qers_downlink, session->pdrs_downlink);
+
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        qer_programs_map_[seid] = qer_program;
+      }
     }
 
     // Extract TEIDs from uplink PDRs
@@ -553,8 +588,6 @@ void SessionProgramManager::ModifyPipeline(
       uint32_t teid = SessionManager::GetUplinkTeidFromPdr(pdr);
       if (teid != 0) {
         uplink_teids.push_back(teid);
-        logger.debug(
-            "  • Uplink PDR %u: F-TEID " TEID_FMT, pdr->pdr_id.rule_id, teid);
       }
     }
 
@@ -566,9 +599,6 @@ void SessionProgramManager::ModifyPipeline(
         uint32_t teid = SessionManager::GetDownlinkTeidFromFar(far);
         if (teid != 0) {
           downlink_teids.push_back(teid);
-          logger.debug(
-              "  • Downlink PDR %u → FAR %u: TEID " TEID_FMT,
-              pdr->pdr_id.rule_id, far->far_id.far_id, teid);
         }
       }
     }
@@ -581,14 +611,6 @@ void SessionProgramManager::ModifyPipeline(
       // (This maintains backward compatibility with single-TEID maps)
       uint32_t primary_teid_ul = uplink_teids.empty() ? 0 : uplink_teids[0];
       uint32_t primary_teid_dl = downlink_teids.empty() ? 0 : downlink_teids[0];
-
-      char ue_ip_str[INET_ADDRSTRLEN];
-      inet_ntop(AF_INET, &ue_ip, ue_ip_str, sizeof(ue_ip_str));
-
-      logger.debug(
-          "Updating PDU session mapping: UE IP %s, Primary TEIDs: "
-          "UL=" TEID_FMT ", DL=" TEID_FMT ", SEID=" SEID_FMT,
-          ue_ip_str, primary_teid_ul, primary_teid_dl, seid);
 
       StorePduSessionInMap(
           upf_xdp_program, ue_ip, primary_teid_ul, primary_teid_dl, seid);
@@ -621,7 +643,6 @@ void SessionProgramManager::ModifyPipeline(
 
     for (const auto& pdr : session->pdrs) {
       pdr_id = pdr->pdr_id.rule_id;
-      logger.debug("Processing PDR %u on Modification", pdr_id);
 
       // Extract PDI (Packet Detection Information)
       bool has_pdi = pdr->get(pdi) && pdi.get(source_interface);
@@ -662,33 +683,28 @@ void SessionProgramManager::ModifyPipeline(
       auto rules_map = upf_xdp_program->GetRulesMatchPdrMap();
       if (rules_map) {
         rules_map->Update(pdr_key, rules, BPF_ANY);
-        logger.debug(
-            "Updated rules_match_pdr: PDR=%u, SEID=" SEID_FMT, pdr_id, seid);
       }
 
       // Launch async ARP table updates based on source interface
       if (has_pdi) {
         if (source_interface.interface_value == INTERFACE_VALUE_ACCESS) {
           // Uplink PDR - update N6 ARP (toward Data Network)
-          if (dn_ip > 0) {
+          if ((dn_ip > 0) &&
+              (n6_ips_updated.find(dn_ip) == n6_ips_updated.end())) {
+            n6_ips_updated.insert(dn_ip);  // Mark as updated
+
             std::thread update_arp_n6([this, upf_xdp_program, dn_ip, upf_n6_ip,
                                        pdr_id, seid]() {
               try {
-                char buf_upf_n6_ip[INET_ADDRSTRLEN];
                 char buf_dn_ip[INET_ADDRSTRLEN];
-
-                struct in_addr addr_upf_n6_ip = {.s_addr = upf_n6_ip};
-                struct in_addr addr_dn_ip     = {.s_addr = dn_ip};
-
-                inet_ntop(
-                    AF_INET, &addr_upf_n6_ip, buf_upf_n6_ip, INET_ADDRSTRLEN);
+                struct in_addr addr_dn_ip = {.s_addr = dn_ip};
                 inet_ntop(AF_INET, &addr_dn_ip, buf_dn_ip, INET_ADDRSTRLEN);
 
-                UpdateArpTableForN6(upf_xdp_program, dn_ip, upf_n6_ip);
+                std::string mac =
+                    UpdateArpTableForN6(upf_xdp_program, dn_ip, upf_n6_ip);
                 Logger::upf_app().debug(
-                    "N6 ARP updated (upf_n6_ip -> dn_ip) : (%s -> %s) "
-                    "[PDR=%u, SEID=%" PRIu64 "]",
-                    buf_upf_n6_ip, buf_dn_ip, pdr_id, seid);
+                    "ARP: %s dev %s lladdr %s [SEID=%" PRIu64 "]", buf_dn_ip,
+                    upf_cfg.n6.if_name.c_str(), mac.c_str(), seid);
               } catch (const std::exception& ex) {
                 Logger::upf_app().error(
                     "N6 ARP update failed for PDR %u: %s", pdr_id, ex.what());
@@ -698,25 +714,22 @@ void SessionProgramManager::ModifyPipeline(
           }
         } else if (source_interface.interface_value == INTERFACE_VALUE_CORE) {
           // Downlink PDR - update N3 ARP (toward gNodeB)
-          if (gnb_ip > 0) {
+          if ((gnb_ip > 0) &&
+              (n3_ips_updated.find(gnb_ip) == n3_ips_updated.end())) {
+            n3_ips_updated.insert(gnb_ip);  // Mark as updated
+
             std::thread update_arp_n3([this, upf_xdp_program, gnb_ip, upf_n3_ip,
                                        pdr_id, seid]() {
               try {
-                char buf_upf_n3_ip[INET_ADDRSTRLEN];
                 char buf_gnb_ip[INET_ADDRSTRLEN];
-
-                struct in_addr addr_upf_n3_ip = {.s_addr = upf_n3_ip};
-                struct in_addr addr_gnb_ip    = {.s_addr = gnb_ip};
-
-                inet_ntop(
-                    AF_INET, &addr_upf_n3_ip, buf_upf_n3_ip, INET_ADDRSTRLEN);
+                struct in_addr addr_gnb_ip = {.s_addr = gnb_ip};
                 inet_ntop(AF_INET, &addr_gnb_ip, buf_gnb_ip, INET_ADDRSTRLEN);
 
-                UpdateArpTableForN3(upf_xdp_program, gnb_ip, upf_n3_ip, seid);
+                std::string mac = UpdateArpTableForN3(
+                    upf_xdp_program, gnb_ip, upf_n3_ip, seid);
                 Logger::upf_app().debug(
-                    "N3 ARP updated (upf_n3_ip -> gnb_ip) : (%s -> %s) "
-                    "[PDR=%u, SEID=%" PRIu64 "]",
-                    buf_upf_n3_ip, buf_gnb_ip, pdr_id, seid);
+                    "ARP: %s dev %s lladdr %s [SEID=%" PRIu64 "]", buf_gnb_ip,
+                    upf_cfg.n3.if_name.c_str(), mac.c_str(), seid);
               } catch (const std::exception& ex) {
                 Logger::upf_app().error(
                     "N3 ARP update failed for PDR %u: %s", pdr_id, ex.what());
@@ -741,9 +754,6 @@ void SessionProgramManager::ModifyPipeline(
           uint32_t qfi = 0;
           if (qer && qer->qos_flow_id.first) {
             qfi = qer->qos_flow_id.second.qfi;
-            logger.debug(
-                "PDR %u has QFI=%u from QER %u", pdr_id, qfi,
-                pdr->qer_id.second.qer_id);
           }
 
           // Inject QFI into PDI if available
@@ -767,9 +777,6 @@ void SessionProgramManager::ModifyPipeline(
             auto sdf_map = upf_xdp_program->GetSdfFilterMap();
             if (sdf_map) {
               sdf_map->Update(sdf_key, sdf_filter, BPF_ANY);
-              logger.debug(
-                  "Updated SDF filter: SEID=" SEID_FMT ", QFI=%u, Flow='%s'",
-                  seid, qfi, flow_description.c_str());
             }
           } else {
             logger.warn(
@@ -788,9 +795,6 @@ void SessionProgramManager::ModifyPipeline(
     auto session_pdrs_map = upf_xdp_program->GetSessionPdrsMap();
     if (session_pdrs_map) {
       session_pdrs_map->Update(seid, pdrs, BPF_ANY);
-      logger.debug(
-          "Updated session_pdrs map: SEID=" SEID_FMT " with %d PDRs", seid,
-          pdr_index);
     }
 
     logger.info(
@@ -812,7 +816,6 @@ void SessionProgramManager::RemovePipeline(uint64_t seid) {
 
   try {
     RemoveSession(seid);
-
     Logger::upf_app().info("Pipeline removed for session " SEID_FMT, seid);
 
   } catch (const std::exception& e) {
@@ -922,9 +925,6 @@ struct pfcp_pdr SessionProgramManager::ConvertPdr(
             bpf_pdr.pdi.sdf_filter.flow_description,
             pdr->pdi.second.sdf_filter.second.flow_description.c_str(),
             bpf_pdr.pdi.sdf_filter.flow_desc_len);
-        Logger::upf_app().debug(
-            "PDR %u SDF Filter:", bpf_pdr.pdr_id.rule_id,
-            bpf_pdr.pdi.sdf_filter.flow_description);
 
       } catch (const std::bad_alloc& e) {
         // Handle memory allocation failure
@@ -1019,13 +1019,56 @@ struct pfcp_qer SessionProgramManager::ConvertQer(
 // ARP Table Management - RFC 826
 //------------------------------------------------------------------------------
 
+// // 3GPP TS 23.501 Section 5.8.2.3 - N6 Interface
+// void SessionProgramManager::UpdateArpTableForN6(
+//     std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t dn_ip,
+//     uint32_t upf_n6_ip) {
+//   if (!xdp_program) {
+//     Logger::upf_app().error("UpdateArpTable: no XDP program available");
+//     return;
+//   }
+
+//   try {
+//     // Get next hop IP (remote endpoint or gateway)
+//     uint32_t remote_ip = GetNextHopIp(upf_n6_ip, dn_ip);
+
+//     // Convert to proper endianness for MAC lookup
+//     uint32_t ip_for_mac_lookup =
+//         (likely(IsLittleEndian())) ? htole32(remote_ip) : remote_ip;
+
+//     // Retrieve MAC address from ARP cache/routing table
+//     auto remote_mac = NextHopFinder::retrieveNextHopMAC(ip_for_mac_lookup);
+
+//     // Populate ARP entry structure
+//     struct arp_entry entry;
+//     memset(&entry, 0, sizeof(struct arp_entry));
+//     memcpy(entry.mac_address, remote_mac,
+//            ETH_ALEN);  // Copy 6-byte MAC address
+//     entry.ipv4_address = ip_for_mac_lookup;
+
+//     // Update ARP table in BPF map
+//     // xdp_program->GetArpTableMap()->Update(upf_n6_ip, entry, BPF_ANY);
+//     auto arp_table_map = xdp_program->GetMapByName("arp_table_map");
+//     if (arp_table_map) {
+//       arp_table_map->Update(upf_n6_ip, entry, BPF_ANY);
+//     } else {
+//       Logger::upf_app().error("UpdateArpTable: arp_table map not found");
+//     }
+
+//   } catch (const std::exception& ex) {
+//     Logger::upf_app().error(
+//         "Error: The ARP table was not updated for N6 Next HOP: %s",
+//         ex.what());
+//   }
+// }
+
 // 3GPP TS 23.501 Section 5.8.2.3 - N6 Interface
-void SessionProgramManager::UpdateArpTableForN6(
+std::string SessionProgramManager::UpdateArpTableForN6(
     std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t dn_ip,
     uint32_t upf_n6_ip) {
   if (!xdp_program) {
     Logger::upf_app().error("UpdateArpTable: no XDP program available");
-    return;
+    return "00:00:00:00:00:00";
   }
 
   try {
@@ -1039,15 +1082,21 @@ void SessionProgramManager::UpdateArpTableForN6(
     // Retrieve MAC address from ARP cache/routing table
     auto remote_mac = NextHopFinder::retrieveNextHopMAC(ip_for_mac_lookup);
 
+    // Format MAC as string
+    char mac_str[18];
+    snprintf(
+        mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
+        remote_mac->ether_addr_octet[0], remote_mac->ether_addr_octet[1],
+        remote_mac->ether_addr_octet[2], remote_mac->ether_addr_octet[3],
+        remote_mac->ether_addr_octet[4], remote_mac->ether_addr_octet[5]);
+
     // Populate ARP entry structure
     struct arp_entry entry;
     memset(&entry, 0, sizeof(struct arp_entry));
-    memcpy(entry.mac_address, remote_mac,
-           ETH_ALEN);  // Copy 6-byte MAC address
+    memcpy(entry.mac_address, remote_mac, ETH_ALEN);
     entry.ipv4_address = ip_for_mac_lookup;
 
     // Update ARP table in BPF map
-    // xdp_program->GetArpTableMap()->Update(upf_n6_ip, entry, BPF_ANY);
     auto arp_table_map = xdp_program->GetMapByName("arp_table_map");
     if (arp_table_map) {
       arp_table_map->Update(upf_n6_ip, entry, BPF_ANY);
@@ -1055,20 +1104,23 @@ void SessionProgramManager::UpdateArpTableForN6(
       Logger::upf_app().error("UpdateArpTable: arp_table map not found");
     }
 
+    return std::string(mac_str);
+
   } catch (const std::exception& ex) {
     Logger::upf_app().error(
         "Error: The ARP table was not updated for N6 Next HOP: %s", ex.what());
+    return "00:00:00:00:00:00";
   }
 }
 
 //------------------------------------------------------------------------------
 // 3GPP TS 23.501 Section 5.8.2.2 - N3 Interface
-void SessionProgramManager::UpdateArpTableForN3(
+std::string SessionProgramManager::UpdateArpTableForN3(
     std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t gnb_ip,
     uint32_t upf_n3_ip, uint64_t seid) {
   if (!xdp_program) {
     Logger::upf_app().error("UpdateArpTable: no XDP program available");
-    return;
+    return "00:00:00:00:00:00";
   }
 
   try {
@@ -1082,27 +1134,31 @@ void SessionProgramManager::UpdateArpTableForN3(
     // Retrieve MAC address from ARP cache/routing table
     auto remote_mac = NextHopFinder::retrieveNextHopMAC(ip_for_mac_lookup);
 
+    // Format MAC as string
+    char mac_str[18];
+    snprintf(
+        mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
+        remote_mac->ether_addr_octet[0], remote_mac->ether_addr_octet[1],
+        remote_mac->ether_addr_octet[2], remote_mac->ether_addr_octet[3],
+        remote_mac->ether_addr_octet[4], remote_mac->ether_addr_octet[5]);
+
     // Populate ARP entry structure
     struct arp_entry entry;
     memset(&entry, 0, sizeof(struct arp_entry));
-    memcpy(entry.mac_address, remote_mac,
-           ETH_ALEN);  // Copy 6-byte MAC address
+    memcpy(entry.mac_address, remote_mac, ETH_ALEN);
     entry.ipv4_address = ip_for_mac_lookup;
 
     // Update ARP table in BPF map
-    // xdp_program->GetArpTableMap()->Update(upf_n3_ip, entry, BPF_ANY);
     auto arp_table_map = xdp_program->GetMapByName("arp_table_map");
     if (arp_table_map) {
       arp_table_map->Update(upf_n3_ip, entry, BPF_ANY);
     }
 
     for (auto it = pfcp_programs->begin(); it != pfcp_programs->end(); ++it) {
-      // Access the members of the 'farprograms' struct
       uint64_t savedSeid                          = it->seid;
       std::shared_ptr<UPF_XDPProgram> xdp_program = it->xdp_program;
 
       if (savedSeid == seid) {
-        // xdp_program->GetArpTableMap()->Update(upf_n3_ip, entry, BPF_ANY);
         auto arp_table_map = xdp_program->GetMapByName("arp_table_map");
         if (arp_table_map) {
           arp_table_map->Update(upf_n3_ip, entry, BPF_ANY);
@@ -1111,9 +1167,13 @@ void SessionProgramManager::UpdateArpTableForN3(
         }
       }
     }
+
+    return std::string(mac_str);
+
   } catch (const std::exception& ex) {
     Logger::upf_app().error(
         "Error: The ARP table was not updated for N3 Next HOP: %s", ex.what());
+    return "00:00:00:00:00:00";
   }
 }
 

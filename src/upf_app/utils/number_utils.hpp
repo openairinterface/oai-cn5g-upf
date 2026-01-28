@@ -19,7 +19,8 @@ namespace oai::utils {
  *              "space" or "intl" = 10 000 000 (International style)
  * @return Formatted string
  */
-std::string FormatNumber(uint64_t value, const std::string& style = "comma") {
+inline std::string FormatNumber(
+    uint64_t value, const std::string& style = "comma") {
   std::string num_str = std::to_string(value);
   std::string result;
   int count = 0;
@@ -53,7 +54,7 @@ std::string FormatNumber(uint64_t value, const std::string& style = "comma") {
 //==============================================================================
 
 // This uses system locale but might not work on all embedded systems
-std::string FormatNumberLocale(uint64_t value) {
+inline std::string FormatNumberLocale(uint64_t value) {
   std::stringstream ss;
   ss.imbue(std::locale("en_US.UTF-8"));  // or "de_DE.UTF-8" for European
   ss << std::fixed << value;
