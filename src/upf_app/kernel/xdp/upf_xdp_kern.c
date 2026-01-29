@@ -1008,7 +1008,7 @@ static __always_inline struct pfcp_pdr* match_pdr_n6(
       case INTERFACE_VALUE_CORE: {
         /* (N6/CORE) */
         bpf_debug(
-            "( packet_ue_ip,  pdi.ue_ip_address ) : ( %pI4, %pI4 )", &pkt_ue_ip,
+            "( packet_ue_ip, pdi.ue_ip_address ) : ( %pI4, %pI4 )", &pkt_ue_ip,
             &ipaddr);
 
         bpf_debug(
@@ -1026,7 +1026,12 @@ static __always_inline struct pfcp_pdr* match_pdr_n6(
           struct session_qfi sdf_key = {0};
           sdf_key.seid               = seid;
           sdf_key.qfi                = *qfi_out;
-
+          bpf_debug(
+              "######################################## seid %llu, qfi %u",
+              seid, *qfi_out);
+          bpf_debug(
+              "+++++++++++++++++++++++++++++++++++++++++ seid %llu, qfi %u",
+              sdf_key.seid, sdf_key.qfi);
           const struct sdf_filtr* sdf =
               bpf_map_lookup_elem(&sdf_filters_map, &sdf_key);
           if (!sdf) {

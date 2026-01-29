@@ -841,6 +841,12 @@ struct pfcp_far SessionProgramManager::ConvertFar(
   // Apply Action (3GPP TS 29.244 Section 8.2.26)
   memcpy(
       &bpf_far.apply_action, &far->apply_action, sizeof(struct apply_action));
+  // bpf_far.apply_action.drop  = far->apply_action.drop ? 1 : 0;
+  // bpf_far.apply_action.forw  = far->apply_action.forw ? 1 : 0;
+  // bpf_far.apply_action.buff  = far->apply_action.buff ? 1 : 0;
+  // bpf_far.apply_action.nocp  = far->apply_action.nocp ? 1 : 0;
+  // bpf_far.apply_action.dupl  = far->apply_action.dupl ? 1 : 0;
+  // bpf_far.apply_action.spare = 0;
 
   // Forwarding Parameters (3GPP TS 29.244 Section 8.2.74)
   if (far->forwarding_parameters.first) {
