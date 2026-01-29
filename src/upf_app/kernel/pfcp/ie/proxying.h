@@ -45,7 +45,7 @@
  * +---+---+---+---+---+---+---+---+
  */
 struct proxying {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 spare : 6, ins : 1, arp : 1;
 } __attribute__((packed));
 

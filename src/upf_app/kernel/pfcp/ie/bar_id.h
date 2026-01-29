@@ -38,7 +38,7 @@
  * Uniquely identifies a Buffering Action Rule within a PFCP session.
  */
 struct bar_id {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 bar_id;
 } __attribute__((packed));
 

@@ -45,7 +45,7 @@
  * +---+---+---+---+---+---+---+---+
  */
 struct ethernet_pdu_session_information {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 spare : 7, ethi : 1;
 } __attribute__((packed));
 ;

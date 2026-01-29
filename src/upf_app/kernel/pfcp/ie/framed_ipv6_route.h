@@ -40,7 +40,7 @@
  * Format as per RFC 3162 (RADIUS IPv6).
  */
 struct framed_ipv6_route {
-  struct ie_base base;
+  // struct ie_base base;
   char framed_ipv6_route[PFCP_FRAMED_IPV6_ROUTE_MAX_LEN];
 } __attribute__((packed));
 

@@ -39,7 +39,7 @@
  * Octet 0: value, Octet 1: mask
  */
 struct transport_level_marking {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 tos_traffic_class[2];
 } __attribute__((packed));
 

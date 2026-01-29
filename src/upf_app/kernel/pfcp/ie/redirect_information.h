@@ -61,7 +61,7 @@ enum pfcp_redirect_addr_type {
  * +---+---+---+---+---+---+---+---+
  */
 struct redirect_information {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 spare : 4, redirect_address_type : 4;
   __u16 redirect_server_address_length;
   __u8* redirect_server_address;

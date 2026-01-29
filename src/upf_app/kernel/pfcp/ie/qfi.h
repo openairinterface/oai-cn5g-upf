@@ -44,7 +44,7 @@
  * +---+---+---+---+---+---+---+---+
  */
 struct qfi {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 spare : 2, qfi : 6;
 } __attribute__((packed));
 

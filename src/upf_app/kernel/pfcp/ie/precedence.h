@@ -38,7 +38,7 @@
  * Lower value = higher precedence (evaluated first).
  */
 struct precedence {
-  struct ie_base base;
+  // struct ie_base base;
   __u32 precedence;
 } __attribute__((packed));
 

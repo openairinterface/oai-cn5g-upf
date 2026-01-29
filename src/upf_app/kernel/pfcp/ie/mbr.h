@@ -40,7 +40,7 @@
  * Values are in kbps (kilobits per second).
  */
 struct mbr {
-  struct ie_base base;
+  // struct ie_base base;
   __u64 ul_mbr;
   __u64 dl_mbr;
 } __attribute__((packed));

@@ -53,7 +53,7 @@
  * Provisions a Packet Detection Rule for packet classification.
  */
 struct create_pdr {
-  struct ie_base base;
+  // struct ie_base base;
   struct pdr_id pdr_id;
   struct precedence precedence;
   struct pdi pdi;

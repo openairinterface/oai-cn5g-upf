@@ -39,7 +39,7 @@
  * Used for charging and usage monitoring.
  */
 struct urr_id {
-  struct ie_base base;
+  // struct ie_base base;
   __u32 urr_id;
 } __attribute__((packed));
 

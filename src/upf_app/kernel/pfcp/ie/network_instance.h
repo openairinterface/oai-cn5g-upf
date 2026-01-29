@@ -39,7 +39,7 @@
  * Identifies the PDN/Data Network (e.g., "internet", "ims").
  */
 struct network_instance {
-  struct ie_base base;
+  // struct ie_base base;
   char network_instance[PFCP_NETWORK_INSTANCE_MAX_LEN];
 } __attribute__((packed));
 ;

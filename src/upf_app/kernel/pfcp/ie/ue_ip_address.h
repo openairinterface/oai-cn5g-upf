@@ -59,7 +59,7 @@
  * +---+---+---+---+-----+-----+-----+-----+
  */
 struct ue_ip_address {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 spare : 4, ipv6d : 1, sd : 1, v4 : 1, v6 : 1;
   struct in_addr ipv4_address;
   struct in6_addr ipv6_address;

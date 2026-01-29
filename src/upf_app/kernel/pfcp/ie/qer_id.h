@@ -38,7 +38,7 @@
  * Uniquely identifies a QoS Enforcement Rule within a PFCP session.
  */
 struct qer_id {
-  struct ie_base base;
+  // struct ie_base base;
   __u32 qer_id;
 } __attribute__((packed));
 

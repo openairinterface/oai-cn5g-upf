@@ -57,7 +57,7 @@
  * +---+---+---+---+---+---+---+---+
  */
 struct sdf_filter {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 spare : 3, bid : 1, fl : 1, spi : 1, ttc : 1, fd : 1;
   __u16 flow_desc_len;
   char flow_description[PFCP_SDF_FLOW_DESC_MAX_LEN];

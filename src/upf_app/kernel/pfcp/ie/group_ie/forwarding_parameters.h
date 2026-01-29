@@ -53,7 +53,7 @@
  * Contains forwarding instructions when FORWARD action is applied in FAR.
  */
 struct forwarding_parameters {
-  struct ie_base base;
+  // struct ie_base base;
   struct destination_interface destination_interface;
   struct redirect_information redirect_information;
   struct outer_header_creation outer_header_creation;

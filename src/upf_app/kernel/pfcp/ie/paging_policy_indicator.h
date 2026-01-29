@@ -44,7 +44,7 @@
  * +---+---+---+---+---+---+---+---+
  */
 struct paging_policy_indicator {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 spare : 5, ppi_value : 3;
 } __attribute__((packed));
 

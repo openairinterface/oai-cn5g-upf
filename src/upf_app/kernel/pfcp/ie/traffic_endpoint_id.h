@@ -38,7 +38,7 @@
  * Identifies a traffic endpoint within a PDU session.
  */
 struct traffic_endpoint_id {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 traffic_endpoint_id;
 } __attribute__((packed));
 

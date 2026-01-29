@@ -60,7 +60,7 @@
  * +---+---+---+---+---+---+---+---+
  */
 struct fteid {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 spare : 4, chid : 1, ch : 1, v6 : 1, v4 : 1;
   teid_t teid;
   struct in_addr ipv4_address;

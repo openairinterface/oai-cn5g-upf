@@ -76,7 +76,7 @@ enum pfcp_ohc_desc {
  * Presence of fields depends on description flags.
  */
 struct outer_header_creation {
-  struct ie_base base;
+  // struct ie_base base;
   __u16 description;
   teid_t teid;
   struct in_addr ipv4_address;

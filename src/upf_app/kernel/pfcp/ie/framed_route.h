@@ -40,7 +40,7 @@
  * Format as per RFC 2865 (RADIUS).
  */
 struct framed_route {
-  struct ie_base base;
+  // struct ie_base base;
   char framed_route[PFCP_FRAMED_ROUTE_MAX_LEN];
 } __attribute__((packed));
 

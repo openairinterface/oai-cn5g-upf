@@ -45,7 +45,7 @@
  * +---+---+---+---+---+---+---+---+
  */
 struct rqi {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 spare : 7, rqi : 1;
 } __attribute__((packed));
 

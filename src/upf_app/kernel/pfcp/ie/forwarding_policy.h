@@ -40,7 +40,7 @@
  * Identifies a forwarding policy to be applied to matching traffic.
  */
 struct forwarding_policy {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 forwarding_policy_id_len;
   char forwarding_policy_id[PFCP_FORWARDING_POLICY_ID_MAX_LEN];
 } __attribute__((packed));

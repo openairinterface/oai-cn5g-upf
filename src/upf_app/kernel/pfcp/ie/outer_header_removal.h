@@ -64,7 +64,7 @@ enum pfcp_ohr_desc {
  * gtpu_ext_hdr_deletion bit 0: PDU Session Container
  */
 struct outer_header_removal {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 description;
   __u8 gtpu_ext_hdr_deletion;
 } __attribute__((packed));

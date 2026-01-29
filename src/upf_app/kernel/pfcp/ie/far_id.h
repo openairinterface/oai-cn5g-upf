@@ -38,7 +38,7 @@
  * Uniquely identifies a Forwarding Action Rule within a PFCP session.
  */
 struct far_id {
-  struct ie_base base;
+  // struct ie_base base;
   __u32 far_id;
 } __attribute__((packed));
 

@@ -40,7 +40,7 @@
  * Variable length string (e.g., "facebook", "youtube").
  */
 struct application_id {
-  struct ie_base base;
+  // struct ie_base base;
   char application_id[PFCP_APPLICATION_ID_MAX_LEN];
 } __attribute__((packed));
 

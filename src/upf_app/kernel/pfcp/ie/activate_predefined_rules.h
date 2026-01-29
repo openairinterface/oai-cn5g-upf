@@ -40,7 +40,7 @@
  * Variable length string identifying the rule set.
  */
 struct activate_predefined_rules {
-  struct ie_base base;
+  // struct ie_base base;
   char predefined_rules_name[PFCP_PREDEFINED_RULES_NAME_MAX_LEN];
 } __attribute__((packed));
 

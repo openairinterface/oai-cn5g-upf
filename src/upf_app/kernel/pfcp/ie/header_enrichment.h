@@ -58,7 +58,7 @@ enum pfcp_header_type {
  * +---+---+---+---+---+---+---+---+
  */
 struct header_enrichment {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 spare : 3, header_type : 5;
   __u8 header_field_name_len;
   char header_field_name[PFCP_HEADER_FIELD_NAME_MAX_LEN];

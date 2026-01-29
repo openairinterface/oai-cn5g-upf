@@ -39,7 +39,7 @@
  * As per RFC 2865 (RADIUS).
  */
 struct framed_routing {
-  struct ie_base base;
+  // struct ie_base base;
   __u32 framed_routing;
 } __attribute__((packed));
 

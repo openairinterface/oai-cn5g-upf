@@ -47,7 +47,7 @@
  * Provisions a Forwarding Action Rule defining packet actions.
  */
 struct create_far {
-  struct ie_base base;
+  // struct ie_base base;
   struct far_id far_id;
   struct apply_action apply_action;
   struct forwarding_parameters forwarding_parameters;

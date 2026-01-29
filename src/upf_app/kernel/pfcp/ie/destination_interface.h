@@ -53,7 +53,7 @@ enum pfcp_dest_interface_value {
  * @spare: Spare bits (4 bits)
  */
 struct destination_interface {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 spare : 4, interface_value : 4;
 } __attribute__((packed));
 

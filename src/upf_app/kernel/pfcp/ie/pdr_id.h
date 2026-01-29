@@ -38,7 +38,7 @@
  * Uniquely identifies a Packet Detection Rule within a PFCP session.
  */
 struct pdr_id {
-  struct ie_base base;
+  // struct ie_base base;
   __u16 rule_id;
 } __attribute__((packed));
 

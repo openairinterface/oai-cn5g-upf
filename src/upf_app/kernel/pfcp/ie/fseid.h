@@ -52,7 +52,7 @@
  * +---+---+---+---+---+---+---+---+
  */
 struct fseid {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 spare : 6, v4 : 1, v6 : 1;
   __u64 seid;
   struct in_addr ipv4_address;

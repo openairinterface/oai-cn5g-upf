@@ -45,7 +45,7 @@
  * Contains duplication instructions when DUPLICATE action is applied in FAR.
  */
 struct duplicating_parameters {
-  struct ie_base base;
+  // struct ie_base base;
   struct destination_interface destination_interface;
   struct outer_header_creation outer_header_creation;
   struct transport_level_marking transport_level_marking;

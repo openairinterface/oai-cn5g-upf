@@ -62,7 +62,7 @@
  * belonging to a specific PDR (Packet Detection Rule).
  */
 struct pdi {
-  struct ie_base base;
+  // struct ie_base base;
   struct source_interface source_interface;
   struct fteid fteid;
   struct network_instance network_instance;

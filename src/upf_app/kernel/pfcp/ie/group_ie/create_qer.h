@@ -53,7 +53,7 @@
  * Provisions a QoS Enforcement Rule for rate limiting and gating.
  */
 struct create_qer {
-  struct ie_base base;
+  // struct ie_base base;
   struct qer_id qer_id;
   struct qer_correlation_id qer_correlation_id;
   struct gate_status gate_status;

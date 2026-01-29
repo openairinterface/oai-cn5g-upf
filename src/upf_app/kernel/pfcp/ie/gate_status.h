@@ -56,7 +56,7 @@ enum pfcp_gate_status_value {
  * +---+---+---+---+---+---+---+---+
  */
 struct gate_status {
-  struct ie_base base;
+  // struct ie_base base;
   __u8 spare : 4, ul_gate : 2, dl_gate : 2;
 } __attribute__((packed));
 

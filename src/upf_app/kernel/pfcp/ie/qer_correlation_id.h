@@ -38,7 +38,7 @@
  * Correlates QERs across different PFCP sessions or nodes.
  */
 struct qer_correlation_id {
-  struct ie_base base;
+  // struct ie_base base;
   __u32 qer_correlation_id;
 } __attribute__((packed));
 

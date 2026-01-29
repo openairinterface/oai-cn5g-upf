@@ -40,7 +40,7 @@
  * Values are in kbps (kilobits per second).
  */
 struct gbr {
-  struct ie_base base;
+  // struct ie_base base;
   __u64 ul_gbr;
   __u64 dl_gbr;
 } __attribute__((packed));
