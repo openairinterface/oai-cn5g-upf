@@ -45,7 +45,8 @@
  */
 struct qfi {
   // struct ie_base base;
-  __u8 spare : 2, qfi : 6;
+  __u8 qfi : 6;
+  __u8 spare : 2;
 } __attribute__((packed));
 
 #endif /* _PFCP_QFI_H */

@@ -249,11 +249,11 @@ static __always_inline u32 match_sdf_filter(
       pkt_proto);
 
   bpf_debug(
-      "( sdf_saddr/mask, packet_saddr ) : ( %pI4/%pI4, %pI4 )", &sdf_src_ip,
+      "( sdf_saddr/mask,  packet_saddr ) : ( %pI4/%pI4, %pI4 )", &sdf_src_ip,
       &sdf_dst_mask, &pkt_src_ip);
 
   bpf_debug(
-      "( sdf_daddr/mask, packet_daddr ) : ( %pI4/%pI4, %pI4 )", &sdf_dst_ip,
+      "( sdf_daddr/mask,  packet_daddr ) : ( %pI4/%pI4, %pI4 )", &sdf_dst_ip,
       &sdf_dst_mask, &pkt_dst_ip);
 
   bpf_debug(
@@ -942,7 +942,70 @@ static __always_inline struct pfcp_pdr* match_pdr_n3(
 /* ========================================================================== */
 
 /**
- * @brief Find matching PDR with highest precedence for downlink
+ * @brief Calculate SDF filter specificity score for PDR selection
+ *
+ * When multiple PDRs match a packet, this score helps select the most specific
+ * rule. Higher scores indicate more specific matches. This prevents generic
+ * "any protocol" rules (protocol=0) from shadowing specific protocol rules
+ * (protocol=1 for ICMP, protocol=6 for TCP, etc.).
+ *
+ * Scoring factors (in importance order):
+ * 1. Protocol specificity: Exact match (300) > Wildcard (100)
+ * 2. IP subnet mask bits: More specific subnet = higher score
+ * 3. Port range narrowness: Specific ports > Wide ranges
+ *
+ * Example:
+ * - PDR with "permit ip from any to any" (protocol=0): Score ~100
+ * - PDR with "permit icmp from any to 12.1.1.0/24" (protocol=1): Score ~324
+ * → ICMP PDR wins despite having worse precedence
+ *
+ * @param sdf SDF filter to score
+ * @param pkt_proto Packet's IP protocol number (1=ICMP, 6=TCP, 17=UDP, etc.)
+ * @return Specificity score (higher = more specific)
+ */
+static __always_inline u32
+calc_sdf_specificity(const struct sdf_filtr* sdf, u8 pkt_proto) {
+  u32 score = 0;
+
+  /* Protocol specificity (most important factor) */
+  if (sdf->protocol == 0) {
+    /* Protocol=0 means "any IP protocol" - least specific */
+    score += 100;
+  } else if (sdf->protocol == pkt_proto) {
+    /* Exact protocol match - most specific */
+    score += 300;
+  } else {
+    /* Protocol mismatch - should not happen if SDF matched, but handle
+     * gracefully */
+    score += 50;
+  }
+
+  /* IP address specificity - count set bits in subnet masks */
+  u32 src_mask = (u32) (sdf->src_addr.mask >> 96); /* IPv4 is top 32 bits of
+                                                      128-bit field */
+  u32 dst_mask = (u32) (sdf->dst_addr.mask >> 96);
+
+  /* Use builtin popcount for efficient bit counting */
+  score += __builtin_popcount(src_mask); /* 0-32 bits */
+  score += __builtin_popcount(dst_mask); /* 0-32 bits */
+
+  /* Port range specificity - reward narrow ranges */
+  u16 src_port_range = sdf->src_port.upper_bound - sdf->src_port.lower_bound;
+  u16 dst_port_range = sdf->dst_port.upper_bound - sdf->dst_port.lower_bound;
+
+  /* Scale down to prevent overwhelming protocol score */
+  if (src_port_range < 65535) {
+    score += (65535 - src_port_range) / 1000; /* 0-65 points */
+  }
+  if (dst_port_range < 65535) {
+    score += (65535 - dst_port_range) / 1000; /* 0-65 points */
+  }
+
+  return score;
+}
+
+/**
+ * @brief Find matching PDR with highest specificity for downlink
  *
  * Iterates through all PDRs for the session and finds the one that:
  * 1. Has N6 (CORE) as source interface
@@ -966,7 +1029,17 @@ static __always_inline struct pfcp_pdr* match_pdr_n6(
     return NULL;
   }
 
-  /* Iterate through PDRs */
+  /* Variables for tracking best match */
+  struct pfcp_pdr* best_pdr = NULL;
+  u32 best_specificity      = 0;
+  u32 best_precedence       = 0xFFFFFFFF;
+  u8 best_qfi               = 0;
+
+  /* Check if QoS enforcement is enabled for this session */
+  u32* qos_flag    = bpf_map_lookup_elem(&session_qos_enabled_map, &seid);
+  bool qos_enabled = (qos_flag != NULL);
+
+  /* Iterate through ALL PDRs to find best match */
   /*
    * The pragma unrol will be replace with:
    *
@@ -1002,73 +1075,115 @@ static __always_inline struct pfcp_pdr* match_pdr_n6(
       continue;
     }
 
-    /* Retireve source interface */
+    /* Only process downlink PDRs (source interface = CORE) */
     u32 source_interface = pdi.source_interface.interface_value;
-    switch (source_interface) {
-      case INTERFACE_VALUE_CORE: {
-        /* (N6/CORE) */
+    if (source_interface != INTERFACE_VALUE_CORE) {
+      continue;
+    }
+
+    /* Log PDR candidate */
+    // bpf_debug(
+    //     "( packet_ue_ip, pdi.ue_ip_address ) : ( %pI4, %pI4 )", &pkt_ue_ip,
+    //     &ipaddr);
+    // bpf_debug(
+    //     "pdi.source_interface.interface_value: %d",
+    //     pdi.source_interface.interface_value);
+
+    /* Get QFI from PDR */
+    u8 pdr_qfi     = pdi.qfi.qfi;
+    u32 precedence = pdr->precedence.precedence;
+
+    /* If QoS is disabled, return first matching downlink PDR */
+    if (!qos_enabled) {
+      bpf_debug("QoS enforcement not enabled for Session %llu", seid);
+      *qfi_out = pdr_qfi;
+      return pdr;
+    }
+
+    /* QoS enabled - check SDF filter */
+    struct session_qfi sdf_key = {0};
+    sdf_key.seid               = seid;
+    sdf_key.qfi                = pdr_qfi;
+
+    const struct sdf_filtr* sdf =
+        bpf_map_lookup_elem(&sdf_filters_map, &sdf_key);
+
+    if (!sdf) {
+      /* No SDF filter - this is default/non-GBR traffic */
+      bpf_debug(
+          "SDF Filter not found for QFI %u - treating as non-GBR", pdr_qfi);
+
+      /* Only select this if we haven't found a better match yet */
+      if (!best_pdr) {
+        best_pdr        = pdr;
+        best_precedence = precedence;
+        best_qfi        = pdr_qfi;
         bpf_debug(
-            "( packet_ue_ip, pdi.ue_ip_address ) : ( %pI4, %pI4 )", &pkt_ue_ip,
-            &ipaddr);
-
-        bpf_debug(
-            "pdi.source_interface.interface_value: %d",
-            pdi.source_interface.interface_value);
-        *qfi_out = pdi.qfi.qfi;
-
-        // Check if the QoS enforcement is enabled:
-        u32* qos_flag = bpf_map_lookup_elem(&session_qos_enabled_map, &seid);
-
-        if (!qos_flag) {
-          bpf_debug("Qos enforcement not ebabled for Session %llu", seid);
-          return pdr;
-        } else {
-          struct session_qfi sdf_key = {0};
-          sdf_key.seid               = seid;
-          sdf_key.qfi                = *qfi_out;
-          bpf_debug(
-              "######################################## seid %llu, qfi %u",
-              seid, *qfi_out);
-          bpf_debug(
-              "+++++++++++++++++++++++++++++++++++++++++ seid %llu, qfi %u",
-              sdf_key.seid, sdf_key.qfi);
-          const struct sdf_filtr* sdf =
-              bpf_map_lookup_elem(&sdf_filters_map, &sdf_key);
-          if (!sdf) {
-            bpf_debug("SDF Filter not found! This is a NON-GBR Traffic");
-            // TODO:
-            // Treat default qos flow here !!!
-            break;
-          }
-          bpf_debug(
-              "SDF key ( seid, qfi ): ( %llu, %u )", sdf_key.seid, sdf_key.qfi);
-          if (match_sdf_filter(pkt_filter, sdf)) {
-            return pdr;
-          }
-
-          break;
-        }
+            "First match (no SDF): PDR %u (precedence=%u, QFI=%u)",
+            pdr->pdr_id.rule_id, precedence, pdr_qfi);
       }
-      case INTERFACE_VALUE_ACCESS: {
-        /* (N3/ACCESS) */
-        break;
-      }
-      case INTERFACE_VALUE_SGI_LAN_N6_LAN: {
-        // TODO: Perform actions here
-        break;
-      }
-      case INTERFACE_VALUE_LI_FUNCTION: {
-        // TODO: Perform actions here
-        break;
-      }
+      continue;
+    }
 
-      default: {
-        // TODO: Perform actions here
-        break;
-      }
+    /* Log SDF lookup */
+    bpf_debug("SDF key ( seid, qfi ): ( %llu, %u )", sdf_key.seid, sdf_key.qfi);
+
+    /* Check if this PDR's SDF filter matches the packet */
+    if (!match_sdf_filter(pkt_filter, sdf)) {
+      bpf_debug("SDF filter did not match for PDR %u", pdr->pdr_id.rule_id);
+      continue;
+    }
+
+    /* SDF matched! Calculate specificity score */
+    u32 specificity = calc_sdf_specificity(sdf, pkt_filter->protocol);
+
+    bpf_debug("PDR %u Matched: ", pdr->pdr_id.rule_id);
+    bpf_debug("   - Specificity = %u", specificity);
+    bpf_debug("   - Precedence  = %u", precedence);
+    bpf_debug("   - QFI         = %u", pdr_qfi);
+
+    /* Determine if this is a better match than current best */
+    bool is_better = false;
+
+    if (!best_pdr) {
+      /* First match */
+      is_better = true;
+    } else if (specificity > best_specificity) {
+      /* Higher specificity wins */
+      is_better = true;
+      bpf_debug(
+          "PDR %u has higher specificity (%u > %u)", pdr->pdr_id.rule_id,
+          specificity, best_specificity);
+    } else if (
+        (specificity == best_specificity) && (precedence < best_precedence)) {
+      /* Same specificity, use precedence (lower is better) */
+      is_better = true;
+      bpf_debug(
+          "PDR %u has better precedence (%u < %u)", pdr->pdr_id.rule_id,
+          precedence, best_precedence);
+    }
+
+    if (is_better) {
+      best_pdr         = pdr;
+      best_specificity = specificity;
+      best_precedence  = precedence;
+      best_qfi         = pdr_qfi;
+      bpf_debug("New best match PDR %u: ", pdr->pdr_id.rule_id);
+      bpf_debug("   - Specificity = %u", specificity);
+      bpf_debug("   - Precedence  = %u", precedence);
+      bpf_debug("   - QFI         = %u", pdr_qfi);
     }
   }
-  return NULL;
+
+  if (best_pdr) {
+    *qfi_out = best_qfi;
+    bpf_debug("Selected PDR %u :", best_pdr->pdr_id.rule_id);
+    bpf_debug("   - Specificity = %u", best_specificity);
+    bpf_debug("   - Precedence  = %u", best_precedence);
+    bpf_debug("   - QFI         = %u", best_qfi);
+  }
+
+  return best_pdr;
 }
 
 /* ========================================================================== */
