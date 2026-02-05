@@ -29,6 +29,11 @@
 # BUILDER IMAGE
 #---------------------------------------------------------------------
 FROM registry.redhat.io/ubi9/ubi:latest as oai-upf-base
+
+
+ARG EPEL_URL
+ENV EPEL_URL=${EPEL_URL}
+
 ENV IS_DOCKERFILE=1
 
 # Entitlements and RHSM configurations are Open-Shift Secret and ConfigMaps
