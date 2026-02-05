@@ -28,7 +28,12 @@
 #---------------------------------------------------------------------
 # BUILDER IMAGE
 #---------------------------------------------------------------------
-FROM registry.access.redhat.com/ubi9/ubi:latest as oai-upf-base
+FROM registry.redhat.io/ubi9/ubi:latest as oai-upf-base
+
+
+ARG EPEL_URL
+ENV EPEL_URL=${EPEL_URL}
+
 ENV IS_DOCKERFILE=1
 
 # Entitlements and RHSM configurations are Open-Shift Secret and ConfigMaps
@@ -72,7 +77,7 @@ RUN ./build_upf --clean --Verbose --build-type Release --jobs && \
 #---------------------------------------------------------------------
 # TARGET IMAGE
 #---------------------------------------------------------------------
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest as oai-upf
+FROM registry.redhat.io/ubi9/ubi-minimal:latest as oai-upf
 ENV TZ=Europe/Paris
 
 # Copy the entitlements
