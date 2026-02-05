@@ -658,22 +658,26 @@ static __always_inline int extract_pkt_filter(
  * @brief Lookup PFCP session for uplink (N3→N6) traffic
  *
  * For GTP-U encapsulated packets from RAN:
- * 1. Extract TEID from GTP-U header
+ * 1. Extract TEID from GTP-U header (for PDR matching)
  * 2. Extract inner IP (UE IP is source)
  * 3. Lookup session by UE IP
  * 4. Extract QFI from GTP-U extension
+ *
+ * IMPORTANT: This function now also extracts the packet's TEID which is
+ * needed for proper PDR matching per 3GPP TS 29.244.
  *
  * @param data Pointer to packet data
  * @param data_end Pointer to end of packet
  * @param eth Ethernet header
  * @param ue_ip_out Output: UE IP address
  * @param qfi_out Output: QFI from GTP-U extension
+ * @param pkt_teid_out Output: TEID from incoming GTP-U packet (network byte
+ * order)
  * @return Pointer to session_id or NULL
  */
-
 static __always_inline struct session_id* lookup_session_n3(
-    void* data, void* data_end, struct ethhdr* eth, u32* ue_ip_out,
-    u8* qfi_out) {
+    void* data, void* data_end, struct ethhdr* eth, u32* ue_ip_out, u8* qfi_out,
+    u32* pkt_teid_out) {
   if (!eth) {
     return NULL;
   }
@@ -714,6 +718,9 @@ static __always_inline struct session_id* lookup_session_n3(
             GTPU_G_PDU);
         return NULL;
       }
+
+      /* Extract TEID from incoming GTP-U packet for PDR matching */
+      *pkt_teid_out = bpf_htonl(gtpu->teid);
 
       /* Extract QFI from GTP-U extension if present */
       struct gtpu_extn_pdu_session_container* gtpu_ext = (void*) (gtpu + 1);
@@ -900,8 +907,13 @@ static __always_inline struct pfcp_pdr* match_pdr_n3(
     /* Retrieve UE IP from PDI */
     u32 ipaddr = bpf_htonl(pdi.ue_ip_address.ipv4_address.s_addr);
 
-    /* Check UE IP */
-    if (ipaddr != pkt_ue_ip) {
+    /*
+     * Check UE IP match ONLY if present in PDR
+     * Per 3GPP TS 29.244: UE IP is OPTIONAL in PDI for uplink PDRs
+     * Open5GS doesn't include UE IP in uplink PDRs - this is compliant
+     */
+
+    if ((ipaddr != 0) && (ipaddr != pkt_ue_ip)) {
       continue;
     }
 
@@ -1494,11 +1506,12 @@ int xdp_uplink(struct xdp_md* ctx) {
     |----------------- (Find PFCP session with matching PDRs) --------------|
     |-----------------------------------------------------------------------|
     */
-  u32 ue_ip = 0;
-  u8 qfi    = 0;
+  u32 ue_ip    = 0;
+  u8 qfi       = 0;
+  u32 pkt_teid = 0;
 
   struct session_id* session =
-      lookup_session_n3(data, data_end, eth, &ue_ip, &qfi);
+      lookup_session_n3(data, data_end, eth, &ue_ip, &qfi, &pkt_teid);
   // session = lookup_session_n3(data, data_end, eth, &ue_ip, &qfi, &filter);
 
   if (!session) {
@@ -1525,7 +1538,8 @@ int xdp_uplink(struct xdp_md* ctx) {
     |-----------------------------------------------------------------------|
     */
   struct pfcp_pdr* pdr_high_precedence =
-      match_pdr_n3(seid, teid_ul, ue_ip, qfi);
+      match_pdr_n3(seid, pkt_teid, ue_ip, qfi);
+  // match_pdr_n3(seid, teid_ul, ue_ip, qfi);
 
   if (!pdr_high_precedence) {
     bpf_debug(
