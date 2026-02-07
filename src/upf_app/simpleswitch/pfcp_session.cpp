@@ -1489,19 +1489,19 @@ std::string pfcp_session::to_string() const {
         case OUTER_HEADER_CREATION_GTPU_UDP_IPV4: {
           char ip_str[INET_ADDRSTRLEN];
           inet_ntop(AF_INET, &ohc.ipv4_address, ip_str, INET_ADDRSTRLEN);
-          create_hdr = fmt::format("GTP→{}:{:#x}", ip_str, ohc.teid);
+          create_hdr = fmt::format("GTP → {}:{:#x}", ip_str, ohc.teid);
           break;
         }
         case OUTER_HEADER_CREATION_GTPU_UDP_IPV6: {
           char ip_str[INET6_ADDRSTRLEN];
           inet_ntop(AF_INET6, &ohc.ipv6_address, ip_str, INET6_ADDRSTRLEN);
-          create_hdr = fmt::format("GTP6→{}:{:#x}", ip_str, ohc.teid);
+          create_hdr = fmt::format("GTP6 → {}:{:#x}", ip_str, ohc.teid);
           break;
         }
         case OUTER_HEADER_CREATION_UDP_IPV4: {
           char ip_str[INET_ADDRSTRLEN];
           inet_ntop(AF_INET, &ohc.ipv4_address, ip_str, INET_ADDRSTRLEN);
-          create_hdr = fmt::format("UDP→{}", ip_str);
+          create_hdr = fmt::format("UDP → {}", ip_str);
           break;
         }
         case OUTER_HEADER_CREATION_UDP_IPV6: {

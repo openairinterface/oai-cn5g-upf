@@ -31,6 +31,7 @@
 #include <sstream>
 #include <iomanip>
 #include <vector>
+#include <inttypes.h>
 
 using namespace oai::config;
 using namespace oai::utils;
@@ -261,7 +262,7 @@ void DisplayDataPlaneStatus(const upf_config& cfg) {
       "│ session_qos_enabled_map              │ %-36d │", cfg.max_pdu_sessions);
   Logger::upf_app().startup(
       "│ sdf_filters_map                      │ %-36d │",
-      cfg.max_sdf_filters_per_pdu_session);
+      cfg.max_pdu_sessions * cfg.max_sdf_filters_per_pdu_session);
 
   Logger::upf_app().startup(
       "│ upf_interface_map                    │ %-36d │",
@@ -377,7 +378,7 @@ void DisplayQosFlowTable(
       "├──────┬─────┬──────────────┬────────────┬────────────┬─────────────────"
       "───────────────────────────────────┤");
   logger.info(
-      "  │ QER  │ QFI │    Class     │ GBR (kbps) │ MBR (kbps) │               "
+      "  │ QER  │ QFI │    Class     │ GBR (kbps) │ MBR (kbps) │ "
       "   Flow "
       "Description                  │");
   logger.info(

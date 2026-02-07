@@ -101,37 +101,78 @@ void UPF_XDPProgram::ConfigurePfcpSessionLookupMaps(
         "max_pdrs_per_pdu_session exceeds compile-time limit");
   }
 
-  // Compute derived limits
-  uint32_t max_rules_match_pdr =
-      upf_cfg.max_pdrs_per_pdu_session * upf_cfg.max_pdu_sessions;
+  /* Compute Map Sizes:
+   * Two types of maps:
+   *	1. SESSION-SCOPED: size = max_pdu_sessions
+   *	2. GLOBAL/RULE:    size = max_pdu_sessions × per_session_limit
+   */
 
-  uint32_t max_qos_enabling = upf_cfg.max_pdu_sessions;
+  // Session-scoped maps: one entry per session
+  uint32_t max_sessions = upf_cfg.max_pdu_sessions;
 
-  // Configure all map sizes
+  // Global maps: entries across ALL sessions
+  // Total PDR-FAR-QER associations = sessions × PDRs_per_session
+  uint32_t total_pdr_rules = max_sessions * upf_cfg.max_pdrs_per_pdu_session;
+
+  // Total SDF filters = sessions × SDF_filters_per_session
+  uint32_t total_sdf_filters =
+      max_sessions * upf_cfg.max_sdf_filters_per_pdu_session;
+
+  // // Compute derived limits
+  // uint32_t max_rules_match_pdr =
+  //     upf_cfg.max_pdrs_per_pdu_session * upf_cfg.max_pdu_sessions;
+
+  // uint32_t max_qos_enabling = upf_cfg.max_pdu_sessions;
+
+  /**
+   * Configure All Map Sizes:
+   */
+
   bool ok = true;
+
+  // --- INTERFACE MAPS (fixed size) ---
   ok &= ConfigureMapMaxEntries(
       skel->maps.upf_interface_map, "upf_interface_map",
       upf_cfg.max_upf_interfaces);
+
   ok &= ConfigureMapMaxEntries(
       skel->maps.redirect_interfaces_map, "redirect_interfaces_map",
       upf_cfg.max_upf_redirect_interfaces);
+
+  // --- SESSION-SCOPED MAPS (size = max_sessions) ---
   ok &= ConfigureMapMaxEntries(
-      skel->maps.session_by_ue_ip_map, "session_by_ue_ip_map",
-      upf_cfg.max_pdu_sessions);
+      skel->maps.session_by_ue_ip_map, "session_by_ue_ip_map", max_sessions);
+
+  // pdrs_per_session_map: ONE entry per session (value is array of PDRs)
+  // Size = max_sessions, NOT max_pdrs_per_pdu_session!
   ok &= ConfigureMapMaxEntries(
       skel->maps.pdrs_per_session_map, "pdrs_per_session_map",
-      upf_cfg.max_pdrs_per_pdu_session);
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.sdf_filters_map, "sdf_filters_map",
-      upf_cfg.max_sdf_filters_per_pdu_session);
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.arp_table_map, "arp_table_map", upf_cfg.max_arp_entries);
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.rules_match_pdr_map, "rules_match_pdr_map",
-      max_rules_match_pdr);
+      max_sessions); /*max_pdrs_per_pdu_session*/
+
   ok &= ConfigureMapMaxEntries(
       skel->maps.session_qos_enabled_map, "session_qos_enabled_map",
-      max_qos_enabling);
+      max_sessions);
+
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.m_framed_route_mapping, "m_framed_route_mapping",
+      max_sessions);
+
+  // --- GLOBAL RULE MAPS (size = sessions × per_session_limit) ---
+
+  // rules_match_pdr_map: PDR rule associations across ALL sessions
+  // Size = max_sessions × max_pdrs_per_session
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.rules_match_pdr_map, "rules_match_pdr_map", total_pdr_rules);
+
+  // sdf_filters_map: SDF filters across ALL sessions
+  // Size = max_sessions × max_sdf_filters_per_session
+  // CRITICAL: Do NOT use max_sdf_filters_per_pdu_session (that's per-session!)
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.sdf_filters_map, "sdf_filters_map", total_sdf_filters);
+
+  // --- NETWORK MAPS ---
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.arp_table_map, "arp_table_map", upf_cfg.max_arp_entries);
 
   if (!ok) {
     Logger::upf_app().error(
@@ -241,8 +282,9 @@ void UPF_XDPProgram::Setup(bool is_qos_enabled) {
 
   uint32_t udp_interface_index = if_nametoindex(udp_iface.c_str());
   uint32_t gtp_interface_index = if_nametoindex(gtp_iface.c_str());
-  uint32_t uplink_id           = static_cast<uint32_t>(FlowDirection::UPLINK);
-  uint32_t downlink_id         = static_cast<uint32_t>(FlowDirection::DOWNLINK);
+
+  uint32_t uplink_id   = static_cast<uint32_t>(FlowDirection::UPLINK);
+  uint32_t downlink_id = static_cast<uint32_t>(FlowDirection::DOWNLINK);
 
   egress_interface_map_->Update(uplink_id, udp_interface_index, BPF_ANY);
   egress_interface_map_->Update(downlink_id, gtp_interface_index, BPF_ANY);
