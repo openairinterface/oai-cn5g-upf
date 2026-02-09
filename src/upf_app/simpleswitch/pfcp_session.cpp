@@ -1021,22 +1021,69 @@ bool pfcp_session::create(
   }
   */
 
+  // Gate Status is optional, only log if missing
   if (not cr_qer.gate_status.first) {
-    cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
-    offending_ie      = PFCP_IE_GATE_STATUS;
+    // cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
+    // offending_ie      = PFCP_IE_GATE_STATUS;
     // return false;
+    Logger::upf_n4().debug(
+        "QER ID %d: Gate Status not provided", cr_qer.qer_id.second.qer_id);
   }
 
-  if (not cr_qer.maximum_bitrate.first) {
+  // MBR and GBR validation
+  // According to 3GPP TS 29.244:
+  // - For GBR QoS flows: Both MBR and GBR are mandatory
+  // - For non-GBR QoS flows: Only MBR may be present, GBR should not be present
+  // - For best-effort flows: Neither MBR nor GBR are required
+
+  bool has_mbr = cr_qer.maximum_bitrate.first;
+  bool has_gbr = cr_qer.guaranteed_bitrate.first;
+
+  if (has_mbr && has_gbr) {
+    // GBR QoS flow - both present, validate GBR values are <= MBR values
+    Logger::upf_n4().debug(
+        "QER ID %d: GBR QoS flow detected (MBR and GBR present)",
+        cr_qer.qer_id.second.qer_id);
+    // Optionally validate: GBR UL <= MBR UL and GBR DL <= MBR DL
+    if (cr_qer.guaranteed_bitrate.second.ul_gbr >
+            cr_qer.maximum_bitrate.second.ul_mbr ||
+        cr_qer.guaranteed_bitrate.second.dl_gbr >
+            cr_qer.maximum_bitrate.second.dl_mbr) {
+      Logger::upf_n4().warn(
+          "QER ID %d: GBR exceeds MBR (UL_GBR: %lu > UL_MBR: %lu or DL_GBR: "
+          "%lu > DL_MBR: %lu)",
+          cr_qer.qer_id.second.qer_id, cr_qer.guaranteed_bitrate.second.ul_gbr,
+          cr_qer.maximum_bitrate.second.ul_mbr,
+          cr_qer.guaranteed_bitrate.second.dl_gbr,
+          cr_qer.maximum_bitrate.second.dl_mbr);
+    }
+  } else if (has_mbr && !has_gbr) {
+    // Non-GBR QoS flow - only MBR present
+    Logger::upf_n4().debug(
+        "QER ID %d: Non-GBR QoS flow (MBR present, no GBR)",
+        cr_qer.qer_id.second.qer_id);
+  } else if (!has_mbr && has_gbr) {
+    // Invalid: GBR without MBR
     cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
     offending_ie      = PFCP_IE_MBR;
-    // return false;
+    Logger::upf_n4().error(
+        "QER ID %d: GBR provided without MBR (invalid configuration)",
+        cr_qer.qer_id.second.qer_id);
+    return false;
+  } else {
+    // Best-effort flow - neither MBR nor GBR
+    Logger::upf_n4().debug(
+        "QER ID %d: Best-effort QoS flow (no MBR, no GBR)",
+        cr_qer.qer_id.second.qer_id);
   }
 
-  if (not cr_qer.guaranteed_bitrate.first) {
+  // QFI is mandatory according to 3GPP TS 29.244
+  if (not cr_qer.qos_flow_identifier.first) {
     cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
-    offending_ie      = PFCP_IE_GBR;
-    // return false;
+    offending_ie      = PFCP_IE_QFI;
+    Logger::upf_n4().error(
+        "QER ID %d: QFI is mandatory but missing", cr_qer.qer_id.second.qer_id);
+    return false;
   }
 
   /*
@@ -1054,12 +1101,6 @@ bool pfcp_session::create(
     return false;
   }
   */
-
-  if (not cr_qer.qos_flow_identifier.first) {
-    cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
-    offending_ie      = PFCP_IE_QFI;
-    // return false;
-  }
 
   /*
   if (not cr_qer.reflective_qos.first) {
