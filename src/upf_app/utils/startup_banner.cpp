@@ -379,8 +379,8 @@ void DisplayQosFlowTable(
       "───────────────────────────────────┤");
   logger.info(
       "  │ QER  │ QFI │    Class     │ GBR (kbps) │ MBR (kbps) │ "
-      "   Flow "
-      "Description                  │");
+      "              Flow "
+      "Description                     │");
   logger.info(
       "  "
       "├──────┼─────┼──────────────┼────────────┼────────────┼─────────────────"
