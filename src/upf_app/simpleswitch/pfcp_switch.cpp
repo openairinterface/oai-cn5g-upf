@@ -930,14 +930,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     resp->seid = session->cp_fseid.seid;
 
     for (auto it : req->pfcp_ies.remove_pdrs) {
-      if (isBpfAccelerationEnabled) {
-        Logger::upf_app().info("Modify datapath:remove(pdr)");
-        call_datapath(
-            NULL, req, NULL, session, spSessionManager,
-            &SessionManager::SessionManager::
-                modifyBpfSession /*&SessionManager::updateBpfSession*/);
-      }
-
       remove_pdr& pdr = it;
 
       if (not session->remove(pdr, cause, offending_ie.offending_ie)) {
@@ -953,14 +945,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.remove_fars) {
-        if (isBpfAccelerationEnabled) {
-          Logger::upf_app().info("Modify datapath: remove(far)");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::
-                  modifyBpfSession /*&SessionManager::updateBpfSession*/);
-        }
-
         remove_far& far = it;
 
         if (not session->remove(far, cause, offending_ie.offending_ie)) {
@@ -978,25 +962,17 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     /*
      *  Add remove_qers
      */
-    if (isBpfAccelerationEnabled) {
-      if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
-        for (auto it : req->pfcp_ies.remove_qers) {
-          Logger::upf_app().info("Modify datapath: remove(qer)");
-          call_datapath(
-              NULL, req, NULL, session, spSessionManager,
-              &SessionManager::
-                  modifyBpfSession /*&SessionManager::updateBpfSession*/);
+    if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+      for (auto it : req->pfcp_ies.remove_qers) {
+        remove_qer& qer = it;
 
-          remove_qer& qer = it;
-
-          if (not session->remove(qer, cause, offending_ie.offending_ie)) {
-            if (cause.cause_value ==
-                CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
-              failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_QER;
-              failed_rule.rule_id_value = qer.qer_id.second.qer_id;
-              resp->pfcp_ies.set(failed_rule);
-              break;
-            }
+        if (not session->remove(qer, cause, offending_ie.offending_ie)) {
+          if (cause.cause_value ==
+              CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
+            failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_QER;
+            failed_rule.rule_id_value = qer.qer_id.second.qer_id;
+            resp->pfcp_ies.set(failed_rule);
+            break;
           }
         }
       }

@@ -1,5 +1,24 @@
 # RELEASE NOTES: #
 
+## v2.2.0 -- December 2025 ##
+* Features
+  - Framed routing for simple switch UPF
+  - Ethernet PDU session 
+  - Configure eBPF map sizes via config file
+  - Manipulate BPF debug logging 
+  - Support QoS enforcement 
+* Fixes
+  - Fix the pFAR add to map
+  - Apply SEID fix on framed routing change
+  - Fix XDP_DROP does not exit in TC
+  - Update code to manage the TC BPF program separately 
+* Future Fixes
+  - Add support for framed routing for eBPF UPF
+  - Improve throughput of simple switch UPF
+  - Add support for Ubuntu 24.04 
+  - Add support for RHEL 10, update container images to UBI 10
+
+
 ## v2.1.0 -- August 2024 ##
 
 * Features
