@@ -376,8 +376,9 @@ void QERProgram::Setup(
 
         uint64_t dl_rate = 1;
 
-        if (qer->guaranteed_bitrate.first) {
-          dl_rate = std::max(qer->guaranteed_bitrate.second.dl_gbr, 1UL);
+        if (not qer->guaranteed_bitrate.first) {
+          dl_rate = std::max(static_cast<unsigned long>(dl_ceil * 0.8), 1UL);
+          Logger::upf_app().warn("QoS Flow missing GBR: set it to 0.8 x MBR");
         }
 
         Logger::upf_app().info(
