@@ -76,7 +76,7 @@
 #include "protocols/gtpu.h"
 #include "utils/csum.h"
 #include "utils/logger.h"
-#include "utils/utils.h"
+#include "utils/bpf_utils.h"
 #include "interfaces.h"
 #include "sdf_filter.h"
 #include "qer_maps.h"

@@ -295,6 +295,8 @@ class upf_support_features : public config_type {
    */
   option_config_value m_enable_fr{};
 
+  // option_config_value m_ignore_qfi_for_uplink{};
+
   /**
    * @brief Enable Ethernet PDU sessions
    *

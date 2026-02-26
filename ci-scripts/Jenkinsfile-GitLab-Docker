@@ -69,6 +69,9 @@ Namespace = 'oaicicd-core'
 // Openshift server URL
 server = 'https://api.oai.cs.eurecom.fr:6443'
 
+// For EPEL Packages - RHEL
+EpelPackage = params.EpelPackageUrl
+
 // Docker build options
 dockerBuildOptions = '--no-cache '
 
@@ -264,6 +267,12 @@ pipeline {
                   // Building
                   sh "oc delete -f openshift/build-config.yaml || true"
                   sh "sed -i -e 's@oai-upf:latest@oai-upf:${upf_tag}@g' openshift/build-config.yaml"
+                  sh """
+sed -i '/^[[:space:]]*dockerfilePath:/a\\
+            buildArgs:\\
+              - name: EPEL_URL\\
+                value: "${EpelPackage}"' openshift/build-config.yaml
+""" // for epel packages
                   sh "oc project ${Namespace}"
                   sh "oc create -f openshift/build-config.yaml"
                   // Trick to bypass bpftool build
@@ -275,7 +284,7 @@ pipeline {
                     sh "cp /home/oaicicd-cn/kernel-no-download/bpftool-5-14.tar.gz build/ext"
                   }
                   // Starting the build
-                  sh 'oc start-build upf-build-cfg  --from-dir=./ --exclude=""'
+                  sh "oc start-build upf-build-cfg  --from-dir=./ --exclude=''"
                   // need python to wait for pod upf-build-cfg-1-build to be Completed or Error
                   // it fails if it detects error or timeout at 20 minutes
                   sh "./ci-scripts/common/python/check_build_pod_status.py --pod-name upf-build-cfg-1-build --log-file archives/upf_rhel_image_build.log"

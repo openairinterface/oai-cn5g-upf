@@ -2,6 +2,7 @@
 #define CUSTOM_TYPES_H
 
 #include <linux/types.h>
+#include <stdbool.h>
 
 //#pragma once
 typedef unsigned __int128 __u128;
@@ -24,6 +25,16 @@ enum FlowDirection {
   DOWNLINK = 0 /**< N3 to N6 direction (RAN to Data Network) */,
   UPLINK   = 1 /**< N6 to N3 direction (Data Network to RAN) */
 };
+
+// /*
+//  * Configuration structure for PDR lookup behavior.
+//  * This is read-only data (.rodata) that can be configured from userspace
+//  before
+//  * loading.
+//  */
+// struct pdr_lookup_config {
+//   bool ignore_qfi_for_uplink;
+// };
 
 #define BPF_ANNOTATE_KV_PAIR(name, type_key, type_val)                         \
   struct ____btf_map_##name {                                                  \

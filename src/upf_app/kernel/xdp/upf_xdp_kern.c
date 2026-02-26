@@ -68,7 +68,8 @@
 /* Utilities */
 #include "utils/csum.h"
 #include "utils/logger.h"
-#include "utils/utils.h"
+#include "utils/bpf_utils.h"
+#include "utils/types.h"
 
 /* Protocols */
 #include "protocols/gtpu.h"
@@ -85,30 +86,6 @@
 #include "framed_routing_bpf.h"
 #include "xdp_stats_kern.h"
 #include "xdp_stats_kern_user.h"
-
-/* ========================================================================== */
-/*                          CONSTANTS AND MACROS                              */
-/* ========================================================================== */
-
-/**
- * @brief Return codes for internal functions
- *
- * These codes provide fine-grained control over packet processing decisions.
- * They are converted to XDP actions at the entry point functions.
- */
-typedef enum {
-  RET_FAILURE  = -1, /**< Operation failed, packet may be recoverable */
-  RET_SUCCESS  = 0,  /**< Operation completed successfully */
-  RET_PASS     = 1,  /**< Pass packet to kernel stack or TC */
-  RET_DROP     = 2,  /**< Drop packet immediately */
-  RET_REDIRECT = 3,  /**< Redirect packet to another interface */
-} return_code;
-
-/**
- * @brief Traffic direction constants
- */
-#define DIR_UPLINK 0   /**< N3 to N6 direction (RAN to Data Network) */
-#define DIR_DOWNLINK 1 /**< N6 to N3 direction (Data Network to RAN) */
 
 #define IP_DF 0x4000 /* Don't fragment; Fragment offset = 0 */
 /* ========================================================================== */
