@@ -19,11 +19,20 @@
  *      contact@openairinterface.org
  */
 
+// clang-format off
+/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
+ * Date:        2026-03
+ * Changes:     Boy Scout cleanup — changelog and @date normalised.
+ *              No functional changes.
+ * 3GPP Refs:   n/a — no PFCP §-refs in this file.
+ */
+// clang-format on
+
 /**
  * @file BPFProgram.cpp
  * @brief Implementation of BPF program base class
- * @author OpenAirInterface
- * @date 2025
+ * @author OpenAirInterface, Franck Messaoudi
+ * @date 2025 / 2026-03
  */
 
 #include "BPFProgram.h"

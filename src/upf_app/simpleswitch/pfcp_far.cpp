@@ -19,6 +19,36 @@
  *      contact@openairinterface.org
  */
 
+// clang-format off
+/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
+ * Date:        2026-03
+ * Changes:     Boy Scout cleanup — Doxygen, 3GPP §-refs, separator lines,
+ *              Google C++ include order.
+ *              V17.10.0 harmonisation:
+ *                - Version bump V17.6.0 → V17.10.0.
+ *                - Fixed §8.2.17 → §8.2.26 (Apply Action) in section header
+ *                  and inline comment.
+ *                - Fixed §8.2.15 → grouped IE type=4 (Forwarding Parameters)
+ *                  in inline comment.
+ *                - Fixed update() parameter: renamed update → updated_far
+ *                  (shadowed method name — boy scout fix).
+ *                - Added §-refs, interface applicability, and Table 7.5.4.3-1
+ *                  cross-references to every IE line in update().
+ *                - Added TODO stubs for IEs absent from lib: Redundant
+ *                  Transmission Forwarding Parameters (grouped=270), Add MBS
+ *                  Unicast Parameters (grouped=302), Remove MBS Unicast
+ *                  Parameters (grouped=303).
+ *                - Fixed cause_value not set on success in update() —
+ *                  was returning true with cause_value uninitialised.
+ *                - Fixed build error: added reinterpret_cast<struct ::iphdr*>
+ *                  at no_internal_loop() / send_to_core() call sites.
+ *                  pfcp_far.cpp does `using namespace pfcp` so unqualified
+ *                  `iphdr` resolves to pfcp::iphdr; pfcp_switch expects the
+ *                  Linux kernel ::iphdr.  Both types are layout-identical.
+ * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
+ */
+// clang-format on
+
 /*! \file pfcp_far.cpp
    \author  Lionel GAUTHIER
    \date 2019
@@ -26,17 +56,29 @@
 */
 
 #include "pfcp_far.hpp"
-#include "pfcp_switch.hpp"
-#include "upf_config.hpp"
-#include "simple_switch.hpp"
 
-using namespace pfcp;
+#include "logger.hpp"
+#include "simple_switch.hpp"
+#include "upf_config.hpp"
+#include "pfcp_switch.hpp"
+
+// using namespace pfcp;
 using namespace oai::upf::app;
 using namespace oai::config;
 
 extern pfcp_switch* pfcp_switch_inst;
 extern upf_n3* upf_n3_inst;
 extern upf_config upf_cfg;
+
+namespace pfcp {
+//------------------------------------------------------------------------------
+// apply_forwarding_rules — execute the FAR action on a matched packet.
+// Apply Action flags (3GPP TS 29.244 V17.10.0 §8.2.26):
+//   forw — Forward packet per Forwarding Parameters (grouped IE type=4)
+//   drop — Silently discard the packet
+//   buff — Buffer packet; caller sets buff=true and handles buffering
+//   nocp — Notify CP; caller sets nocp=true and triggers CP report
+//   dupl — Duplicate (TODO — not yet implemented)
 
 //------------------------------------------------------------------------------
 void pfcp_far::apply_forwarding_rules(
@@ -80,7 +122,12 @@ void pfcp_far::apply_forwarding_rules(
             rule.destination_interface.second.interface_value ==
                 INTERFACE_VALUE_CP_FUNCTION) {
           if (!upf_cfg.enable_bpf_datapath) {
-            if (pfcp_switch_inst->no_internal_loop(iph, num_bytes)) {
+            // Cast required: `using namespace pfcp` makes unqualified `iphdr`
+            // resolve to pfcp::iphdr here, but no_internal_loop / send_to_core
+            // expect the Linux kernel ::iphdr.  The two types are
+            // layout-identical so reinterpret_cast is safe.
+            if (pfcp_switch_inst->no_internal_loop(
+                    reinterpret_cast<struct ::iphdr*>(iph), num_bytes)) {
               pfcp_switch_inst->send_to_core(
                   reinterpret_cast<char* const>(iph), num_bytes);
             }
@@ -88,13 +135,14 @@ void pfcp_far::apply_forwarding_rules(
         } else {
         }
       } else {
-        // Mandatory IE
+        // Destination Interface is mandatory when apply_action.forw is set
       }
     } else {
-      // Mandatory if FW set in apply action
+      // Forwarding Parameters mandatory when forw flag is set (grouped IE
+      // type=4)
     }
   } else if (apply_action.drop) {
-    // DONE !
+    // Drop — nothing to do, packet is silently discarded
   } else if (apply_action.buff) {
     buff = true;
   }
@@ -105,28 +153,52 @@ void pfcp_far::apply_forwarding_rules(
 }
 
 //------------------------------------------------------------------------------
-bool pfcp_far::update(const pfcp::update_far& update, uint8_t& cause_value) {
-  set(update.apply_action.second);
-  if (update.update_forwarding_parameters.first) {
+// update() — 3GPP TS 29.244 V17.10.0 Table 7.5.4.3-1 (Update FAR).
+// Patches apply_action and forwarding/duplicating parameters in-place.
+// PFCPSMReq-Flags (§8.2.31) is tracked but not yet fully handled.
+
+//------------------------------------------------------------------------------
+bool pfcp_far::update(
+    const pfcp::update_far& updated_far, uint8_t& cause_value) {
+  // 3GPP TS 29.244 V17.10.0 Table 7.5.4.3-1 — Update FAR IEs
+  set(updated_far.apply_action.second);  // §8.2.26 — Sxa+Sxb+Sxc+N4+N4mb (C)
+
+  if (updated_far.update_forwarding_parameters.first) {
+    // Update Forwarding Parameters — grouped IE type=11, Table 7.5.4.3-2
+    // Sxa+Sxb+Sxc+N4
     forwarding_parameters.first = true;
     forwarding_parameters.second.update(
-        update.update_forwarding_parameters.second);
-    if (update.update_forwarding_parameters.second.pfcpsmreq_flags.first) {
-      // TODO: Implement handling of PFCPSMReq-Flags (3GPP TS 29.244
-      // Section 8.2.31)
-      // The flags indicate:
-      // - DROBU: Drop Buffered Packets - should trigger dropping of buffered DL
-      // packets
-      // - SNDEM: Send End Marker packets - should trigger sending GTP-U End
-      // Marker
-      // - QAURR: Query URR - should trigger immediate usage report for
-      // associated URRs Currently the UPF does not actively use these flags
+        updated_far.update_forwarding_parameters.second);
+
+    if (updated_far.update_forwarding_parameters.second.pfcpsmreq_flags.first) {
+      // TODO §8.2.31 — PFCPSMReq-Flags (Table 7.5.4.3-2, Sxa+Sxb+Sxc+N4):
+      //   DROBU: Drop Buffered Packets — trigger dropping of buffered DL pkts.
+      //   SNDEM: Send End Marker — trigger GTP-U End Marker towards gNB.
+      //   QAURR: Query URR — trigger immediate usage report for assoc. URRs.
+      //   Currently not handled; add when SNDEM/DROBU signalling is needed.
     }
   }
-  if (update.update_duplicating_parameters.first) {
+
+  if (updated_far.update_duplicating_parameters.first) {
+    // Update Duplicating Parameters — grouped IE type=105, Table 7.5.4.3-3
+    // Sxa+Sxb only
+    duplicating_parameters.first = true;
     duplicating_parameters.second.update(
-        update.update_duplicating_parameters.second);
+        updated_far.update_duplicating_parameters.second);
   }
-  if (update.get(bar_id.second)) bar_id.first = true;
+
+  if (updated_far.get(bar_id.second))
+    bar_id.first = true;  // §8.2.57 — Sxa+N4 (C)
+
+  // TODO grouped=270 — Redundant Transmission Forwarding Parameters
+  //   (C, N4 only, Table 7.5.4.3-1). Not in lib; add when N4 redundant
+  //   transmission is needed.
+  // TODO grouped=302 — Add MBS Unicast Parameters
+  //   (C, N4mb only, Table 7.5.4.3-1). Not in lib.
+  // TODO grouped=303 — Remove MBS Unicast Parameters
+  //   (C, N4mb only, Table 7.5.4.3-1). Not in lib.
+
+  cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
   return true;
 }
+}  // namespace pfcp

@@ -19,11 +19,22 @@
  *      contact@openairinterface.org
  */
 
+// clang-format off
+/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
+ * Date:        2026-03
+ * Changes:     Boy Scout cleanup:
+ *                - Removed duplicate @note "Follows Google C++ Style Guide"
+ *                  from both @file and @class blocks — adds no information.
+ *                - Added changelog block with clang-format guards.
+ * 3GPP Refs:   n/a — no PFCP §-refs in this file.
+ */
+// clang-format on
+
 /**
  * @file BPFProgram.h
  * @brief Base class for BPF/eBPF programs in UPF
- * @author OpenAirInterface
- * @date 2025
+ * @author OpenAirInterface, Franck Messaoudi
+ * @date 2025 / 2026-03
  *
  * This is the abstract base class for all BPF/eBPF programs used in the
  * User Plane Function. It provides common functionality like program ID
@@ -56,8 +67,6 @@
  *
  * Thread Safety: ID counter is NOT thread-safe. Create programs sequentially
  * during initialization.
- *
- * @note This implementation follows Google C++ Style Guide
  */
 class BPFProgram {
  public:

@@ -19,43 +19,76 @@
  *      contact@openairinterface.org
  */
 
+// clang-format off
+/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
+ * Date:        2026-03
+ * Changes:     Boy Scout cleanup — changelog, Doxygen improvements.
+ *              V17.10.0 harmonisation:
+ *                - Added "session_rules_enabled_map" alias to GetMapByName()
+ *                  docstring (renamed from session_qos_enabled_map in the
+ *                  rules-enabled-flags refactor).
+ *                - Documented missing maps in GetMapByName() alias table:
+ *                  urr_config_map, urr_volume_map, bar_config_map,
+ *                  bar_state_map, mar_rules_map, feature_dispatch_map.
+ *                - Clarified that @note "Follows Google C++ Style Guide"
+ *                  adds no information; removed from @class block.
+ *                - Removed `extern upf_config upf_cfg` forward-declaration
+ *                  note (upf_cfg access moved to upf_xdp_user.cpp only; the
+ *                  header need not mention it).
+ * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
+ *              3GPP TS 23.501          (Release 17)           — 5G System Arch.
+ */
+// clang-format on
+
 /**
  * @file upf_xdp_user.h
- * @brief XDP program management for UPF packet processing
- * @author OpenAirInterface
- * @date 2025
+ * @brief XDP pipeline manager for UPF packet processing
+ * @author OpenAirInterface, Franck Messaoudi
+ * @date 2025 / 2026-03
  *
- * This class manages XDP (eXpress Data Path) programs for fast-path packet
- * processing in the User Plane Function. XDP provides kernel-bypass packet
- * processing with hardware offload capabilities.
+ * UPF_XDPProgram manages the complete BPF tail-call pipeline for fast-path
+ * packet processing.  The monolithic XDP program has been decomposed into
+ * modular stages connected via BPF PROG_ARRAY tail calls.
  *
- * Key Features:
- * - Dual XDP programs: Uplink (GTP-U/N3) and Downlink (UDP/N6)
- * - Session-based packet forwarding with BPF maps
- * - ARP resolution for next-hop forwarding
- * - PDR (Packet Detection Rules) matching
- * - SDF (Service Data Flow) filtering
- * - QoS enablement per session
- * - Framed routing support for advanced routing scenarios
+ * Pipeline Architecture
+ * ---------------------
+ *   Entry (N3/N6) → Session Lookup → PDR Match → FAR
+ *                                              └→ QER → URR → MAR
+ *                                                          └→ BAR (terminal)
  *
- * Architecture:
- * - Uplink: GTP-U packets from N3 interface → decapsulation → routing
- * - Downlink: IP packets from N6 interface → encapsulation → forwarding
+ * Entry Points (selected by PipelineFeatureFlags::pdu_type)
+ * ----------------------------------------------------------
+ *   IP PDU:  upf_n3_entry  on N3,  upf_n6_entry  on N6
+ *   ETH PDU: upf_n3_eth_entry on N3, upf_n6_eth_entry on N6
  *
- * XDP Hook Points:
- * - N3 (GTP) interface: xdp_uplink section
- * - N6 (UDP) interface: xdp_downlink or xdp_qos section
+ * PROG_ARRAY Slots (feature_dispatch_map)
+ * ----------------------------------------
+ *   0  PROG_SESSION_LOOKUP  — always loaded (ip or eth variant)
+ *   1  PROG_PDR_MATCH       — always loaded
+ *   2  PROG_FAR             — always loaded
+ *   3  PROG_QER             — loaded when enable_qos
+ *   4  PROG_URR             — loaded when enable_urr
+ *   5  PROG_BAR             — loaded when enable_bar
+ *   6  PROG_MAR             — loaded when enable_mar
+ *   7  PROG_FRAMED_ROUTING  — loaded when enable_framed_routing
+ *   8  PROG_ETH_PDU_BROADCAST — loaded when ETH PDU type
+ *
+ * All programs share maps via BTF map linking (same name+type = same map).
+ * Per-packet context is passed via BPF_MAP_TYPE_PERCPU_ARRAY (zero overhead).
  *
  * BPF Maps Managed:
- * - session_by_ue_ip_map: UE IP → Session ID mapping
- * - arp_table_map: ARP resolution table
- * - redirect_interfaces_map: Interface redirection
- * - upf_interface_map: UPF reference points (N3, N4, N6)
- * - pdrs_per_session_map: PDRs for each session
- * - rules_match_pdr_map: Rule matching state
- * - sdf_filters_map: SDF filter definitions
- * - session_qos_enabled_map: QoS enablement per session
- * - framed_route_mapping: Framed routing mappings
+ *   - packet_ctx_map: Per-CPU scratch for inter-stage context
+ *   - feature_dispatch_map: PROG_ARRAY for tail calls
+ *   - session_by_ue_ip_map: UE IP → Session ID mapping
+ *   - session_by_mac_map: UE MAC → Session ID (ETH PDU only)
+ *   - arp_table_map: ARP resolution table
+ *   - redirect_interfaces_map: Interface redirection
+ *   - upf_interface_map: UPF reference points (N3, N4, N6)
+ *   - pdrs_per_session_map: PDRs for each session
+ *   - rules_match_pdr_map: Rule matching state
+ *   - sdf_filters_map: SDF filter definitions
+ *   - session_qos_enabled_map: QoS enablement per session
+ *   - framed_route_mapping: Framed routing mappings
  *
  * XDP Performance:
  * - Native/Driver mode: Best performance, hardware offload
@@ -63,10 +96,10 @@
  * - Typical throughput: 10-40 Gbps depending on hardware
  *
  * Reference Standards:
- * - Linux XDP: https://www.kernel.org/doc/html/latest/networking/af_xdp.html
- * - 3GPP TS 29.281: GTP-U protocol
- * - 3GPP TS 29.244: PFCP protocol for session management
- * - 3GPP TS 23.501: 5G System Architecture (N3, N6 interfaces)
+ *   - Linux XDP: kernel.org/doc/html/latest/networking/af_xdp.html
+ *   - 3GPP TS 29.281: GTP-U protocol
+ *   - 3GPP TS 29.244: PFCP protocol for session management
+ *   - 3GPP TS 23.501: 5G System Architecture (N3, N6 interfaces)
  *
  * @note This implementation follows Google C++ Style Guide
  */
@@ -82,15 +115,21 @@
 #include <wrappers/BPFMap.hpp>
 #include "interfaces.h"
 #include <framed_routing_bpf.h>
-#include "upf_config.hpp"
+#include "upf_network_config.h"  // upf::g_net_cfg — no upf_config.hpp needed
 #include "BPFProgram.h"
-
-using namespace oai::config;
-extern upf_config upf_cfg;
 
 // Forward declarations
 class BPFMaps;
 class BPFMap;
+
+// ==========================================================================
+// Pipeline configuration types
+// ==========================================================================
+
+// PduSessionType, PipelineFeatureFlags, and ProgIndex are defined in
+// include/upf_pipeline_config.h — visible to control/, user/, and kernel/
+// without any cross-folder dependency or generated-skeleton dependency.
+#include "upf_pipeline_config.h"
 
 /**
  * @brief Type alias for XDP program lifecycle management
@@ -100,67 +139,60 @@ class BPFMap;
  */
 using UPF_XDPProgramLifeCycle = ProgramLifeCycle<upf_xdp_kern_c>;
 
+// ==========================================================================
+// UPF_XDPProgram
+// ==========================================================================
+
 /**
  * @class UPF_XDPProgram
- * @brief Manages XDP programs for User Plane Function packet processing
+ * @brief Manages the BPF tail-call pipeline for UPF packet processing
  *
- * This class provides high-performance packet processing using XDP (eXpress
- * Data Path), a Linux kernel feature for fast packet processing at the driver
- * level.
+ * Owns the upf_xdp_kern_c skeleton which contains all pipeline programs.
+ * Provides:
+ *   - Skeleton open / load / attach lifecycle
+ *   - Entry program selection (IP PDU vs ETH PDU)
+ *   - PROG_ARRAY population (feature_dispatch_map)
+ *   - BPF map wrappers for all pipeline maps
+ *   - Network interface configuration (N3/N4/N6 maps)
+ *   - ARP table and framed routing helpers
  *
- * Key Responsibilities:
- * - Initialize and configure XDP programs for uplink/downlink
- * - Manage BPF maps for session state and routing
- * - Configure interface-specific packet processing
- * - Handle ARP resolution for packet forwarding
- * - Support framed routing for advanced scenarios
- * - Provide QoS enforcement hooks
+ * The constructor reads all config from upf::g_net_cfg — no upf_config
+ * argument required.  upf::g_net_cfg must be populated before construction
+ * (guaranteed by control/Configuration.cpp running first).
  *
  * Lifecycle:
- * 1. Construction: Initialize with interfaces
- * 2. Setup: Load and attach XDP programs
- * 3. Runtime: Maps managed by SessionManager
- * 4. Teardown: Detach programs and cleanup
+ *   1. Construct: supply N3/N6 interface names
+ *   2. Setup(flags): open skeleton, load, attach, populate PROG_ARRAY,
+ *                    link entry programs to interfaces
+ *   3. Runtime: maps managed by SessionProgramManager
+ *   4. TearDown: detach programs, destroy skeleton
  *
- * Thread Safety: Not thread-safe. Use from single thread (typically main).
+ * Thread Safety: Not thread-safe.  Create and Setup from a single thread.
  *
  * XDP Modes:
  * - XDP_FLAGS_DRV_MODE: Driver mode (best performance, hardware offload)
  * - XDP_FLAGS_SKB_MODE: SKB mode (fallback, compatibility)
  *
- * @note This implementation follows Google C++ Style Guide
  * @note Inherits from BPFProgram base class
  */
 class UPF_XDPProgram : public BPFProgram {
  public:
   /**
-   * @brief Constructor - initializes XDP program for specified interfaces
+   * @brief Constructor
    *
-   * Creates the XDP program manager for the given network interfaces.
-   * Configures BPF maps based on system capabilities and UPF configuration.
+   * Stores interface names and prepares the lifecycle manager.  Does NOT
+   * open or load the skeleton — call Setup() for that.
    *
-   * @param gtp_interface GTP-U interface name (N3, e.g., "n3", "eth0")
-   * @param udp_interface UDP interface name (N6, e.g., "n6", "eth1")
-   * @param upf_cfg UPF configuration with map sizes and limits
+   * Network addresses (N3 IP, N6 IP, DN IP) are read from upf::g_net_cfg
+   * automatically during Setup().
    *
-   * @throws std::runtime_error if skeleton creation fails
-   * @throws std::runtime_error if map configuration fails
+   * @param gtp_interface  N3 (GTP-U) interface name, e.g. "n3"
+   * @param non_gtp_interface  N6 (Data Network) interface name, e.g. "n6"
    *
-   * Configuration Validation:
-   * - Checks interface count against system limits
-   * - Validates redirect interface count
-   * - Ensures PDR limits don't exceed compile-time constants
-   *
-   * Usage:
-   * @code
-   * upf_config cfg = load_config();
-   * auto xdp_program = std::make_shared<UPF_XDPProgram>("n3", "n6", cfg);
-   * xdp_program->Setup(true);  // Enable QoS
-   * @endcode
+   * @throws std::runtime_error if skeleton open fails in the lifecycle ctor
    */
   explicit UPF_XDPProgram(
-      const std::string& gtp_interface, const std::string& udp_interface,
-      const upf_config& upf_cfg);
+      const std::string& gtp_interface, const std::string& non_gtp_interface);
 
   /**
    * @brief Destructor - cleans up XDP program resources
@@ -170,63 +202,118 @@ class UPF_XDPProgram : public BPFProgram {
    */
   virtual ~UPF_XDPProgram();
 
-  /**
-   * @brief Setup and attach XDP programs to interfaces
-   *
-   * Performs the complete XDP program initialization:
-   * 1. Opens BPF skeleton
-   * 2. Initializes all BPF maps
-   * 3. Loads programs into kernel
-   * 4. Attaches to kernel hooks
-   * 5. Links XDP programs to network interfaces
-   * 6. Configures reference points (N3, N4, N6)
-   * 7. Sets up egress interface mappings
-   *
-   * @param is_qos_enabled If true, attach QoS enforcement (xdp_qos section)
-   *                       If false, attach standard downlink (xdp_downlink)
-   *
-   * @throws std::runtime_error if interface not found
-   * @throws std::runtime_error if XDP attach fails
-   *
-   * XDP Sections:
-   * - xdp_uplink: Attached to GTP interface (N3)
-   * - xdp_downlink: Attached to UDP interface (N6) when QoS disabled
-   * - xdp_qos: Attached to UDP interface (N6) when QoS enabled
-   *
-   * Usage:
-   * @code
-   * xdp_program->Setup(upf_cfg.enable_qos);
-   * @endcode
-   */
-  void Setup(bool is_qos_enabled);
+  // ==========================================================================
+  // Lifecycle
+  // ==========================================================================
 
   /**
-   * @brief Get all BPF maps from the program
+   * @brief Setup tail-call pipeline and attach to interfaces
    *
-   * Returns the BPFMaps container which provides access to all maps
-   * in the XDP program by name.
+   * Complete pipeline initialisation:
+   *   1. Open skeleton; configure map max_entries from upf::g_net_cfg
+   *   2. Load all programs into kernel
+   *   3. Attach programs to hooks
+   *   4. Initialise BPF map wrappers (InitializeMaps)
+   *   5. Configure egress interface map (UPLINK→N6, DOWNLINK→N3)
+   *   6. Write upf_interface_map entries for N3, N4, N6
+   *   7. Populate feature_dispatch_map (PopulateProgramArray)
+   *   8. Link entry programs to N3/N6 based on flags.pdu_type
    *
-   * @return std::shared_ptr<BPFMaps> Container of all BPF maps
+   * Entry program selection (flags.pdu_type):
+   *   IP PDU:  upf_n3_entry  → N3 interface
+   *            upf_n6_entry  → N6 interface
+   *   ETH PDU: upf_n3_eth_entry → N3 interface
+   *            upf_n6_eth_entry → N6 interface
+   *
+   * @param flags  Feature flags (QER/URR/BAR/MAR/framed_routing, pdu_type)
+   *
+   * @throws std::runtime_error on interface lookup failure, XDP attach failure,
+   *                            or PROG_ARRAY population failure
    */
-  std::shared_ptr<BPFMaps> GetMaps();
+  void Setup(const PipelineFeatureFlags& flags);
 
   /**
-   * @brief Teardown XDP programs and cleanup resources
-   *
-   * Detaches XDP programs from interfaces, unloads from kernel,
-   * and frees all resources. Maps are cleaned up by kernel.
-   *
+   * @brief Teardown pipeline and release all resources
    * @note Safe to call multiple times
    */
   void TearDown();
 
+  // ==========================================================================
+  // PROG_ARRAY Management
+  // ==========================================================================
+
   /**
-   * @brief Create entry in UPF interface map for a reference point
+   * @brief Populate feature_dispatch_map from feature flags
    *
-   * Stores interface configuration (IP, port, name) for UPF reference
-   * points in the BPF map for kernel access.
+   * Inserts BPF program FDs at the slot indices defined by ProgIndex.
+   * Slots for disabled features are left empty (tail_call → no-op).
    *
-   * @param reference_point Type of reference point (N3, N4, N6, N9, N19)
+   * @param flags  Feature flags controlling which slots are populated
+   * @throws std::runtime_error if a mandatory slot cannot be inserted
+   */
+  void PopulateProgramArray(const PipelineFeatureFlags& flags);
+
+  /**
+   * @brief Remove a key from the tail-call program map
+   * @param key  Program map key (typically session ID or slot index)
+   */
+  void RemoveProgramMap(uint32_t key);
+
+  /**
+   * @brief Get file descriptor for a BPF program section by name
+   *
+   * @param section_name  BPF program section/function name
+   * @return int  Program FD, or -1 if not found
+   */
+  int GetProgramFd(const char* section_name) const;
+
+  // ==========================================================================
+  // Map Access — generic
+  // ==========================================================================
+
+  /** @return All BPF maps container */
+  std::shared_ptr<BPFMaps> GetMaps();
+
+  /**
+   * @brief Get BPF map by name (with alias support)
+   *
+   * Supported names (aliases listed after →):
+   *   "session_map" / "session_by_ue_ip_map" → UE IP→session mapping
+   *   "session_by_mac_map"                   → ETH PDU MAC→session mapping
+   *   "arp_table" / "arp_table_map"          → ARP resolution
+   *   "redirect_interfaces_map"              → Egress interface IDs
+   *   "upf_interface_map"                    → N3/N4/N6 reference points
+   *   "pdrs_per_session_map"                 → PDR arrays per session
+   *   "rules_match_pdr_map"                  → PDR → rule associations
+   *   "sdf_filters_map"                      → SDF 5-tuple filter defs
+   *   "session_qos_enabled_map" /
+   *   "session_rules_enabled_map"            → Rules-enabled flags per session
+   *                                            (both names accepted; map was
+   *                                            renamed from the former to the
+   *                                            latter in the
+   * rules-enabled-flags refactor) "m_framed_route_mapping"               →
+   * Framed route table "framed_routing_flag"                  → Framed routing
+   * enable flag "feature_dispatch_map"                 → PROG_ARRAY for tail
+   * calls "urr_config_map"                       → URR configuration
+   *   "urr_volume_map"                       → URR volume counters
+   *   "bar_config_map"                       → BAR configuration
+   *   "bar_state_map"                        → BAR DDN runtime state
+   *   "mar_rules_map"                        → MAR steering rules
+   *
+   * @return nullptr if not found (logs a warning)
+   */
+  std::shared_ptr<BPFMap> GetMapByName(const std::string& map_name);
+
+  // ==========================================================================
+  // Interface Configuration
+  // ==========================================================================
+
+  /**
+   * @brief Write an entry into upf_interface_map for a reference point
+   *
+   * Reads IP/port from upf::g_net_cfg — no upf_config access needed.
+   *
+   * @param reference_point  N3_INTERFACE / N4_INTERFACE / N6_INTERFACE
    *
    * Reference Points (3GPP TS 23.501):
    * - N3: Interface between RAN and UPF (GTP-U)
@@ -237,117 +324,152 @@ class UPF_XDPProgram : public BPFProgram {
    */
   void CreateUpfInterfaceMapEntry(reference_point_t reference_point);
 
-  /**
-   * @brief Remove a program from the program map
-   *
-   * Removes the BPF program file descriptor for a given key.
-   * Used during session deletion.
-   *
-   * @param key Program map key (typically session ID)
-   */
-  void RemoveProgramMap(uint32_t key);
+  // ==========================================================================
+  // Framed Routing
+  // ==========================================================================
 
-  /**
-   * @brief Get BPF map by name for dynamic access (CRITICAL METHOD)
-   *
-   * Provides access to BPF maps by their string name. This method is
-   * used by SessionProgramManager for dynamic map access.
-   *
-   * Supported Map Names (with aliases):
-   * - "session_map", "session_by_ue_ip_map" → Session mapping
-   * - "arp_table", "arp_table_map" → ARP resolution
-   * - "redirect_interfaces_map" → Interface redirection
-   * - "upf_interface_map" → UPF reference points
-   * - "pdrs_per_session_map" → PDRs per session
-   * - "rules_match_pdr_map" → Rule matching
-   * - "sdf_filters_map" → SDF filters
-   * - "session_qos_enabled_map" → QoS enablement
-   * - "m_framed_route_mapping" → Framed routing
-   *
-   * @param map_name Name of the map (supports aliases)
-   * @return std::shared_ptr<BPFMap> Pointer to map, or nullptr if not found
-   *
-   * @note Prefer using specific getter methods for better performance
-   * @note This method enables SessionProgramManager to work generically
-   *
-   * Usage:
-   * @code
-   * // In SessionProgramManager:
-   * auto session_map = xdp_program->GetMapByName("session_map");
-   * if (session_map) {
-   *   session_map->Update(ue_ip, session_id, BPF_ANY);
-   * }
-   * @endcode
-   */
-  std::shared_ptr<BPFMap> GetMapByName(const std::string& map_name);
-
-  // Framed Routing Methods
   std::shared_ptr<BPFMap> GetFramedRouteMappingMap();
   void UpdateFramedRouteMappingMap(uint32_t ue_ip, FramedRoutingKeyBPF key);
   void RemoveFramedRoute(FramedRoutingKeyBPF key);
   void SetFramedRouting(bool enable);
 
-  // Map Getters - Direct access for performance
+  // ==========================================================================
+  // Direct Map Getters (for performance)
+  // ==========================================================================
+
   std::shared_ptr<BPFMap> GetEgressInterfaceMap() const;
   std::shared_ptr<BPFMap> GetArpTableMap() const;
   std::shared_ptr<BPFMap> GetIfaceMap() const;
   std::shared_ptr<BPFMap> GetSessionMappingMap() const;
+  std::shared_ptr<BPFMap> GetSessionMacMap() const;  ///< ETH PDU only
   std::shared_ptr<BPFMap> GetRulesMatchPdrMap() const;
   std::shared_ptr<BPFMap> GetSessionPdrsMap() const;
   std::shared_ptr<BPFMap> GetSdfFilterMap() const;
   std::shared_ptr<BPFMap> GetQosEnablingMap() const;
+  std::shared_ptr<BPFMap> GetFeatureDispatchMap() const;
 
-  // XDP Mode and Statistics Methods
+  // ==========================================================================
+  // Pipeline Status and Statistics
+  // ==========================================================================
+
+  /**
+   * @brief Get total number of BPF maps in the pipeline
+   */
   size_t GetMapCount() const;
+
+  /**
+   * @brief Check if interface is using native XDP (driver mode)
+   */
   bool IsNativeXdp(const std::string& interface) const;
+
+  /**
+   * @brief Get XDP mode string for display ("Native" or "SKB")
+   */
   std::string GetXdpModeString(const std::string& interface) const;
 
+  /**
+   * @brief Get configured PDU session type
+   */
+  PduSessionType GetPduSessionType() const { return pdu_session_type_; }
+
+  /**
+   * @brief Get current pipeline feature flags
+   */
+  const PipelineFeatureFlags& GetFeatureFlags() const { return features_; }
+
  private:
+  // ==========================================================================
+  // Internal Initialization
+  // ==========================================================================
+
   /**
    * @brief Initialize all BPF map wrappers
    *
-   * Creates BPFMap wrappers for all maps in the skeleton.
-   * Called during Setup() after skeleton is opened.
+   * Called after skeleton open and before load.  Wrappers for pipeline-shared
+   * maps (urr_config_map, bar_config_map, mar_rules_map, etc.) are created
+   * here so URRProgram / BARProgram / MARProgram can receive them.
    */
   void InitializeMaps();
 
   /**
-   * @brief Configure PFCP session lookup maps
+   * @brief Configure map max_entries from upf::g_net_cfg sizing parameters
    *
-   * Sets max_entries for all maps based on configuration.
-   * Must be called after open, before load.
+   * Called during open (before load) to set map capacities.
    *
-   * @param skel Pointer to opened BPF skeleton
-   * @param upf_cfg UPF configuration with map sizes
-   *
-   * @throws std::runtime_error if configuration fails
+   * @param skel  Opened skeleton pointer
+   * @throws std::runtime_error on invalid configuration
    */
-  void ConfigurePfcpSessionLookupMaps(
-      struct upf_xdp_kern_c* skel, const upf_config& upf_cfg);
+  void ConfigurePfcpSessionLookupMaps(struct upf_xdp_kern_c* skel);
+
+  /**
+   * @brief Insert one BPF program FD into feature_dispatch_map
+   *
+   * @param index PROG_ARRAY slot index (enum ProgIndex)
+   * @param section_name BPF program section name
+   * @return true if inserted successfully, false on error
+   */
+  bool InsertProgramSlot(uint32_t index, const char* section_name);
+
+  // ==========================================================================
+  // Member Variables
+  // ==========================================================================
 
   // Skeleton and lifecycle
   upf_xdp_kern_c* skeleton_;  ///< BPF skeleton (libbpf)
   std::shared_ptr<UPF_XDPProgramLifeCycle> lifecycle_;  ///< Lifecycle manager
 
-  // Interface configuration
-  std::string gtp_interface_;  ///< GTP-U interface name (N3)
-  std::string udp_interface_;  ///< UDP interface name (N6)
+  // Interface configuration names (N3 / N6)
+  std::string gtp_interface_;      ///< GTP-U interface name (N3)
+  std::string non_gtp_interface_;  ///< NON-GTP interface name (N6)
 
-  // Map containers
+  // Pipeline configuration
+  PduSessionType pdu_session_type_;  ///< IP or ETH PDU sessions
+  PipelineFeatureFlags features_;    ///< Current feature flags
+
+  // Map container
   std::shared_ptr<BPFMaps> maps_;  ///< All BPF maps container
 
+  // --- Individual map pointers (fast access) ---
+
+  // Session lookup maps
+  std::shared_ptr<BPFMap> session_mapping_map_;  ///< UE IP  → SEID (IP PDU)
+  std::shared_ptr<BPFMap> session_mac_map_;      ///< UE MAC → SEID (ETH PDU)
+
   // Individual map pointers (for fast access)
-  std::shared_ptr<BPFMap> teid_session_map_;      ///< TEID to session mapping
-  std::shared_ptr<BPFMap> session_mapping_map_;   ///< UE IP to session
-  std::shared_ptr<BPFMap> egress_interface_map_;  ///< Egress interface IDs
-  std::shared_ptr<BPFMap> arp_table_map_;         ///< ARP resolution table
-  std::shared_ptr<BPFMap> upf_iface_map_;         ///< UPF interface config
-  std::shared_ptr<BPFMap> rules_match_pdr_map_;   ///< Rule matching state
-  std::shared_ptr<BPFMap> session_pdrs_map_;      ///< PDRs per session
-  std::shared_ptr<BPFMap> sdf_filter_map_;        ///< SDF filter definitions
-  std::shared_ptr<BPFMap> qos_enabling_map_;      ///< QoS per session
-  std::shared_ptr<BPFMap> framed_route_mapping_map_;  ///< Framed route mapping
-  std::shared_ptr<BPFMap> framed_route_flag_map_;  ///< Framed route enable flag
+  std::shared_ptr<BPFMap> teid_session_map_;  ///< TEID to session mapping
+  // Interface maps
+  std::shared_ptr<BPFMap> egress_interface_map_;  ///< FlowDir → ifindex
+  std::shared_ptr<BPFMap> arp_table_map_;         ///< IP → MAC (ARP)
+  std::shared_ptr<BPFMap> upf_iface_map_;         ///< N3/N4/N6 reference pts
+
+  // PDR matching maps
+  std::shared_ptr<BPFMap> session_pdrs_map_;     ///< SEID → ordered PDR list
+  std::shared_ptr<BPFMap> rules_match_pdr_map_;  ///< (SEID,PDR) → rule IDs
+  std::shared_ptr<BPFMap> sdf_filter_map_;       ///< (SEID,PDR) → SDF tuple
+
+  // QoS / rule enablement
+  std::shared_ptr<BPFMap> qos_enabling_map_;  ///< SEID → rules_enabled flags
+
+  // URR maps
+  std::shared_ptr<BPFMap> urr_config_map_;  ///< (SEID,URR) → pfcp_urr
+  std::shared_ptr<BPFMap> urr_volume_map_;  ///< (SEID,URR) → counters
+
+  // BAR maps
+  std::shared_ptr<BPFMap> bar_config_map_;  ///< (SEID,BAR) → pfcp_bar
+  std::shared_ptr<BPFMap> bar_state_map_;   ///< (SEID,BAR) → ddn state
+
+  // MAR maps
+  std::shared_ptr<BPFMap> mar_rules_map_;  ///< (SEID,MAR) → pfcp_mar
+
+  // Framed routing
+  std::shared_ptr<BPFMap> framed_route_mapping_map_;
+  std::shared_ptr<BPFMap> framed_route_flag_map_;
+
+  // PROG_ARRAY
+  std::shared_ptr<BPFMap> feature_dispatch_map_;  ///< Tail-call program array
+
+  // Per-CPU packet context (managed by kernel, no explicit user-space writes)
+  std::shared_ptr<BPFMap> packet_ctx_map_;
 };
 
 #endif  // UPF_XDP_USER_H_

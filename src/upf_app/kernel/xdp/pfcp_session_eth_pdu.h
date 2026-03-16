@@ -1,8 +1,23 @@
+/* ⚠️  LEGACY FILE — DO NOT ADD NEW FEATURES HERE
+ *
+ * pfcp_session_eth_pdu.h is the monolithic ETH PDU handler from the
+ * pre-tail-call era.  Production ETH PDU processing is now in:
+ *
+ *   upf_n3_eth_entry.c   — GTP-U parse + pctx population
+ *   session_lookup_eth.c — TEID → session, MAC learning
+ *   upf_n6_eth_entry.c   — DL encap + MAC table lookup / flood via TC
+ *   pdr_match.c          — shared ETH PDU UL branch (match_pdr_eth_n3)
+ *   far_apply.c          — bcast/mcast detect + GTP strip / encap
+ *
+ * This file is retained for CI regression only and does NOT reflect
+ * V17.10.0 struct changes.
+ */
+
 #ifndef __PFCP_SESSION_ETH_PDU_H
 #define __PFCP_SESSION_ETH_PDU_H
 
 // clang-format off
-#include <types.h>
+ #include <types.h>
 // clang-format on
 #include <linux/bpf.h>
 #include <bpf_helpers.h>

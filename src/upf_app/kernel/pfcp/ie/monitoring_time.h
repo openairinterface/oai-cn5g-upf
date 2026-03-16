@@ -20,27 +20,25 @@
  */
 
 /*
- * PFCP URR ID
- * Reference: 3GPP TS 29.244 Section 8.2.55
+ * PFCP Monitoring Time
+ * Reference: 3GPP TS 29.244 Section 8.2.49
  */
 
-#ifndef _PFCP_URR_ID_H
-#define _PFCP_URR_ID_H
+#ifndef _PFCP_MONITORING_TIME_H
+#define _PFCP_MONITORING_TIME_H
 
 #include <linux/types.h>
 #include "ie_base.h"
 
 /**
- * struct urr_id - Usage Reporting Rule ID
- * @base: Common IE header
- * @urr_id: URR identifier (network byte order)
+ * struct monitoring_time - Monitoring Time IE
+ * @monitoring_time: Measurement start timestamp (NTP epoch, seconds)
  *
- * Uniquely identifies a Usage Reporting Rule within a PFCP session.
- * Used for charging and usage monitoring.
+ * Specifies the start time for usage measurement.
  */
-struct urr_id {
+struct monitoring_time {
   // struct ie_base base;
-  __u32 urr_id;
+  __u32 monitoring_time;
 } __attribute__((packed));
 
-#endif /* _PFCP_URR_ID_H */
+#endif /* _PFCP_MONITORING_TIME_H */

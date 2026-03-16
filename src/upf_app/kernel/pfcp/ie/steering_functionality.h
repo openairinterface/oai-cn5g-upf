@@ -20,26 +20,28 @@
  */
 
 /*
- * PFCP BAR ID (Buffering Action Rule ID)
- * Reference: 3GPP TS 29.244 Section 8.2.57
+ * PFCP Steering Functionality
+ * Reference: 3GPP TS 29.244 Section 8.2.96
  */
 
-#ifndef _PFCP_BAR_ID_H
-#define _PFCP_BAR_ID_H
+#ifndef _PFCP_STEERING_FUNCTIONALITY_H
+#define _PFCP_STEERING_FUNCTIONALITY_H
 
 #include <linux/types.h>
 #include "ie_base.h"
 
+#define STEERING_FUNC_ATSSS_LL  0  /* ATSSS Low Layer */
+#define STEERING_FUNC_MPTCP     1  /* MPTCP           */
+
 /**
- * struct bar_id - Buffering Action Rule ID
- * @base: Common IE header
- * @bar_id: BAR identifier (8 bits)
+ * struct steering_functionality - Steering Functionality IE
+ * @steering_functionality_value: STEERING_FUNC_* enum
  *
- * Uniquely identifies a Buffering Action Rule within a PFCP session.
+ * Indicates ATSSS-LL or MPTCP steering functionality.
  */
-struct bar_id {
+struct steering_functionality {
   // struct ie_base base;
-  __u8 bar_id;
+  __u8 steering_functionality_value;
 } __attribute__((packed));
 
-#endif /* _PFCP_BAR_ID_H */
+#endif /* _PFCP_STEERING_FUNCTIONALITY_H */
