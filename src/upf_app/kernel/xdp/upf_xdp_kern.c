@@ -1,3 +1,25 @@
+// clang-format off
+/* ⚠️  LEGACY FILE — DO NOT ADD NEW FEATURES HERE
+ *
+ * upf_xdp_kern.c is the monolithic predecessor of the tail-call pipeline.
+ * The production XDP datapath is now split across:
+ *
+ *   upf_n3_entry.c / upf_n6_entry.c       — IP PDU entry points
+ *   upf_n3_eth_entry.c / upf_n6_eth_entry.c — ETH PDU entry points
+ *   session_lookup_ip.c / session_lookup_eth.c
+ *   pdr_match.c / far_apply.c / qer_apply.c
+ *   urr_apply.c / bar_apply.c / mar_apply.c
+ *
+ * This file is retained for reference and CI regression only.
+ * It does NOT reflect V17.10.0 struct changes (pfcp_pdr.h mar_id,
+ * pfcp_urr.h time_quota / dropped_dl_traffic_threshold,
+ * pfcp_qer.h averaging_window).
+ *
+ * If you are reading this to understand the production code, start with
+ * tail_call_dispatch.h and the files listed above instead.
+ */
+// clang-format on
+
 /**
  * @file upf_xdp_kern.c
  * @brief UPF (User Plane Function) XDP datapath kernel program
@@ -397,6 +419,7 @@ gtpu_encap_ipv4(struct xdp_md* ctx, struct pfcp_far* far, u8 qfi) {
   }
 
   struct ethhdr* eth_inner = data + GTP_ENCAPSULATED_SIZE;
+
   if ((void*) (eth_inner + 1) > data_end) {
     bpf_debug("Error: Invalid Ethernet copy header");
     return RET_DROP;
@@ -1071,7 +1094,7 @@ calc_sdf_specificity(const struct sdf_filtr* sdf, u8 pkt_proto) {
 
   /* Protocol specificity (most important factor) */
   if (sdf->protocol == 0) {
-    /* Protocol=0 means "any IP protocol" - least specific */
+    /* Protocol = 0 means "any IP protocol" - least specific */
     score += 100;
   } else if (sdf->protocol == pkt_proto) {
     /* Exact protocol match - most specific */
@@ -1099,6 +1122,7 @@ calc_sdf_specificity(const struct sdf_filtr* sdf, u8 pkt_proto) {
   if (src_port_range < 65535) {
     score += (65535 - src_port_range) / 1000; /* 0-65 points */
   }
+
   if (dst_port_range < 65535) {
     score += (65535 - dst_port_range) / 1000; /* 0-65 points */
   }
@@ -1619,7 +1643,7 @@ int xdp_uplink(struct xdp_md* ctx) {
   }
 
   u64 seid                            = session->seid;
-  u32 teid_ul                         = bpf_htonl(session->teid_ul);
+  __attribute__((unused)) u32 teid_ul = bpf_htonl(session->teid_ul);
   __attribute__((unused)) u32 teid_dl = bpf_htonl(session->teid_dl);
   bpf_debug(
       "Session found ( seid, teid_ul, teid_dl ) : ( %llu, %u, %u )", seid,

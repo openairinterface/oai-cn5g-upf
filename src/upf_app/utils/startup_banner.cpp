@@ -3,21 +3,20 @@
  */
 
 #include "startup_banner.hpp"
+#include "upf_network_config.h"  // upf::g_net_cfg, upf::Get*()/Is*()
 #include "version_utils.h"
 #include "number_utils.hpp"
+#include "common_root_types.h"
 #include "logger.hpp"
-#include "upf_config.hpp"
 #include <arpa/inet.h>
 #include <net/if.h>
 #include <spdlog/spdlog.h>
-
-#include <sstream>
 #include <iomanip>
+#include <sstream>
 #include <vector>
-#include <inttypes.h>
 
-using namespace oai::config;
 using namespace oai::utils;
+
 //------------------------------------------------------------------------------
 void DisplayStartupBanner() {
   using namespace oai::upf::utils;
@@ -95,11 +94,7 @@ void DisplayStartupBanner() {
 }
 
 //------------------------------------------------------------------------------
-void DisplayConfigSummary(const upf_config& cfg) {
-  // Convert log_level enum to string
-  std::string log_level_str =
-      spdlog::level::to_string_view(cfg.log_level).data();
-
+void DisplayConfigSummary() {
   Logger::upf_app().startup(
       "┌───────────────────────────────────────────────────────────────────────"
       "──────┐");
@@ -114,7 +109,21 @@ void DisplayConfigSummary(const upf_config& cfg) {
 }
 
 //------------------------------------------------------------------------------
-void DisplayNetworkInterfaces(const upf_config& cfg) {
+void DisplayNetworkInterfaces() {
+  // Resolve IPs from g_net_cfg addresses
+  struct in_addr n3_addr = {upf::GetN3Ip()};
+  struct in_addr n4_addr = {upf::GetN4Ip()};
+  struct in_addr n6_addr = {upf::GetN6Ip()};
+
+  char n3_ip[INET_ADDRSTRLEN], n4_ip[INET_ADDRSTRLEN], n6_ip[INET_ADDRSTRLEN];
+  inet_ntop(AF_INET, &n3_addr, n3_ip, INET_ADDRSTRLEN);
+  inet_ntop(AF_INET, &n4_addr, n4_ip, INET_ADDRSTRLEN);
+  inet_ntop(AF_INET, &n6_addr, n6_ip, INET_ADDRSTRLEN);
+
+  int n3_ifindex = if_nametoindex(upf::GetN3Iface().c_str());
+  int n4_ifindex = if_nametoindex(upf::GetN4Iface().c_str());
+  int n6_ifindex = if_nametoindex(upf::GetN6Iface().c_str());
+
   Logger::upf_app().startup(
       "┌───────────────────────────────────────────────────────────────────────"
       "──────┐");
@@ -131,28 +140,16 @@ void DisplayNetworkInterfaces(const upf_config& cfg) {
       "├──────────────────┼──────────────────────┼───────────────────┼─────────"
       "──────┤");
 
-  // N3 interface
-  char n3_ip[INET_ADDRSTRLEN];
-  inet_ntop(AF_INET, &cfg.n3.addr4.s_addr, n3_ip, INET_ADDRSTRLEN);
-  int n3_ifindex = if_nametoindex(cfg.n3.if_name.c_str());
   Logger::upf_app().startup(
-      "│ N3 (GTP-U)       │ %-20s │ %-17s │ %-13d │", cfg.n3.if_name.c_str(),
+      "│ N3 (GTP-U)       │ %-20s │ %-17s │ %-13d │", upf::GetN3Iface().c_str(),
       n3_ip, n3_ifindex);
 
-  // N4 interface
-  char n4_ip[INET_ADDRSTRLEN];
-  inet_ntop(AF_INET, &cfg.n4.addr4.s_addr, n4_ip, INET_ADDRSTRLEN);
-  int n4_ifindex = if_nametoindex(cfg.n4.if_name.c_str());
   Logger::upf_app().startup(
-      "│ N4 (PFCP)        │ %-20s │ %-17s │ %-13d │", cfg.n4.if_name.c_str(),
+      "│ N4 (PFCP)        │ %-20s │ %-17s │ %-13d │", upf::GetN4Iface().c_str(),
       n4_ip, n4_ifindex);
 
-  // N6 interface
-  char n6_ip[INET_ADDRSTRLEN];
-  inet_ntop(AF_INET, &cfg.n6.addr4.s_addr, n6_ip, INET_ADDRSTRLEN);
-  int n6_ifindex = if_nametoindex(cfg.n6.if_name.c_str());
   Logger::upf_app().startup(
-      "│ N6 (Data Network)│ %-20s │ %-17s │ %-13d │", cfg.n6.if_name.c_str(),
+      "│ N6 (Data Network)│ %-20s │ %-17s │ %-13d │", upf::GetN6Iface().c_str(),
       n6_ip, n6_ifindex);
 
   Logger::upf_app().startup(
@@ -162,7 +159,7 @@ void DisplayNetworkInterfaces(const upf_config& cfg) {
 }
 
 //------------------------------------------------------------------------------
-void DisplayDataPlaneStatus(const upf_config& cfg) {
+void DisplayDataPlaneStatus() {
   // Feature Configuration
   Logger::upf_app().startup(
       "┌───────────────────────────────────────────────────────────────────────"
@@ -181,33 +178,25 @@ void DisplayDataPlaneStatus(const upf_config& cfg) {
       "──────┤");
   Logger::upf_app().startup(
       "│ eBPF/XDP Data Plane                  │ %-36s │",
-      cfg.enable_bpf_datapath ? "✓ Enabled" : "✗ Disabled");
+      upf::IsBpfDatapathEnabled() ? "✓ Enabled" : "✗ Disabled");
   Logger::upf_app().startup(
       "│ QoS Enforcement (TC-BPF)             │ %-36s │",
-      cfg.enable_qos ? "✓ Enabled" : "✗ Disabled");
-  Logger::upf_app().startup(
-      "│ Source NAT (SNAT)                    │ %-36s │",
-      cfg.enable_snat ? "✓ Enabled" : "✗ Disabled");
+      upf::IsQosEnabled() ? "✓ Enabled" : "✗ Disabled");
   Logger::upf_app().startup(
       "│ Framed Routing                       │ %-36s │",
-      cfg.enable_fr ? "✓ Enabled" : "✗ Disabled");
-
+      upf::IsFramedRoutingEnabled() ? "✓ Enabled" : "✗ Disabled");
   Logger::upf_app().startup(
-      "│ Usage Reporting                      │ %-36s │",
-      cfg.enable_urr ? "✓ Enabled" : "✗ Disabled");
-
+      "│ Usage Reporting (URR)                │ %-36s │",
+      upf::IsUrrEnabled() ? "✓ Enabled" : "✗ Disabled");
   Logger::upf_app().startup(
-      "│ Packet Buffering                     │ %-36s │",
-      cfg.enable_bar ? "✓ Enabled" : "✗ Disabled");
-
+      "│ Packet Buffering (BAR)               │ %-36s │",
+      upf::IsBarEnabled() ? "✓ Enabled" : "✗ Disabled");
   Logger::upf_app().startup(
-      "│ Multi Access                         │ %-36s │",
-      cfg.enable_mar ? "✓ Enabled" : "✗ Disabled");
-
+      "│ Multi-Access Steering (MAR)          │ %-36s │",
+      upf::IsMarEnabled() ? "✓ Enabled" : "✗ Disabled");
   Logger::upf_app().startup(
       "│ Ethernet PDU Sessions                │ %-36s │",
-      cfg.enable_eth_pdu ? "✓ Enabled" : "✗ Disabled");
-
+      (upf::GetPduSessionType() == "ethernet") ? "✓ Enabled" : "✗ Disabled");
   Logger::upf_app().startup(
       "└──────────────────────────────────────┴────────────────────────────────"
       "──────┘");
@@ -229,32 +218,95 @@ void DisplayDataPlaneStatus(const upf_config& cfg) {
       "├──────────────────────────────────────┼────────────────────────────────"
       "──────┤");
   Logger::upf_app().startup(
-      "│ session_by_ue_ip_map                 │ %-36d │", cfg.max_pdu_sessions);
+      "│ session_by_ue_ip_map                 │ %-36u │",
+      upf::GetMaxPduSessions());
   Logger::upf_app().startup(
-      "│ pdrs_per_session_map                 │ %-36d │",
-      cfg.max_pdrs_per_pdu_session);
+      "│ pdrs_per_session_map                 │ %-36u │",
+      upf::GetMaxPdrsPerSession());
   Logger::upf_app().startup(
-      "│ qos_flows_per_session_map            │ %-36d │",
-      cfg.max_qos_flows_per_pdu_session);
+      "│ arp_table_map                        │ %-36u │",
+      upf::GetMaxArpEntries());
   Logger::upf_app().startup(
-      "│ arp_table_map                        │ %-36d │", cfg.max_arp_entries);
+      "│ rules_match_pdr_map                  │ %-36u │",
+      upf::GetMaxPduSessions() * upf::GetMaxPdrsPerSession());
   Logger::upf_app().startup(
-      "│ rules_match_pdr_map                  │ %-36d │",
-      cfg.max_pdu_sessions * cfg.max_pdrs_per_pdu_session);
+      "│ sdf_filters_map                      │ %-36u │",
+      upf::GetMaxPduSessions() * upf::GetMaxSdfFiltersPerSession());
   Logger::upf_app().startup(
-      "│ session_qos_enabled_map              │ %-36d │", cfg.max_pdu_sessions);
+      "│ upf_interface_map                    │ %-36u │",
+      upf::GetMaxUpfInterfaces());
   Logger::upf_app().startup(
-      "│ sdf_filters_map                      │ %-36d │",
-      cfg.max_pdu_sessions * cfg.max_sdf_filters_per_pdu_session);
+      "│ redirect_interfaces_map              │ %-36u │",
+      upf::GetMaxUpfRedirectInterfaces());
 
   Logger::upf_app().startup(
-      "│ upf_interface_map                    │ %-36d │",
-      cfg.max_upf_interfaces);
+      "└──────────────────────────────────────┴────────────────────────────────"
+      "──────┘");
+  Logger::upf_app().startup("");
+}
+
+//------------------------------------------------------------------------------
+void DisplayPipelineConfig(const PipelineFeatureFlags& flags) {
+  const bool eth = (flags.pdu_type == PduSessionType::Ethernet);
 
   Logger::upf_app().startup(
-      "│ redirect_interfaces_map              │ %-36d │",
-      cfg.max_upf_redirect_interfaces);
-
+      "┌───────────────────────────────────────────────────────────────────────"
+      "──────┐");
+  Logger::upf_app().startup(
+      "│                   BPF TAIL-CALL PIPELINE CONFIGURATION                "
+      "      │");
+  Logger::upf_app().startup(
+      "├──────────────────────────────────────┬────────────────────────────────"
+      "──────┤");
+  Logger::upf_app().startup(
+      "│ Stage                                │ Status / Program               "
+      "      │");
+  Logger::upf_app().startup(
+      "├──────────────────────────────────────┼────────────────────────────────"
+      "──────┤");
+  Logger::upf_app().startup(
+      "│ PDU Session Type                     │ %-36s │",
+      eth ? "Ethernet" : "IP");
+  Logger::upf_app().startup(
+      "│ N3 Entry Program                     │ %-36s │",
+      eth ? "upf_n3_eth_entry" : "upf_n3_entry");
+  Logger::upf_app().startup(
+      "│ N6 Entry Program                     │ %-36s │",
+      eth ? "upf_n6_eth_entry" : "upf_n6_entry");
+  Logger::upf_app().startup(
+      "├──────────────────────────────────────┼────────────────────────────────"
+      "──────┤");
+  Logger::upf_app().startup(
+      "│ Session Lookup  [slot %-2d] (mandatory) │ %-36s │",
+      PROG_SESSION_LOOKUP, "✓ Loaded");
+  Logger::upf_app().startup(
+      "│ PDR Match       [slot %-2d] (mandatory) │ %-36s │", PROG_PDR_MATCH,
+      "✓ Loaded");
+  Logger::upf_app().startup(
+      "│ FAR Apply       [slot %-2d] (mandatory) │ %-36s │", PROG_FAR,
+      "✓ Loaded");
+  Logger::upf_app().startup(
+      "├──────────────────────────────────────┼────────────────────────────────"
+      "──────┤");
+  Logger::upf_app().startup(
+      "│ QER Enforcement [slot %-2d] (optional)  │ %-36s │", PROG_QER,
+      flags.enable_qos ? "✓ Loaded" : "— Skipped");
+  Logger::upf_app().startup(
+      "│ URR Reporting   [slot %-2d] (optional)  │ %-36s │", PROG_URR,
+      flags.enable_urr ? "✓ Loaded" : "— Skipped");
+  Logger::upf_app().startup(
+      "│ BAR Buffering   [slot %-2d] (optional)  │ %-36s │", PROG_BAR,
+      flags.enable_bar ? "✓ Loaded" : "— Skipped");
+  Logger::upf_app().startup(
+      "│ MAR Steering    [slot %-2d] (optional)  │ %-36s │", PROG_MAR,
+      flags.enable_mar ? "✓ Loaded" : "— Skipped");
+  Logger::upf_app().startup(
+      "│ Framed Routing  [slot %-2d] (optional)  │ %-36s │",
+      PROG_FRAMED_ROUTING,
+      flags.enable_framed_routing ? "✓ Loaded" : "— Skipped");
+  Logger::upf_app().startup(
+      "│ ETH Broadcast   [slot %-2d] (ETH only)  │ %-36s │",
+      PROG_ETH_PDU_BROADCAST, eth ? "✓ Loaded" : "— Skipped");
   Logger::upf_app().startup(
       "└──────────────────────────────────────┴────────────────────────────────"
       "──────┘");
@@ -273,14 +325,10 @@ void DisplayDataPlaneStatus(const upf_config& cfg) {
  * @param total_maps Total number of BPF maps loaded
  */
 void DisplayXdpConfiguration(
-    const upf_config& cfg, const std::string& n3_xdp_mode,
-    const std::string& n6_xdp_mode, size_t total_maps) {
-  // Check if both interfaces use native XDP
-  bool both_native = (n3_xdp_mode == "Native (Hardware)") &&
-                     (n6_xdp_mode == "Native (Hardware)");
-
-  // Get QoS status
-  bool qos_enabled = cfg.enable_qos;
+    const std::string& n3_xdp_mode, const std::string& n6_xdp_mode,
+    size_t total_maps) {
+  const bool both_native = (n3_xdp_mode == "Native (Hardware)") &&
+                           (n6_xdp_mode == "Native (Hardware)");
 
   Logger::upf_app().startup(
       "┌───────────────────────────────────────────────────────────────────────"
@@ -303,7 +351,7 @@ void DisplayXdpConfiguration(
       "│ N6 XDP Mode                          │ %-36s │", n6_xdp_mode.c_str());
   Logger::upf_app().startup(
       "│ QoS Enforcement (TC-BPF)             │ %-36s │",
-      qos_enabled ? "✓ Enabled" : "✗ Disabled");
+      upf::IsQosEnabled() ? "✓ Enabled" : "✗ Disabled");
   Logger::upf_app().startup(
       "│ Total BPF Maps Loaded                │ %-36zu │", total_maps);
   Logger::upf_app().startup(

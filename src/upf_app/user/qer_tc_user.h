@@ -1,10 +1,50 @@
 /*
- * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this
+ * file except in compliance with the License. You may obtain a copy of the
+ * License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
  */
+
+// clang-format off
+/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
+ * Date:        2026-03
+ * Changes:     Boy Scout cleanup:
+ *                - Removed duplicate stale constructor @brief block that
+ *                  still had a wrong @param upf_cfg — constructor reads
+ *                  from upf::g_net_cfg (BuildNetworkConfig) not upf_cfg.
+ *                - Removed @note "Follows Google C++ Style Guide" from
+ *                  @file, @class, and inline blocks — adds no information.
+ *                - Added changelog block with clang-format guards.
+ *                - Updated @author / @date.
+ * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
+ *              §8.2.7   Gate Status (UL/DL gate open/closed)
+ *              §8.2.8   MBR (Maximum Bit Rate)
+ *              §8.2.9   GBR (Guaranteed Bit Rate)
+ *              §8.2.75  QER ID
+ *              §8.2.89  QFI (QoS Flow Identifier)
+ *              §8.2.88  RQI (Reflective QoS Indication)
+ */
+// clang-format on
 
 /**
  * @file qer_tc_user.h
  * @brief TC-BPF program for QoS Enforcement Rules (QER)
+ * @author OpenAirInterface, Franck Messaoudi
+ * @date 2025 / 2026-03
  *
  * This class manages Traffic Control (TC) BPF programs for QoS enforcement
  * in the User Plane Function. It implements QoS Enforcement Rules (QER) as
@@ -77,10 +117,7 @@
 #include <wrappers/BPFMap.hpp>
 #include <BPFProgram.h>
 #include <pfcp_session.hpp>
-#include "upf_config.hpp"
-
-using namespace oai::config;
-extern upf_config upf_cfg;
+#include "upf_network_config.h"  // upf::g_net_cfg — no upf_config.hpp
 
 // Forward declarations
 class BPFMaps;
@@ -131,7 +168,16 @@ class QERProgram : public BPFProgram {
    * @throws std::runtime_error if skeleton creation fails
    * @throws std::runtime_error if map configuration fails
    */
-  explicit QERProgram(const upf_config& upf_cfg);
+  /**
+   * @brief Constructor
+   *
+   * Network configuration (interface names, map sizing limits) is read
+   * from upf::g_net_cfg which must be populated by
+   * control/Configuration.cpp before the first QERProgram is created.
+   *
+   * @throws std::runtime_error if skeleton creation fails
+   */
+  explicit QERProgram();
 
   /**
    * @brief Destructor - cleans up TC-BPF program
@@ -236,7 +282,7 @@ class QERProgram : public BPFProgram {
    * @param skel Opened BPF skeleton
    * @param upf_cfg Configuration
    */
-  void ConfigureQerMaps(struct qer_tc_kern_c* skel, const upf_config& upf_cfg);
+  void ConfigureQerMaps(struct qer_tc_kern_c* skel);
 
   /**
    * @brief Build QER ID to PDR mapping

@@ -2,6 +2,15 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
+// clang-format off
+/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
+ * Date:        2026-03
+ * Changes:     Boy Scout — no §-ref corrections needed (no PFCP §-refs in
+ *              this file); @date normalised.
+ * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
+ */
+// clang-format on
+
 /**
  * @file SignalHandler.cpp
  * @brief Signal Handler Implementation

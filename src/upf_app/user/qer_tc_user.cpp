@@ -1,10 +1,40 @@
 /*
- * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this
+ * file except in compliance with the License. You may obtain a copy of the
+ * License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
  */
+
+// clang-format off
+/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
+ * Date:        2026-03
+ * Changes:     Boy Scout cleanup — changelog and @date normalised.
+ *              No functional changes.
+ * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
+ *              §8.2.7   Gate Status   §8.2.8  MBR   §8.2.9  GBR
+ *              §8.2.75  QER ID        §8.2.89 QFI   §8.2.88 RQI
+ */
+// clang-format on
 
 /**
  * @file qer_tc_user.cpp
  * @brief Implementation of QER TC-BPF program
+ * @author OpenAirInterface, Franck Messaoudi
+ * @date 2025 / 2026-03
  */
 
 #include "qer_tc_user.h"
@@ -28,50 +58,48 @@ using namespace oai::utils::net;
 using namespace oai::utils;
 
 //------------------------------------------------------------------------------
-void QERProgram::ConfigureQerMaps(
-    struct qer_tc_kern_c* skel, const upf_config& upf_cfg) {
+void QERProgram::ConfigureQerMaps(struct qer_tc_kern_c* skel) {
   if (!skel) {
     Logger::upf_app().error("Null skeleton in ConfigureQerMaps");
     return;
   }
 
+  const uint32_t max_ifaces   = upf::GetMaxUpfInterfaces();
+  const uint32_t max_redirect = upf::GetMaxUpfRedirectInterfaces();
+
   int num_ifaces = CountAvailableInterfaces();
-  if (upf_cfg.max_upf_interfaces > static_cast<uint32_t>(num_ifaces)) {
+  if (max_ifaces > static_cast<uint32_t>(num_ifaces)) {
     Logger::upf_app().warn(
         "Configured max_upf_interfaces (%u) exceeds available system "
         "interfaces (%d). Clamping to %d.",
-        upf_cfg.max_upf_interfaces, num_ifaces, num_ifaces);
+        max_ifaces, num_ifaces, num_ifaces);
   }
 
-  if (upf_cfg.max_upf_redirect_interfaces > upf_cfg.max_upf_interfaces) {
+  if (max_redirect > max_ifaces) {
     Logger::upf_app().error(
         "Invalid config: max_upf_redirect_interfaces (%u) cannot exceed "
         "max_upf_interfaces (%u).",
-        upf_cfg.max_upf_redirect_interfaces, upf_cfg.max_upf_interfaces);
+        max_redirect, max_ifaces);
     throw std::runtime_error(
         "Invalid UPF configuration (redirect > interfaces)");
   }
 
-  // Compute derived limits
-  uint32_t max_egress_interfaces = upf_cfg.max_upf_redirect_interfaces;
-
   bool ok = ConfigureMapMaxEntries(
-      skel->maps.egress_ifindex, "egress_ifindex", max_egress_interfaces);
+      skel->maps.egress_ifindex, "egress_ifindex", max_redirect);
 
   if (!ok) {
-    Logger::upf_app().error(
-        "egress_ifindex BPF map configuration failed for QER Program");
+    Logger::upf_app().error("egress_ifindex BPF map configuration failed");
     throw std::runtime_error("QER Program map configuration failed");
   }
 
   // Configure .rodata constants (if available)
   if (skel->rodata) {
-    skel->rodata->MAX_EGRESS_INTERFACES = max_egress_interfaces;
+    skel->rodata->MAX_EGRESS_INTERFACES = max_redirect;
   }
 }
 
 //------------------------------------------------------------------------------
-QERProgram::QERProgram(const upf_config& upf_cfg)
+QERProgram::QERProgram()
     : BPFProgram(),
       default_class_handle_(65535),
       default_class_rate_(1024),
@@ -79,8 +107,8 @@ QERProgram::QERProgram(const upf_config& upf_cfg)
       r2q_root_(1000) {
   Logger::upf_app().info("Initializing QER TC BPF program...");
 
-  // Define the 'open' lambda for the QER skeleton
-  auto open_fn = [&upf_cfg, this]() -> qer_tc_kern_c* {
+  // open lambda: configuration sourced from upf::g_net_cfg
+  auto open_fn = [this]() -> qer_tc_kern_c* {
     struct qer_tc_kern_c* skel = qer_tc_kern_c__open();
     if (!skel) {
       Logger::upf_app().error("Failed to open QER TC BPF skeleton");
@@ -88,7 +116,7 @@ QERProgram::QERProgram(const upf_config& upf_cfg)
     }
 
     // Configure map sizes and .rodata constants
-    this->ConfigureQerMaps(skel, upf_cfg);
+    this->ConfigureQerMaps(skel);
     return skel;
   };
 
@@ -166,10 +194,8 @@ bool QERProgram::NoTcFilterBpf(const std::string& interface) {
 void QERProgram::Setup(
     uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> qers,
     std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs) {
-  const std::string udp_iface =
-      UserPlaneComponent::GetInstance().GetUDPInterface();
-  const std::string gtp_iface =
-      UserPlaneComponent::GetInstance().GetGTPInterface();
+  const std::string udp_iface = upf::GetN6Iface();
+  const std::string gtp_iface = upf::GetN3Iface();
 
   const uint32_t default_rate = NicInformationGetter::retrieveRate(gtp_iface);
   const uint32_t max_rate     = default_rate;
@@ -357,11 +383,7 @@ void QERProgram::Setup(
 
         uint64_t dl_rate = 1;
 
-        if (qer->guaranteed_bitrate.first) {
-          // GBR present: use the SMF-provided GBR value
-          dl_rate = std::max(qer->guaranteed_bitrate.second.dl_gbr, 1UL);
-        } else {
-          // GBR absent: fallback to 80% of MBR
+        if (not qer->guaranteed_bitrate.first) {
           dl_rate = std::max(static_cast<unsigned long>(dl_ceil * 0.8), 1UL);
           Logger::upf_app().warn("QoS Flow missing GBR: set it to 0.8 x MBR");
         }

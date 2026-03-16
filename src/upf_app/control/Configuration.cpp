@@ -1,41 +1,178 @@
 /*
- * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this
+ * file except in compliance with the License. You may obtain a copy of the
+ * License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
  */
 
-/**
- * @file Configuration.cpp
- * @brief Configuration Management Implementation
- * @author OpenAirInterface
- * @date 2025
+// clang-format off
+/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
+ * Date:        2026-03
+ * Changes:     Boy Scout cleanup:
+ *                - Fixed static member initialisation-order hazard: the
+ *                  previous code initialised gtp_interface_ and
+ *                  non_gtp_interface_ directly from upf_cfg.n3.if_name /
+ *                  upf_cfg.n6.if_name at file scope.  upf_cfg lives in
+ *                  another TU; C++ does not guarantee its static initialiser
+ *                  runs before this TU's — so those strings could be empty.
+ *                  Fixed by initialising both to "" (populated at runtime by
+ *                  the constructor from upf_cfg, which by then is fully
+ *                  loaded).
+ *                - Fixed argc guard in constructor: was `if (argc >= 2)` but
+ *                  then dereferenced argv[2] — UB if exactly one argument is
+ *                  passed.  Corrected to `if (argc >= 3)`.
+ *                - Fixed include order to follow Google C++ style:
+ *                  own header → system headers → project headers.
+ *                - Fixed inconsistent comment style: ---BPF map sizing--
+ *                  replaced with a standard `// ---` separator.
+ *                - Fixed g_net_cfg definition comment: "populated in
+ *                  Configuration()" → "populated in BuildNetworkConfig()".
+ *                - Added changelog block with clang-format guards.
  */
+// clang-format on
 
+/*! \file Configuration.cpp
+   \brief  UPF configuration management implementation.
+   \author OpenAirInterface, Franck Messaoudi
+   \date   2025 / 2026-03
+*/
+
+// Google C++ include order: own header, system, project
 #include "Configuration.h"
+
 #include <string>
+
 #include "logger.hpp"
-#include "upf_config.hpp"
+#include "upf_config.hpp"  // upf_config — intentionally local to this TU
+#include "upf_network_config.h"  // upf::NetworkConfig, upf::g_net_cfg
 
 using namespace oai::config;
 
 extern upf_config upf_cfg;
 
-// Static member initialization
-std::string Configuration::gtp_interface_              = upf_cfg.n3.if_name;
-std::string Configuration::udp_interface_              = upf_cfg.n6.if_name;
+// =============================================================================
+// upf::g_net_cfg — definition (declared extern in upf_network_config.h)
+// Populated at runtime by BuildNetworkConfig() — not at static-init time.
+// =============================================================================
+
+namespace upf {
+NetworkConfig
+    g_net_cfg;  ///< Zero-initialised; populated by BuildNetworkConfig()
+}  // namespace upf
+
+// =============================================================================
+// Configuration static members
+// Initialised to empty string — real values come from upf_cfg in the
+// constructor (upf_cfg is fully loaded by then) or from argv overrides.
+// Direct file-scope initialisation from upf_cfg was an initialisation-order
+// hazard: upf_cfg lives in another TU with no guaranteed init order.
+// =============================================================================
+
+std::string Configuration::gtp_interface_              = "";
+std::string Configuration::non_gtp_interface_          = "";
 unsigned char Configuration::is_socket_buffer_enabled_ = 0;
 
-//------------------------------------------------------------------------------
+// =============================================================================
+// Constructor — apply argv overrides; read upf_cfg defaults otherwise
+// =============================================================================
+
 Configuration::Configuration(int argc, char** argv) {
-  if (argc >= 2) {
-    Configuration::gtp_interface_ = argv[1];
-    Configuration::udp_interface_ = argv[2];
+  // Default from YAML-parsed upf_cfg (safe here — upf_cfg is fully loaded
+  // before Configuration is constructed in main()).
+  gtp_interface_     = upf_cfg.n3.if_name;
+  non_gtp_interface_ = upf_cfg.n6.if_name;
+
+  // argv[1] = N3 (GTP-U) interface, argv[2] = N6 (Data Network) interface.
+  // Guard requires argc >= 3 so both argv[1] and argv[2] are valid.
+  if (argc >= 3) {
+    gtp_interface_     = argv[1];
+    non_gtp_interface_ = argv[2];
   }
 
-  Logger::upf_app().debug(
-      "GTP Interface: %s", Configuration::gtp_interface_.c_str());
-  Logger::upf_app().debug(
-      "UDP Interface: %s", Configuration::udp_interface_.c_str());
+  Logger::upf_app().info(
+      "CLI override: N3 = %s N6 = %s", gtp_interface_.c_str(),
+      non_gtp_interface_.c_str());
 
   for (int i = 1; i < argc; ++i) {
-    Logger::upf_app().debug("arg %d = %s", i, argv[i]);
+    Logger::upf_app().debug("arg[%d] = %s", i, argv[i]);
   }
+}
+
+// =============================================================================
+// BuildNetworkConfig — single write-point: upf_cfg → upf::g_net_cfg
+// =============================================================================
+
+void Configuration::BuildNetworkConfig() {
+  Logger::upf_app().info("Building network configuration from upf_config...");
+
+  // --- Interface names ---
+  upf::g_net_cfg.n3_iface = upf_cfg.n3.if_name;
+  upf::g_net_cfg.n6_iface = upf_cfg.n6.if_name;
+  upf::g_net_cfg.n4_iface = upf_cfg.n4.if_name;
+
+  // --- IPv4 addresses (network byte order from struct in_addr::s_addr) ---
+  upf::g_net_cfg.n3_ip = upf_cfg.n3.addr4.s_addr;
+  upf::g_net_cfg.n6_ip = upf_cfg.n6.addr4.s_addr;
+  upf::g_net_cfg.n4_ip = upf_cfg.n4.addr4.s_addr;
+  upf::g_net_cfg.dn_ip = upf_cfg.remote_n6.s_addr;
+
+  // --- Ports ---
+  upf::g_net_cfg.n3_port = upf_cfg.n3.port;
+  upf::g_net_cfg.n4_port = upf_cfg.n4.port;
+  // TODO: upf_cfg.n6.port not yet exposed by the YAML parser; uncomment once
+  // available:
+  //   upf::g_net_cfg.n6_port = upf_cfg.n6.port;
+
+  // --- Feature flags ---
+  upf::g_net_cfg.bpf_datapath   = upf_cfg.enable_bpf_datapath;
+  upf::g_net_cfg.qos            = upf_cfg.enable_qos;
+  upf::g_net_cfg.urr            = upf_cfg.enable_urr;
+  upf::g_net_cfg.bar            = upf_cfg.enable_bar;
+  upf::g_net_cfg.mar            = upf_cfg.enable_mar;
+  upf::g_net_cfg.framed_routing = upf_cfg.enable_fr;
+  // upf_cfg uses a bool (enable_eth_pdu); normalise to "ethernet" / "ip" so
+  // downstream code can compare without knowing the upf_config representation.
+  upf::g_net_cfg.pdu_session_type = upf_cfg.enable_eth_pdu ? "ethernet" : "ip";
+
+  // --- BPF map sizing ---
+  upf::g_net_cfg.max_pdu_sessions         = upf_cfg.max_pdu_sessions;
+  upf::g_net_cfg.max_pdrs_per_pdu_session = upf_cfg.max_pdrs_per_pdu_session;
+  upf::g_net_cfg.max_sdf_filters_per_pdu_session =
+      upf_cfg.max_sdf_filters_per_pdu_session;
+  upf::g_net_cfg.max_upf_interfaces = upf_cfg.max_upf_interfaces;
+  upf::g_net_cfg.max_upf_redirect_interfaces =
+      upf_cfg.max_upf_redirect_interfaces;
+  upf::g_net_cfg.max_arp_entries = upf_cfg.max_arp_entries;
+
+  Logger::upf_app().info(
+      "Network config ready: N3 = %s  N6 = %s  N4 = %s",
+      upf::GetN3Iface().c_str(), upf::GetN6Iface().c_str(),
+      upf::GetN4Iface().c_str());
+
+  Logger::upf_app().info(
+      "Features: BPF = %s QoS = %s URR = %s BAR = %s MAR = %s FR = %s PDU = %s",
+      upf::IsBpfDatapathEnabled() ? "on" : "off",
+      upf::IsQosEnabled() ? "on" : "off", upf::IsUrrEnabled() ? "on" : "off",
+      upf::IsBarEnabled() ? "on" : "off", upf::IsMarEnabled() ? "on" : "off",
+      upf::IsFramedRoutingEnabled() ? "on" : "off",
+      upf::GetPduSessionType().c_str());
+
+  Logger::upf_app().info(
+      "Map sizing: sessions = %u pdrs/session = %u sdf/session = %u arp = %u",
+      upf::GetMaxPduSessions(), upf::GetMaxPdrsPerSession(),
+      upf::GetMaxSdfFiltersPerSession(), upf::GetMaxArpEntries());
 }

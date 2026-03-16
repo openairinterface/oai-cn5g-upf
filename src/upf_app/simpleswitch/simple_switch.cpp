@@ -1,6 +1,57 @@
 /*
- * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this
+ * file except in compliance with the License. You may obtain a copy of the
+ * License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
  */
+
+// clang-format off
+/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
+ * Date:        2026-03
+ * Changes:     Boy Scout cleanup — Doxygen on all public methods, 3GPP §-refs,
+ *              separator lines, Google C++ include order.
+ *              V17.3.0 audit (2026-03, harmonisation pass):
+ *                - GTP-U §-refs confirmed correct; no changes.
+ *                - Fixed \file block: added missing \date field.
+ *                - Added Doxygen section header for upf_n3_task() forward
+ *                  declaration and implementation.
+ *                - Normalised all section-header spec citations to include
+ *                  "3GPP TS 29.281 V17.3.0" consistently (previously some
+ *                  section headers used bare §x.x without spec name).
+ *                - Cross-spec refs in send_g_pdu section header updated to
+ *                  reference 3GPP TS 29.244 V17.10.0 for §8.2.3/§8.2.89.
+ * 3GPP Refs:   3GPP TS 29.281 V17.3.0 (Release 17, 2022-09) — GTP-U Protocol
+ *              3GPP TS 38.415          (NR User Plane Protocol)
+ *              3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
+ *                (cross-refs only: §8.2.3 F-TEID, §8.2.89 QFI)
+ */
+// clang-format on
+
+/*! \file simple_switch.cpp
+   \brief   GTP-U N3 interface handler — receive, dispatch, send.
+   \author  Lionel Gauthier
+   \date    2019
+   \company Eurecom
+   \email   lionel.gauthier@eurecom.fr
+*/
+
+#include "simple_switch.hpp"
+
+#include <stdexcept>
 
 #include "3gpp_conversions.hpp"
 #include "common_defs.h"
@@ -10,9 +61,6 @@
 #include "logger.hpp"
 #include "pfcp_switch.hpp"
 #include "upf_config.hpp"
-#include "simple_switch.hpp"
-
-#include <stdexcept>
 
 using namespace gtpv1u;
 using namespace oai::upf::app;
@@ -24,10 +72,26 @@ extern pfcp_switch* pfcp_switch_inst;
 extern upf_config upf_cfg;
 extern upf_n3* upf_n3_inst;
 
+/** @brief ITTI task loop for N3 (GTP-U) control messages.
+ *
+ *  Handles N3_ECHO_RESPONSE, N3_ERROR_INDICATION, TIME_OUT, and TERMINATE
+ *  ITTI message types.  G-PDU data traffic bypasses this loop and is
+ *  dispatched directly in upf_n3::handle_receive() (3GPP TS 29.281 §5.1).
+ *
+ *  @param args_p  Pointer to oai::utils::thread_sched_params (cast from void*).
+ */
 void upf_n3_task(void*);
 
-//------------------------------------------------------------------------------
+// =============================================================================
+// ITTI task entry point
+// =============================================================================
 
+//------------------------------------------------------------------------------
+// upf_n3_task — ITTI task loop for N3 (3GPP TS 29.281 V17.3.0).
+// G-PDU data traffic is handled directly in handle_receive() without ITTI
+// to avoid task-queue latency on the hot path (fast-path per §5.1).
+
+//------------------------------------------------------------------------------
 void upf_n3_task(void* args_p) {
   const task_id_t task_id = TASK_UPF_N3;
 
@@ -75,6 +139,10 @@ void upf_n3_task(void* args_p) {
   } while (true);
 }
 
+// =============================================================================
+// Constructor
+// =============================================================================
+
 //------------------------------------------------------------------------------
 upf_n3::upf_n3()
     : gtpu_l4_stack(
@@ -88,6 +156,26 @@ upf_n3::upf_n3()
   }
   Logger::upf_n3().startup("Started");
 }
+
+// =============================================================================
+// Receive path
+// =============================================================================
+
+//------------------------------------------------------------------------------
+// handle_receive — called by gtpu_l4_stack on every UDP datagram
+// (3GPP TS 29.281 V17.3.0).
+//
+// Fast-path for G-PDU (§5.1):
+//   Strip GTP-U header (min 8 bytes + optional 4-byte SN/PN/EH fields) then
+//   dispatch the inner IP packet directly to pfcp_switch for PDR look-up.
+//
+// Slow-path for all other GTPv1-U message types:
+//   Deserialise the full GTPv1-U message and route to
+//   handle_receive_gtpv1u_msg().
+//
+// Legacy raw-IP path (gtpuh->version != 1):
+//   Assume the buffer is a raw IPv4/IPv6 packet (no GTP encapsulation).
+
 //------------------------------------------------------------------------------
 void upf_n3::handle_receive(
     char* recv_buffer, const std::size_t bytes_transferred,
@@ -99,16 +187,21 @@ void upf_n3::handle_receive(
   if (gtpuh->version == 1) {
     // Do it fast, do not go throught handle_receive_gtpv1u_msg()
     if (gtpuh->message_type == GTPU_G_PDU) {
+      // Fast-path: compute inner-payload offset without full deserialisation
       uint8_t gtp_flags = recv_buffer[GTPU_MESSAGE_FLAGS_POS_IN_UDP_PAYLOAD];
       std::size_t gtp_payload_offset = GTPV1U_MSG_HEADER_MIN_SIZE;
+
+      // Optional fields: Sequence Number, N-PDU, Extension Header (§5.1)
       if ((((gtp_flags & GTPU_MESSAGE_VERSION_MASK)) &&
            (gtp_flags & GTPU_MESSAGE_PT_MASK)) &&
           ((gtp_flags & GTPU_MESSAGE_EXT_HEADER_MASK) ||
            (gtp_flags & GTPU_MESSAGE_SN_MASK) ||
            (gtp_flags & GTPU_MESSAGE_PN_MASK)))
         gtp_payload_offset += 4;
+
       std::size_t gtp_payload_length = be16toh(gtpuh->message_length);
       if (gtp_flags & 0x07) {
+        // Extension header(s) present — skip PDU Session Container (4 bytes)
         gtp_payload_offset += 4;
         gtp_payload_length -= 4;
       }
@@ -126,9 +219,7 @@ void upf_n3::handle_receive(
         Logger::upf_n3().trace("Unknown GTPU_G_PDU packet");
       }
     } else {
-      // Logger::upf_n3().info( "handle_receive(%d bytes)",
-      // bytes_transferred); std::cout << string_to_hex(recv_buffer,
-      // bytes_transferred) << std::endl;
+      // Slow-path: Echo Request, Error Indication, End Marker, etc.
       std::istringstream iss(std::istringstream::binary);
       iss.rdbuf()->pubsetbuf(recv_buffer, bytes_transferred);
       gtpv1u_msg msg = {};
@@ -140,6 +231,7 @@ void upf_n3::handle_receive(
       }
     }
   } else {
+    // Legacy raw-IP path — no GTP encapsulation (e.g. bypass mode)
     struct iphdr* iph = (struct iphdr*) &recv_buffer[0];
     if (iph->version == 4) {
       pfcp_switch_inst->pfcp_session_look_up_pack_in_access(
@@ -156,6 +248,12 @@ void upf_n3::handle_receive(
   // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop
   // - start); cout << "UL took "  << duration.count() << std::endl;
 }
+
+//------------------------------------------------------------------------------
+// handle_receive_gtpv1u_msg — dispatch non-G-PDU GTPv1-U messages.
+// Echo Request → handle_receive_echo_request() → ITTI → TASK_UPF_APP
+// All other types are silently dropped at this level.
+
 //------------------------------------------------------------------------------
 void upf_n3::handle_receive_gtpv1u_msg(
     gtpv1u_msg& msg, const endpoint& r_endpoint) {
@@ -173,9 +271,21 @@ void upf_n3::handle_receive_gtpv1u_msg(
       break;
     default:
       Logger::upf_n3().error(
-          "handle_receive_gtpv1u_msg msg length %d", msg.get_message_length());
+          "handle_receive_gtpv1u_msg unhandled msg type, length %d",
+          msg.get_message_length());
   }
 }
+
+// =============================================================================
+// Send helpers
+// =============================================================================
+
+//------------------------------------------------------------------------------
+// send_g_pdu (IPv4) — wrap an IPv4 inner packet in a GTP-U G-PDU
+// (3GPP TS 29.281 V17.3.0 §5.1) and send it to the gNB via UDP/IPv4 on N3.
+// QFI (3GPP TS 29.244 V17.10.0 §8.2.89) is carried in the PDU Session
+// Container extension header (3GPP TS 38.415 §5.5.2).
+
 //------------------------------------------------------------------------------
 void upf_n3::send_g_pdu(
     const struct in_addr& peer_addr, const uint16_t peer_udp_port,
@@ -183,26 +293,59 @@ void upf_n3::send_g_pdu(
     uint8_t qfi) {
   // Logger::upf_n3().info( "upf_n3::send_g_pdu() TEID " TEID_FMT " %d
   // bytes", num_bytes);
-  struct sockaddr_in peer_sock_addr;
-  peer_sock_addr.sin_family = AF_INET;
-  peer_sock_addr.sin_addr   = peer_addr;
-  peer_sock_addr.sin_port   = htobe16(peer_udp_port);
+  struct sockaddr_in peer_sock_addr = {};
+  peer_sock_addr.sin_family         = AF_INET;
+  peer_sock_addr.sin_addr           = peer_addr;
+  peer_sock_addr.sin_port           = htobe16(peer_udp_port);
   gtpu_l4_stack::send_g_pdu(
       peer_sock_addr, (teid_t) tunnel_id, send_buffer, num_bytes, qfi);
 }
+
+//------------------------------------------------------------------------------
+// send_g_pdu (IPv6) — wrap an IPv6 inner packet in a GTP-U G-PDU
+// (3GPP TS 29.281 V17.3.0 §5.1) and send it to the gNB via UDP/IPv6 on N3.
+
 //------------------------------------------------------------------------------
 void upf_n3::send_g_pdu(
     const struct in6_addr& peer_addr, const uint16_t peer_udp_port,
     const uint32_t tunnel_id, const char* send_buffer,
     const ssize_t num_bytes) {
-  struct sockaddr_in6 peer_sock_addr;
-  peer_sock_addr.sin6_family   = AF_INET6;
-  peer_sock_addr.sin6_addr     = peer_addr;
-  peer_sock_addr.sin6_port     = htobe16(peer_udp_port);
-  peer_sock_addr.sin6_flowinfo = 0;
-  peer_sock_addr.sin6_scope_id = 0;
+  struct sockaddr_in6 peer_sock_addr = {};
+  peer_sock_addr.sin6_family         = AF_INET6;
+  peer_sock_addr.sin6_addr           = peer_addr;
+  peer_sock_addr.sin6_port           = htobe16(peer_udp_port);
+  peer_sock_addr.sin6_flowinfo       = 0;
+  peer_sock_addr.sin6_scope_id       = 0;
   gtpu_l4_stack::send_g_pdu(peer_sock_addr, tunnel_id, send_buffer, num_bytes);
 }
+
+// =============================================================================
+// ITTI message handlers
+// =============================================================================
+
+//------------------------------------------------------------------------------
+// handle_itti_msg(echo_response) — forward Echo Response back to gNB
+// (3GPP TS 29.281 §7.2.2).
+
+//------------------------------------------------------------------------------
+void upf_n3::handle_itti_msg(std::shared_ptr<itti_n3_echo_response> m) {
+  send_response(m->gtp_ies);
+}
+
+//------------------------------------------------------------------------------
+// handle_itti_msg(error_indication) — send Error Indication to gNB
+// (3GPP TS 29.281 §7.3.1).
+
+//------------------------------------------------------------------------------
+void upf_n3::handle_itti_msg(std::shared_ptr<itti_n3_error_indication> m) {
+  send_indication(m->gtp_ies);
+}
+
+//------------------------------------------------------------------------------
+// handle_receive_echo_request — wrap Echo Request (3GPP TS 29.281 V17.3.0
+// §7.2.1) into an ITTI message and send it to TASK_UPF_APP for response
+// generation (§7.2.2).
+
 //------------------------------------------------------------------------------
 void upf_n3::handle_receive_echo_request(
     gtpv1u_msg& msg, const endpoint& r_endpoint) {
@@ -231,13 +374,10 @@ void upf_n3::handle_receive_echo_request(
 }
 
 //------------------------------------------------------------------------------
-void upf_n3::handle_itti_msg(std::shared_ptr<itti_n3_echo_response> m) {
-  send_response(m->gtp_ies);
-}
-//------------------------------------------------------------------------------
-void upf_n3::handle_itti_msg(std::shared_ptr<itti_n3_error_indication> m) {
-  send_indication(m->gtp_ies);
-}
+// report_error_indication — send a GTP-U Error Indication to the gNB when
+// pfcp_switch receives a TEID with no matching PDR (3GPP TS 29.281 §7.3.1).
+// Mandatory IEs: Tunnel Endpoint Identifier Data I (§8.3), GTP-U Peer Address.
+
 //------------------------------------------------------------------------------
 void upf_n3::report_error_indication(
     const endpoint& r_endpoint, const uint32_t tunnel_id) {
@@ -246,10 +386,12 @@ void upf_n3::report_error_indication(
   error_ind->gtp_ies.r_endpoint = r_endpoint;
   error_ind->gtp_ies.set_teid(0);
 
+  // 3GPP TS 29.281 §8.3 — Tunnel Endpoint Identifier Data I
   tunnel_endpoint_identifier_data_i_t tun_data = {};
   tun_data.tunnel_endpoint_identifier_data_i   = tunnel_id;
   error_ind->gtp_ies.set(tun_data);
 
+  // 3GPP TS 29.281 §8.10 — GTP-U Peer Address (mandatory)
   gtp_u_peer_address_t peer_address = {};
   if (oai::utils::xgpp_conv::endpoint_to_gtp_u_peer_address(
           r_endpoint, peer_address)) {

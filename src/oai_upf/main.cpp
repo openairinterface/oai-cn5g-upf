@@ -99,16 +99,17 @@ void my_app_signal_handler(int s) {
 
 //------------------------------------------------------------------------------
 void setup_bpf() {
-  std::string sGTPInterface = upf_cfg.n3.if_name;
-  std::string sUDPInterface = upf_cfg.n6.if_name;
+  std::string sGTPInterface    = upf_cfg.n3.if_name;
+  std::string sNonGTPInterface = upf_cfg.n6.if_name;
   Logger::upf_app().info("GTP interface: %s", sGTPInterface.c_str());
-  Logger::upf_app().info("Non-GTP interface: %s", sUDPInterface.c_str());
+  Logger::upf_app().info("Non-GTP interface: %s", sNonGTPInterface.c_str());
   Logger::upf_app().info(
       "Configured UPF interfaces : N3 (GTP) = %s, N6 (Non-GTP) = %s, N4 (PFCP) "
       "= %s",
-      sGTPInterface.c_str(), sUDPInterface.c_str(), upf_cfg.n4.if_name.c_str());
+      sGTPInterface.c_str(), sNonGTPInterface.c_str(),
+      upf_cfg.n4.if_name.c_str());
 
-  UserPlaneComponent::GetInstance().Setup(sGTPInterface, sUDPInterface);
+  UserPlaneComponent::GetInstance().Setup(sGTPInterface, sNonGTPInterface);
 
   auto pUPF_XDPProgram = UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
   pUPF_XDPProgram->SetFramedRouting(upf_cfg.enable_fr);

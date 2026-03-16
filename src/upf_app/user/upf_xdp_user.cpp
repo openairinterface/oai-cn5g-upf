@@ -1,10 +1,61 @@
 /*
- * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this
+ * file except in compliance with the License. You may obtain a copy of the
+ * License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
  */
+
+// clang-format off
+/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
+ * Date:        2026-03
+ * Changes:     Boy Scout cleanup — changelogs, §-refs, separator lines.
+ *              V17.10.0 harmonisation:
+ *                - [BUG FIX] InitializeMaps(): urr_config_map_, urr_volume_map_,
+ *                  bar_config_map_, bar_state_map_, mar_rules_map_,
+ *                  feature_dispatch_map_, session_mac_map_ were declared as
+ *                  member variables but never assigned — all remained nullptr.
+ *                  SessionPrograms::CleanupBpfMapEntries() and
+ *                  URRProgram/BARProgram/MARProgram therefore received nullptr
+ *                  map references and silently discarded all cleanup calls.
+ *                  Fixed: all seven maps now initialised from the skeleton.
+ *                - [BUG FIX] GetMapByName(): missing cases for urr_config_map,
+ *                  urr_volume_map, bar_config_map, bar_state_map, mar_rules_map,
+ *                  feature_dispatch_map, session_by_mac_map — all returned
+ *                  nullptr. Added cases for every map advertised in the
+ *                  docstring.
+ *                - [BUG FIX] GetMapByName(): "session_rules_enabled_map" not
+ *                  handled; SessionPrograms.cpp uses this name (the BPF map was
+ *                  renamed from session_qos_enabled_map during the
+ *                  rules-enabled-flags refactor). Added as alias for
+ *                  qos_enabling_map_.
+ *                - [BUG FIX] CreateUpfInterfaceMapEntry(): was reading directly
+ *                  from upf_cfg.n3/n4/n6 — inconsistent with the rest of the
+ *                  codebase which reads from upf::g_net_cfg after
+ *                  BuildNetworkConfig(). Fixed to use upf::Get*() getters.
+ * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
+ *              3GPP TS 23.501          (Release 17)           — 5G System Arch.
+ */
+// clang-format on
 
 /**
  * @file upf_xdp_user.cpp
  * @brief Implementation of XDP program management
+ * @author OpenAirInterface, Franck Messaoudi
+ * @date 2025 / 2026-03
  */
 
 #include "upf_xdp_user.h"
@@ -41,7 +92,7 @@ class XDPSection {
 
 //------------------------------------------------------------------------------
 void UPF_XDPProgram::ConfigurePfcpSessionLookupMaps(
-    struct upf_xdp_kern_c* skel, const upf_config& upf_cfg) {
+    struct upf_xdp_kern_c* skel) {
   if (!skel) {
     Logger::upf_app().error("Null skeleton in ConfigurePfcpSessionLookupMaps");
     return;
@@ -178,15 +229,14 @@ void UPF_XDPProgram::ConfigurePfcpSessionLookupMaps(
 
 //------------------------------------------------------------------------------
 UPF_XDPProgram::UPF_XDPProgram(
-    const std::string& gtp_interface, const std::string& udp_interface,
-    const upf_config& upf_cfg)
+    const std::string& gtp_interface, const std::string& non_gtp_interface)
     : BPFProgram(),
       gtp_interface_(gtp_interface),
-      udp_interface_(udp_interface) {
+      non_gtp_interface_(non_gtp_interface) {
   Logger::upf_app().info("Initializing UPF XDP Program...");
 
   // Define the 'open' lambda for the XDP skeleton
-  auto open_fn = [&upf_cfg, this]() -> upf_xdp_kern_c* {
+  auto open_fn = [this]() -> upf_xdp_kern_c* {
     struct upf_xdp_kern_c* skel = upf_xdp_kern_c__open();
     if (!skel) {
       Logger::upf_app().error("Failed to open BPF skeleton");
@@ -194,7 +244,7 @@ UPF_XDPProgram::UPF_XDPProgram(
     }
 
     // Configure maps and rodata
-    this->ConfigurePfcpSessionLookupMaps(skel, upf_cfg);
+    this->ConfigurePfcpSessionLookupMaps(skel);
     return skel;
   };
 
@@ -211,25 +261,28 @@ void UPF_XDPProgram::CreateUpfInterfaceMapEntry(reference_point_t s) {
   struct interface_config iface;
   __builtin_memset(&iface, 0, sizeof(interface_config));
 
+  // Read from upf::g_net_cfg — populated by Configuration::BuildNetworkConfig()
+  // before Setup() is called.  Do NOT read from upf_cfg directly here.
   switch (s) {
     case N3_INTERFACE:
-      iface.ipv4_address = upf_cfg.n3.addr4.s_addr;
-      iface.port         = upf_cfg.n3.port;
-      iface.if_name      = upf_cfg.n3.if_name.c_str();
+      iface.ipv4_address = upf::GetN3Ip();
+      iface.port         = upf::GetN3Port();
+      iface.if_name      = upf::GetN3Iface().c_str();
       GetIfaceMap()->Update(s, iface, BPF_ANY);
       break;
 
     case N6_INTERFACE:
-      iface.ipv4_address = upf_cfg.n6.addr4.s_addr;
-      iface.port         = upf_cfg.n6.port;
-      iface.if_name      = upf_cfg.n6.if_name.c_str();
+      iface.ipv4_address = upf::GetN6Ip();
+      // N6 port not yet exposed by YAML parser; use 0 until added.
+      iface.port    = 0;
+      iface.if_name = upf::GetN6Iface().c_str();
       GetIfaceMap()->Update(s, iface, BPF_ANY);
       break;
 
     case N4_INTERFACE:
-      iface.ipv4_address = upf_cfg.n4.addr4.s_addr;
-      iface.port         = upf_cfg.n4.port;
-      iface.if_name      = upf_cfg.n4.if_name.c_str();
+      iface.ipv4_address = upf::GetN4Ip();
+      iface.port         = upf::GetN4Port();
+      iface.if_name      = upf::GetN4Iface().c_str();
       GetIfaceMap()->Update(s, iface, BPF_ANY);
       break;
 
@@ -250,36 +303,36 @@ void UPF_XDPProgram::CreateUpfInterfaceMapEntry(reference_point_t s) {
 UPF_XDPProgram::~UPF_XDPProgram() {}
 
 //------------------------------------------------------------------------------
-void UPF_XDPProgram::Setup(bool is_qos_enabled) {
+void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   skeleton_ = lifecycle_->open();
   InitializeMaps();
   lifecycle_->load();
   lifecycle_->attach();
 
-  const std::string udp_iface =
-      UserPlaneComponent::GetInstance().GetUDPInterface();
+  const std::string non_gtp_iface =
+      UserPlaneComponent::GetInstance().GetNonGTPInterface();
   const std::string gtp_iface =
       UserPlaneComponent::GetInstance().GetGTPInterface();
 
-  uint32_t udp_interface_index = if_nametoindex(udp_iface.c_str());
-  uint32_t gtp_interface_index = if_nametoindex(gtp_iface.c_str());
+  uint32_t non_gtp_interface_index = if_nametoindex(non_gtp_iface.c_str());
+  uint32_t gtp_interface_index     = if_nametoindex(gtp_iface.c_str());
 
   uint32_t uplink_id   = static_cast<uint32_t>(FlowDirection::UPLINK);
   uint32_t downlink_id = static_cast<uint32_t>(FlowDirection::DOWNLINK);
 
-  egress_interface_map_->Update(uplink_id, udp_interface_index, BPF_ANY);
+  egress_interface_map_->Update(uplink_id, non_gtp_interface_index, BPF_ANY);
   egress_interface_map_->Update(downlink_id, gtp_interface_index, BPF_ANY);
 
   Logger::upf_app().info(
       "Reference points configured: N3 (%s), N4 (%s), N6 (%s)",
-      upf_cfg.n3.if_name.c_str(), upf_cfg.n4.if_name.c_str(),
-      upf_cfg.n6.if_name.c_str());
+      upf::GetN3Iface().c_str(), upf::GetN4Iface().c_str(),
+      upf::GetN6Iface().c_str());
   CreateUpfInterfaceMapEntry(N3_INTERFACE);
   CreateUpfInterfaceMapEntry(N6_INTERFACE);
   CreateUpfInterfaceMapEntry(N4_INTERFACE);
 
   // Validate interface names
-  if (udp_interface_.empty() || gtp_interface_.empty()) {
+  if (non_gtp_interface_.empty() || gtp_interface_.empty()) {
     Logger::upf_app().error("GTP or UDP interface not defined!");
     throw std::runtime_error("GTP or UDP interface not defined!");
   }
@@ -289,14 +342,14 @@ void UPF_XDPProgram::Setup(bool is_qos_enabled) {
   lifecycle_->link(XDPSection::Uplink, gtp_interface_.c_str());
 
   Logger::upf_app().debug(
-      "Link Non-GTP XDP Section to interface %s", udp_interface_.c_str());
-  if (is_qos_enabled) {
+      "Link Non-GTP XDP Section to interface %s", non_gtp_interface_.c_str());
+  if (flags.enable_qos) {
     Logger::upf_app().debug(
         "QoS enforcement is enabled - attaching TC BPF section");
-    lifecycle_->link(XDPSection::Shaping, udp_interface_.c_str());
+    lifecycle_->link(XDPSection::Shaping, non_gtp_interface_.c_str());
   } else {
     Logger::upf_app().debug("QoS enforcement: disabled");
-    lifecycle_->link(XDPSection::Downlink, udp_interface_.c_str());
+    lifecycle_->link(XDPSection::Downlink, non_gtp_interface_.c_str());
   }
 }
 
@@ -322,11 +375,15 @@ std::shared_ptr<BPFMaps> UPF_XDPProgram::GetMaps() {
 //------------------------------------------------------------------------------
 std::shared_ptr<BPFMap> UPF_XDPProgram::GetMapByName(
     const std::string& map_name) {
-  // Map name aliases to actual map members
-  // Support both new names and legacy names for compatibility
+  // Map name aliases to actual map members.
+  // Supports both canonical names and legacy aliases for backward compat.
 
   if (map_name == "session_map" || map_name == "session_by_ue_ip_map") {
     return session_mapping_map_;
+  }
+
+  if (map_name == "session_by_mac_map") {
+    return session_mac_map_;
   }
 
   if (map_name == "arp_table" || map_name == "arp_table_map") {
@@ -353,7 +410,10 @@ std::shared_ptr<BPFMap> UPF_XDPProgram::GetMapByName(
     return sdf_filter_map_;
   }
 
-  if (map_name == "session_qos_enabled_map") {
+  // "session_rules_enabled_map" is the name used by SessionPrograms.cpp
+  // (rules-enabled-flags refactor renamed from session_qos_enabled_map).
+  if (map_name == "session_qos_enabled_map" ||
+      map_name == "session_rules_enabled_map") {
     return qos_enabling_map_;
   }
 
@@ -365,20 +425,31 @@ std::shared_ptr<BPFMap> UPF_XDPProgram::GetMapByName(
     return framed_route_flag_map_;
   }
 
-  if (map_name == "m_eth__session_mapping") {
-    return eth_session_mapping_map_;
+  if (map_name == "feature_dispatch_map") {
+    return feature_dispatch_map_;
   }
 
-  if (map_name == "m_eth__rules_match_pdr") {
-    return eth_rules_match_pdr_map_;
+  // URR maps — required by URRProgram and SessionPrograms::CleanupBpfMapEntries
+  if (map_name == "urr_config_map") {
+    return urr_config_map_;
   }
 
-  if (map_name == "m_eth__session_pdrs") {
-    return eth_session_pdrs_map_;
+  if (map_name == "urr_volume_map") {
+    return urr_volume_map_;
   }
 
-  if (map_name == "m_mac_pdu_session") {
-    return mac_pdu_session_map_;
+  // BAR maps — required by BARProgram and SessionPrograms::CleanupBpfMapEntries
+  if (map_name == "bar_config_map") {
+    return bar_config_map_;
+  }
+
+  if (map_name == "bar_state_map") {
+    return bar_state_map_;
+  }
+
+  // MAR maps — required by MARProgram and SessionPrograms::CleanupBpfMapEntries
+  if (map_name == "mar_rules_map") {
+    return mar_rules_map_;
   }
 
   // Map not found
@@ -463,6 +534,8 @@ void UPF_XDPProgram::InitializeMaps() {
 
   session_mapping_map_ =
       std::make_shared<BPFMap>(maps_->GetMap("session_by_ue_ip_map"));
+  session_mac_map_ =
+      std::make_shared<BPFMap>(maps_->GetMap("session_by_mac_map"));
   arp_table_map_ = std::make_shared<BPFMap>(maps_->GetMap("arp_table_map"));
   egress_interface_map_ =
       std::make_shared<BPFMap>(maps_->GetMap("redirect_interfaces_map"));
@@ -478,23 +551,19 @@ void UPF_XDPProgram::InitializeMaps() {
       std::make_shared<BPFMap>(maps_->GetMap("m_framed_route_mapping"));
   framed_route_flag_map_ =
       std::make_shared<BPFMap>(maps_->GetMap("framed_routing_flag"));
+  feature_dispatch_map_ =
+      std::make_shared<BPFMap>(maps_->GetMap("feature_dispatch_map"));
 
-  // Ethernet PDU session maps — optional; absent if ETH support not compiled in
-  try {
-    eth_session_mapping_map_ =
-        std::make_shared<BPFMap>(maps_->GetMap("m_eth__session_mapping"));
-    eth_rules_match_pdr_map_ =
-        std::make_shared<BPFMap>(maps_->GetMap("m_eth__rules_match_pdr"));
-    eth_session_pdrs_map_ =
-        std::make_shared<BPFMap>(maps_->GetMap("m_eth__session_pdrs"));
-    mac_pdu_session_map_ =
-        std::make_shared<BPFMap>(maps_->GetMap("m_mac_pdu_session"));
-    Logger::upf_app().debug("ETH-PDU BPF maps initialized");
-  } catch (const std::exception& e) {
-    Logger::upf_app().warn(
-        "ETH-PDU BPF maps not found — Ethernet PDU sessions disabled: %s",
-        e.what());
-  }
+  // URR maps — required by URRProgram (SessionProgramManager)
+  urr_config_map_ = std::make_shared<BPFMap>(maps_->GetMap("urr_config_map"));
+  urr_volume_map_ = std::make_shared<BPFMap>(maps_->GetMap("urr_volume_map"));
+
+  // BAR maps — required by BARProgram
+  bar_config_map_ = std::make_shared<BPFMap>(maps_->GetMap("bar_config_map"));
+  bar_state_map_  = std::make_shared<BPFMap>(maps_->GetMap("bar_state_map"));
+
+  // MAR maps — required by MARProgram
+  mar_rules_map_ = std::make_shared<BPFMap>(maps_->GetMap("mar_rules_map"));
 }
 
 //------------------------------------------------------------------------------

@@ -26,7 +26,7 @@ enum pfcp_dest_interface_value {
   INTERFACE_VALUE_CORE           = 1,
   INTERFACE_VALUE_SGI_LAN_N6_LAN = 2,
   INTERFACE_VALUE_CP_FUNCTION    = 3,
-  INTERFACE_VALUE_LI_FUNCTION    = 4,
+  INTERFACE_VALUE_LI_FUNCTION    = 4
 };
 
 /**
