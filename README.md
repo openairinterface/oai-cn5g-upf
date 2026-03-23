@@ -1,94 +1,197 @@
-------------------------------------------------------------------------------
+# 🚀 OAI-UPF (Official Source) with QoS WebUI
 
-                             OPENAIR-CN-5G
- An implementation of the 5G Core network by the OpenAirInterface community.
+> **Updated:** March 23, 2026  
+> **Mode:** Official OAI-UPF datapath (`src/` kept aligned with upstream)  
+> **Focus:** Build the official UPF, monitor QoS behavior through the WebUI, and drive traffic with companion PFCP/TRex helper scripts.
 
-------------------------------------------------------------------------------
+## ✨ Overview
+This repository keeps the **official OAI-UPF source tree** in `src/` while adding a practical monitoring workflow around it.
 
-OPENAIR-CN-5G is an implementation of the 3GPP specifications for the 5G Core Network.
-At the moment, it contains the following network elements:
+It is intended for a lab setup where:
+- the **UPF** runs on the UPF host,
+- the **WebUI** runs on the same UPF host,
+- a **PFCP helper script** runs on the SMF-simulator host, and
+- a **TRex helper script** runs on the traffic-generator host.
 
-* Access and Mobility Management Function (**AMF**)
-* Authentication Server Management Function (**AUSF**)
-* Location Management Function (**LMF**)
-* Network Exposure Function (**NEF**)
-* Network Slicing Selection Function (**NSSF**)
-* Network Repository Function (**NRF**)
-* Network Data Analytics Function (**NWDAF**)
-* Policy Control Function (**PCF**)
-* Session Management Function (**SMF**)
-* Unified Data Management (**UDM**)
-* Unified Data Repository (**UDR**)
-* Unstructured Data Storage Function (**UDSF**)
-* User Plane Function (**UPF**)
+The monitoring layer is designed to work **with the upstream HTB/TC behavior** of the official UPF, rather than replacing the datapath with a custom in-kernel rate limiter.
 
-Each element implementation has its own repository: this repository (`oai-upf`) is meant for UPF.
+## 🧭 Highlights
+- ✅ **Official UPF source preserved**: `src/` follows the upstream OAI implementation.
+- 🌐 **Full-stack WebUI**: Flask backend plus HTML/CSS/JS frontend under `gui/webui/`.
+- 📊 **QoS-aware monitoring**: Interface rates, PFCP session overview, and runtime QoS visualization.
+- 🎯 **Official HTB/TC mode**: The UI is aligned with the upstream N3 HTB class behavior.
+- 🧪 **Companion helper scripts**: PFCP session setup and TRex traffic generation used alongside this repository.
 
-# Licence info
+## 🔄 Datapath Model
+In the official source flow, downlink QoS follows the upstream OAI path:
 
+```text
+DN -> N6 -> XDP session lookup -> TC ingress redirect -> N3 HTB classes
+```
+
+This means:
+- XDP performs early packet/session processing.
+- TC and HTB enforce the official upstream class-based shaping behavior.
+- The WebUI observes the system from the outside using configuration files, interface counters, BPF state, and HTB class statistics.
+
+## 📜 License
 The source code is distributed under `Collaborative Standards Software License v1.0 (CSSL v1.0)`.
 For more details, visit the [OAI Website](https://openairinterface.org/oai-cssl/).
 
-The full text of `Collaborative Standards Software License v1.0` is also included in the [LICENSE](LICENSE)
-file at the root of this repository.
+The full text of `Collaborative Standards Software License v1.0` is also included in the [LICENSE](LICENSE) file at the root of this repository.
 
 Certain files in the repository are using MIT License and documentation is distributed under
 Creative Commons Attribution 4.0 International license.
 
 For third-party softwares, please refer to [NOTICE](NOTICE) file.
 
-# Where to start
+## 📂 Repository Layout
+```text
+.
+├── build/            # Build system and generated output
+├── ci-scripts/       # CI helpers
+├── docker/           # Container build files
+├── docs/             # Documentation
+├── etc/              # Runtime configuration (config.yaml)
+├── gui/
+│   └── webui/        # QoS monitoring frontend + backend
+├── scripts/          # Container/runtime helper scripts
+└── src/              # Official OAI-UPF source tree
+```
 
-The Openair-CN-5G UPF code is written, executed, and tested on UBUNTU server focal/jammy version.
-Other Linux distributions support will be added later on.
+## 🛠️ Build the Official UPF
+Install dependencies and build the UPF as usual:
 
-More details on the supported feature set is available on this [page](docs/FEATURE_SET.md).
+```bash
+make setup
+make install
+```
 
-# Collaborative work
+Run the UPF:
 
-This source code is managed through a GITLAB server, a collaborative development platform:
+```bash
+sudo upf -c etc/config.yaml -o
+```
 
-*  URL: [https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-upf](https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-upf).
+## 🌐 Start the WebUI
+The WebUI lives under `gui/webui/`.
 
-Process is explained in [CONTRIBUTING](CONTRIBUTING.md) file.
+```bash
+cd gui/webui
+sudo ./start_webui.sh
+```
 
-# Contribution requests
+Then open:
+- [http://localhost:5001](http://localhost:5001)
+- `http://<UPF-host-ip>:5001`
 
-In a general way, anybody who is willing can contribute on any part of the
-code in any network component.
+## 🧩 PFCP and TRex Helper Scripts
+In our lab workflow, the PFCP and TRex helpers are placed under:
 
-Contributions can be simple bugfixes, advices and remarks on the design,
-architecture, coding/implementation.
+- `oai-cn5g-fed/test/block_test/SMF_scripts/oripfcp_qos_10_with_prio.py`  
+  Used on the **SMF simulator / PFCP client host** to establish 10 PFCP sessions.
+- `oai-cn5g-fed/test/block_test/Trex_scripts/oriudp_10_pkt_src_ip_split.py`  
+  Used on the **TRex host** to generate per-user UDP traffic according to the QoS layout.
 
-# Release Notes
+## ▶️ Typical Lab Workflow
+### 1. Start the official UPF
+```bash
+sudo upf -c etc/config.yaml -o
+```
 
-They are available on the [CHANGELOG](CHANGELOG.md) file.
+### 2. Start the WebUI on the UPF host
+```bash
+cd gui/webui
+sudo ./start_webui.sh
+```
 
-# Directory structure
+### 3. Establish PFCP sessions from the PFCP helper host
+```bash
+python3 oai-cn5g-fed/test/block_test/SMF_scripts/oripfcp_qos_10_with_prio.py
+```
 
-<pre>
-oai-upf
-├── build :       Build directory, contains targets and object files generated by compilation of network functions. 
-│   ├── log :     Directory containing build log files.
-│   ├── scripts : Directory containing scripts for building network functions.
-│   └── upf :  Directory containing CMakefile.txt and object files generated by compilation of UPF network function. 
-├── ci-scripts :  Directory containing scripts for the CI process.
-├── docker :      Directory containing dockerfiles to create images.
-├── docs :        Directory containing documentation on the supported feature set.
-│   └── images :  Directory containing images for the documentation.
-├── etc :         Directory containing the configuration files to be deployed for each network function.
-├── openshift :   Directory containing YAML files for build within OpenShift context.
-├── scripts :     Directory containing entrypoint script for container images.
-└── src :         Source files of network functions.
-    ├── common :    Common header files
-    │   ├── msg :   ITTI messages definitions.
-    │   └── utils : Common utilities.
-    ├── gtpv1u :    Generic GTPV1-U stack implementation
-    ├── gtpv2c :    Generic GTPV2-C stack implementation
-    ├── itti :      Inter task interface 
-    ├── oai_upf : UPF main directory, contains the "main" CMakeLists.txt file.
-    │   └── simpleswitch : Very Basic Switch implementation.
-    ├── pfcp :      Generic PFCP stack implementation.
-    └── udp :       UDP server implementation.
-</pre>
+### 4. Start TRex on the traffic-generator host (run as `root`)
+```bash
+./t-rex-64 -i --no-scapy-server -c 30
+```
 
+### 5. Open the TRex console (run as `root`)
+```bash
+./trex-console
+```
+
+### 6. Launch the companion traffic profile from the TRex console
+```bash
+start -f oai-cn5g-fed/test/block_test/Trex_scripts/oriudp_10_pkt_src_ip_split.py -p 1 -m 100% -d 600
+```
+
+## 📊 What the WebUI Shows
+The WebUI provides several layers of visibility:
+
+### UPF Configuration
+Read from `etc/config.yaml`, including:
+- BPF datapath switch
+- QoS switch
+- N3 / N4 / N6 interfaces
+- N6 gateway and runtime basics
+
+### PFCP Session Overview
+Session metadata can be shown from `gui/webui/data/sessions.json` when available.
+Typical fields include:
+- user / UE IP
+- TEID
+- QoS tier
+- GBR / MBR
+- QFI
+- precedence
+
+### Runtime Traffic View
+Depending on the environment, the backend can use:
+- custom BPF counters when present, or
+- official upstream HTB class counters on the N3 side.
+
+In official-source mode, the UI is intended to reflect the **actual upstream HTB-based QoS behavior** rather than a custom token-bucket branch.
+
+## 📐 Stable Official QoS Profile Used in Our Lab
+For the official source branch, a stable 10-user profile commonly used in testing is:
+
+- **HIGH** (2 users): `GBR 0.8 Gbps`, `MBR 1.2 Gbps`
+- **MEDIUM** (3 users): `GBR 0.4 Gbps`, `MBR 0.8 Gbps`
+- **LOW** (5 users): `GBR 0.2 Gbps`, `MBR 0.4 Gbps`
+
+Aggregate totals:
+- **Total GBR**: `3.8 Gbps`
+- **Total MBR**: `6.8 Gbps`
+
+This keeps the official upstream implementation in a range that is easier to validate consistently in lab tests.
+
+## 🔍 Troubleshooting
+### WebUI shows no active sessions
+Check:
+- the UPF process is running,
+- PFCP sessions have been established,
+- `bpftool` is available on the UPF host,
+- `tc` HTB classes exist on the N3 interface when using official mode.
+
+### WebUI shows configuration but no live movement
+Check:
+- traffic is actually traversing the UPF,
+- TRex is sending to the right UE IP range,
+- the PFCP helper created sessions successfully,
+- the N3 / N6 interface names in `etc/config.yaml` match the real host.
+
+### WebUI port is already in use
+`gui/webui/start_webui.sh` automatically cleans up the previous process on port `5001` before starting a new backend.
+
+## 📚 Related Files
+- `etc/config.yaml`
+- `gui/webui/backend/api_server.py`
+- `gui/webui/frontend/index.html`
+- `gui/webui/frontend/app.js`
+- `gui/webui/frontend/style.css`
+- `gui/webui/start_webui.sh`
+
+## 📝 Notes
+- This repository keeps the **official OAI-UPF source** in place.
+- The WebUI is meant to **observe** the official datapath, not redefine it.
+- Companion PFCP/TRex scripts are part of the test workflow and are expected under `oai-cn5g-fed/test/block_test/`

@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAI-UPF QoS Monitoring System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>OAI-UPF QoS Monitoring System</h1>
+                <div class="header-status">
+                    <span class="status-indicator" id="connection-status">
+                        <span class="dot"></span> Connecting...
+                    </span>
+                    <span class="last-update">Last Update: <span id="last-update-time">--</span></span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- UPF Configuration Panel -->
+            <section class="panel config-panel">
+                <div class="panel-header">
+                    <h2>UPF Configuration</h2>
+                    <button class="refresh-btn" onclick="refreshConfig()">Refresh</button>
+                </div>
+                <div class="panel-body">
+                    <div class="config-grid">
+                        <div class="config-card">
+                            <h3>Features</h3>
+                            <div class="config-items" id="features-config">
+                                <div class="loading">Loading...</div>
+                            </div>
+                        </div>
+                        <div class="config-card">
+                            <h3>Network Interfaces</h3>
+                            <div class="config-items" id="interfaces-config">
+                                <div class="loading">Loading...</div>
+                            </div>
+                        </div>
+                        <div class="config-card">
+                            <h3>System Settings</h3>
+                            <div class="config-items" id="system-config">
+                                <div class="loading">Loading...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- User Session Panel -->
+            <section class="panel sessions-panel">
+                <div class="panel-header">
+                    <h2>User Sessions (PFCP Sessions)</h2>
+                    <div class="session-summary">
+                        <span>Total Sessions: <strong id="total-sessions">0</strong></span>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="table-wrapper">
+                        <table class="sessions-table">
+                            <thead>
+                                <tr>
+                                    <th>User ID</th>
+                                    <th>UE IP Address</th>
+                                    <th>TEID</th>
+                                    <th>QoS Tier</th>
+                                    <th>GBR (Gbps)</th>
+                                    <th>MBR (Gbps)</th>
+                                    <th>QFI</th>
+                                    <th>Precedence</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sessions-tbody">
+                                <tr>
+                                    <td colspan="9" class="loading">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Real-time Statistics Panel -->
+            <section class="panel stats-panel">
+                <div class="panel-header">
+                    <h2>Real-time Rate Statistics (QoS Monitor)</h2>
+                    <div class="stats-controls">
+                        <label>
+                            <input type="checkbox" id="auto-refresh" checked> Auto Refresh
+                        </label>
+                        <select id="refresh-interval">
+                            <option value="1000" selected>1 sec</option>
+                            <option value="2000">2 sec</option>
+                            <option value="5000">5 sec</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <!-- Interface Overview -->
+                    <div class="interface-summary">
+                        <div class="summary-card">
+                            <div class="summary-label">Hostname</div>
+                            <div class="summary-value" id="hostname">--</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="summary-label">N3 NIC (Uplink)</div>
+                            <div class="summary-value" id="n3-interface-name">--</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="summary-label">N3 RX/TX Rate</div>
+                            <div class="summary-value" id="n3-rate">0.00 / 0.00 Gbps</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="summary-label">N6 NIC (Downlink)</div>
+                            <div class="summary-value" id="n6-interface-name">--</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="summary-label">N6 RX/TX Rate</div>
+                            <div class="summary-value" id="n6-rate">0.00 / 0.00 Gbps</div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="summary-label">QoS Accounted Traffic</div>
+                            <div class="summary-value" id="bpf-total-rate">0.00 Gbps</div>
+                        </div>
+                    </div>
+                    <div class="stats-note" id="rate-basis-note">
+                        Runtime statistics automatically switch between custom BPF counters and the upstream HTB/TC view. PFCP GBR/MBR remains the configured reference.
+                    </div>
+
+                    <!-- User Rate Table -->
+                    <div class="table-wrapper">
+                        <table class="stats-table">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>UE IP</th>
+                                    <th>QoS Tier</th>
+                                    <th>Measured Rate (Gbps)</th>
+                                    <th>Expected Range (Gbps)</th>
+                                    <th>Bytes Passed</th>
+                                    <th>Bytes Dropped</th>
+                                    <th>Drop Rate</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stats-tbody">
+                                <tr>
+                                    <td colspan="9" class="loading">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Traffic Chart Panel -->
+            <section class="panel chart-panel">
+                <div class="panel-header">
+                    <h2>Traffic Trend Chart</h2>
+                </div>
+                <div class="panel-body">
+                    <!-- Legend -->
+                    <div class="chart-legend">
+                        <div class="chart-legend-item">
+                            <span class="chart-legend-color high"></span>
+                            <span>HIGH (2 users, green)</span>
+                        </div>
+                        <div class="chart-legend-item">
+                            <span class="chart-legend-color medium"></span>
+                            <span>MEDIUM (3 users, orange)</span>
+                        </div>
+                        <div class="chart-legend-item">
+                            <span class="chart-legend-color low"></span>
+                            <span>LOW (5 users, red)</span>
+                        </div>
+                    </div>
+                    <canvas id="traffic-chart"></canvas>
+                </div>
+            </section>
+
+            <!-- QoS Achievement Analysis Panel -->
+            <section class="panel qos-analysis-panel">
+                <div class="panel-header">
+                    <h2>QoS Achievement Analysis</h2>
+                    <button class="refresh-btn" onclick="fetchQosAnalysis()">Refresh</button>
+                </div>
+                <div class="panel-body">
+                    <!-- Resource Configuration Overview -->
+                    <div class="qos-overview">
+                        <div class="qos-card">
+                            <h4>Resource Configuration</h4>
+                            <div class="qos-stats" id="qos-config-stats">
+                                <div class="qos-stat">
+                                    <span class="stat-label">Total Users</span>
+                                    <span class="stat-value" id="qos-total-users">10</span>
+                                </div>
+                                <div class="qos-stat">
+                                    <span class="stat-label">PFCP GBR Sum</span>
+                                    <span class="stat-value" id="qos-total-gbr">3.8 Gbps</span>
+                                </div>
+                                <div class="qos-stat">
+                                    <span class="stat-label">PFCP MBR Sum</span>
+                                    <span class="stat-value" id="qos-total-mbr">6.8 Gbps</span>
+                                </div>
+                                <div class="qos-stat">
+                                    <span class="stat-label">Expected MBR Sum</span>
+                                    <span class="stat-value" id="qos-display-mbr">6.8 Gbps</span>
+                                </div>
+                            </div>
+                            <div class="qos-note" id="qos-config-note">
+                                Expected totals follow the same runtime accounting basis as the real-time table.
+                            </div>
+                        </div>
+                        <div class="qos-card">
+                            <h4>Tier Distribution</h4>
+                            <div class="tier-distribution">
+                                <div class="tier-item high">
+                                    <span class="tier-badge">HIGH</span>
+                                    <span class="tier-count">2 users</span>
+                                    <span class="tier-rate" id="tier-rate-high">cfg 0.8-1.2 | exp 0.80-1.20 Gbps</span>
+                                </div>
+                                <div class="tier-item medium">
+                                    <span class="tier-badge">MEDIUM</span>
+                                    <span class="tier-count">3 users</span>
+                                    <span class="tier-rate" id="tier-rate-medium">cfg 0.4-0.8 | exp 0.40-0.80 Gbps</span>
+                                </div>
+                                <div class="tier-item low">
+                                    <span class="tier-badge">LOW</span>
+                                    <span class="tier-count">5 users</span>
+                                    <span class="tier-rate" id="tier-rate-low">cfg 0.2-0.4 | exp 0.20-0.40 Gbps</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Real-time Achievement Metrics -->
+                    <div class="qos-metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-icon">✅</span>
+                                <span class="metric-title">GBR Satisfaction Rate</span>
+                            </div>
+                            <div class="metric-value" id="gbr-satisfaction">--</div>
+                            <div class="metric-bar">
+                                <div class="metric-bar-fill gbr" id="gbr-bar" style="width: 0%"></div>
+                            </div>
+                            <div class="metric-desc">Measured-basis percentage of users with actual rate >= expected GBR</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-icon">🚦</span>
+                                <span class="metric-title">MBR Compliance Rate</span>
+                            </div>
+                            <div class="metric-value" id="mbr-compliance">--</div>
+                            <div class="metric-bar">
+                                <div class="metric-bar-fill mbr" id="mbr-bar" style="width: 0%"></div>
+                            </div>
+                            <div class="metric-desc">Measured-basis percentage of users with actual rate <= expected MBR</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-header">
+                                <span class="metric-icon">🏆</span>
+                                <span class="metric-title">Overall Score</span>
+                            </div>
+                            <div class="metric-value" id="overall-score">--</div>
+                            <div class="metric-bar">
+                                <div class="metric-bar-fill overall" id="overall-bar" style="width: 0%"></div>
+                            </div>
+                            <div class="metric-desc">(GBR x 0.7) + (MBR x 0.3)</div>
+                        </div>
+                    </div>
+
+                    <!-- Statistics by Tier -->
+                    <div class="tier-stats-table">
+                        <h4>QoS Achievement by Tier (Measured Basis)</h4>
+                        <table class="qos-table">
+                            <thead>
+                                <tr>
+                                    <th>Tier</th>
+                                    <th>Users</th>
+                                    <th>GBR Met</th>
+                                    <th>MBR Compliant</th>
+                                    <th>Avg Rate</th>
+                                    <th>Achievement</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tier-stats-tbody">
+                                <tr><td colspan="6" class="loading">Waiting for data...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>OAI-UPF Web Monitor v2.0 | OpenAirInterface 5G Core Network</p>
+        </footer>
+    </div>
+
+    <!-- Include Chart.js for drawing charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
