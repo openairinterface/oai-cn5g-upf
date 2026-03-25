@@ -7,6 +7,7 @@
 #include "version_utils.h"
 #include "number_utils.hpp"
 #include "common_root_types.h"
+#include "tail_call_types.h"
 #include "logger.hpp"
 #include <arpa/inet.h>
 #include <net/if.h>
@@ -278,35 +279,35 @@ void DisplayPipelineConfig(const PipelineFeatureFlags& flags) {
       "──────┤");
   Logger::upf_app().startup(
       "│ Session Lookup  [slot %-2d] (mandatory) │ %-36s │",
-      PROG_SESSION_LOOKUP, "✓ Loaded");
+      PROG_SESSION_LOOKUP_IP, "✓ Loaded");
   Logger::upf_app().startup(
       "│ PDR Match       [slot %-2d] (mandatory) │ %-36s │", PROG_PDR_MATCH,
       "✓ Loaded");
   Logger::upf_app().startup(
-      "│ FAR Apply       [slot %-2d] (mandatory) │ %-36s │", PROG_FAR,
+      "│ FAR Apply       [slot %-2d] (mandatory) │ %-36s │", PROG_FAR_APPLY,
       "✓ Loaded");
   Logger::upf_app().startup(
       "├──────────────────────────────────────┼────────────────────────────────"
       "──────┤");
   Logger::upf_app().startup(
-      "│ QER Enforcement [slot %-2d] (optional)  │ %-36s │", PROG_QER,
+      "│ QER Enforcement [slot %-2d] (optional)  │ %-36s │", PROG_QER_APPLY,
       flags.enable_qos ? "✓ Loaded" : "— Skipped");
   Logger::upf_app().startup(
-      "│ URR Reporting   [slot %-2d] (optional)  │ %-36s │", PROG_URR,
+      "│ URR Reporting   [slot %-2d] (optional)  │ %-36s │", PROG_URR_APPLY,
       flags.enable_urr ? "✓ Loaded" : "— Skipped");
   Logger::upf_app().startup(
-      "│ BAR Buffering   [slot %-2d] (optional)  │ %-36s │", PROG_BAR,
+      "│ BAR Buffering   [slot %-2d] (optional)  │ %-36s │", PROG_BAR_APPLY,
       flags.enable_bar ? "✓ Loaded" : "— Skipped");
   Logger::upf_app().startup(
-      "│ MAR Steering    [slot %-2d] (optional)  │ %-36s │", PROG_MAR,
+      "│ MAR Steering    [slot %-2d] (optional)  │ %-36s │", PROG_MAR_APPLY,
       flags.enable_mar ? "✓ Loaded" : "— Skipped");
-  Logger::upf_app().startup(
-      "│ Framed Routing  [slot %-2d] (optional)  │ %-36s │",
-      PROG_FRAMED_ROUTING,
-      flags.enable_framed_routing ? "✓ Loaded" : "— Skipped");
-  Logger::upf_app().startup(
-      "│ ETH Broadcast   [slot %-2d] (ETH only)  │ %-36s │",
-      PROG_ETH_PDU_BROADCAST, eth ? "✓ Loaded" : "— Skipped");
+  //   Logger::upf_app().startup(
+  //       "│ Framed Routing  [slot %-2d] (optional)  │ %-36s │",
+  //       PROG_FRAMED_ROUTING,
+  //       flags.enable_framed_routing ? "✓ Loaded" : "— Skipped");
+  //   Logger::upf_app().startup(
+  //       "│ ETH Broadcast   [slot %-2d] (ETH only)  │ %-36s │",
+  //       PROG_ETH_PDU_BROADCAST, eth ? "✓ Loaded" : "— Skipped");
   Logger::upf_app().startup(
       "└──────────────────────────────────────┴────────────────────────────────"
       "──────┘");

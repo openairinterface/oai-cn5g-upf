@@ -118,7 +118,7 @@
  *
  * Written by URRProgram::Setup(); read by the urr_apply BPF program
  * for per-session volume and time accounting.
- * Volume counters are stored separately in urr_volume_map and updated
+ * Volume counters are stored separately in urr_volume_counters_map and updated
  * atomically by the data plane; this struct carries thresholds/triggers.
  *
  * V17.10.0 additions (active data-plane fields):

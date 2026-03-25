@@ -1,10 +1,32 @@
 /*
- * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The OpenAirInterface Software Alliance licenses this file to You under
+ * the OAI Public License, Version 1.1  (the "License"); you may not use this
+ * file except in compliance with the License. You may obtain a copy of the
+ * License at
+ *
+ *      http://www.openairinterface.org/?page_id=698
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *-------------------------------------------------------------------------------
+ * For more information about the OpenAirInterface (OAI) Software Alliance:
+ *      contact@openairinterface.org
  */
 
 /**
  * @file UserPlaneComponent.cpp
  * @brief User Plane Function Component Implementation
+ * @author OpenAirInterface
+ * @date 2025 / 2026-03
+ *
+ * Changes (2026-03): Renamed UPF_XDPProgram -> UPF_XDPProgram
+ *   in SetMembers() and GetUPF_XDPProgram() -> GetUPF_XDPProgram().
  *
  * Main orchestrator for UPF control plane, managing the BPF tail-call
  * pipeline, PFCP sessions, and network interfaces.
@@ -15,7 +37,6 @@
 #include "SessionProgramManager.h"
 #include "SignalHandler.h"
 #include <upf_xdp_user.h>
-#include <far_tc_user.h>
 #include "logger.hpp"
 #include "Configuration.h"
 #include "upf_pipeline_config.h"  // PduSessionType, PipelineFeatureFlags, ProgIndex
@@ -107,14 +128,8 @@ void UserPlaneComponent::SetMembers(
     throw std::runtime_error("BPF pipeline initialization failed");
   }
 
-  far_tc_program_ = std::make_shared<FARTCProgram>();
-  if (!far_tc_program_) {
-    Logger::upf_app().error("Failed to initialize FAR TC program");
-    throw std::runtime_error("FAR TC program initialization failed");
-  }
-
   Logger::upf_app().info(
-      "UPF XDP pipeline initialized (N3: %s, N6: %s)", gtp_interface.c_str(),
+      "UPF_XDPProgram initialized (N3: %s, N6: %s)", gtp_interface.c_str(),
       non_gtp_interface.c_str());
 }
 
@@ -148,12 +163,6 @@ void UserPlaneComponent::Setup(
   //   - Populates PROG_ARRAY based on feature flags
   //   - Links entry programs to N3/N6 interfaces
   upf_xdp_program_->Setup(flags);
-
-  // Setup FAR TC program for Ethernet PDU broadcast/multicast forwarding
-  if (upf_cfg.enable_bpf_datapath && upf_cfg.enable_eth_pdu) {
-    Logger::upf_app().info("ETH-PDU: setting up FAR TC broadcast program");
-    far_tc_program_->setup();
-  }
 
   // Get SessionProgramManager singleton
   SessionProgramManager& session_program_manager =
@@ -224,11 +233,6 @@ void UserPlaneComponent::TearDown() {
   // Tear down XDP pipeline
   if (upf_xdp_program_) {
     upf_xdp_program_->TearDown();
-  }
-
-  // Tear down FAR TC program
-  if (far_tc_program_) {
-    far_tc_program_->tearDown();
   }
 
   // Reset session manager

@@ -42,14 +42,15 @@
 #include <stdexcept>
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
-#include "interfaces.h"
+#include "interfaces_types.h"
 #include "logger.hpp"
 #include "helpers/GetNicInformation.hpp"
 #include "helpers/CmdRunner.hpp"
 #include "utils/net_utils.hpp"
 #include "utils/bpf_utils.hpp"
 #include "UserPlaneComponent.h"
-#include "sdf_filter.h"
+//#include "sdf_filter.h"
+#include "sdf_types.h"
 #include "startup_banner.hpp"
 #include "number_utils.hpp"
 
@@ -121,7 +122,7 @@ QERProgram::QERProgram()
   };
 
   // Initialize lifecycle management
-  lifecycle_ = std::make_shared<QERProgramLifeCycle>(
+  lifecycle_ = std::make_shared<QerProgramLifeCycle>(
       open_fn,
       /* load */ qer_tc_kern_c__load,
       /* attach */ qer_tc_kern_c__attach,

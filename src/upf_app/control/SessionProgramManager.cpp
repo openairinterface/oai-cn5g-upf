@@ -88,9 +88,9 @@
 #include <arpa/inet.h>
 #include "observer/SessionObserver.h"
 #include <errno.h>
-#include <arp_table.h>
-#include <session_id.h>
-#include <rules_matching_pdr.h>
+#include <arp_types.h>
+#include <pipeline_types.h>
+#include <sdf_types.h>
 #include "logger.hpp"
 #include "upf_network_config.h"
 #include "pfcp_session.hpp"
@@ -166,7 +166,7 @@ void SessionProgramManager::CreateSession(uint64_t seid) {
  * Cleans up all BPF maps associated with this session:
  * - session_rules_enabled_map (tail call skip-chain flags)
  * - ETH-specific maps if Ethernet PDU session
- * - urr_config_map, urr_volume_map (usage reporting state)
+ * - urr_config_map, urr_volume_counters_map (usage reporting state)
  * - bar_config_map, bar_state_map (buffering state)
  * - mar_rules_map (ATSSS steering)
  * - QER TC-BPF program (if instantiated)
@@ -214,7 +214,7 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
     // Clean up URR/BAR/MAR dedicated config + runtime state maps
     auto urr_cfg_map = upf_xdp_program->GetMapByName("urr_config_map");
     if (urr_cfg_map) urr_cfg_map->Remove(seid);
-    auto urr_vol_map = upf_xdp_program->GetMapByName("urr_volume_map");
+    auto urr_vol_map = upf_xdp_program->GetMapByName("urr_volume_counters_map");
     if (urr_vol_map) urr_vol_map->Remove(seid);
     auto bar_cfg_map = upf_xdp_program->GetMapByName("bar_config_map");
     if (bar_cfg_map) bar_cfg_map->Remove(seid);
@@ -307,7 +307,7 @@ void SessionProgramManager::SetArpTableMap(std::shared_ptr<BpfMap> map) {
  * in (supports split Create/Modify where UL and DL TEIDs arrive in
  * separate PFCP messages).
  *
- * @param xdp_program XDP program containing the maps
+ * @param upf_xdp_program XDP program containing the maps
  * @param ue_ip UE IP address (map key)
  * @param teid_ul Uplink TEID (3GPP TS 29.281)
  * @param teid_dl Downlink TEID (3GPP TS 29.281)
@@ -316,9 +316,9 @@ void SessionProgramManager::SetArpTableMap(std::shared_ptr<BpfMap> map) {
  * @see 3GPP TS 29.281 - GTPv1-U
  */
 void SessionProgramManager::StorePduSessionInMap(
-    std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t ue_ip,
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t ue_ip,
     uint32_t teid_ul, uint32_t teid_dl, uint64_t seid) {
-  if (!xdp_program) {
+  if (!upf_xdp_program) {
     Logger::upf_app().error("StorePduSessionInMap: null XDP program");
     return;
   }
@@ -333,10 +333,10 @@ void SessionProgramManager::StorePduSessionInMap(
     }
 
     // Perform the lookup
-    // auto session_map = xdp_program->GetMapByName("session_map");
+    // auto session_map = upf_xdp_program->GetMapByName("session_map");
     // if (session_map) {
 
-    auto session_map = xdp_program->GetSessionMappingMap();
+    auto session_map = upf_xdp_program->GetSessionMappingMap();
     if (!session_map) {
       Logger::upf_app().error("session_by_ue_ip_map is null");
       return;
@@ -394,7 +394,7 @@ void SessionProgramManager::StorePduSessionInMap(
  * Ethernet PDU sessions are keyed by TEID since Ethernet frames
  * have no UE IP address.
  *
- * @param xdp_program XDP program containing the maps
+ * @param upf_xdp_program XDP program containing the maps
  * @param teid_ul Uplink TEID (map key, converted to network byte order)
  * @param teid_dl Downlink TEID (for GTP-U encap toward gNB)
  * @param gnb_ip gNodeB IPv4 address (for DL outer header creation)
@@ -404,15 +404,16 @@ void SessionProgramManager::StorePduSessionInMap(
  * @see 3GPP TS 29.281 - GTPv1-U
  */
 void SessionProgramManager::StoreEthPduSessionInMap(
-    std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t teid_ul,
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t teid_ul,
     uint32_t teid_dl, uint32_t gnb_ip, uint64_t seid) {
-  if (!xdp_program) {
+  if (!upf_xdp_program) {
     Logger::upf_app().error("StoreEthPduSessionInMap: null XDP program");
     return;
   }
 
   try {
-    auto eth_session_map = xdp_program->GetMapByName("eth_session_mapping_map");
+    auto eth_session_map =
+        upf_xdp_program->GetMapByName("eth_session_mapping_map");
     if (!eth_session_map) {
       Logger::upf_app().error(
           "eth_session_mapping_map not found - ETH PDU not supported");
@@ -514,7 +515,7 @@ uint32_t SessionProgramManager::ComputeRulesEnabledFlags(
  *
  * Replaces the old session_qos_enabled_map which only tracked QER.
  *
- * @param xdp_program XDP program containing the map
+ * @param upf_xdp_program XDP program containing the map
  * @param seid Session Endpoint Identifier (map key)
  * @param flags Bitmask of RULE_*_ENABLED flags (map value)
  *
@@ -522,11 +523,11 @@ uint32_t SessionProgramManager::ComputeRulesEnabledFlags(
  * @see tail_call_dispatch.h for skip-chain implementation
  */
 void SessionProgramManager::UpdateRulesEnabledMap(
-    std::shared_ptr<UPF_XDPProgram> xdp_program, uint64_t seid,
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
     uint32_t flags) {
-  if (!xdp_program) return;
+  if (!upf_xdp_program) return;
 
-  auto rules_map = xdp_program->GetMapByName("session_rules_enabled_map");
+  auto rules_map = upf_xdp_program->GetMapByName("session_rules_enabled_map");
   if (!rules_map) {
     Logger::upf_app().warn(
         "session_rules_enabled_map not found - skip-chain will not optimize");
@@ -617,7 +618,7 @@ PduSessionType SessionProgramManager::DetectPduSessionType(
  * - Storing complete rule set in rules_match_pdr_map (IP PDU) or
  *   eth_rules_match_pdr_map (ETH PDU)
  * - Populating dedicated config maps (urr_config_map, bar_config_map,
- *   mar_rules_map) and initializing runtime state (urr_volume_map,
+ *   mar_rules_map) and initializing runtime state (urr_volume_counters_map,
  *   bar_state_map) with BPF_NOEXIST to avoid overwriting active state
  * - Computing and storing rules_enabled flags for tail call skip-chain
  * - Detecting IP vs ETH PDU type and routing to correct BPF maps
@@ -1900,28 +1901,28 @@ bool SessionProgramManager::GetMarForPdr(
 //------------------------------------------------------------------------------
 
 /**
- * @brief Populate urr_config_map and initialize urr_volume_map
+ * @brief Populate urr_config_map and initialize urr_volume_counters_map
  *
  * Stores the URR configuration in the BPF urr_config_map (key: SEID)
  * for threshold/quota checking by the data path (urr_apply.c).
  *
- * Also initializes urr_volume_map (volume counters) to zero using
+ * Also initializes urr_volume_counters_map (volume counters) to zero using
  * BPF_NOEXIST to avoid overwriting counters for active measurements
  * during session modification.
  *
- * @param xdp_program XDP program containing the BPF maps
+ * @param upf_xdp_program XDP program containing the BPF maps
  * @param seid Session Endpoint Identifier (map key)
  * @param urr_config Converted URR configuration to store
  *
  * @see 3GPP TS 29.244 Section 8.2.44-48 - URR IEs
  */
 void SessionProgramManager::PopulateUrrConfigMap(
-    std::shared_ptr<UPF_XDPProgram> xdp_program, uint64_t seid,
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
     const struct pfcp_urr& urr_config) {
-  if (!xdp_program) return;
+  if (!upf_xdp_program) return;
 
   // Store config in urr_config_map (key: seid)
-  auto cfg_map = xdp_program->GetMapByName("urr_config_map");
+  auto cfg_map = upf_xdp_program->GetMapByName("urr_config_map");
   if (cfg_map) {
     int ret = cfg_map->Update(seid, urr_config, BPF_ANY);
     if (ret != 0) {
@@ -1931,7 +1932,7 @@ void SessionProgramManager::PopulateUrrConfigMap(
   }
 
   // Initialize volume counters to zero (key: seid)
-  auto vol_map = xdp_program->GetMapByName("urr_volume_map");
+  auto vol_map = upf_xdp_program->GetMapByName("urr_volume_counters_map");
   if (vol_map) {
     // urr_volume is {ul_bytes, dl_bytes, ul_packets, dl_packets,
     //                total_bytes, total_packets} — all zero
@@ -1958,7 +1959,7 @@ void SessionProgramManager::PopulateUrrConfigMap(
  * Also initializes bar_state_map (DDN tracking, pkt count) to zero
  * using BPF_NOEXIST to avoid overwriting active buffering state.
  *
- * @param xdp_program XDP program containing the BPF maps
+ * @param upf_xdp_program XDP program containing the BPF maps
  * @param seid Session Endpoint Identifier (map key)
  * @param bar_config Converted BAR configuration to store
  *
@@ -1966,12 +1967,12 @@ void SessionProgramManager::PopulateUrrConfigMap(
  * @see 3GPP TS 29.244 Section 8.2.28 - DL Data Notification Delay
  */
 void SessionProgramManager::PopulateBarConfigMap(
-    std::shared_ptr<UPF_XDPProgram> xdp_program, uint64_t seid,
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
     const struct pfcp_bar& bar_config) {
-  if (!xdp_program) return;
+  if (!upf_xdp_program) return;
 
   // Store config in bar_config_map (key: seid)
-  auto cfg_map = xdp_program->GetMapByName("bar_config_map");
+  auto cfg_map = upf_xdp_program->GetMapByName("bar_config_map");
   if (cfg_map) {
     int ret = cfg_map->Update(seid, bar_config, BPF_ANY);
     if (ret != 0) {
@@ -1981,7 +1982,7 @@ void SessionProgramManager::PopulateBarConfigMap(
   }
 
   // Initialize buffering state to zero (key: seid)
-  auto st_map = xdp_program->GetMapByName("bar_state_map");
+  auto st_map = upf_xdp_program->GetMapByName("bar_state_map");
   if (st_map) {
     // bar_state is {last_ddn_ns, buffered_pkt_count,
     //               notification_sent, pad[3]} — all zero
@@ -2006,7 +2007,7 @@ void SessionProgramManager::PopulateBarConfigMap(
  * The data path (mar_apply.c) reads this map to determine the ATSSS
  * steering mode and access forwarding FAR IDs.
  *
- * @param xdp_program XDP program containing the BPF maps
+ * @param upf_xdp_program XDP program containing the BPF maps
  * @param seid Session Endpoint Identifier (map key)
  * @param mar_rule Converted MAR configuration to store
  *
@@ -2014,11 +2015,11 @@ void SessionProgramManager::PopulateBarConfigMap(
  * @see 3GPP TS 23.501 Section 5.32 - ATSSS
  */
 void SessionProgramManager::PopulateMarRulesMap(
-    std::shared_ptr<UPF_XDPProgram> xdp_program, uint64_t seid,
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
     const struct pfcp_mar& mar_rule) {
-  if (!xdp_program) return;
+  if (!upf_xdp_program) return;
 
-  auto mar_map = xdp_program->GetMapByName("mar_rules_map");
+  auto mar_map = upf_xdp_program->GetMapByName("mar_rules_map");
   if (mar_map) {
     int ret = mar_map->Update(seid, mar_rule, BPF_ANY);
     if (ret != 0) {
@@ -2042,9 +2043,9 @@ void SessionProgramManager::PopulateMarRulesMap(
 
 // // 3GPP TS 23.501 Section 5.8.2.3 - N6 Interface
 // void SessionProgramManager::UpdateArpTableForN6(
-//     std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t dn_ip,
+//     std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t dn_ip,
 //     uint32_t upf_n6_ip) {
-//   if (!xdp_program) {
+//   if (!upf_xdp_program) {
 //     Logger::upf_app().error("UpdateArpTable: no XDP program available");
 //     return;
 //   }
@@ -2068,9 +2069,9 @@ void SessionProgramManager::PopulateMarRulesMap(
 //     entry.ipv4_address = ip_for_mac_lookup;
 
 //     // Update ARP table in BPF map
-//     // xdp_program->GetArpTableMap()->Update(upf_n6_ip, entry, BPF_ANY);
-//     auto arp_table_map = xdp_program->GetMapByName("arp_table_map");
-//     if (arp_table_map) {
+//     // upf_xdp_program->GetArpTableMap()->Update(upf_n6_ip, entry,
+//     BPF_ANY); auto arp_table_map =
+//     upf_xdp_program->GetMapByName("arp_table_map"); if (arp_table_map) {
 //       arp_table_map->Update(upf_n6_ip, entry, BPF_ANY);
 //     } else {
 //       Logger::upf_app().error("UpdateArpTable: arp_table map not found");
@@ -2089,7 +2090,7 @@ void SessionProgramManager::PopulateMarRulesMap(
  * Resolves the MAC address of the next hop toward the DN and stores
  * it in the BPF arp_table_map for L2 header rewriting.
  *
- * @param xdp_program XDP program containing arp_table_map
+ * @param upf_xdp_program XDP program containing arp_table_map
  * @param dn_ip Data Network IP address (destination)
  * @param upf_n6_ip UPF N6 interface IP address (source)
  * @return MAC address string of resolved next hop
@@ -2098,9 +2099,9 @@ void SessionProgramManager::PopulateMarRulesMap(
  * @see 3GPP TS 23.501 Section 5.8.2.3 - N6 Interface
  */
 std::string SessionProgramManager::UpdateArpTableForN6(
-    std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t dn_ip,
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t dn_ip,
     uint32_t upf_n6_ip) {
-  if (!xdp_program) {
+  if (!upf_xdp_program) {
     Logger::upf_app().error("UpdateArpTable: no XDP program available");
     return "00:00:00:00:00:00";
   }
@@ -2131,7 +2132,7 @@ std::string SessionProgramManager::UpdateArpTableForN6(
     entry.ipv4_address = ip_for_mac_lookup;
 
     // Update ARP table in BPF map
-    auto arp_table_map = xdp_program->GetMapByName("arp_table_map");
+    auto arp_table_map = upf_xdp_program->GetMapByName("arp_table_map");
     if (arp_table_map) {
       arp_table_map->Update(upf_n6_ip, entry, BPF_ANY);
     } else {
@@ -2164,9 +2165,9 @@ std::string SessionProgramManager::UpdateArpTableForN6(
  * @see 3GPP TS 23.501 Section 5.8.2.2 - N3 Interface
  */
 std::string SessionProgramManager::UpdateArpTableForN3(
-    std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t gnb_ip,
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t gnb_ip,
     uint32_t upf_n3_ip, uint64_t seid) {
-  if (!xdp_program) {
+  if (!upf_xdp_program) {
     Logger::upf_app().error("UpdateArpTable: no XDP program available");
     return "00:00:00:00:00:00";
   }
@@ -2197,17 +2198,17 @@ std::string SessionProgramManager::UpdateArpTableForN3(
     entry.ipv4_address = ip_for_mac_lookup;
 
     // Update ARP table in BPF map
-    auto arp_table_map = xdp_program->GetMapByName("arp_table_map");
+    auto arp_table_map = upf_xdp_program->GetMapByName("arp_table_map");
     if (arp_table_map) {
       arp_table_map->Update(upf_n3_ip, entry, BPF_ANY);
     }
 
     for (auto it = pfcp_programs->begin(); it != pfcp_programs->end(); ++it) {
-      uint64_t savedSeid                          = it->seid;
-      std::shared_ptr<UPF_XDPProgram> xdp_program = it->xdp_program;
+      uint64_t savedSeid                              = it->seid;
+      std::shared_ptr<UPF_XDPProgram> upf_xdp_program = it->upf_xdp_program;
 
       if (savedSeid == seid) {
-        auto arp_table_map = xdp_program->GetMapByName("arp_table_map");
+        auto arp_table_map = upf_xdp_program->GetMapByName("arp_table_map");
         if (arp_table_map) {
           arp_table_map->Update(upf_n3_ip, entry, BPF_ANY);
         } else {
@@ -2253,16 +2254,16 @@ uint32_t SessionProgramManager::GetNextHopIp(
  * @brief Register a PFCP program for a session
  *
  * @param seid Session Endpoint Identifier
- * @param xdp_program XDP program to associate with this session
+ * @param upf_xdp_program XDP program to associate with this session
  */
 void SessionProgramManager::AddPfcpProgram(
-    uint64_t seid, std::shared_ptr<UPF_XDPProgram> xdp_program) {
+    uint64_t seid, std::shared_ptr<UPF_XDPProgram> upf_xdp_program) {
   // TODO: re-enable mutex when deadlock risk from callers has been assessed
   // std::lock_guard<std::mutex> lock(mutex_);
 
   PfcpProgramInfo pfcp_prgm;
-  pfcp_prgm.seid        = seid;
-  pfcp_prgm.xdp_program = xdp_program;
+  pfcp_prgm.seid            = seid;
+  pfcp_prgm.upf_xdp_program = upf_xdp_program;
 
   pfcp_programs->push_back(pfcp_prgm);
 }

@@ -65,10 +65,10 @@ struct pfcp_mar;
  * @brief Associates PFCP session with BPF program
  */
 struct PfcpProgramInfo {
-  uint64_t seid;                                ///< Session Endpoint ID
-  std::shared_ptr<UPF_XDPProgram> xdp_program;  ///< Associated XDP program
+  uint64_t seid;                                    ///< Session Endpoint ID
+  std::shared_ptr<UPF_XDPProgram> upf_xdp_program;  ///< XDP pipeline manager
 
-  PfcpProgramInfo() : seid(0), xdp_program(nullptr) {}
+  PfcpProgramInfo() : seid(0), upf_xdp_program(nullptr) {}
 };
 
 /**
@@ -122,7 +122,7 @@ class SessionProgramManager {
    * Cleans up all BPF maps for this session:
    * - session_rules_enabled_map (tail call skip-chain flags)
    * - ETH-specific maps if Ethernet PDU session
-   * - urr_config_map, urr_volume_map (usage reporting state)
+   * - urr_config_map, urr_volume_counters_map (usage reporting state)
    * - bar_config_map, bar_state_map (buffering state)
    * - mar_rules_map (ATSSS steering)
    * - QER TC-BPF program (if instantiated)
@@ -512,14 +512,14 @@ class SessionProgramManager {
 
   // Dedicated BPF map population (runtime state initialization)
   /**
-   * @brief Populate urr_config_map and initialize urr_volume_map
+   * @brief Populate urr_config_map and initialize urr_volume_counters_map
    *
    * Stores the URR configuration in the BPF urr_config_map (key: SEID)
-   * and initializes the volume counters in urr_volume_map to zero
+   * and initializes the volume counters in urr_volume_counters_map to zero
    * (using BPF_NOEXIST to avoid overwriting active measurements).
    *
    * The data path (urr_apply.c) reads urr_config_map for thresholds
-   * and updates urr_volume_map atomically per packet.
+   * and updates urr_volume_counters_map atomically per packet.
    *
    * @param xdp_program XDP program containing the BPF maps
    * @param seid Session Endpoint Identifier (map key)

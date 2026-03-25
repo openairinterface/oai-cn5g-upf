@@ -1748,7 +1748,7 @@ bool SessionManager::UpdateUrr(
     }
 
     // ModifyPipeline repopulates urr_config_map (BPF_ANY) while preserving
-    // urr_volume_map counters (BPF_NOEXIST in PopulateUrrConfigMap)
+    // urr_volume_counters_map counters (BPF_NOEXIST in PopulateUrrConfigMap)
     session_program_manager_->ModifyPipeline(session);
 
     Logger::upf_app().info("Updated URR %u in session " SEID_FMT, urr_id, seid);
@@ -2085,7 +2085,7 @@ size_t SessionManager::HandleMarRemoval(
 //------------------------------------------------------------------------------
 // §7.5.4.4 Update URR — Table 7.5.4.4-1
 // Applies updated reporting triggers, thresholds, quotas, and timing fields.
-// Volume counters in urr_volume_map are preserved (BPF_NOEXIST write).
+// Volume counters in urr_volume_counters_map are preserved (BPF_NOEXIST write).
 size_t SessionManager::HandleUrrUpdates(
     std::shared_ptr<pfcp::pfcp_session> session,
     itti_n4_session_modification_request* mod_req) {

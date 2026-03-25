@@ -79,16 +79,24 @@ set(UPF_HELPER_SOURCES
 # URR, BAR, MAR and PDR match wrappers are map-only managers that work
 # regardless of whether the XDP or TC path is active.
 set(UPF_USER_SHARED_SOURCES
-  user/BPFProgram.cpp
-  user/urr_xdp_user.cpp
-  user/bar_xdp_user.cpp
-  user/mar_xdp_user.cpp
+  user/far_apply_user.cpp
+  user/mar_apply_user.cpp
+  user/qer_tc_user.cpp
+  user/urr_apply_user.cpp
+  user/bar_apply_user.cpp
   user/pdr_match_user.cpp
+  user/upf_xdp_user.cpp
+  user/session_lookup_ip_user.cpp
+  user/session_lookup_eth_user.cpp  
+  user/BPFProgram.cpp
   user/wrappers/BPFMap.cpp
   user/wrappers/BPFMaps.cpp
   user/utils/bpf_utils.cpp
   user/utils/net_utils.cpp
 )
+
+
+
 
 # ==========================================================================
 # UPF_XDP — XDP fast-path dataplane library

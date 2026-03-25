@@ -11,6 +11,9 @@
 #include <optional>
 #include <cstdlib>
 
+#include "linux/custom_types.h"
+#include "sdf_types.h"
+
 #include "logger.hpp"
 
 class SdfFilterParser {
