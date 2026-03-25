@@ -13,10 +13,8 @@
 
 // These headers define the BPF structures we need to format
 extern "C" {
-#include "session_id.h"          // For struct session_id
-#include "arp_table.h"           // For struct arp_entry
-#include "rules_matching_pdr.h"  // For struct pdrs_per_session, rules_match_pdr
-// Add any other struct headers you need
+#include "pipeline_types.h"  // For struct session_id
+#include "arp_types.h"       // For struct arp_entry
 }
 
 namespace upf::utils {

@@ -70,17 +70,16 @@
 /* ========================================================================== */
 
 #include "linux/custom_types.h"
-#include "xdp_stats_kern.h"
+// #include "xdp_stats_kern.h"
 #include "pfcp/pfcp_far.h"
 #include "pfcp/pfcp_pdr.h"
 #include "protocols/gtpu.h"
 #include "utils/csum.h"
 #include "utils/logger.h"
 #include "utils/bpf_utils.h"
-#include "interfaces.h"
-#include "sdf_filter.h"
+#include "interfaces_maps.h"
 #include "qer_maps.h"
-
+#include "sdf_types.h"
 /* ========================================================================== */
 /*                          CONSTANTS AND MACROS                              */
 /* ========================================================================== */

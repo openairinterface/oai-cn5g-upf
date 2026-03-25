@@ -65,7 +65,8 @@
  *   - rules_match_pdr_map    : SEID   → rule match state
  *   - session_rules_enabled_map: SEID → bitmask (RULE_QER|URR|BAR|MAR)
  *   - urr_config_map         : SEID   → pfcp_urr_t (usage reporting config)
- *   - urr_volume_map         : SEID   → urr_volume_t (runtime counters)
+ *   - urr_volume_counters_map         : SEID   → urr_volume_t (runtime
+ * counters)
  *   - bar_config_map         : SEID   → pfcp_bar_t (buffering config)
  *   - bar_state_map          : SEID   → bar_state_t (runtime state)
  *   - mar_rules_map          : SEID   → pfcp_mar_t (ATSSS steering rules)
@@ -140,7 +141,7 @@ class SessionPrograms {
    *   1. Tear down QERProgram (TC-BPF rate shaping classes) — must precede
    *      BPF map cleanup so QER map entries still exist for TearDown().
    *   2. Remove per-session BPF map entries:
-   *        urr_config_map, urr_volume_map  (if URR enabled)
+   *        urr_config_map, urr_volume_counters_map  (if URR enabled)
    *        bar_config_map, bar_state_map   (if BAR enabled)
    *        mar_rules_map                   (if MAR enabled)
    *        session_rules_enabled_map       (always)

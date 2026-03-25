@@ -32,7 +32,7 @@ struct callback_ctx {
 
 static long broadcast_callback_fn(
     struct bpf_map* map, void* key, void* value, struct callback_ctx* ctx) {
-  struct eth__session_id* pdu_session = (struct eth__session_id*) value;
+  struct eth_session_id* pdu_session = (struct eth_session_id*) value;
 
   struct __sk_buff* skb = (struct __sk_buff*) ctx->skb;
   void* data            = (void*) (long) skb->data;

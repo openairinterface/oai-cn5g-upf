@@ -23,20 +23,37 @@
  * @file UserPlaneComponent.h
  * @brief Main User Plane Function Component
  * @author OpenAirInterface
- * @date 2025
+ * @date 2025 / 2026-03
+ *
+ * Changes (2026-03): Renamed UPF_XDPProgram -> UPF_XDPProgram
+ *   throughout (forward declaration, member, getter).
+ *   GetUPF_XDPProgram() -> GetUPF_XDPProgram().
  *
  * This module is the main entry point and orchestrator for the User Plane
  * Function (UPF) control plane. It coordinates session management, the BPF
  * tail-call pipeline, and network interfaces.
  *
  * Architecture:
+ * ```
  *   UserPlaneComponent
- *     ├── UPF_XDPProgram (BPF tail-call pipeline orchestrator)
- *     │     ├── Entry programs: N3 (IP/ETH) + N6 (IP/ETH)
- *     │     ├── Core pipeline: Session Lookup → PDR → FAR
- *     │     └── Feature programs: QER, URR, BAR, MAR (config-driven)
- *     ├── SessionManager (PFCP session lifecycle)
- *     └── QERProgram (TC-BPF for QoS rate enforcement)
+ *   ├─ UPF_XDPProgram        -- BPF data plane orchestrator
+ *   │   ├─ Entry programs (attached to N3/N6 via XDP hook)
+ *   │   │   ├─ xdp_n3_entry        -- IP PDU uplink  (N3 → N6)
+ *   │   │   ├─ xdp_n6_entry        -- IP PDU downlink (N6 → N3)
+ *   │   │   ├─ xdp_n3_eth_entry    -- ETH PDU uplink  (N3 → N6)
+ *   │   │   └─ xdp_n6_eth_entry    -- ETH PDU downlink (N6 → N3)
+ *   │   └─ Pipeline stages (tail_call_progs_map slots)
+ *       ├─ SessionLookupIPProgram  -- slot 0  PROG_SESSION_LOOKUP_IP
+ *       ├─ SessionLookupETHProgram -- slot 1  PROG_SESSION_LOOKUP_ETH
+ *       ├─ PdrMatchProgram         -- slot 2  PROG_PDR_MATCH
+ *       ├─ FARProgram              -- slot 3  PROG_FAR_APPLY
+ *       ├─ QERProgram              -- slot 4  PROG_QER_APPLY  (TC-BPF)
+ *       ├─ URRProgram              -- slot 5  PROG_URR_APPLY  (enable_urr)
+ *       ├─ BARProgram              -- slot 6  PROG_BAR_APPLY  (enable_bar)
+ *       └─ MARProgram              -- slot 7  PROG_MAR_APPLY  (enable_mar)
+ *   ├─ SessionManager            -- PFCP session lifecycle (TS 29.244)
+ *   └─ QERProgram                -- TC-BPF QoS enforcement (HTB qdisc)
+ * ```
  *
  * Key 3GPP References:
  *   - 3GPP TS 23.501: System architecture for the 5G System
@@ -158,9 +175,9 @@ class UserPlaneComponent : public ISessionObserver {
   std::shared_ptr<SessionManager> GetSessionManager() const;
 
   /**
-   * @brief Get UPF XDP pipeline program instance
+   * @brief Get BPF data plane manager instance
    *
-   * @return Shared pointer to XDP pipeline program
+   * @return Shared pointer to UPF_XDPProgram
    */
   std::shared_ptr<UPF_XDPProgram> GetUPF_XDPProgram() const;
 
@@ -271,7 +288,7 @@ class UserPlaneComponent : public ISessionObserver {
   /// Session manager for PFCP session lifecycle
   std::shared_ptr<SessionManager> session_manager_;
 
-  /// UPF XDP pipeline program (tail-call orchestrator)
+  /// BPF data plane manager (entry programs + shared map ownership)
   std::shared_ptr<UPF_XDPProgram> upf_xdp_program_;
 
   /// N3 GTP-U interface name

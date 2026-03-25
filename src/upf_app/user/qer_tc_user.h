@@ -123,11 +123,17 @@
 class BPFMaps;
 class BPFMap;
 
+/* ==========================================================================
+ * Type alias
+ * ========================================================================== */
 /**
  * @brief Type alias for QER TC-BPF program lifecycle
  */
-using QERProgramLifeCycle = ProgramLifeCycle<qer_tc_kern_c>;
+using QerProgramLifeCycle = ProgramLifeCycle<qer_tc_kern_c>;
 
+/* ==========================================================================
+ * QERProgram
+ * ========================================================================== */
 /**
  * @class QERProgram
  * @brief Manages TC-BPF programs for QoS Enforcement Rules
@@ -271,6 +277,9 @@ class QERProgram : public BPFProgram {
   uint32_t GetR2qRoot() const { return r2q_root_; }
 
  private:
+  // ==========================================================================
+  // Private helpers
+  // ==========================================================================
   /**
    * @brief Initialize BPF map wrappers
    */
@@ -307,15 +316,20 @@ class QERProgram : public BPFProgram {
   uint32_t default_class_ceil_;    ///< Default ceil in kbps
   uint32_t r2q_root_;              ///< Root qdisc r2q parameter
 
-  // PDR lookup map
-  std::unordered_map<uint32_t, std::shared_ptr<pfcp::pfcp_pdr>> pdr_map_;
-
-  // BPF program components
-  std::shared_ptr<BPFMaps> maps_;                   ///< All BPF maps
+  // ==========================================================================
+  // Skeleton and lifecycle
+  // ==========================================================================
   qer_tc_kern_c* skeleton_;                         ///< BPF skeleton
-  std::shared_ptr<BPFMap> egress_ifindex_map_;      ///< Egress interfaces
-  std::shared_ptr<QERProgramLifeCycle> lifecycle_;  ///< Lifecycle manager
-  std::shared_ptr<BPFMap> qos_flow_params_map_;     ///< QoS flow parameters
+  std::shared_ptr<QerProgramLifeCycle> lifecycle_;  ///< Lifecycle manager
+
+  // ==========================================================================
+  // Maps
+  // ==========================================================================
+  std::shared_ptr<BPFMaps> maps_;  ///< All BPF maps
+  std::unordered_map<uint32_t, std::shared_ptr<pfcp::pfcp_pdr>>
+      pdr_map_;                                  /// PDR lookup map
+  std::shared_ptr<BPFMap> egress_ifindex_map_;   ///< Egress interfaces
+  std::shared_ptr<BPFMap> qos_flow_params_map_;  ///< QoS flow parameters
 };
 
 #endif  // QER_TC_USER_H_

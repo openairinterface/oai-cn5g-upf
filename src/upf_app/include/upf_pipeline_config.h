@@ -24,7 +24,13 @@
  * @brief BPF tail-call pipeline types shared across control/, user/, and
  * kernel/
  * @author OpenAirInterface
- * @date 2025
+ * @date 2025 / 2026-03
+ *
+ * Changes (2026-03): Removed stale ProgIndex enum -- it duplicated
+ *   enum upf_prog_index from kernel/include/tail_call_types.h with
+ *   wrong values, causing redefinition errors. User-space files that
+ *   need PROG_* slot indices must include tail_call_types.h directly.
+ *   PduSessionType and PipelineFeatureFlags are unchanged.
  *
  * Lives in include/ — the only folder visible to control/, user/, and kernel/
  * without cross-folder dependencies.
@@ -32,7 +38,7 @@
  * Defines:
  *   - PduSessionType       — IP or Ethernet entry program selection
  *   - PipelineFeatureFlags — which optional PROG_ARRAY slots to load
- *   - ProgIndex            — PROG_ARRAY slot assignments
+ *   - upf_prog_index       — PROG_* slot indices (in tail_call_types.h)
  *
  * These types are intentionally kept here and NOT in user/upf_xdp_user.h
  * because control/UserPlaneComponent and helpers/startup_banner need them
@@ -81,7 +87,8 @@ enum class PduSessionType : uint8_t {
  * Each flag maps to one optional PROG_ARRAY slot in feature_dispatch_map.
  * An empty slot is a safe no-op in the kernel tail-call chain.
  *
- * @see ProgIndex for slot assignments
+ * @see kernel/include/tail_call_types.h -- enum upf_prog_index for slot
+ * assignments
  * @see kernel/xdp/tail_call_dispatch.h — kernel-side enum (must stay in sync)
  */
 struct PipelineFeatureFlags {
@@ -96,29 +103,20 @@ struct PipelineFeatureFlags {
 // ==========================================================================
 // PROG_ARRAY Slot Indices
 // ==========================================================================
-
-/**
- * @brief PROG_ARRAY slot assignments for feature_dispatch_map
+/*
+ * NOTE: PROG_* slot indices are defined in kernel/include/tail_call_types.h
+ * as enum upf_prog_index. That file is the single authoritative source,
+ * shared by both kernel BPF programs and userspace translation units.
  *
- * MUST match enum upf_prog_index in kernel/xdp/tail_call_dispatch.h exactly.
- * Any mismatch causes the kernel to tail-call the wrong program or miss a
- * stage.
+ * User-space files that need PROG_SESSION_LOOKUP_IP, PROG_PDR_MATCH, etc.
+ * must include tail_call_types.h directly:
  *
- * Mandatory (always populated):   SESSION_LOOKUP, PDR_MATCH, FAR
- * Optional (gated by flags):      QER, URR, BAR, MAR, FRAMED_ROUTING
- * ETH-PDU-only:                   ETH_PDU_BROADCAST
+ *   #include "tail_call_types.h"   // enum upf_prog_index -- PROG_* slot
+ * indices
+ *
+ * This file intentionally does NOT include tail_call_types.h to keep
+ * upf_pipeline_config.h free of kernel/include/ dependencies so it
+ * remains safely includable from control/ without BPF headers.
  */
-enum ProgIndex : uint32_t {
-  PROG_SESSION_LOOKUP    = 0,  ///< IP or Ethernet session lookup
-  PROG_PDR_MATCH         = 1,  ///< PDR precedence matching
-  PROG_FAR               = 2,  ///< Forwarding Action Rule apply
-  PROG_QER               = 3,  ///< QoS Enforcement Rule (optional)
-  PROG_URR               = 4,  ///< Usage Reporting Rule (optional)
-  PROG_BAR               = 5,  ///< Buffering Action Rule (optional)
-  PROG_MAR               = 6,  ///< Multi-Access Rule / ATSSS (optional)
-  PROG_FRAMED_ROUTING    = 7,  ///< Per-UE framed routing (optional)
-  PROG_ETH_PDU_BROADCAST = 8,  ///< Ethernet PDU ARP/broadcast (ETH only)
-  PROG_MAX               = 16  ///< PROG_ARRAY capacity
-};
 
 #endif  // UPF_PIPELINE_CONFIG_H_

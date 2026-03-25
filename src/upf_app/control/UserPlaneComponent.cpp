@@ -23,7 +23,10 @@
  * @file UserPlaneComponent.cpp
  * @brief User Plane Function Component Implementation
  * @author OpenAirInterface
- * @date 2025
+ * @date 2025 / 2026-03
+ *
+ * Changes (2026-03): Renamed UPF_XDPProgram -> UPF_XDPProgram
+ *   in SetMembers() and GetUPF_XDPProgram() -> GetUPF_XDPProgram().
  *
  * Main orchestrator for UPF control plane, managing the BPF tail-call
  * pipeline, PFCP sessions, and network interfaces.
@@ -126,7 +129,7 @@ void UserPlaneComponent::SetMembers(
   }
 
   Logger::upf_app().info(
-      "UPF XDP pipeline initialized (N3: %s, N6: %s)", gtp_interface.c_str(),
+      "UPF_XDPProgram initialized (N3: %s, N6: %s)", gtp_interface.c_str(),
       non_gtp_interface.c_str());
 }
 

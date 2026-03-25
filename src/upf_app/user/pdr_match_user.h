@@ -30,6 +30,15 @@
  *                - Section 8.2.5 — Create FAR IE: §8.2.5 = SDF Filter in
  *                  V17.10.0, not Create FAR.  Create FAR grouped IE is at
  *                  §7.5.2.4.  Fixed: @see §7.5.2.4.
+ *              Added skeleton ownership following the QERProgram pattern:
+ *                - PdrMatchProgram now owns xdp_pdr_match_c skeleton +
+ *                  ProgramLifeCycle<xdp_pdr_match_c>.
+ *                - Constructor opens skeleton (no map args needed at
+ *                  construction time).
+ *                - SetMaps() replaces old constructor map injection so
+ *                  UPF_XDPProgram can share map FDs after load.
+ *                - GetBpfObject() for map sharing.
+ *                - GetXdpProgram() for tail_call_progs_map insertion.
  *              Boy Scout: added changelog with clang-format guards; updated
  *              @author / @date.
  * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
@@ -42,8 +51,18 @@
  * @author OpenAirInterface, Franck Messaoudi
  * @date 2025 / 2026-03
  *
- * PdrMatchProgram manages the BPF maps that back the XDP tail-call program
- * `pdr_match` (PROG_PDR_MATCH slot, index 1 in feature_dispatch_map).
+ * PdrMatchProgram owns the xdp_pdr_match_c BPF skeleton and manages the
+ * BPF maps that back the XDP tail-call program `pdr_match`
+ * (PROG_PDR_MATCH slot, index 2 in tail_call_progs_map).
+ *
+ * Skeleton Lifecycle (driven by UPF_XDPProgram)
+ * --------------------------------------------------
+ *   1. PdrMatchProgram() -- opens xdp_pdr_match_c skeleton.
+ *   2. UPF_XDPProgram::ShareMapsFromPrimary() -- reuses primary map FDs.
+ *   3. Load()     -- loads skeleton (map FDs already shared).
+ *   4. SetMaps()  -- receives BPFMap wrappers from UPF_XDPProgram.
+ *   5. GetXdpProgram() -- provides FD for tail_call_progs_map slot.
+ *   6. Destructor -- destroys skeleton via ProgramLifeCycle.
  *
  * PDR matching is the second stage of the XDP pipeline.  After session
  * lookup resolves the SEID, pdr_match.c iterates PDRs in precedence order
@@ -85,20 +104,30 @@
 #ifndef PDR_MATCH_USER_H_
 #define PDR_MATCH_USER_H_
 
+#include <ProgramLifeCycle.hpp>
+#include <xdp_pdr_match_skel.h>
 #include <linux/bpf.h>
 #include <cstdint>
 #include <memory>
 #include <vector>
 #include <wrappers/BPFMap.hpp>
-#include <pfcp_pdr.hpp>      // pfcp::pfcp_pdr (PFCP IE wrapper)
-#include <pfcp_session.hpp>  // pfcp::pfcp_session
+#include <pfcp_pdr.hpp>     /* pfcp::pfcp_pdr (PFCP IE wrapper)  */
+#include <pfcp_session.hpp> /* pfcp::pfcp_session                */
+#include "BPFProgram.h"
 #include "rules_enabled_flags.h"
 
 class BPFMap;
+class BPFMaps;
 
-// ==========================================================================
-// PDR rule association (stored in rules_match_pdr_map)
-// ==========================================================================
+/* ==========================================================================
+ * Type alias
+ * ========================================================================== */
+
+using PdrMatchProgramLifeCycle = ProgramLifeCycle<xdp_pdr_match_kern_c>;
+
+/* ==========================================================================
+ * PDR rule association (stored in rules_match_pdr_map)
+ * ========================================================================== */
 
 /**
  * @struct pdr_rule_association
@@ -137,9 +166,9 @@ struct pdr_rule_key {
   uint32_t _pad;
 } __attribute__((packed));
 
-// ==========================================================================
-// PdrMatchProgram
-// ==========================================================================
+/* ==========================================================================
+ * PdrMatchProgram
+ * ========================================================================== */
 
 /**
  * @class PdrMatchProgram
@@ -157,23 +186,47 @@ struct pdr_rule_key {
  * @see pdr_match.c — corresponding BPF program
  * @note Follows Google C++ Style Guide
  */
-class PdrMatchProgram {
+class PdrMatchProgram : public BPFProgram {
  public:
+  // ==========================================================================
+  // Constructor / Destructor
+  // ==========================================================================
+
   /**
-   * @brief Constructor — receives shared BPFMap references
-   *
-   * @param session_pdrs_map   pdrs_per_session_map (PDR arrays per session)
-   * @param rules_match_map    rules_match_pdr_map (PDR → rule IDs)
-   * @param sdf_filter_map     sdf_filters_map (SDF 5-tuple filters)
-   *
-   * @throws std::invalid_argument if any map pointer is null
+   * @brief Constructor -- opens xdp_pdr_match skeleton.
+   * Does NOT inject maps; call SetMaps() after UPF_XDPProgram
+   * has called ShareMapsFromPrimary() and InitializeMaps().
+   * @throws std::runtime_error if skeleton open fails.
    */
-  PdrMatchProgram(
+  PdrMatchProgram();
+  virtual ~PdrMatchProgram() = default;
+
+  // ==========================================================================
+  // Skeleton lifecycle
+  // ==========================================================================
+
+  /** @brief Load skeleton (call after map sharing is complete). */
+  void Load();
+
+  /** @brief Return the underlying BPF object (for map sharing). */
+  struct bpf_object* GetBpfObject() const;
+
+  /** @brief Return XDP program pointer for tail_call_progs_map insertion. */
+  struct bpf_program* GetXdpProgram() const;
+
+  // ==========================================================================
+  // Map injection
+  // ==========================================================================
+
+  /**
+   * @brief Receive BPFMap wrappers from UPF_XDPProgram.
+   * Replaces old constructor map injection.
+   * @throws std::invalid_argument if any pointer is null.
+   */
+  void SetMaps(
       std::shared_ptr<BPFMap> session_pdrs_map,
       std::shared_ptr<BPFMap> rules_match_map,
       std::shared_ptr<BPFMap> sdf_filter_map);
-
-  ~PdrMatchProgram() = default;
 
   // ==========================================================================
   // Session lifecycle
@@ -234,7 +287,7 @@ class PdrMatchProgram {
       uint32_t rules_enabled);
 
   // ==========================================================================
-  // Map access
+  // Map accessors
   // ==========================================================================
 
   /** @return Shared pointer to pdrs_per_session_map */
@@ -249,11 +302,42 @@ class PdrMatchProgram {
   std::shared_ptr<BPFMap> GetSdfFilterMap() const { return sdf_filter_map_; }
 
  private:
+  // ==========================================================================
+  // Private helpers
+  // ==========================================================================
+  /**
+   * @brief Initialize BPF map wrappers
+   */
+  void InitializeMaps();
+
+  /**
+   * @brief Configure specific BPF maps
+   *
+   * @param skel Opened BPF skeleton
+   * @param upf_cfg Configuration
+   */
+  void ConfigurePdrMatchMaps(struct pdr_match_kern_c* skel);
+
+  /** @brief Build a pdr_map_key from SEID and PDR_ID (pad zeroed). */
   static pdr_rule_key MakePdrKey(uint64_t seid, uint32_t pdr_id);
 
+  /** @brief Translate PFCP PDR IE into BPF pfcp_pdr struct. */
+  static void ConvertPdr(
+      const pfcp::pfcp_pdr& pfcp_ie, struct pfcp_pdr& bpf_pdr);
+
+  // ==========================================================================
+  // Skeleton and lifecycle
+  // ==========================================================================
+  xdp_pdr_match_kern_c* skeleton_ = nullptr;
+  std::shared_ptr<PdrMatchProgramLifeCycle> lifecycle_;
+
+  // ==========================================================================
+  // Maps
+  // ==========================================================================
+  std::shared_ptr<BPFMaps> maps_;             ///< All BPF maps
   std::shared_ptr<BPFMap> session_pdrs_map_;  ///< PDR arrays per session
   std::shared_ptr<BPFMap> rules_match_map_;   ///< PDR → rule associations
   std::shared_ptr<BPFMap> sdf_filter_map_;    ///< SDF 5-tuple filter defs
 };
 
-#endif  // PDR_MATCH_USER_H_
+#endif /* PDR_MATCH_USER_H_ */

@@ -441,7 +441,7 @@ class SessionManager {
    * @brief Update existing Usage Reporting Rule
    *
    * Modifies URR parameters (triggers, thresholds, quotas) while preserving
-   * active volume counters in urr_volume_map (BPF_NOEXIST semantics).
+   * active volume counters in urr_volume_counters_map (BPF_NOEXIST semantics).
    *
    * @param seid Session Endpoint Identifier
    * @param urr Updated Usage Reporting Rule
@@ -769,7 +769,7 @@ class SessionManager {
    *
    * Applies Update URR IE fields (reporting triggers, volume threshold/quota,
    * time threshold, measurement period, monitoring time) to existing URRs.
-   * Volume counters in urr_volume_map are preserved (not reset).
+   * Volume counters in urr_volume_counters_map are preserved (not reset).
    *
    * @see 3GPP TS 29.244 Section 8.2.12 - Update URR IE
    */

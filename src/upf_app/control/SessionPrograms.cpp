@@ -48,7 +48,7 @@
  *                  bar_config_map, mar_rules_map) guard-checked against
  *                  rules_enabled_flags — no change needed; already correct.
  *              §-refs used in this file:
- *                §8.2.54  URR ID — urr_config_map / urr_volume_map keyed by SEID
+ *                §8.2.54  URR ID — urr_config_map / urr_volume_counters_map keyed by SEID
  *                §8.2.57  BAR ID — bar_config_map / bar_state_map keyed by SEID
  *                §8.2.123 MAR ID — mar_rules_map keyed by SEID
  * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
@@ -193,11 +193,12 @@ void SessionPrograms::CleanupBpfMapEntries() {
           "  Removed urr_config_map entry for SEID=0x%016lx", seid_);
     }
 
-    auto urr_vol_map = upf_xdp_program_->GetMapByName("urr_volume_map");
+    auto urr_vol_map =
+        upf_xdp_program_->GetMapByName("urr_volume_counters_map");
     if (urr_vol_map) {
       urr_vol_map->Remove(seid_);
       Logger::upf_app().debug(
-          "  Removed urr_volume_map entry for SEID=0x%016lx", seid_);
+          "  Removed urr_volume_counters_map entry for SEID=0x%016lx", seid_);
     }
   }
 

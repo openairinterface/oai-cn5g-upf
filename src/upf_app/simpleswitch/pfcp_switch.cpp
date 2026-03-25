@@ -889,7 +889,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
       // ---- Create URRs (BPF only) — §7.5.2.4 Create URR IE ----------------
       // pfcp_session::create(urr) populates session->urrs so that
       // SessionProgramManager::CreatePipeline can populate urr_config_map and
-      // urr_volume_map in the BPF program.
+      // urr_volume_counters_map in the BPF program.
       if (isBpfAccelerationEnabled) {
         if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
           for (auto it : req->pfcp_ies.create_urrs) {
@@ -1285,8 +1285,9 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
       // ---- Update URRs (BPF only) — §7.5.4.11 Update URR IE ----------------
       // Updates reporting triggers, thresholds, and quotas in session->urrs.
-      // urr_config_map is repopulated by ModifyPipeline; urr_volume_map
-      // counters are preserved (BPF_NOEXIST semantics in PopulateUrrConfigMap).
+      // urr_config_map is repopulated by ModifyPipeline;
+      // urr_volume_counters_map counters are preserved (BPF_NOEXIST semantics
+      // in PopulateUrrConfigMap).
       if (isBpfAccelerationEnabled) {
         for (auto it : req->pfcp_ies.update_urrs) {
           update_urr& urr     = it;
