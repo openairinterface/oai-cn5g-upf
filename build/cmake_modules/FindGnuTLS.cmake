@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 # - Find gnutls
 # Find the native GNUTLS includes and library
 #

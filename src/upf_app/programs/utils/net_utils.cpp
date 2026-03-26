@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 #include "net_utils.hpp"
 #include <ifaddrs.h>
 #include <net/if.h>

@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 #include "SdfFilterParser.hpp"
 #include <regex>
 #include <string>

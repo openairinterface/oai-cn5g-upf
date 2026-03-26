@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 # Find Libevent
 # http://monkey.org/~provos/libevent/
 #

@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 #include "SessionProgramManager.h"
 #include <qer_tc_user.h>
 //#include <pfcp_session_pdr_lookup_xdp_user.h>

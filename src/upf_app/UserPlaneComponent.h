@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef __USERPLANECOMPONENT_H__
 #define __USERPLANECOMPONENT_H__
 

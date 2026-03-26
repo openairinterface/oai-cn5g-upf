@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 if (LibNL_FIND_REQUIRED)
 	message("  (required)")
 else (LibNL_FIND_REQUIRED)

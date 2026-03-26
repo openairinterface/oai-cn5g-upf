@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 #include "NextHopFinder.hpp"
 #include <string.h>
 #include <arpa/inet.h>

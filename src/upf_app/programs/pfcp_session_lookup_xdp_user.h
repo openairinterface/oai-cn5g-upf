@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 #ifndef __PFCP_SESSION_LOOKUP_XDP_USER_H__
 #define __PFCP_SESSION_LOOKUP_XDP_USER_H__
 
