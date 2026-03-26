@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: MIT
 
 # Mount bpffs and debugfs if not present already
 if [ $(/bin/mount | /bin/grep /sys/fs/bpf -c) -eq 0 ]; then
