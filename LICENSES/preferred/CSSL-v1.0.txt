@@ -1,7 +1,15 @@
-                          Collaborative Standards Software License v1.0 (CSSL)
+Valid-License-Identifier: CSSL
+URL: https://openairinterface.org/oai-cssl
+Usage-Guide:
+  To use the CSSL License put the following SPDX tag/value pair into a
+  comment according to the placement guidelines in the licensing rules
+  documentation:
+    SPDX-License-Identifier: LicenseRef-CSSL-1.0
+License-Text:
 
-LICENSE TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION OF OPENAIRINTERFACE.
-The pdf version of this document can be downloaded from https://openairinterface.org/oai-cssl/.
+Collaborative Standards Software License v1.0 (CSSL)
+
+LICENSE TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION OF OPENAIRINTERFACE. 
 
 1. Definitions.
 
@@ -76,7 +84,7 @@ such Contribution(s) was submitted (“Essential Patents”).
 3.2 Grant of Patent License for purposes other than study, testing and research:
 
 For purposes other than study, testing and research, and subject to the terms and conditions of
-this License, You commit to be prepared to negotiate, in good faith, a non-exclusive, nontransferable,
+this License, You commit to be prepared to negotiate, in good faith, a non-exclusive, nontransferable, 
 non-assignable license of Essential Patents with each Contributor and/or the
 Licensor on Fair, Reasonable and Non-Discriminatory (“FRAND”) terms and conditions for
 the use of the Work or Contribution(s) incorporated within the Work.
@@ -178,24 +186,3 @@ additional liability obligations.
 
 END OF TERMS AND CONDITIONS
 
-1. APPENDIX: How to apply the PRESENT License to your work
-
-To apply the present License to your work, attach the following boilerplate notice, with the
-fields enclosed by brackets “[]” replaced with your own identifying information. (Don’t
-include the brackets!) The text should be enclosed in the appropriate comment syntax for the
-file format. We also recommend that a file or class name and description of purpose be
-included on the same “printed page” as the copyright notice for easier identification within
-third-party archives.
-
-Copyright [yyyy] [name of copyright owner]
-
-Licensed under the Standards Software License, version 1.0, terms and conditions (the
-“License”); you may not use this file except in compliance with the License. You may obtain a
-copy of the License at [URL link]
-
-Unless required by applicable law or agreed to in writing, software distributed under the License
-is distributed on an “AS IS” BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-KIND, either express or implied.
-
-See the License for the specific language governing permissions and limitations under the
-License.
