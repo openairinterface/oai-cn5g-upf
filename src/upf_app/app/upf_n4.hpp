@@ -2,7 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-
 #ifndef FILE_SGWU_SX_HPP_SEEN
 #define FILE_SGWU_SX_HPP_SEEN
 

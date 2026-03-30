@@ -2,7 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-
 #include "common_defs.h"
 #include "itti.hpp"
 #include "logger.hpp"

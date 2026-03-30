@@ -2,7 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-
 #include "upf_nrf.hpp"
 
 #include <boost/uuid/random_generator.hpp>

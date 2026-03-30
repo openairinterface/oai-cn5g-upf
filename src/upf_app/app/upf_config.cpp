@@ -2,7 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-
 #include "async_shell_cmd.hpp"
 #include "logger.hpp"
 #include "upf_config.hpp"
