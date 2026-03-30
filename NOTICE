@@ -1,0 +1,127 @@
+The source code is distributed under the Collaborative Standards Software License v1.0 (CSSL).
+For more details of the license, refer to the LICENSE file in the same directory.
+However, the source code also contains third-party software that is acknowledged here for reference.
+
+------------------------------------------------------------------
+
+libcpr
+Source: https://github.com/libcpr/cpr
+Author: contact23@libcpr.org
+License: MIT License
+
+cpp-jwt
+Source: https://github.com/arun11299/cpp-jwt.git
+Author: Arun Muralidharan (arun11299@gmail.com)
+License: MIT License
+
+GoogleTest
+Source: https://github.com/google/googletest
+Author: Google
+License: BSD 3-Clause License
+
+Folly
+Source: https://github.com/facebook/folly
+Author: Facebook
+License: Apache License 2.0
+
+fmt
+Source: https://github.com/fmtlib/fmt
+Author: Hello World Foundation
+License: MIT License
+
+nghttp2
+Source: https://github.com/nghttp2/nghttp2.git
+Author: NGHTTP2
+License: MIT License
+
+JSON for Modern C++
+Source: https://github.com/nlohmann/json
+Author: Niels Lohmann (mail@nlohmann.me)
+License: MIT License
+
+Pistache
+Source: https://github.com/pistacheio/pistache
+Author: pistacheio
+License: Apache License 2.0
+
+spdlog
+Source: https://github.com/gabime/spdlog
+Author: Gabi Melman (gmelman1@gmail.com)
+License: MIT License
+
+------------------------------------------------------------------
+
+Optional:
+
+userspace-rcu
+Source: https://git.lttng.org/userspace-rcu.git
+LTTNG: LGPL-2.1-or-later
+
+MongoDB C++ Driver
+Source: https://github.com/mongodb/mongo-cxx-driver.git
+MongoDB: Apache License 2.0
+
+------------------------------------------------------------------
+
+Credits for work contributed from Sprint in Apache 2.0 License:
+
+The following files include contributions from Sprint and are licensed under Apache License 2.0:
+
+- src/oai_upf/options.hpp
+- src/oai_upf/options.cpp
+
+------------------------------------------------------------------
+
+Credits for file generated via ASN1C:
+
+Files: src/common-src/ngap/{libngap, libngap_ies}/*
+Source: https://github.com/mouse07410/asn1c
+Author: Lev Walkin <vlm@lionet.info>
+
+Credits for file generated via openapi-generator.tech:
+
+Files: src/common-src/model/*
+Source: https://openapi-generator.tech/
+NOTE: Files were also edited manually to fix auto-generated errors
+
+Credits for files with Copyright of Facebook under:
+
+GPL-2.0 WITH Linux-syscall-note License:
+- src/upf_app/include/linux/btf.h
+
+LGPL-2.1 OR BSD-2-Clause License:
+- src/upf_app/include/libbpf_common.h
+- src/upf_app/include/bpf/libbpf_util.h
+- src/upf_app/include/bpf/libbpf_legacy.h
+- src/upf_app/include/bpf/libbpf_legacy.h
+- src/upf_app/include/bpf/libbpf_internal.h
+- src/upf_app/include/bpf/libbpf_version.h
+- src/upf_app/include/bpf/skel_internal.h
+- src/upf_app/include/bpf/btf.h
+
+Credits for files with Copyright of PLUMgrid under:
+
+GPL-2.0 WITH Linux-syscall-note License:
+- src/upf_app/include/linux/bpf.h
+
+Credits for files with Copyright of Intel Corporation under:
+
+GPL-2.0 WITH Linux-syscall-note License:
+- src/upf_app/include/linux/if_xdp.h
+- src/upf_app/include/bpf/xsk.h
+
+Credits for files with Copyright of Meta Platforms:
+
+LGPL-2.1 OR BSD-2-Clause License:
+- src/upf_app/include/bpf/usdt.bpf.h
+
+Credits for files with Copyright of Huawei Inc and Alexei Starovoitov <ast@kernel.org>:
+
+LGPL-2.1 OR BSD-2-Clause License:
+- src/upf_app/include/bpf/bpf.h
+- src/upf_app/include/bpf/libbpf.h
+
+Credits for files with Copyright of The Polycube Authors and Thiago Navarro:
+
+Apache License 2.0:
+- src/upf_app/bpf/utils/csum.h
