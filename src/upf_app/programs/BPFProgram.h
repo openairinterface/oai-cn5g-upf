@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 #ifndef __BPFPROGRAM_H__
 #define __BPFPROGRAM_H__
 

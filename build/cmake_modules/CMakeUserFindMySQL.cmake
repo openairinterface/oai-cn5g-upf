@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 # - Find mysqlclient
 # Find the native MySQL includes and library
 #

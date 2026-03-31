@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef __BPFMAPS_H__
 #define __BPFMAPS_H__
 

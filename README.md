@@ -21,16 +21,21 @@ At the moment, it contains the following network elements:
 * Unified Data Repository (**UDR**)
 * Unstructured Data Storage Function (**UDSF**)
 * User Plane Function (**UPF**)
-  
+
 Each element implementation has its own repository: this repository (`oai-upf`) is meant for UPF.
 
 # Licence info
 
-It is distributed under `OAI Public License V1.1`.
-See [OAI Website for more details](https://www.openairinterface.org/?page_id=698).
+The source code is distributed under `Collaborative Standards Software License v1.0 (CSSL v1.0)`.
+For more details, visit the [OAI Website](https://openairinterface.org/oai-cssl/).
 
-The text for `OAI Public License V1.1` is also available under [LICENSE](LICENSE)
+The full text of `Collaborative Standards Software License v1.0` is also included in the [LICENSE](LICENSE)
 file at the root of this repository.
+
+Certain files in the repository are using MIT License and documentation is distributed under
+Creative Commons Attribution 4.0 International license.
+
+For third-party softwares, please refer to [NOTICE](NOTICE) file.
 
 # Where to start
 

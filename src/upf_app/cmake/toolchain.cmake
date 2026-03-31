@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_BUILD_TYPE Release)
 set (CMAKE_CXX_STANDARD 17)

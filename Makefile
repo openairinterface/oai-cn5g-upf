@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 SHELL := /bin/bash
 GTP_INTERFACE?=$(GTP_INTERFACE)
 UDP_INTERFACE?=$(UDP_INTERFACE)

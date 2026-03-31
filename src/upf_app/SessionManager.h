@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 #ifndef __SESSIONMANAGER_H__
 #define __SESSIONMANAGER_H__
 

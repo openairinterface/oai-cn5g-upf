@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 #ifndef __ONNEWSESSIONPROGRAMOBSERVER_H__
 #define __ONNEWSESSIONPROGRAMOBSERVER_H__
 

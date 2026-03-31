@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 #ifndef __SESSIONBPFIMPL_H__
 #define __SESSIONBPFIMPL_H__
 

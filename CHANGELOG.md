@@ -1,25 +1,34 @@
-# RELEASE NOTES: #
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
 
-## v2.2.0 -- December 2025 ##
+# RELEASE NOTES:
+
+## v2.2.1 -- March 2026
+
+* Change of license from OAI Public License v1.1 to CSSL v1.0
+* Re-license documentation to the CC-BY-4.0 License
+* Re-license orchestration files (docker compose yaml files, health scripts, openshift build files)
+   and CI-scripts under the MIT License
+
+## v2.2.0 -- December 2025
 * Features
   - Framed routing for simple switch UPF
-  - Ethernet PDU session 
+  - Ethernet PDU session
   - Configure eBPF map sizes via config file
-  - Manipulate BPF debug logging 
-  - Support QoS enforcement 
+  - Manipulate BPF debug logging
+  - Support QoS enforcement
 * Fixes
   - Fix the pFAR add to map
   - Apply SEID fix on framed routing change
   - Fix XDP_DROP does not exit in TC
-  - Update code to manage the TC BPF program separately 
+  - Update code to manage the TC BPF program separately
 * Future Fixes
   - Add support for framed routing for eBPF UPF
   - Improve throughput of simple switch UPF
-  - Add support for Ubuntu 24.04 
+  - Add support for Ubuntu 24.04
   - Add support for RHEL 10, update container images to UBI 10
 
 
-## v2.1.0 -- August 2024 ##
+## v2.1.0 -- August 2024
 
 * Features
   - Add connection handling between UPF and NRF
@@ -41,7 +50,7 @@
     - bpftool to `v7.3.0`
     - This should allow to build on newer systems
 
-## v2.0.0 -- December 2023 ##
+## v2.0.0 -- December 2023
 
 * Features
   - Support YAML configuration file
@@ -55,7 +64,7 @@
   - Published image on Docker-Hub is using now Ubuntu-22 as base image
   - Ubuntu-18 is no longer supportable due to eBPF
 
-## v1.5.1 -- May 2023 ##
+## v1.5.1 -- May 2023
 
 * Support for rocky linux 8.7
 * Increasing size of hashmap tables
@@ -64,16 +73,16 @@
 * Published image on Docker-Hub is using now Ubuntu-20 as base image
   * We will soon obsolete the build system for Ubuntu18.04
 
-## v1.5.0 -- January 2023 ##
+## v1.5.0 -- January 2023
 
 * feat(fqdn): giving some time for FQDN resolution
 * Docker image improvements
 * Fixed docker exit by catching SIGTERM
 * Ubuntu22 full support
 
-## v1.4.0 -- July 2022 ##
+## v1.4.0 -- July 2022
 
-* Fix for handling S-NSSAI 
+* Fix for handling S-NSSAI
 * Add support for multiple slices via config file
 * Allowed reusing GTPv1-U socket
 * Fix GTPU offset sequence number
@@ -82,37 +91,37 @@
 * Reduce image size
 * Skipping release tag v1.3.0 to be in sync with OAI CN 5G network functions
 
-## v1.2.0 -- February 2022 ##
+## v1.2.0 -- February 2022
 
 * Obsolescence of Legacy OAI-MME
 * Build fixes
 * Docker image layer optimization
 
-## v1.1.5 -- December 2021 ##
+## v1.1.5 -- December 2021
 
 * Disable association request if NF registration is enabled
 
-## v1.1.4 -- October 2021 ##
+## v1.1.4 -- October 2021
 
 * Fix build issue
 * Fix GTPU DL encapsulation: 8 extraneous bytes
 
-## v1.1.3 -- October 2021 ##
+## v1.1.3 -- October 2021
 
 * Adding 5G features
   - HTTP2 support
 
-## v1.1.2 -- July 2021 ##
+## v1.1.2 -- July 2021
 
 * Adding 5G features
   - NRF discovery and FQDN support
 
-## v1.1.1 -- March 2021 ##
+## v1.1.1 -- March 2021
 
 * GTP-U extension headers for 5G support
   - disabled by default for 4G usage
 
-## v1.1.0 -- February 2021 ##
+## v1.1.0 -- February 2021
 
 *  Cloud-native support
 *  RHEL8 support
@@ -123,6 +132,6 @@
    -  ...
 *  Last release before Multi-UPF-instance support
 
-## v1.0.0 -- May 2019 ##
+## v1.0.0 -- May 2019
 
 * First release, Able to serve a MME with basic attach, detach, release, paging procedures, default bearer only.
