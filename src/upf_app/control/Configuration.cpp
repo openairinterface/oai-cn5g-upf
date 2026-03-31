@@ -117,8 +117,6 @@ Configuration::Configuration(int argc, char** argv) {
 // =============================================================================
 
 void Configuration::BuildNetworkConfig() {
-  Logger::upf_app().info("Building network configuration from upf_config...");
-
   // --- Interface names ---
   upf::g_net_cfg.n3_iface = upf_cfg.n3.if_name;
   upf::g_net_cfg.n6_iface = upf_cfg.n6.if_name;
@@ -158,21 +156,21 @@ void Configuration::BuildNetworkConfig() {
       upf_cfg.max_upf_redirect_interfaces;
   upf::g_net_cfg.max_arp_entries = upf_cfg.max_arp_entries;
 
-  Logger::upf_app().info(
-      "Network config ready: N3 = %s  N6 = %s  N4 = %s",
-      upf::GetN3Iface().c_str(), upf::GetN6Iface().c_str(),
-      upf::GetN4Iface().c_str());
+  // Logger::upf_app().info(
+  //     "Network config ready: N3 = %s  N6 = %s  N4 = %s",
+  //     upf::GetN3Iface().c_str(), upf::GetN6Iface().c_str(),
+  //     upf::GetN4Iface().c_str());
 
-  Logger::upf_app().info(
-      "Features: BPF = %s QoS = %s URR = %s BAR = %s MAR = %s FR = %s PDU = %s",
-      upf::IsBpfDatapathEnabled() ? "on" : "off",
-      upf::IsQosEnabled() ? "on" : "off", upf::IsUrrEnabled() ? "on" : "off",
-      upf::IsBarEnabled() ? "on" : "off", upf::IsMarEnabled() ? "on" : "off",
-      upf::IsFramedRoutingEnabled() ? "on" : "off",
-      upf::GetPduSessionType().c_str());
+  // Logger::upf_app().info(
+  //     "Features: BPF = %s QoS = %s URR = %s BAR = %s MAR = %s FR = %s PDU =
+  //     %s", upf::IsBpfDatapathEnabled() ? "on" : "off", upf::IsQosEnabled() ?
+  //     "on" : "off", upf::IsUrrEnabled() ? "on" : "off", upf::IsBarEnabled() ?
+  //     "on" : "off", upf::IsMarEnabled() ? "on" : "off",
+  //     upf::IsFramedRoutingEnabled() ? "on" : "off",
+  //     upf::GetPduSessionType().c_str());
 
-  Logger::upf_app().info(
-      "Map sizing: sessions = %u pdrs/session = %u sdf/session = %u arp = %u",
-      upf::GetMaxPduSessions(), upf::GetMaxPdrsPerSession(),
-      upf::GetMaxSdfFiltersPerSession(), upf::GetMaxArpEntries());
+  // Logger::upf_app().info(
+  //     "Map sizing: sessions = %u pdrs/session = %u sdf/session = %u arp =
+  //     %u", upf::GetMaxPduSessions(), upf::GetMaxPdrsPerSession(),
+  //     upf::GetMaxSdfFiltersPerSession(), upf::GetMaxArpEntries());
 }

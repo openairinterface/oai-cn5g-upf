@@ -21,53 +21,109 @@
 // clang-format off
 /* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
  * Date:        2026-03
- * Changes:     Rewrote constructor -- own lifecycle_ (BPFProgram pattern).
- *              Added Load(), GetBpfObject(), GetXdpProgram().
- *              SetMaps() receives refs from UPF_XDPProgram::InitializeMaps().
- *              All session lifecycle methods preserved unchanged. No upf_cfg.
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 ss8.2.57 BAR ID
+ * Changes:     Rewritten to follow n3_entry_user.cpp / session_lookup_ip_user.cpp
+ *              pattern exactly.
+ *              Constructor no longer opens the skeleton -- open is lazy.
+ *              ConfigureMaps uses ConfigureMapMaxEntries(skel->maps.xxx).
+ *              Setup() = open (idempotent) + InitializeMaps + load.
+ *              No attach() / link() -- stage program, reached via tail call.
+ *              All session lifecycle methods preserved unchanged.
+ * 3GPP Refs:   3GPP TS 29.244 V17.10.0 §8.2.57 BAR ID
  */
 // clang-format on
 
 #include "bar_apply_user.h"
 #include <bpf/libbpf.h>
-#include <linux/bpf.h>
 #include <cerrno>
 #include <stdexcept>
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
 #include "logger.hpp"
-#include "upf_network_config.h"
+#include "upf_xdp_limits.h"
+#include "utils/bpf_utils.hpp"
 
-/* Section: Skeleton lifecycle */
+using namespace oai::utils::bpf;
 
 //------------------------------------------------------------------------------
-BARProgram::BARProgram() : BPFProgram() {
-  auto open_fn = [this]() -> xdp_bar_apply_kern_c* {
-    auto* s = xdp_bar_apply_kern_c__open();
-    if (!s) throw std::runtime_error("Failed to open xdp_bar_apply skeleton");
-    auto set_size = [&](const char* name, uint32_t sz) {
-      struct bpf_map* m = bpf_object__find_map_by_name(s->obj, name);
-      if (m) bpf_map__set_max_entries(m, sz);
-    };
-    set_size("bar_config_map", upf::GetMaxPduSessions());
-    set_size("bar_state_map", upf::GetMaxPduSessions());
-    return s;
-  };
-  lifecycle_ = std::make_shared<BarProgramLifeCycle>(
-      open_fn, xdp_bar_apply_kern_c__load, xdp_bar_apply_kern_c__attach,
-      xdp_bar_apply_kern_c__destroy);
-  skeleton_ = lifecycle_->open();
-  Logger::upf_app().debug("BARProgram: skeleton opened");
+void BARProgram::ConfigureMaps(struct xdp_bar_apply_kern_c* skel) {
+  if (!skel) {
+    Logger::upf_app().error("Null skeleton in BARProgram::ConfigureMaps");
+    return;
+  }
+
+  bool ok = true;
+
+  /* bar_maps.h -- runtime-sized maps */
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.bar_config_map, "bar_config_map", upf::GetMaxPduSessions());
+
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.bar_state_map, "bar_state_map", upf::GetMaxPduSessions());
+
+  /* bar_ddn_ringbuf_map: fixed size (64 KB) -- no runtime configuration. */
+
+  if (!ok) {
+    Logger::upf_app().error(
+        "One or more map configurations failed for BARProgram.");
+    throw std::runtime_error("BARProgram map configuration failed");
+  }
+
+  /* rodata: MAX_PDU_SESSIONS (bar_maps.h declares it) */
+  if (skel->rodata) skel->rodata->MAX_PDU_SESSIONS = upf::GetMaxPduSessions();
 }
 
 //------------------------------------------------------------------------------
-void BARProgram::Load() {
+BARProgram::BARProgram() : BPFProgram() {
+  Logger::upf_app().info("Initializing BAR XDP Program...");
+
+  auto open_fn = [this]() -> xdp_bar_apply_kern_c* {
+    struct xdp_bar_apply_kern_c* s = xdp_bar_apply_kern_c__open();
+    if (!s) {
+      Logger::upf_app().error("Failed to open xdp_bar_apply skeleton");
+      return nullptr;
+    }
+    // Configure maps before skeleton is loaded
+    this->ConfigureMaps(s);
+    // Store skeleton pointer -- available from this point onwards
+    skeleton_ = s;
+    return s;
+  };
+
+  lifecycle_ = std::make_shared<BarProgramLifeCycle>(
+      open_fn,
+      /* load    */ xdp_bar_apply_kern_c__load,
+      /* attach  */ xdp_bar_apply_kern_c__attach,
+      /* destroy */ xdp_bar_apply_kern_c__destroy);
+}
+
+//------------------------------------------------------------------------------
+void BARProgram::Setup() {
+  /*
+   * lifecycle_->open() is idempotent: if UPF_XDPProgram already called it
+   * (to get the bpf_object for ShareMaps before loading), this returns the
+   * cached skeleton with no side effects.
+   */
+  skeleton_ = lifecycle_->open();
+  InitializeMaps();
   lifecycle_->load();
-  auto maps       = std::make_shared<BPFMaps>(skeleton_->skeleton);
-  bar_config_map_ = std::make_shared<BPFMap>(maps->GetMap("bar_config_map"));
-  bar_state_map_  = std::make_shared<BPFMap>(maps->GetMap("bar_state_map"));
-  Logger::upf_app().debug("BARProgram: skeleton loaded");
+  Logger::upf_app().debug("BARProgram: loaded (no attach -- stage program)");
+}
+
+//------------------------------------------------------------------------------
+void BARProgram::TearDown() {
+  lifecycle_->tearDown();
+}
+
+//------------------------------------------------------------------------------
+void BARProgram::InitializeMaps() {
+  maps_    = std::make_shared<BPFMaps>(lifecycle_->getBPFSkeleton()->skeleton);
+  auto get = [&](const char* name) {
+    return std::make_shared<BPFMap>(maps_->GetMap(name));
+  };
+  /* bar_maps.h */
+  bar_config_map_      = get("bar_config_map");
+  bar_state_map_       = get("bar_state_map");
+  bar_ddn_ringbuf_map_ = get("bar_ddn_ringbuf_map");
 }
 
 //------------------------------------------------------------------------------
@@ -76,24 +132,55 @@ struct bpf_object* BARProgram::GetBpfObject() const {
 }
 
 //------------------------------------------------------------------------------
+struct bpf_object_skeleton* BARProgram::GetSkeleton() const {
+  return skeleton_ ? skeleton_->skeleton : nullptr;
+}
+
+//------------------------------------------------------------------------------
 struct bpf_program* BARProgram::GetXdpProgram() const {
   return skeleton_ ? skeleton_->progs.bar_apply : nullptr;
 }
 
-/* Section: Map injection */
-
 //------------------------------------------------------------------------------
-void BARProgram::SetMaps(
-    std::shared_ptr<BPFMap> bar_config_map,
-    std::shared_ptr<BPFMap> bar_state_map) {
-  if (!bar_config_map || !bar_state_map)
-    throw std::invalid_argument("BARProgram::SetMaps: null BPFMap pointer");
-  bar_config_map_ = std::move(bar_config_map);
-  bar_state_map_  = std::move(bar_state_map);
-  Logger::upf_app().debug("BARProgram: maps set");
+std::shared_ptr<BPFMaps> BARProgram::GetMaps() const {
+  return maps_;
 }
 
-/* Section: Static helpers */
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> BARProgram::GetBarConfigMap() const {
+  return bar_config_map_;
+}
+
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> BARProgram::GetBarStateMap() const {
+  return bar_state_map_;
+}
+
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> BARProgram::GetBarDdnRingbuf() const {
+  return bar_ddn_ringbuf_map_;
+}
+
+//------------------------------------------------------------------------------
+/*
+ * TODO(fmessaoudi): See TODO in n3_entry_user.cpp -- GetMapCount() ownership.
+ */
+size_t BARProgram::GetMapCount() const {
+  return maps_ ? maps_->GetMapCount() : 0;
+}
+
+//------------------------------------------------------------------------------
+void BARProgram::ConvertBar(
+    const pfcp::pfcp_bar& bar, struct pfcp_bar& bpf_bar) {
+  bpf_bar        = {};
+  bpf_bar.bar_id = bar.bar_id.second.bar_id;
+  if (bar.suggested_buffering_packets_count.first)
+    bpf_bar.suggested_buffering_packets_count.packet_count =
+        bar.suggested_buffering_packets_count.second.packet_count;
+  if (bar.downlink_data_notification_delay.first)
+    bpf_bar.dl_data_notification_delay.delay_value =
+        bar.downlink_data_notification_delay.second.delay_value;
+}
 
 //------------------------------------------------------------------------------
 bar_map_key BARProgram::MakeKey(uint64_t seid, uint32_t bar_id) {
@@ -103,8 +190,6 @@ bar_map_key BARProgram::MakeKey(uint64_t seid, uint32_t bar_id) {
   k._pad   = 0;
   return k;
 }
-
-/* Section: Session lifecycle */
 
 //------------------------------------------------------------------------------
 void BARProgram::PopulateBarConfigMap(
@@ -123,9 +208,9 @@ void BARProgram::PopulateBarConfigMap(
 
 //------------------------------------------------------------------------------
 void BARProgram::InitBarStateMap(uint64_t seid, uint32_t bar_id) {
-  if (!bar_state_map_) return;
   bar_map_key key = MakeKey(seid, bar_id);
   bar_state_t state{};
+  if (!bar_state_map_) return;
   int ret = bar_state_map_->Update(key, state, BPF_NOEXIST);
   if (ret != 0 && ret != -EEXIST)
     Logger::upf_app().warn(
@@ -169,23 +254,7 @@ void BARProgram::TearDown(
 //------------------------------------------------------------------------------
 bool BARProgram::ReadBarState(
     uint64_t seid, uint32_t bar_id, bar_state_t& out) const {
-  if (!bar_state_map_) return false;
   bar_map_key key = MakeKey(seid, bar_id);
+  if (!bar_state_map_) return false;
   return bar_state_map_->Lookup(key, &out) == 0;
-}
-
-//------------------------------------------------------------------------------
-void BARProgram::ConvertBar(
-    const pfcp::pfcp_bar& bar, struct pfcp_bar& bpf_bar) {
-  bpf_bar = {};
-
-  bpf_bar.bar_id = bar.bar_id.second.bar_id;
-
-  if (bar.suggested_buffering_packets_count.first)
-    bpf_bar.suggested_buffering_packets_count.packet_count =
-        bar.suggested_buffering_packets_count.second.packet_count;
-
-  if (bar.downlink_data_notification_delay.first)
-    bpf_bar.dl_data_notification_delay.delay_value =
-        bar.downlink_data_notification_delay.second.delay_value;
 }

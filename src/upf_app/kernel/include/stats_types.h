@@ -54,7 +54,7 @@
  * ========================================================================== */
 
 /**
- * @brief Per-CPU statistics record stored in mc_stats map.
+ * @brief Per-CPU statistics record stored in mc_stats_map.
  *
  * One entry per XDP action (XDP_ABORTED, XDP_DROP, XDP_PASS,
  * XDP_TX, XDP_REDIRECT).  Updated without locks because

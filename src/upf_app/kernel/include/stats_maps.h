@@ -51,7 +51,7 @@
 #include "stats_types.h"
 
 /* ==========================================================================
- * mc_stats
+ * mc_stats_map
  * ========================================================================== */
 
 /**
@@ -69,14 +69,14 @@ struct {
   __uint(max_entries, XDP_ACTION_MAX);
   __type(key, __u32);
   __type(value, struct datarec);
-} mc_stats SEC(".maps");
+} mc_stats_map SEC(".maps");
 
 /* ==========================================================================
  * xdp_stats_record_action — inline verdict helper
  * ========================================================================== */
 
 /**
- * @brief Record an XDP verdict in mc_stats and return the action.
+ * @brief Record an XDP verdict in mc_stats_map and return the action.
  *
  * Called as the final return in every XDP program:
  *   return xdp_stats_record_action(ctx, XDP_PASS);
@@ -91,7 +91,7 @@ static __u32 xdp_stats_record_action(struct xdp_md* ctx, __u32 action) {
     return XDP_ABORTED;
   }
 
-  struct datarec* rec = bpf_map_lookup_elem(&mc_stats, &action);
+  struct datarec* rec = bpf_map_lookup_elem(&mc_stats_map, &action);
   if (!rec) {
     bpf_debug("stats: map lookup failed for action %u\n", action);
     return XDP_ABORTED;

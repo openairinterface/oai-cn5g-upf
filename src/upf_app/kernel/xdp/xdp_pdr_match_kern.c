@@ -615,8 +615,8 @@ int pdr_match(struct xdp_md* ctx) {
     return xdp_stats_record_action(ctx, XDP_DROP);
   }
 
-  u64 seid  = pctx->seid;
-  u32 ue_ip = pctx->ue_ip;
+  __attribute__((unused)) u64 seid  = pctx->seid;
+  __attribute__((unused)) u32 ue_ip = pctx->ue_ip;
 
   struct pfcp_pdr* pdr = NULL;
   u8 qfi               = pctx->qfi;

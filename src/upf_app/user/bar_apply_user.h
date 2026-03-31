@@ -18,116 +18,74 @@
  * For more information about the OpenAirInterface (OAI) Software Alliance:
  *      contact@openairinterface.org
  */
-
 // clang-format off
 /* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
  * Date:        2026-03
- * Changes:     V17.10.0 audit -- fixed all §-refs in @see block and struct
- *              field comments (see bar_xdp_user.h history for full detail).
- *              Renamed bar_xdp_user.h -> bar_apply_user.h to mirror
- *              kernel file naming (xdp_bar_apply.c -> bar_apply_user.h).
- *              Added skeleton ownership following the QERProgram pattern:
- *                - BARProgram now owns xdp_bar_apply_c skeleton +
- *                  ProgramLifeCycle<xdp_bar_apply_c>.
- *                - SetMaps() replaces old constructor map injection so
- *                  UPF_XDPProgram can share map FDs after load.
- *              All existing map management methods preserved unchanged.
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) -- PFCP Protocol
+ * Changes:     Rewritten to follow n3_entry_user.h / session_lookup_ip_user.h
+ *              pattern exactly.
+ *              xdp_bar_apply_kern.c includes:
+ *                bar_maps.h -> bar_config_map      (runtime, owned)
+ *                              bar_state_map        (runtime, owned)
+ *                              bar_ddn_ringbuf_map  (fixed 64 KB, owned)
+ *              rodata: MAX_PDU_SESSIONS (bar_maps.h declares it).
+ *              All session lifecycle methods preserved unchanged.
+ * 3GPP Refs:   3GPP TS 29.244 V17.10.0 §8.2.57  BAR ID
+ *              3GPP TS 29.244 V17.10.0 §8.2.100 Suggested Buffering Packets
+ *              3GPP TS 29.244 V17.10.0 §8.2.28  DL Data Notification Delay
  */
 // clang-format on
 
 /**
  * @file  bar_apply_user.h
- * @brief User-space manager for BAR (Buffering Action Rule) BPF maps.
- * @author OpenAirInterface, Franck Messaoudi
- * @date 2025 / 2026-03
+ * @brief User-space lifecycle manager for the xdp_bar_apply XDP program.
  *
- * BARProgram owns the xdp_bar_apply_c BPF skeleton and manages the BPF maps
- * that back the XDP tail-call program `xdp_bar_apply` (PROG_BAR_APPLY slot,
- * index 6 in tail_call_progs_map).
+ * Responsibilities:
+ *   - Open the xdp_bar_apply_kern_c skeleton and configure its maps.
+ *   - Load the program (no attach/link -- stage program, reached via tail
+ *     call).
+ *   - Manage per-session BAR configuration maps on behalf of
+ *     SessionProgramManager.
  *
- * BAR is referenced indirectly: a FAR with apply_action.buff=1 carries a
- * BAR_ID that indexes into bar_config_map to control buffering behaviour.
- * This side path is terminal -- after buffering, no further tail calls.
+ * Maps owned (from xdp_bar_apply_kern.c includes, bar_maps.h):
+ *   - bar_config_map      (runtime: MAX_PDU_SESSIONS)
+ *   - bar_state_map       (runtime: MAX_PDU_SESSIONS)
+ *   - bar_ddn_ringbuf_map (fixed: 64 KB)
  *
- * Skeleton Lifecycle (driven by UPF_XDPProgram)
- * --------------------------------------------------
- *   1. BARProgram() constructor -- opens xdp_bar_apply_c skeleton.
- *   2. UPF_XDPProgram::ShareMapsFromPrimary() -- reuses primary map FDs.
- *   3. Load()    -- loads skeleton (map FDs already shared).
- *   4. SetMaps() -- receives BPFMap wrappers from UPF_XDPProgram.
- *   5. GetXdpProgram() -- provides program FD for tail_call_progs_map slot.
- *   6. Destructor -- destroys skeleton via ProgramLifeCycle.
- *
- * BPF Maps managed
- * ----------------
- *   bar_config_map  -- BAR configuration per SEID.
- *                      Written by control plane; read by xdp_bar_apply.c.
- *                      Stores pfcp_bar: DDN delay + buffer packet count hint.
- *
- *   bar_state_map   -- Runtime buffering state per SEID.
- *                      Written atomically by data plane.
- *                      Stores: last DDN timestamp, buffered packet count,
- *                      notification-sent flag.
- *                      NEVER reset during modification -- state preserved
- *                      across session updates to avoid spurious DDN retrigger.
- *
- * DDN suppression logic
- * ---------------------
- *   dl_notification_delay_sec > 0: the data plane suppresses duplicate DDN
- *   notifications within the delay window (bar_state.last_ddn_ns).
- *   The control plane must NOT clear last_ddn_ns during modification --
- *   handled by BPF_NOEXIST state initialisation.
- *
- * @see 3GPP TS 29.244 §7.5.2.7  -- Create BAR grouped IE
- * @see 3GPP TS 29.244 §8.2.57   -- BAR ID
- * @see 3GPP TS 29.244 §8.2.100  -- Suggested Buffering Packets Count
- * @see 3GPP TS 29.244 §8.2.28   -- DL Data Notification Delay
- * @see kernel/xdp/xdp_bar_apply.c -- BPF tail-call program
+ * @note Stage program -- no interface attachment. Reached exclusively via
+ *       tail call when a FAR with apply_action.buff == 1 is hit.
+ * @note Instantiated by UPF_XDPProgram only when flags.enable_bar is set.
  */
 
 #ifndef BAR_APPLY_USER_H_
 #define BAR_APPLY_USER_H_
 
 #include <ProgramLifeCycle.hpp>
-#include <xdp_bar_apply_skel.h>
 #include <linux/bpf.h>
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include <xdp_bar_apply_skel.h>
 #include <wrappers/BPFMap.hpp>
+#include <wrappers/BPFMaps.h>
 #include "BPFProgram.h"
-#include <pfcp_bar.h>       /* struct pfcp_bar (shared kernel/user struct)  */
-#include <pfcp_session.hpp> /* pfcp::pfcp_bar (PFCP IE wrapper)             */
+#include "upf_network_config.h"
+#include <pfcp_bar.h>
+#include <pfcp_session.hpp>
 
-/* Forward declaration */
-class BPFMap;
 class BPFMaps;
-
-/* ==========================================================================
- * Type alias
- * ========================================================================== */
+class BPFMap;
 
 using BarProgramLifeCycle = ProgramLifeCycle<xdp_bar_apply_kern_c>;
 
-/* ==========================================================================
- * Map key type
- * ========================================================================== */
-
 /**
  * @struct bar_map_key
- * @brief Compound BPF map key for bar_config_map and bar_state_map.
- * Must match the key definition in xdp_bar_apply.c.
+ * @brief Compound BPF map key: {seid, bar_id}.
  */
 struct bar_map_key {
-  uint64_t seid;    ///< PFCP Session Endpoint Identifier
-  uint32_t bar_id;  ///< BAR identifier (§8.2.57)
-  uint32_t _pad;    ///< Alignment pad (must be zero)
+  uint64_t seid;
+  uint32_t bar_id;
+  uint32_t _pad;
 } __attribute__((packed));
-
-/* ==========================================================================
- * Runtime buffering state (written by data plane)
- * ========================================================================== */
 
 /**
  * @struct bar_state_t
@@ -135,74 +93,91 @@ struct bar_map_key {
  *
  * Initialised with BPF_NOEXIST on session creation so that existing state
  * is preserved across session modifications.
- *
- * @see 3GPP TS 29.244 §8.2.28 -- DL Data Notification Delay
  */
 struct bar_state_t {
-  uint64_t last_ddn_ns;         ///< bpf_ktime_get_ns() at last DDN send
-  uint32_t buffered_pkt_count;  ///< DL packets buffered since last DDN
-  uint8_t notification_sent;    ///< 1 if DDN already sent this window
+  uint64_t last_ddn_ns;
+  uint32_t buffered_pkt_count;
+  uint8_t notification_sent;
   uint8_t _pad[3];
 };
 
-/* ==========================================================================
- * BARProgram
- * ========================================================================== */
-
 /**
  * @class BARProgram
- * @brief Skeleton owner and BPF map manager for BAR XDP processing.
+ * @brief Manages the xdp_bar_apply XDP program lifecycle.
  *
- * Owns the xdp_bar_apply_c skeleton and translates PFCP BAR IEs into
- * pfcp_bar BPF structs for the data plane.
+ * Follows the same constructor/Setup/TearDown/InitializeMaps pattern as
+ * SessionLookupIPProgram. Instantiated by UPF_XDPProgram only when
+ * flags.enable_bar is set.
  *
- * Thread Safety: Not thread-safe. External locking required.
- *
- * @see xdp_bar_apply.c -- corresponding BPF program
+ * Lifecycle (orchestrated by UPF_XDPProgram):
+ *   1. Constructor  -- creates lifecycle_, does NOT open skeleton.
+ *   2. UPF_XDPProgram calls GetLifeCycle()->open() before ShareMaps().
+ *   3. UPF_XDPProgram::ShareMaps(primary, this) -- reuse_fd for shared maps.
+ *   4. Setup()      -- InitializeMaps() + load() (no attach, no link).
+ *   5. TearDown()   -- lifecycle_->tearDown().
  */
 class BARProgram : public BPFProgram {
  public:
-  // ==========================================================================
-  // Constructor / Destructor
-  // ==========================================================================
-
-  /**
-   * @brief Constructor -- opens xdp_bar_apply skeleton.
-   * @throws std::runtime_error if skeleton open fails.
-   */
+  /** @brief Constructor -- creates lifecycle_, does NOT open skeleton. */
   BARProgram();
+
+  /** @brief Destructor. */
   virtual ~BARProgram() = default;
 
-  // ==========================================================================
-  // Skeleton lifecycle
-  // ==========================================================================
+  /**
+   * @brief Initialize maps and load the XDP program into the kernel.
+   *
+   * Order: lifecycle_->open() (idempotent) -> InitializeMaps() -> load().
+   * Must be called AFTER UPF_XDPProgram::ShareMaps().
+   * No attach() or link() -- stage program, reached via tail call only.
+   */
+  void Setup();
 
-  /** @brief Load the skeleton (call after map sharing is complete). */
-  void Load();
+  /**
+   * @brief Unload the XDP program.
+   *
+   * Delegates to lifecycle_->tearDown().
+   * @note Distinct from TearDown(seid, bars) which removes session map entries.
+   */
+  void TearDown();
 
-  /** @brief Return the underlying BPF object (for map sharing). */
+  /**
+   * @brief Returns the lifecycle for external orchestration.
+   *
+   * UPF_XDPProgram uses this to call open() before ShareMaps().
+   */
+  std::shared_ptr<BarProgramLifeCycle> GetLifeCycle() const {
+    return lifecycle_;
+  }
+
+  /** @brief Returns the underlying bpf_object for map sharing. */
   struct bpf_object* GetBpfObject() const;
 
-  /** @brief Return the XDP program pointer for tail_call_progs_map insertion.
+  /** @brief Returns the raw bpf_object_skeleton pointer. */
+  struct bpf_object_skeleton* GetSkeleton() const;
+
+  /**
+   * @brief Returns the xdp_program* for insertion into tail_call_progs_map.
+   *
+   * Called by UPF_XDPProgram::InsertProgramSlot(PROG_BAR_APPLY, ...).
    */
   struct bpf_program* GetXdpProgram() const;
 
-  // ==========================================================================
-  // Map injection
-  // ==========================================================================
+  /** @brief Returns the container of all maps in this skeleton. */
+  std::shared_ptr<BPFMaps> GetMaps() const;
 
-  /**
-   * @brief Receive BPFMap wrappers from UPF_XDPProgram.
-   * @param bar_config_map  Map storing pfcp_bar config per SEID.
-   * @param bar_state_map   Map storing runtime buffering state per SEID.
-   * @throws std::invalid_argument if either pointer is null.
-   */
-  void SetMaps(
-      std::shared_ptr<BPFMap> bar_config_map,
-      std::shared_ptr<BPFMap> bar_state_map);
+  /** @name Direct map accessors (bar_maps.h) */
+  ///@{
+  std::shared_ptr<BPFMap> GetBarConfigMap() const;
+  std::shared_ptr<BPFMap> GetBarStateMap() const;
+  std::shared_ptr<BPFMap> GetBarDdnRingbuf() const;
+  ///@}
+
+  /** @brief Returns the number of maps in this skeleton. */
+  size_t GetMapCount() const;
 
   // ==========================================================================
-  // Session lifecycle
+  // Session lifecycle (called by SessionProgramManager)
   // ==========================================================================
 
   /**
@@ -243,10 +218,6 @@ class BARProgram : public BPFProgram {
   void TearDown(
       uint64_t seid, const std::vector<std::shared_ptr<pfcp::pfcp_bar>>& bars);
 
-  // ==========================================================================
-  // Map population helpers
-  // ==========================================================================
-
   /**
    * @brief Populate bar_config_map for a single BAR.
    * @param seid   PFCP session identifier.
@@ -273,52 +244,21 @@ class BARProgram : public BPFProgram {
    */
   bool ReadBarState(uint64_t seid, uint32_t bar_id, bar_state_t& state) const;
 
-  // ==========================================================================
-  // Map accessors
-  // ==========================================================================
-
-  /** @return Shared pointer to bar_config_map. */
-  std::shared_ptr<BPFMap> GetBarConfigMap() const { return bar_config_map_; }
-
-  /** @return Shared pointer to bar_state_map. */
-  std::shared_ptr<BPFMap> GetBarStateMap() const { return bar_state_map_; }
-
  private:
-  // ==========================================================================
-  // Private helpers
-  // ==========================================================================
-  // ==========================================================================
-  // Private helpers
-  // ==========================================================================
   /**
-   * @brief Initialize BPF map wrappers
+   * @brief Configure max_entries for all runtime-sized maps.
+   *
+   * Uses ConfigureMapMaxEntries(skel->maps.field, "name", size).
+   * Called inside the open_fn lambda before the skeleton is returned.
+   *
+   * @param skel Opened (not yet loaded) skeleton.
+   */
+  void ConfigureMaps(struct xdp_bar_apply_kern_c* skel);
+
+  /**
+   * @brief Wrap skeleton map FDs in BPFMap objects after open.
    */
   void InitializeMaps();
-
-  /**
-   * @brief Configure specific BPF maps
-   *
-   * @param skel Opened BPF skeleton
-   * @param upf_cfg Configuration
-   */
-  void ConfigureBarMaps(struct bar_apply_kern_c* skel);
-
-  /**
-   * @brief Build BAR ID to PDR mapping
-   *
-   * Creates internal map for quick PDR lookup by BAR ID.
-   *
-   * @param pdrs Vector of PDRs
-   */
-  void BuildPdrMap(const std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs);
-
-  /**
-   * @brief Get PDR associated with a BAR ID
-   *
-   * @param bar_id BAR identifier
-   * @return std::shared_ptr<pfcp::pfcp_pdr> PDR or nullptr
-   */
-  std::shared_ptr<pfcp::pfcp_pdr> GetPdrByBarId(uint32_t bar_id) const;
 
   /** @brief Build a bar_map_key from SEID and BAR_ID (pad zeroed). */
   static bar_map_key MakeKey(uint64_t seid, uint32_t bar_id);
@@ -326,18 +266,19 @@ class BARProgram : public BPFProgram {
   /** @brief Translate PFCP BAR IE into BPF pfcp_bar struct. */
   static void ConvertBar(const pfcp::pfcp_bar& ie, struct pfcp_bar& bpf_bar);
 
-  // ==========================================================================
+  //----------------------------------------------------------------------------
   // Skeleton and lifecycle
-  // ==========================================================================
-  xdp_bar_apply_kern_c* skeleton_ = nullptr;        ///< BPF skeleton
-  std::shared_ptr<BarProgramLifeCycle> lifecycle_;  ///< Lifecycle manager
+  //----------------------------------------------------------------------------
+  xdp_bar_apply_kern_c* skeleton_ = nullptr;
+  std::shared_ptr<BarProgramLifeCycle> lifecycle_;
 
-  // ==========================================================================
-  // Maps
-  // ==========================================================================
-  std::shared_ptr<BPFMaps> maps_;           ///< All BPF maps
-  std::shared_ptr<BPFMap> bar_config_map_;  ///< BAR configuration map
-  std::shared_ptr<BPFMap> bar_state_map_;   ///< BAR runtime state map
+  //----------------------------------------------------------------------------
+  // Maps (bar_maps.h)
+  //----------------------------------------------------------------------------
+  std::shared_ptr<BPFMaps> maps_;
+  std::shared_ptr<BPFMap> bar_config_map_;
+  std::shared_ptr<BPFMap> bar_state_map_;
+  std::shared_ptr<BPFMap> bar_ddn_ringbuf_map_;
 };
 
 #endif /* BAR_APPLY_USER_H_ */

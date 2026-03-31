@@ -51,7 +51,7 @@ class pfcp_mar;
 class BpfMap;
 class ISessionObserver;
 class UPF_XDPProgram;
-class QERProgram;
+class QERTCProgram;
 class SessionPrograms;
 struct pfcp_pdr;
 struct pfcp_far;
@@ -784,7 +784,7 @@ class SessionProgramManager {
   std::map<uint64_t, std::shared_ptr<SessionPrograms>> session_programs_map_;
 
   /// Map of SEID to QER programs for QoS enforcement
-  std::map<uint64_t, std::shared_ptr<QERProgram>> qer_programs_map_;
+  std::map<uint64_t, std::shared_ptr<QERTCProgram>> qer_programs_map_;
 
   /// Array tracking program slots
   std::array<int64_t, 1024> program_array_;

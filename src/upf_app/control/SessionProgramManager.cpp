@@ -808,7 +808,7 @@ void SessionProgramManager::CreatePipeline(
       rules.mar                    = bpf_mar;
 
       // Populate dedicated config maps for URR/BAR/MAR (runtime state init)
-      if (bpf_urr.urr_id != 0) {
+     /* if (bpf_urr.urr_id != 0) {
         PopulateUrrConfigMap(upf_xdp_program, seid, bpf_urr);
       }
       if (bpf_bar.bar_id != 0) {
@@ -817,7 +817,7 @@ void SessionProgramManager::CreatePipeline(
       if (bpf_mar.mar_id != 0) {
         PopulateMarRulesMap(upf_xdp_program, seid, bpf_mar);
       }
-
+*/
       struct pdrs_per_session pdr_key = {0};
       pdr_key.pdr_id                  = pdr_id;
       pdr_key.seid                    = seid;
@@ -1030,27 +1030,54 @@ void SessionProgramManager::ModifyPipeline(
     uint32_t rules_flags = ComputeRulesEnabledFlags(session);
     UpdateRulesEnabledMap(upf_xdp_program, seid, rules_flags);
 
-    // TC-BPF QoS enforcement (legacy DL QER path, still needed)
-    bool has_downlink_qer                = !session->qers_downlink.empty();
-    const bool ebpf_acceleration_enabled = upf::IsBpfDatapathEnabled();
-    const bool qos_enforcement_enabled =
-        ebpf_acceleration_enabled && upf::IsQosEnabled();
+    // ── Per-session stage program Setup() calls ─────────────────────────────
+    // rules_flags was computed and written to session_rules_enabled_map above.
+    // Use it here (no redundant IsQosEnabled() / IsBpfDatapathEnabled() calls)
+    // to decide which per-session maps and TC programs need to be initialised.
+    // This mirrors the pipeline-level Setup() in UPF_XDPProgram which only
+    // loads the XDP programs; per-session map population is done here.
+    // ─────────────────────────────────────────────────────────────────────────
 
-    if (qos_enforcement_enabled && has_downlink_qer) {
-      /*
-      uint32_t value       = 1;
-      auto enabled_qos_map = upf_xdp_program->GetQosEnablingMap();
-      if (enabled_qos_map) {
-        enabled_qos_map->Update(seid, value, BPF_ANY);
-      }
-    */
-      logger.debug("Instantiate a new QER Program on Downlink");
-      std::shared_ptr<QERProgram> qer_program = std::make_shared<QERProgram>();
+    // QER-XDP: gate-check is stateless -- rules_match_pdr_map already carries
+    // the pfcp_qer struct per PDR; no per-session map write needed here.
+
+    // QER-TC: per-session HTB class setup (rate shaping via TC BPF).
+    // Requires downlink QER rules and RULE_QER_ENABLED in rules_flags.
+    if ((rules_flags & RULE_QER_ENABLED) && !session->qers_downlink.empty()) {
+      logger.debug("Setup QERTCProgram for SEID=" SEID_FMT, seid);
+      std::shared_ptr<QERTCProgram> qer_program =
+          std::make_shared<QERTCProgram>();
       qer_program->Setup(seid, session->qers_downlink, session->pdrs_downlink);
-
       {
         std::lock_guard<std::mutex> lock(mutex_);
         qer_programs_map_[seid] = qer_program;
+      }
+    }
+
+    // URR: populate urr_config_map + initialise urr_volume_counters_map.
+    if ((rules_flags & RULE_URR_ENABLED) && !session->urrs.empty()) {
+      auto urr = upf_xdp_program->GetUrrProgram();
+      if (urr) {
+        logger.debug("Setup URRProgram for SEID=" SEID_FMT, seid);
+        urr->Setup(seid, session->urrs);
+      }
+    }
+
+    // BAR: populate bar_config_map + initialise bar_state_map.
+    if ((rules_flags & RULE_BAR_ENABLED) && !session->bars.empty()) {
+      auto bar = upf_xdp_program->GetBarProgram();
+      if (bar) {
+        logger.debug("Setup BARProgram for SEID=" SEID_FMT, seid);
+        bar->Setup(seid, session->bars);
+      }
+    }
+
+    // MAR: populate mar_config_map + initialise mar_access_state_map.
+    if ((rules_flags & RULE_MAR_ENABLED) && !session->mars.empty()) {
+      auto mar = upf_xdp_program->GetMarProgram();
+      if (mar) {
+        logger.debug("Setup MARProgram for SEID=" SEID_FMT, seid);
+        mar->Setup(seid, session->mars);
       }
     }
 
@@ -1183,7 +1210,7 @@ void SessionProgramManager::ModifyPipeline(
       rules.mar                    = bpf_mar;
 
       // Populate dedicated config maps for URR/BAR/MAR (runtime state init)
-      if (bpf_urr.urr_id != 0) {
+     /* if (bpf_urr.urr_id != 0) {
         PopulateUrrConfigMap(upf_xdp_program, seid, bpf_urr);
       }
       if (bpf_bar.bar_id != 0) {
@@ -1192,7 +1219,7 @@ void SessionProgramManager::ModifyPipeline(
       if (bpf_mar.mar_id != 0) {
         PopulateMarRulesMap(upf_xdp_program, seid, bpf_mar);
       }
-
+*/
       struct pdrs_per_session pdr_key = {0};
       pdr_key.pdr_id                  = pdr_id;
       pdr_key.seid                    = seid;

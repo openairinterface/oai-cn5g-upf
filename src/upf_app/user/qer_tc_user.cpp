@@ -59,7 +59,7 @@ using namespace oai::utils::net;
 using namespace oai::utils;
 
 //------------------------------------------------------------------------------
-void QERProgram::ConfigureQerMaps(struct qer_tc_kern_c* skel) {
+void QERTCProgram::ConfigureQerMaps(struct qer_tc_kern_c* skel) {
   if (!skel) {
     Logger::upf_app().error("Null skeleton in ConfigureQerMaps");
     return;
@@ -94,13 +94,21 @@ void QERProgram::ConfigureQerMaps(struct qer_tc_kern_c* skel) {
   }
 
   // Configure .rodata constants (if available)
+  /*
+   * qer_tc_kern.c includes interfaces_maps.h which declares:
+   *   const volatile int MAX_UPF_INTERFACES SEC(".rodata");
+   *   const volatile int MAX_UPF_REDIRECT_INTERFACES SEC(".rodata");
+   * NOT MAX_EGRESS_INTERFACES (that field does not exist).
+   */
   if (skel->rodata) {
-    skel->rodata->MAX_EGRESS_INTERFACES = max_redirect;
+    skel->rodata->MAX_UPF_INTERFACES = upf::GetMaxUpfInterfaces();
+    skel->rodata->MAX_UPF_REDIRECT_INTERFACES =
+        upf::GetMaxUpfRedirectInterfaces();
   }
 }
 
 //------------------------------------------------------------------------------
-QERProgram::QERProgram()
+QERTCProgram::QERTCProgram()
     : BPFProgram(),
       default_class_handle_(65535),
       default_class_rate_(1024),
@@ -122,7 +130,7 @@ QERProgram::QERProgram()
   };
 
   // Initialize lifecycle management
-  lifecycle_ = std::make_shared<QerProgramLifeCycle>(
+  lifecycle_ = std::make_shared<QerTCProgramLifeCycle>(
       open_fn,
       /* load */ qer_tc_kern_c__load,
       /* attach */ qer_tc_kern_c__attach,
@@ -130,10 +138,10 @@ QERProgram::QERProgram()
 }
 
 //------------------------------------------------------------------------------
-QERProgram::~QERProgram() {}
+QERTCProgram::~QERTCProgram() {}
 
 //------------------------------------------------------------------------------
-bool QERProgram::NoHtbRootQdisc(const std::string& interface) {
+bool QERTCProgram::NoHtbRootQdisc(const std::string& interface) {
   std::string cmd = fmt::format(
       "tc qdisc show dev {} | awk '/htb/ {{found=1; print 1}} END {{if "
       "(!found) print 0}}'",
@@ -143,7 +151,7 @@ bool QERProgram::NoHtbRootQdisc(const std::string& interface) {
 }
 
 //------------------------------------------------------------------------------
-bool QERProgram::NoHtbDefaultClass(const std::string& interface) {
+bool QERTCProgram::NoHtbDefaultClass(const std::string& interface) {
   std::string cmd = fmt::format(
       "tc qdisc show dev {} | awk '/htb/ && /default/ {{found=1; print 1}} "
       "END {{if (!found) print 0}}'",
@@ -153,7 +161,7 @@ bool QERProgram::NoHtbDefaultClass(const std::string& interface) {
 }
 
 //------------------------------------------------------------------------------
-std::shared_ptr<pfcp::pfcp_qer> QERProgram::RetrieveDefaultQerWithDefaultQfi(
+std::shared_ptr<pfcp::pfcp_qer> QERTCProgram::RetrieveDefaultQerWithDefaultQfi(
     std::vector<std::shared_ptr<pfcp::pfcp_qer>> qers) {
   for (const auto& qer : qers) {
     if (!qer->guaranteed_bitrate.first && !qer->maximum_bitrate.first) {
@@ -164,7 +172,7 @@ std::shared_ptr<pfcp::pfcp_qer> QERProgram::RetrieveDefaultQerWithDefaultQfi(
 }
 
 //------------------------------------------------------------------------------
-void QERProgram::BuildPdrMap(
+void QERTCProgram::BuildPdrMap(
     const std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs) {
   pdr_map_.clear();
   for (const auto& pdr : pdrs) {
@@ -175,14 +183,14 @@ void QERProgram::BuildPdrMap(
 }
 
 //------------------------------------------------------------------------------
-std::shared_ptr<pfcp::pfcp_pdr> QERProgram::GetPdrByQerId(
+std::shared_ptr<pfcp::pfcp_pdr> QERTCProgram::GetPdrByQerId(
     uint32_t qer_id) const {
   auto it = pdr_map_.find(qer_id);
   return (it != pdr_map_.end()) ? it->second : nullptr;
 }
 
 //------------------------------------------------------------------------------
-bool QERProgram::NoTcFilterBpf(const std::string& interface) {
+bool QERTCProgram::NoTcFilterBpf(const std::string& interface) {
   std::string cmd = fmt::format(
       "tc filter show dev {} | awk '/bpf/ {{found=1; print 1}} END {{if "
       "(!found) print 0}}'",
@@ -192,7 +200,7 @@ bool QERProgram::NoTcFilterBpf(const std::string& interface) {
 }
 
 //------------------------------------------------------------------------------
-void QERProgram::Setup(
+void QERTCProgram::Setup(
     uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> qers,
     std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs) {
   const std::string udp_iface = upf::GetN6Iface();
@@ -470,27 +478,27 @@ void QERProgram::Setup(
 }
 
 //------------------------------------------------------------------------------
-std::shared_ptr<BPFMaps> QERProgram::GetMaps() {
+std::shared_ptr<BPFMaps> QERTCProgram::GetMaps() {
   return maps_;
 }
 
 //------------------------------------------------------------------------------
-void QERProgram::TearDown() {
+void QERTCProgram::TearDown() {
   lifecycle_->tearDown();
 }
 
 //------------------------------------------------------------------------------
-std::shared_ptr<BPFMap> QERProgram::Get5GQoSFlowParamsMap() const {
+std::shared_ptr<BPFMap> QERTCProgram::Get5GQoSFlowParamsMap() const {
   return qos_flow_params_map_;
 }
 
 //------------------------------------------------------------------------------
-std::shared_ptr<BPFMap> QERProgram::GetEgressIfindexMap() const {
+std::shared_ptr<BPFMap> QERTCProgram::GetEgressIfindexMap() const {
   return egress_ifindex_map_;
 }
 
 //------------------------------------------------------------------------------
-void QERProgram::InitializeMaps() {
+void QERTCProgram::InitializeMaps() {
   // Store all maps available in the program
   maps_ = std::make_shared<BPFMaps>(lifecycle_->getBPFSkeleton()->skeleton);
 

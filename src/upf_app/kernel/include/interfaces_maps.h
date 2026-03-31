@@ -49,6 +49,17 @@
 #include "interfaces_types.h"
 
 /* ==========================================================================
+ * .rodata — runtime-configurable size constants
+ * ========================================================================== */
+
+/**
+ * Set by userspace via bpf_map__set_value_size() / skeleton globals
+ * before skel->load(). Shared across all programs via .rodata section.
+ */
+const volatile int MAX_UPF_INTERFACES SEC(".rodata");
+const volatile int MAX_UPF_REDIRECT_INTERFACES SEC(".rodata");
+
+/* ==========================================================================
  * upf_interface_map
  * ========================================================================== */
 

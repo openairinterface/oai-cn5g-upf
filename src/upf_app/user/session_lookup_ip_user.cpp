@@ -21,63 +21,155 @@
 // clang-format off
 /* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
  * Date:        2026-03
- * Changes:     New file. Own lifecycle_ (BPFProgram pattern). No upf_cfg.
+ * Changes:     Rewritten to follow n3_entry_user.cpp pattern.
+ *              - Constructor no longer opens the skeleton -- open is lazy.
+ *              - ConfigureMaps uses ConfigureMapMaxEntries(skel->maps.xxx),
+ *                identical to original upf_xdp_user.cpp pattern.
+ *              - All 10 map members stored as class fields and returned by
+ *                getters (no std::make_shared<BPFMap> on every call).
+ *              - Setup() = open (idempotent) + InitializeMaps + load.
+ *                No attach() / link() -- stage program, reached via tail call.
+ * 3GPP Refs:   3GPP TS 29.244 V17.10.0 -- PFCP Protocol
+ *              3GPP TS 23.501          -- 5G System Architecture
  */
 // clang-format on
 
 #include "session_lookup_ip_user.h"
 #include <bpf/libbpf.h>
 #include <stdexcept>
+#include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
 #include "logger.hpp"
-#include "upf_network_config.h"
+#include "upf_xdp_limits.h"
+#include "utils/bpf_utils.hpp"
+
+using namespace oai::utils::bpf;
+
+//------------------------------------------------------------------------------
+void SessionLookupIPProgram::ConfigureMaps(
+    struct xdp_session_lookup_ip_kern_c* skel) {
+  if (!skel) {
+    Logger::upf_app().error(
+        "Null skeleton in SessionLookupIPProgram::ConfigureMaps");
+    return;
+  }
+
+  bool ok = true;
+
+  /* pipeline_maps.h -- runtime-sized maps */
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.session_by_ue_ip_map, "session_by_ue_ip_map",
+      upf::GetMaxPduSessions());
+
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.pdrs_per_session_map, "pdrs_per_session_map",
+      upf::GetMaxPduSessions());
+
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.session_qos_enabled_map, "session_qos_enabled_map",
+      upf::GetMaxPduSessions());
+
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.rules_match_pdr_map, "rules_match_pdr_map",
+      upf::GetMaxPduSessions() * upf::GetMaxPdrsPerSession());
+
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.m_framed_route_mapping, "m_framed_route_mapping",
+      upf::GetMaxPduSessions());
+
+  /*
+   * framed_routing_flag: BPF_MAP_TYPE_ARRAY, max_entries=1 (boolean flag).
+   * feature_dispatch_map: BPF_MAP_TYPE_PROG_ARRAY, tail-call table.
+   * tail_call_progs_map, packet_context_map, session_rules_enabled_map:
+   *   fixed size or shared from primary (n3_entry) via bpf_map__reuse_fd.
+   * No runtime sizing needed for these.
+   */
+
+  if (!ok) {
+    Logger::upf_app().error(
+        "One or more map configurations failed for SessionLookupIPProgram.");
+    throw std::runtime_error("SessionLookupIPProgram map configuration failed");
+  }
+
+  /* rodata: all 7 fields */
+  if (skel->rodata) {
+    skel->rodata->MAX_UPF_INTERFACES = upf::GetMaxUpfInterfaces();
+    skel->rodata->MAX_UPF_REDIRECT_INTERFACES =
+        upf::GetMaxUpfRedirectInterfaces();
+    skel->rodata->MAX_PDU_SESSIONS         = upf::GetMaxPduSessions();
+    skel->rodata->MAX_PDRS_PER_PDU_SESSION = upf::GetMaxPdrsPerSession();
+    skel->rodata->MAX_SDF_FILTERS_PER_PDU_SESSION =
+        upf::GetMaxSdfFiltersPerSession();
+    skel->rodata->MAX_ARP_ENTRIES  = upf::GetMaxArpEntries();
+    skel->rodata->MAX_QOS_ENABLING = upf::GetMaxPduSessions();
+  }
+}
 
 //------------------------------------------------------------------------------
 SessionLookupIPProgram::SessionLookupIPProgram() : BPFProgram() {
+  Logger::upf_app().info("Initializing SessionLookupIP XDP Program...");
+
   auto open_fn = [this]() -> xdp_session_lookup_ip_kern_c* {
-    auto* s = xdp_session_lookup_ip_kern_c__open();
-    if (!s)
-      throw std::runtime_error("Failed to open xdp_session_lookup_ip skeleton");
-    auto set_size = [&](const char* name, uint32_t sz) {
-      struct bpf_map* m = bpf_object__find_map_by_name(s->obj, name);
-      if (m) bpf_map__set_max_entries(m, sz);
-    };
-    uint32_t max_sessions    = upf::GetMaxPduSessions();
-    uint32_t total_pdr_rules = max_sessions * upf::GetMaxPdrsPerSession();
-    set_size("session_by_ue_ip_map", max_sessions);
-    set_size("pdrs_per_session_map", max_sessions);
-    set_size("session_qos_enabled_map", max_sessions);
-    set_size("m_framed_route_mapping", max_sessions);
-    set_size("rules_match_pdr_map", total_pdr_rules);
-    if (s->rodata) {
-      s->rodata->MAX_PDU_SESSIONS         = upf::GetMaxPduSessions();
-      s->rodata->MAX_PDRS_PER_PDU_SESSION = upf::GetMaxPdrsPerSession();
-      s->rodata->MAX_SDF_FILTERS_PER_PDU_SESSION =
-          upf::GetMaxSdfFiltersPerSession();
-      s->rodata->MAX_UPF_INTERFACES = upf::GetMaxUpfInterfaces();
-      s->rodata->MAX_UPF_REDIRECT_INTERFACES =
-          upf::GetMaxUpfRedirectInterfaces();
-      s->rodata->MAX_ARP_ENTRIES  = upf::GetMaxArpEntries();
-      s->rodata->MAX_QOS_ENABLING = upf::GetMaxPduSessions();
+    struct xdp_session_lookup_ip_kern_c* s =
+        xdp_session_lookup_ip_kern_c__open();
+    if (!s) {
+      Logger::upf_app().error("Failed to open xdp_session_lookup_ip skeleton");
+      return nullptr;
     }
+    // Configure maps and rodata before skeleton is loaded
+    this->ConfigureMaps(s);
+    // Store skeleton pointer -- available from this point onwards
+    skeleton_ = s;
     return s;
   };
+
   lifecycle_ = std::make_shared<SessionLookupIPLifeCycle>(
-      open_fn, xdp_session_lookup_ip_kern_c__load,
-      xdp_session_lookup_ip_kern_c__attach,
-      xdp_session_lookup_ip_kern_c__destroy);
-  skeleton_ = lifecycle_->open();
-  Logger::upf_app().debug("SessionLookupIPProgram: skeleton opened");
+      open_fn,
+      /* load    */ xdp_session_lookup_ip_kern_c__load,
+      /* attach  */ xdp_session_lookup_ip_kern_c__attach,
+      /* destroy */ xdp_session_lookup_ip_kern_c__destroy);
 }
 
 //------------------------------------------------------------------------------
 SessionLookupIPProgram::~SessionLookupIPProgram() {}
 
 //------------------------------------------------------------------------------
-void SessionLookupIPProgram::Load() {
-  lifecycle_->load();
+void SessionLookupIPProgram::Setup() {
+  /*
+   * lifecycle_->open() is idempotent: if UPF_XDPProgram already called it
+   * (to get the bpf_object for ShareMaps before loading), this returns the
+   * cached skeleton with no side effects.
+   */
+  skeleton_ = lifecycle_->open();
   InitializeMaps();
-  Logger::upf_app().debug("SessionLookupIPProgram: loaded");
+  lifecycle_->load();
+  Logger::upf_app().debug(
+      "SessionLookupIPProgram: loaded (no attach -- stage program)");
+}
+
+//------------------------------------------------------------------------------
+void SessionLookupIPProgram::TearDown() {
+  lifecycle_->tearDown();
+}
+
+//------------------------------------------------------------------------------
+void SessionLookupIPProgram::InitializeMaps() {
+  maps_    = std::make_shared<BPFMaps>(lifecycle_->getBPFSkeleton()->skeleton);
+  auto get = [&](const char* name) {
+    return std::make_shared<BPFMap>(maps_->GetMap(name));
+  };
+  /* pipeline_maps.h */
+  session_by_ue_ip_map_     = get("session_by_ue_ip_map");
+  pdrs_per_session_map_     = get("pdrs_per_session_map");
+  session_qos_enabled_map_  = get("session_qos_enabled_map");
+  rules_match_pdr_map_      = get("rules_match_pdr_map");
+  framed_route_mapping_map_ = get("m_framed_route_mapping");
+  framed_routing_flag_map_  = get("framed_routing_flag");
+  feature_dispatch_map_     = get("feature_dispatch_map");
+  /* tail_call_dispatcher.h -- shared from primary (n3_ or n3_eth_) */
+  tail_call_progs_map_       = get("tail_call_progs_map");
+  packet_ctx_map_            = get("packet_context_map");
+  session_rules_enabled_map_ = get("session_rules_enabled_map");
 }
 
 //------------------------------------------------------------------------------
@@ -86,45 +178,72 @@ struct bpf_object* SessionLookupIPProgram::GetBpfObject() const {
 }
 
 //------------------------------------------------------------------------------
+struct bpf_object_skeleton* SessionLookupIPProgram::GetSkeleton() const {
+  return skeleton_ ? skeleton_->skeleton : nullptr;
+}
+
+//------------------------------------------------------------------------------
 struct bpf_program* SessionLookupIPProgram::GetXdpProgram() const {
   return skeleton_ ? skeleton_->progs.session_lookup_ip : nullptr;
 }
 
 //------------------------------------------------------------------------------
-void SessionLookupIPProgram::InitializeMaps() {
-  maps_ = std::make_shared<BPFMaps>(skeleton_->skeleton);
+std::shared_ptr<BPFMaps> SessionLookupIPProgram::GetMaps() const {
+  return maps_;
 }
 
-/* Section: Map getters */
-
+//------------------------------------------------------------------------------
 std::shared_ptr<BPFMap> SessionLookupIPProgram::GetSessionByUeIpMap() const {
-  if (!maps_) return nullptr;
-  return std::make_shared<BPFMap>(maps_->GetMap("session_by_ue_ip_map"));
+  return session_by_ue_ip_map_;
 }
+
+//------------------------------------------------------------------------------
 std::shared_ptr<BPFMap> SessionLookupIPProgram::GetSessionPdrsMap() const {
-  if (!maps_) return nullptr;
-  return std::make_shared<BPFMap>(maps_->GetMap("pdrs_per_session_map"));
+  return pdrs_per_session_map_;
 }
-std::shared_ptr<BPFMap> SessionLookupIPProgram::GetRulesMatchMap() const {
-  if (!maps_) return nullptr;
-  return std::make_shared<BPFMap>(maps_->GetMap("rules_match_pdr_map"));
-}
+//------------------------------------------------------------------------------
 std::shared_ptr<BPFMap> SessionLookupIPProgram::GetSessionQosEnabledMap()
     const {
-  if (!maps_) return nullptr;
-  return std::make_shared<BPFMap>(maps_->GetMap("session_qos_enabled_map"));
+  return session_qos_enabled_map_;
 }
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> SessionLookupIPProgram::GetRulesMatchMap() const {
+  return rules_match_pdr_map_;
+}
+//------------------------------------------------------------------------------
 std::shared_ptr<BPFMap> SessionLookupIPProgram::GetFramedRouteMappingMap()
     const {
-  if (!maps_) return nullptr;
-  return std::make_shared<BPFMap>(maps_->GetMap("m_framed_route_mapping"));
+  return framed_route_mapping_map_;
 }
+//------------------------------------------------------------------------------
 std::shared_ptr<BPFMap> SessionLookupIPProgram::GetFramedRoutingFlagMap()
     const {
-  if (!maps_) return nullptr;
-  return std::make_shared<BPFMap>(maps_->GetMap("framed_routing_flag"));
+  return framed_routing_flag_map_;
 }
+//------------------------------------------------------------------------------
 std::shared_ptr<BPFMap> SessionLookupIPProgram::GetFeatureDispatchMap() const {
-  if (!maps_) return nullptr;
-  return std::make_shared<BPFMap>(maps_->GetMap("feature_dispatch_map"));
+  return feature_dispatch_map_;
+}
+
+/* Section: Map accessors -- tail_call_dispatcher.h */
+
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> SessionLookupIPProgram::GetTailCallProgsMap() const {
+  return tail_call_progs_map_;
+}
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> SessionLookupIPProgram::GetPacketContextMap() const {
+  return packet_ctx_map_;
+}
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> SessionLookupIPProgram::GetSessionRulesEnabledMap()
+    const {
+  return session_rules_enabled_map_;
+}
+
+/* Section: Utility */
+
+//------------------------------------------------------------------------------
+size_t SessionLookupIPProgram::GetMapCount() const {
+  return maps_ ? maps_->GetMapCount() : 0;
 }
