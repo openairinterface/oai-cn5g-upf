@@ -10,7 +10,7 @@
  *      http://www.openairinterface.org/?page_id=698
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the LICENSE is distributed on an "AS IS" BASIS,
+ * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
@@ -21,54 +21,107 @@
 // clang-format off
 /* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
  * Date:        2026-03
- * Changes:     Rewrote constructor -- own lifecycle_ (BPFProgram pattern).
- *              Added Load(), GetBpfObject(), GetXdpProgram().
- *              SetMaps() receives refs from UPF_XDPProgram::InitializeMaps().
- *              All session lifecycle methods preserved unchanged. No upf_cfg.
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 ss8.2.123 MAR ID
+ * Changes:     Rewritten to follow n3_entry_user.cpp / session_lookup_ip_user.cpp
+ *              pattern exactly.
+ *              Constructor no longer opens the skeleton -- open is lazy.
+ *              ConfigureMaps uses ConfigureMapMaxEntries(skel->maps.xxx).
+ *              Setup() = open (idempotent) + InitializeMaps + load.
+ *              No attach() / link() -- stage program, reached via tail call.
+ *              All session lifecycle methods preserved unchanged.
+ * 3GPP Refs:   3GPP TS 29.244 V17.10.0 §8.2.123 MAR ID
  */
 // clang-format on
 
 #include "mar_apply_user.h"
 #include <bpf/libbpf.h>
-#include <linux/bpf.h>
 #include <stdexcept>
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
 #include "logger.hpp"
-#include "upf_network_config.h"
+#include "upf_xdp_limits.h"
+#include "utils/bpf_utils.hpp"
+#include "mar_types.h"
 
-/* Section: Skeleton lifecycle */
+using namespace oai::utils::bpf;
 
 //------------------------------------------------------------------------------
-MARProgram::MARProgram() : BPFProgram() {
-  auto open_fn = [this]() -> xdp_mar_apply_kern_c* {
-    auto* s = xdp_mar_apply_kern_c__open();
-    if (!s) throw std::runtime_error("Failed to open xdp_mar_apply skeleton");
-    auto set_size = [&](const char* name, uint32_t sz) {
-      struct bpf_map* m = bpf_object__find_map_by_name(s->obj, name);
-      if (m) bpf_map__set_max_entries(m, sz);
-    };
-    set_size("mar_config_map", upf::GetMaxPduSessions());
-    set_size("mar_access_state_map", upf::GetMaxPduSessions());
-    if (s->rodata) s->rodata->MAX_PDU_SESSIONS = upf::GetMaxPduSessions();
-    return s;
-  };
-  lifecycle_ = std::make_shared<MarProgramLifeCycle>(
-      open_fn, xdp_mar_apply_kern_c__load, xdp_mar_apply_kern_c__attach,
-      xdp_mar_apply_kern_c__destroy);
-  skeleton_ = lifecycle_->open();
-  Logger::upf_app().debug("MARProgram: skeleton opened");
+void MARProgram::ConfigureMaps(struct xdp_mar_apply_kern_c* skel) {
+  if (!skel) {
+    Logger::upf_app().error("Null skeleton in MARProgram::ConfigureMaps");
+    return;
+  }
+
+  bool ok = true;
+
+  /* mar_maps.h -- runtime-sized maps */
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.mar_config_map, "mar_config_map", upf::GetMaxPduSessions());
+
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.mar_access_state_map, "mar_access_state_map",
+      upf::GetMaxPduSessions());
+
+  if (!ok) {
+    Logger::upf_app().error(
+        "One or more map configurations failed for MARProgram.");
+    throw std::runtime_error("MARProgram map configuration failed");
+  }
+
+  /* rodata: MAX_PDU_SESSIONS */
+  if (skel->rodata) skel->rodata->MAX_PDU_SESSIONS = upf::GetMaxPduSessions();
 }
 
 //------------------------------------------------------------------------------
-void MARProgram::Load() {
+MARProgram::MARProgram() : BPFProgram() {
+  Logger::upf_app().info("Initializing MAR XDP Program...");
+
+  auto open_fn = [this]() -> xdp_mar_apply_kern_c* {
+    struct xdp_mar_apply_kern_c* s = xdp_mar_apply_kern_c__open();
+    if (!s) {
+      Logger::upf_app().error("Failed to open xdp_mar_apply skeleton");
+      return nullptr;
+    }
+    // Configure maps and rodata before skeleton is loaded
+    this->ConfigureMaps(s);
+    // Store skeleton pointer -- available from this point onwards
+    skeleton_ = s;
+    return s;
+  };
+
+  lifecycle_ = std::make_shared<MarProgramLifeCycle>(
+      open_fn,
+      /* load    */ xdp_mar_apply_kern_c__load,
+      /* attach  */ xdp_mar_apply_kern_c__attach,
+      /* destroy */ xdp_mar_apply_kern_c__destroy);
+}
+
+//------------------------------------------------------------------------------
+void MARProgram::Setup() {
+  /*
+   * lifecycle_->open() is idempotent: if UPF_XDPProgram already called it
+   * (to get the bpf_object for ShareMaps before loading), this returns the
+   * cached skeleton with no side effects.
+   */
+  skeleton_ = lifecycle_->open();
+  InitializeMaps();
   lifecycle_->load();
-  auto maps       = std::make_shared<BPFMaps>(skeleton_->skeleton);
-  mar_config_map_ = std::make_shared<BPFMap>(maps->GetMap("mar_config_map"));
-  mar_access_state_map_ =
-      std::make_shared<BPFMap>(maps->GetMap("mar_access_state_map"));
-  Logger::upf_app().debug("MARProgram: skeleton loaded");
+  Logger::upf_app().debug("MARProgram: loaded (no attach -- stage program)");
+}
+
+//------------------------------------------------------------------------------
+void MARProgram::TearDown() {
+  lifecycle_->tearDown();
+}
+
+//------------------------------------------------------------------------------
+void MARProgram::InitializeMaps() {
+  maps_    = std::make_shared<BPFMaps>(lifecycle_->getBPFSkeleton()->skeleton);
+  auto get = [&](const char* name) {
+    return std::make_shared<BPFMap>(maps_->GetMap(name));
+  };
+  /* mar_maps.h */
+  mar_config_map_       = get("mar_config_map");
+  mar_access_state_map_ = get("mar_access_state_map");
 }
 
 //------------------------------------------------------------------------------
@@ -77,24 +130,53 @@ struct bpf_object* MARProgram::GetBpfObject() const {
 }
 
 //------------------------------------------------------------------------------
+struct bpf_object_skeleton* MARProgram::GetSkeleton() const {
+  return skeleton_ ? skeleton_->skeleton : nullptr;
+}
+
+//------------------------------------------------------------------------------
 struct bpf_program* MARProgram::GetXdpProgram() const {
   return skeleton_ ? skeleton_->progs.mar_apply : nullptr;
 }
 
-/* Section: Map injection */
-
 //------------------------------------------------------------------------------
-void MARProgram::SetMaps(
-    std::shared_ptr<BPFMap> mar_config_map,
-    std::shared_ptr<BPFMap> mar_access_state_map) {
-  if (!mar_config_map)
-    throw std::invalid_argument("MARProgram::SetMaps: null mar_config_map");
-  mar_config_map_       = std::move(mar_config_map);
-  mar_access_state_map_ = std::move(mar_access_state_map);
-  Logger::upf_app().debug("MARProgram: maps set");
+std::shared_ptr<BPFMaps> MARProgram::GetMaps() const {
+  return maps_;
 }
 
-/* Section: Static helpers */
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> MARProgram::GetMarConfigMap() const {
+  return mar_config_map_;
+}
+
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> MARProgram::GetMarAccessStateMap() const {
+  return mar_access_state_map_;
+}
+
+//------------------------------------------------------------------------------
+/*
+ * TODO(fmessaoudi): See TODO in n3_entry_user.cpp -- GetMapCount() ownership.
+ */
+size_t MARProgram::GetMapCount() const {
+  return maps_ ? maps_->GetMapCount() : 0;
+}
+
+//------------------------------------------------------------------------------
+void MARProgram::ConvertMar(
+    const pfcp::pfcp_mar& mar, struct pfcp_mar& bpf_mar) {
+  bpf_mar        = {};
+  bpf_mar.mar_id = mar.mar_id.second.mar_id;
+  if (mar.steering_mode.first)
+    bpf_mar.steering_mode.steer_mode_value =
+        mar.steering_mode.second.steering_mode_value;
+  if (mar.access_forwarding_action_info_1.first)
+    bpf_mar.access_forwarding_action_info_1.far_id.far_id =
+        mar.access_forwarding_action_info_1.second.far_id.far_id;
+  if (mar.access_forwarding_action_info_2.first)
+    bpf_mar.access_forwarding_action_info_2.far_id.far_id =
+        mar.access_forwarding_action_info_2.second.far_id.far_id;
+}
 
 //------------------------------------------------------------------------------
 mar_map_key MARProgram::MakeKey(uint64_t seid, uint32_t mar_id) {
@@ -104,8 +186,6 @@ mar_map_key MARProgram::MakeKey(uint64_t seid, uint32_t mar_id) {
   k._pad   = 0;
   return k;
 }
-
-/* Section: Session lifecycle */
 
 //------------------------------------------------------------------------------
 void MARProgram::PopulateMarRulesMap(
@@ -120,6 +200,14 @@ void MARProgram::PopulateMarRulesMap(
         "MARProgram: config map update failed SEID=%" PRIu64
         " MAR_ID=%u ret=%d",
         seid, bpf_mar.mar_id, ret);
+}
+
+//------------------------------------------------------------------------------
+void MARProgram::InitMarAccessStateMap(uint64_t seid, uint32_t mar_id) {
+  mar_map_key key = MakeKey(seid, mar_id);
+  struct mar_access_state state {};
+  if (!mar_access_state_map_) return;
+  mar_access_state_map_->Update(key, state, BPF_NOEXIST);
 }
 
 //------------------------------------------------------------------------------
@@ -152,24 +240,4 @@ void MARProgram::TearDown(
     if (!mar) continue;
     Remove(seid, mar->mar_id.second.mar_id);
   }
-}
-
-//------------------------------------------------------------------------------
-void MARProgram::ConvertMar(
-    const pfcp::pfcp_mar& mar, struct pfcp_mar& bpf_mar) {
-  bpf_mar = {};
-
-  bpf_mar.mar_id = mar.mar_id.second.mar_id;
-
-  if (mar.steering_mode.first)
-    bpf_mar.steering_mode.steer_mode_value =
-        mar.steering_mode.second.steering_mode_value;
-
-  if (mar.access_forwarding_action_info_1.first)
-    bpf_mar.access_forwarding_action_info_1.far_id.far_id =
-        mar.access_forwarding_action_info_1.second.far_id.far_id;
-
-  if (mar.access_forwarding_action_info_2.first)
-    bpf_mar.access_forwarding_action_info_2.far_id.far_id =
-        mar.access_forwarding_action_info_2.second.far_id.far_id;
 }

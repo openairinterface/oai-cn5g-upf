@@ -21,221 +21,173 @@
 // clang-format off
 /* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
  * Date:        2026-03
- * Changes:     V17.10.0 audit -- fixed all §-refs in @see and struct
- *              comments (see urr_xdp_user.h history for full detail).
- *              Renamed urr_xdp_user.h -> urr_apply_user.h to mirror
- *              kernel file naming (xdp_urr_apply.c -> urr_apply_user.h).
- *              Added skeleton ownership following the QERProgram pattern:
- *                - URRProgram now owns xdp_urr_apply_c skeleton +
- *                  ProgramLifeCycle<xdp_urr_apply_c>.
- *                - SetMaps() replaces old constructor map injection so
- *                  UPF_XDPProgram can share map FDs after load.
- *              All existing map management methods preserved unchanged.
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) -- PFCP Protocol
+ * Changes:     Rewritten to follow n3_entry_user.h / session_lookup_ip_user.h
+ *              pattern exactly.
+ *              xdp_urr_apply_kern.c includes:
+ *                urr_maps.h -> urr_volume_counters_map (runtime, owned)
+ *                              urr_config_map           (runtime, owned)
+ *                              urr_report_ringbuf_map   (fixed 256 KB, owned)
+ *              rodata: MAX_PDU_SESSIONS.
+ *              All session lifecycle methods preserved unchanged.
+ * 3GPP Refs:   3GPP TS 29.244 V17.10.0 §8.2.54 URR ID
+ *              3GPP TS 29.244 V17.10.0 §8.2.48 Volume Threshold
+ *              3GPP TS 29.244 V17.10.0 §8.2.46 Volume Quota
  */
 // clang-format on
 
 /**
  * @file  urr_apply_user.h
- * @brief User-space manager for URR (Usage Reporting Rule) BPF maps.
- * @author OpenAirInterface, Franck Messaoudi
- * @date 2025 / 2026-03
+ * @brief User-space lifecycle manager for the xdp_urr_apply XDP program.
  *
- * URRProgram owns the xdp_urr_apply_c BPF skeleton and manages the BPF maps
- * that back the XDP tail-call program `xdp_urr_apply` (PROG_URR_APPLY slot,
- * index 5 in tail_call_progs_map).
+ * Responsibilities:
+ *   - Open the xdp_urr_apply_kern_c skeleton and configure its maps.
+ *   - Load the program (no attach/link -- stage program, reached via tail
+ *     call).
+ *   - Manage per-session URR configuration maps on behalf of
+ *     SessionProgramManager.
  *
- * Skeleton Lifecycle (driven by UPF_XDPProgram)
- * --------------------------------------------------
- *   1. URRProgram() constructor -- opens xdp_urr_apply_c skeleton.
- *   2. UPF_XDPProgram::ShareMapsFromPrimary() -- reuses primary map FDs.
- *   3. Load()    -- loads skeleton (map FDs already shared).
- *   4. SetMaps() -- receives BPFMap wrappers from UPF_XDPProgram.
- *   5. GetXdpProgram() -- provides program FD for tail_call_progs_map slot.
- *   6. Destructor -- destroys skeleton via ProgramLifeCycle.
+ * Maps owned (from xdp_urr_apply_kern.c includes, urr_maps.h):
+ *   - urr_volume_counters_map (runtime: MAX_PDU_SESSIONS)
+ *   - urr_config_map          (runtime: MAX_PDU_SESSIONS)
+ *   - urr_report_ringbuf_map  (fixed: 256 KB)
  *
- * BPF Maps managed
- * ----------------
- *   urr_config_map          -- URR configuration per SEID.
- *                              Written by control plane; read by
- * xdp_urr_apply.c. Flags: BPF_ANY on create/modify; BPF_EXIST on update.
+ * Rodata: MAX_PDU_SESSIONS.
  *
- *   urr_volume_counters_map -- Per-SEID volume and packet counters.
- *                              Written atomically by data plane; read by
- * control plane for usage reporting. Initialised with BPF_NOEXIST so existing
- * counters are NEVER reset on modification.
- *
- * Lifecycle (session management)
- * --------------------------------
- *   UPF_XDPProgram::Setup() -> URRProgram constructed with skeleton
- *   SessionProgramManager::CreateSession() -> Setup(seid, urrs)
- *   SessionProgramManager::ModifySession() -> Update(seid, urr)
- *   SessionProgramManager::DeleteSession() -> TearDown(seid, urrs)
- *
- * @see 3GPP TS 29.244 §7.5.2.6  -- Create URR grouped IE
- * @see 3GPP TS 29.244 §8.2.54   -- URR ID
- * @see 3GPP TS 29.244 §8.2.48   -- Volume Threshold
- * @see 3GPP TS 29.244 §8.2.46   -- Volume Quota
- * @see 3GPP TS 29.244 §8.2.67   -- Monitoring Time
- * @see kernel/xdp/xdp_urr_apply.c -- BPF tail-call program
+ * @note Stage program -- no interface attachment.
+ * @note Instantiated by UPF_XDPProgram only when flags.enable_urr is set.
  */
 
 #ifndef URR_APPLY_USER_H_
 #define URR_APPLY_USER_H_
 
 #include <ProgramLifeCycle.hpp>
-#include <xdp_urr_apply_skel.h>
 #include <linux/bpf.h>
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include <xdp_urr_apply_skel.h>
 #include <wrappers/BPFMap.hpp>
+#include <wrappers/BPFMaps.h>
 #include "BPFProgram.h"
-#include <pfcp_urr.h>       /* struct pfcp_urr (shared kernel/user struct)  */
-#include <pfcp_session.hpp> /* pfcp::pfcp_urr (PFCP IE wrapper)             */
+#include "upf_network_config.h"
+#include <pfcp_urr.h>
+#include <urr_types.h> /* struct urr_config, URR_TRIGGER_* */
+#include <pfcp_session.hpp>
 
-/* Forward declaration */
 class BPFMaps;
 class BPFMap;
 
-/* ==========================================================================
- * Type alias
- * ========================================================================== */
-
 using UrrProgramLifeCycle = ProgramLifeCycle<xdp_urr_apply_kern_c>;
-
-/* ==========================================================================
- * Map key type
- * ========================================================================== */
 
 /**
  * @struct urr_map_key
- * @brief Compound BPF map key for urr_config_map and urr_volume_counters_map.
- *
- * Combines SEID and URR_ID into a 16-byte key so the same URR_ID can be
- * reused across different sessions without collision.
- * Must match the key definition in xdp_urr_apply.c.
+ * @brief Compound BPF map key: {seid, urr_id}.
  */
 struct urr_map_key {
-  uint64_t seid;    ///< PFCP Session Endpoint Identifier
-  uint32_t urr_id;  ///< URR identifier (§8.2.54)
-  uint32_t _pad;    ///< Alignment pad (must be zero)
+  uint64_t seid;
+  uint32_t urr_id;
+  uint32_t _pad;
 } __attribute__((packed));
-
-/* ==========================================================================
- * Volume counter type (runtime state, written by data plane)
- * ========================================================================== */
 
 /**
  * @struct urr_volume_t
- * @brief Per-URR volume and packet counters maintained by the data plane.
- *
- * Stored in urr_volume_counters_map with BPF_NOEXIST semantics -- the control
- * plane only initialises these counters and NEVER resets them during
- * modification, preserving in-flight accounting across session updates.
- *
- * The control plane reads these values for:
- *   - Usage reporting (3GPP TS 29.244 §7.5.5 -- Usage Report)
- *   - Threshold/quota comparison (URR trigger evaluation)
- *
- * @see 3GPP TS 29.244 §8.2.48 -- Volume Threshold IE
- * @see 3GPP TS 29.244 §8.2.46 -- Volume Quota IE
+ * @brief Per-URR volume counters maintained atomically by the data plane.
  */
 struct urr_volume_t {
-  uint64_t total_bytes;  ///< Accumulated total bytes (UL + DL)
-  uint64_t ul_bytes;     ///< Accumulated uplink bytes
-  uint64_t dl_bytes;     ///< Accumulated downlink bytes
-  uint64_t total_pkts;   ///< Accumulated total packets
-  uint64_t ul_pkts;      ///< Accumulated uplink packets
-  uint64_t dl_pkts;      ///< Accumulated downlink packets
+  uint64_t ul_octets;
+  uint64_t dl_octets;
+  uint64_t ul_packets;
+  uint64_t dl_packets;
 };
-
-/* ==========================================================================
- * URRProgram
- * ========================================================================== */
 
 /**
  * @class URRProgram
- * @brief Skeleton owner and BPF map manager for URR XDP processing.
+ * @brief Manages the xdp_urr_apply XDP program lifecycle.
  *
- * Owns the xdp_urr_apply_c skeleton and translates PFCP URR IEs into
- * pfcp_urr BPF structs for the data plane.
+ * Follows the same constructor/Setup/TearDown/InitializeMaps pattern as
+ * SessionLookupIPProgram. Instantiated by UPF_XDPProgram only when
+ * flags.enable_urr is set.
  *
- * Thread Safety: Not thread-safe. External locking required when called
- * from SessionProgramManager (protected by sessions_mutex_).
- *
- * @see xdp_urr_apply.c -- corresponding BPF program
+ * Lifecycle (orchestrated by UPF_XDPProgram):
+ *   1. Constructor  -- creates lifecycle_, does NOT open skeleton.
+ *   2. UPF_XDPProgram calls GetLifeCycle()->open() before ShareMaps().
+ *   3. UPF_XDPProgram::ShareMaps(primary, this) -- reuse_fd for shared maps.
+ *   4. Setup()      -- InitializeMaps() + load() (no attach, no link).
+ *   5. TearDown()   -- lifecycle_->tearDown().
  */
 class URRProgram : public BPFProgram {
  public:
-  // ==========================================================================
-  // Constructor / Destructor
-  // ==========================================================================
-
-  /**
-   * @brief Constructor -- opens xdp_urr_apply skeleton.
-   * Does NOT load the skeleton; call Load() after UPF_XDPProgram has
-   * called ShareMapsFromPrimary() on this program's BPF object.
-   * @throws std::runtime_error if skeleton open fails.
-   */
+  /** @brief Constructor -- creates lifecycle_, does NOT open skeleton. */
   URRProgram();
+
+  /** @brief Destructor. */
   virtual ~URRProgram() = default;
 
-  // ==========================================================================
-  // Skeleton lifecycle
-  // ==========================================================================
+  /**
+   * @brief Initialize maps and load the XDP program into the kernel.
+   *
+   * Order: lifecycle_->open() (idempotent) -> InitializeMaps() -> load().
+   * Must be called AFTER UPF_XDPProgram::ShareMaps().
+   * No attach() or link() -- stage program, reached via tail call only.
+   */
+  void Setup();
 
   /**
-   * @brief Load the skeleton (call after map sharing is complete).
-   * @throws std::runtime_error if load fails.
+   * @brief Unload the XDP program.
+   *
+   * Delegates to lifecycle_->tearDown().
+   * @note Distinct from TearDown(seid, urrs) which removes session map entries.
    */
-  void Load();
+  void TearDown();
 
   /**
-   * @brief Return the underlying BPF object (for map sharing).
-   * Used by UPF_XDPProgram::ShareMapsFromPrimary().
+   * @brief Returns the lifecycle for external orchestration.
+   *
+   * UPF_XDPProgram uses this to call open() before ShareMaps().
    */
+  std::shared_ptr<UrrProgramLifeCycle> GetLifeCycle() const {
+    return lifecycle_;
+  }
+
+  /** @brief Returns the underlying bpf_object for map sharing. */
   struct bpf_object* GetBpfObject() const;
 
+  /** @brief Returns the raw bpf_object_skeleton pointer. */
+  struct bpf_object_skeleton* GetSkeleton() const;
+
   /**
-   * @brief Return the XDP program pointer for tail_call_progs_map insertion.
-   * Used by UPF_XDPProgram::InsertProgramSlot(PROG_URR_APPLY).
+   * @brief Returns the xdp_program* for insertion into tail_call_progs_map.
+   *
+   * Called by UPF_XDPProgram::InsertProgramSlot(PROG_URR_APPLY, ...).
    */
   struct bpf_program* GetXdpProgram() const;
 
-  // ==========================================================================
-  // Map injection
-  // ==========================================================================
+  /** @brief Returns the container of all maps in this skeleton. */
+  std::shared_ptr<BPFMaps> GetMaps() const;
 
-  /**
-   * @brief Receive BPFMap wrappers from UPF_XDPProgram.
-   *
-   * Called by UPF_XDPProgram::InitializeMaps() after the primary skeleton
-   * is loaded and BPFMap objects have been wrapped around the shared FDs.
-   * Replaces the old constructor map injection pattern.
-   *
-   * @param urr_config_map          Map storing pfcp_urr config per SEID.
-   * @param urr_volume_counters_map Map storing volume counters per SEID.
-   * @throws std::invalid_argument if either pointer is null.
-   */
-  void SetMaps(
-      std::shared_ptr<BPFMap> urr_config_map,
-      std::shared_ptr<BPFMap> urr_volume_counters_map);
+  /** @name Direct map accessors (urr_maps.h) */
+  ///@{
+  std::shared_ptr<BPFMap> GetUrrConfigMap() const;
+  std::shared_ptr<BPFMap> GetUrrVolumeMap() const;
+  std::shared_ptr<BPFMap> GetUrrReportRingbuf() const;
+  ///@}
+
+  /** @brief Returns the number of maps in this skeleton. */
+  size_t GetMapCount() const;
 
   // ==========================================================================
-  // Session lifecycle
+  // Session lifecycle (called by SessionProgramManager)
   // ==========================================================================
 
   /**
    * @brief Configure all URRs for a new session.
    *
-   * Populates urr_config_map and initialises urr_volume_counters_map for each
-   * URR in the list. Volume counters are inserted with BPF_NOEXIST so they
-   * start at zero without overwriting any existing data.
+   * Populates urr_config_map and initialises urr_volume_counters_map for
+   * each URR. Volume counters are inserted with BPF_NOEXIST so they start
+   * at zero without overwriting any existing data.
    *
    * @param seid  PFCP session identifier.
    * @param urrs  URR IEs from PFCP Session Establishment Request.
-   * @see 3GPP TS 29.244 §7.5.2 -- PFCP Session Establishment Request
    */
   void Setup(
       uint64_t seid, const std::vector<std::shared_ptr<pfcp::pfcp_urr>>& urrs);
@@ -248,7 +200,6 @@ class URRProgram : public BPFProgram {
    *
    * @param seid  PFCP session identifier.
    * @param urr   Updated URR IE from PFCP Session Modification Request.
-   * @see 3GPP TS 29.244 §7.5.4 -- PFCP Session Modification Request
    */
   void Update(uint64_t seid, const std::shared_ptr<pfcp::pfcp_urr>& urr);
 
@@ -262,26 +213,20 @@ class URRProgram : public BPFProgram {
   /**
    * @brief Tear down all URRs for a session on deletion.
    *
-   * Does NOT send usage reports -- caller (SessionManager) is responsible
-   * for collecting final usage before calling TearDown().
+   * Does NOT send usage reports -- caller is responsible for collecting
+   * final usage before calling TearDown().
    *
    * @param seid  PFCP session identifier.
    * @param urrs  URRs to remove.
-   * @see 3GPP TS 29.244 §7.5.6 -- PFCP Session Deletion Request
    */
   void TearDown(
       uint64_t seid, const std::vector<std::shared_ptr<pfcp::pfcp_urr>>& urrs);
-
-  // ==========================================================================
-  // Map population helpers
-  // ==========================================================================
 
   /**
    * @brief Populate urr_config_map for a single URR.
    * @param seid   PFCP session identifier.
    * @param urr    URR IE to convert and write.
    * @param flags  BPF_ANY / BPF_NOEXIST / BPF_EXIST.
-   * @see struct pfcp_urr in pfcp_urr.h
    */
   void PopulateUrrConfigMap(
       uint64_t seid, const std::shared_ptr<pfcp::pfcp_urr>& urr,
@@ -308,51 +253,21 @@ class URRProgram : public BPFProgram {
   bool ReadVolumeCounters(
       uint64_t seid, uint32_t urr_id, urr_volume_t& volume) const;
 
-  // ==========================================================================
-  // Map accessors
-  // ==========================================================================
-
-  /** @return Shared pointer to urr_config_map. */
-  std::shared_ptr<BPFMap> GetUrrConfigMap() const { return urr_config_map_; }
-
-  /** @return Shared pointer to urr_volume_counters_map. */
-  std::shared_ptr<BPFMap> GetUrrVolumeMap() const {
-    return urr_volume_counters_map_;
-  }
-
  private:
-  // ==========================================================================
-  // Private helpers
-  // ==========================================================================
   /**
-   * @brief Initialize BPF map wrappers
+   * @brief Configure max_entries for all runtime-sized maps.
+   *
+   * Uses ConfigureMapMaxEntries(skel->maps.field, "name", size).
+   * Called inside the open_fn lambda before the skeleton is returned.
+   *
+   * @param skel Opened (not yet loaded) skeleton.
+   */
+  void ConfigureMaps(struct xdp_urr_apply_kern_c* skel);
+
+  /**
+   * @brief Wrap skeleton map FDs in BPFMap objects after open.
    */
   void InitializeMaps();
-
-  /**
-   * @brief Configure specific BPF maps
-   *
-   * @param skel Opened BPF skeleton
-   * @param upf_cfg Configuration
-   */
-  void ConfigureUrrMaps(struct urr_apply_kern_c* skel);
-
-  /**
-   * @brief Build URR ID to PDR mapping
-   *
-   * Creates internal map for quick PDR lookup by URR ID.
-   *
-   * @param pdrs Vector of PDRs
-   */
-  void BuildPdrMap(const std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs);
-
-  /**
-   * @brief Get PDR associated with a URR ID
-   *
-   * @param urr_id URR identifier
-   * @return std::shared_ptr<pfcp::pfcp_pdr> PDR or nullptr
-   */
-  std::shared_ptr<pfcp::pfcp_pdr> GetPdrByUrrId(uint32_t urr_id) const;
 
   /** @brief Build a urr_map_key from SEID and URR_ID (pad zeroed). */
   static urr_map_key MakeKey(uint64_t seid, uint32_t urr_id);
@@ -361,18 +276,19 @@ class URRProgram : public BPFProgram {
   static void ConvertUrr(
       const pfcp::pfcp_urr& pfcp_ie, struct pfcp_urr& bpf_urr);
 
-  // ==========================================================================
+  //----------------------------------------------------------------------------
   // Skeleton and lifecycle
-  // ==========================================================================
-  xdp_urr_apply_kern_c* skeleton_ = nullptr;        ///< BPF skeleton
-  std::shared_ptr<UrrProgramLifeCycle> lifecycle_;  ///< Lifecycle manager
+  //----------------------------------------------------------------------------
+  xdp_urr_apply_kern_c* skeleton_ = nullptr;
+  std::shared_ptr<UrrProgramLifeCycle> lifecycle_;
 
-  // ==========================================================================
-  // Maps
-  // ==========================================================================
-  std::shared_ptr<BPFMaps> maps_;                    ///< All BPF maps
-  std::shared_ptr<BPFMap> urr_config_map_;           ///< URR configuration map
-  std::shared_ptr<BPFMap> urr_volume_counters_map_;  ///< URR volume counter map
+  //----------------------------------------------------------------------------
+  // Maps (urr_maps.h)
+  //----------------------------------------------------------------------------
+  std::shared_ptr<BPFMaps> maps_;
+  std::shared_ptr<BPFMap> urr_volume_counters_map_;
+  std::shared_ptr<BPFMap> urr_config_map_;
+  std::shared_ptr<BPFMap> urr_report_ringbuf_map_;
 };
 
 #endif /* URR_APPLY_USER_H_ */

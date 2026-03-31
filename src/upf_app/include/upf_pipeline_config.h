@@ -92,7 +92,7 @@ enum class PduSessionType : uint8_t {
  * @see kernel/xdp/tail_call_dispatch.h — kernel-side enum (must stay in sync)
  */
 struct PipelineFeatureFlags {
-  bool enable_qos = false;  ///< PROG_QER  — QoS gate + MBR/GBR enforcement
+  bool enable_qer = false;  ///< PROG_QER  — QoS gate + MBR/GBR enforcement
   bool enable_urr = false;  ///< PROG_URR  — volume/time usage reporting
   bool enable_bar = false;  ///< PROG_BAR  — DL buffering + DDN notification
   bool enable_mar = false;  ///< PROG_MAR  — ATSSS multi-access steering

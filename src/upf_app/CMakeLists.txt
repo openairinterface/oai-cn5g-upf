@@ -82,12 +82,17 @@ set(UPF_USER_SHARED_SOURCES
   user/far_apply_user.cpp
   user/mar_apply_user.cpp
   user/qer_tc_user.cpp
+   user/qer_apply_user.cpp
   user/urr_apply_user.cpp
   user/bar_apply_user.cpp
   user/pdr_match_user.cpp
   user/upf_xdp_user.cpp
   user/session_lookup_ip_user.cpp
   user/session_lookup_eth_user.cpp  
+  user/n3_entry_user.cpp
+  user/n6_entry_user.cpp
+  user/n3_eth_entry_user.cpp
+  user/n6_eth_entry_user.cpp  
   user/BPFProgram.cpp
   user/wrappers/BPFMap.cpp
   user/wrappers/BPFMaps.cpp

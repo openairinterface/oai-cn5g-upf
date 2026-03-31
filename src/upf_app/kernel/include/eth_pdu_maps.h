@@ -65,10 +65,19 @@
 #include "pfcp/pfcp_pdr.h"
 #include "pfcp/pfcp_far.h"
 
-#define ETH_PDU_MAX_INTERFACES 10
-#define ETH_PDU_MAX_PDRS 32
+/* ==========================================================================
+ * .rodata — runtime-configurable size constants
+ * ========================================================================== */
 
+/**
+ * Set by userspace via bpf_map__set_value_size() / skeleton globals
+ * before skel->load(). Shared across all programs via .rodata section.
+ */
 const volatile int MAX_UPF_INTERFACES SEC(".rodata");
+const volatile int MAX_PDU_SESSIONS SEC(".rodata");
+const volatile int MAX_PDRS_PER_PDU_SESSION SEC(".rodata");
+const volatile int MAX_UPF_REDIRECT_INTERFACES SEC(".rodata");
+// const volatile int MAX_USER_EQUIPMENTS SEC(".rodata");
 
 /* ==========================================================================
  * session_by_mac_map
@@ -123,8 +132,8 @@ struct {
  * @brief Per-session PDR array for Ethernet PDU sessions.
  *
  * Key:   u64                                   SEID
- * Value: struct pfcp_pdr[ETH_PDU_MAX_PDRS]     PDR array, sorted by precedence
- * Size:  MAX_PDU_SESSIONS
+ * Value: struct pfcp_pdr[MAX_PDRS_PER_PDU_SESSION]     PDR array, sorted by
+ * precedence Size:  MAX_PDU_SESSIONS
  *
  * ETH-PDU-path mirror of pdrs_per_session_map.
  * Kept separate because this is compiled as a distinct BPF object.
@@ -170,9 +179,9 @@ struct {
 /**
  * @brief Egress interface DEVMAP for Ethernet PDU XDP_REDIRECT.
  *
- * Key:   u32   interface slot index (0 .. ETH_PDU_MAX_INTERFACES-1)
+ * Key:   u32   interface slot index (0 .. MAX_UPF_INTERFACES-1)
  * Value: u32   kernel ifindex of the egress network device
- * Size:  ETH_PDU_MAX_INTERFACES (10)
+ * Size:  MAX_UPF_INTERFACES (10)
  *
  * Populated by xdp_upf_user.cpp using if_nametoindex().
  * Used by xdp_n6_eth_entry.c to redirect Ethernet frames to the
@@ -180,7 +189,7 @@ struct {
  */
 struct {
   __uint(type, BPF_MAP_TYPE_DEVMAP);
-  __uint(max_entries, ETH_PDU_MAX_INTERFACES);
+  __uint(max_entries, 1); /*MAX_UPF_REDIRECT_INTERFACES*/
   __type(key, u32);
   __type(value, u32);
 } eth_egress_ifindex_map SEC(".maps");
@@ -206,7 +215,7 @@ struct {
  */
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, 1); /* Runtime: MAX_UEs */
+  __uint(max_entries, 1); /* Runtime: MAX_UEs or max_pdu_sessions */
   __type(key, u8[ETH_ALEN]);
   __type(value, struct mac_pdu_session_value);
 } mac_pdu_session_map SEC(".maps");

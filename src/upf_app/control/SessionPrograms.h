@@ -55,7 +55,7 @@
  *   - UPF_XDPProgram: NON-OWNING reference (global pipeline, shared by all
  *     sessions).  Provides access to BPF maps for per-session entries.
  *     MUST NOT be torn down when a session is destroyed.
- *   - QERProgram: OWNING reference (per-session TC-BPF for rate shaping).
+ *   - QERTCProgram: OWNING reference (per-session TC-BPF for rate shaping).
  *     Created when QER rules are present, torn down with the session.
  *
  * Per-session BPF map entries (managed by SessionProgramManager):
@@ -98,7 +98,7 @@
 
 // Forward declarations — avoid circular includes
 class UPF_XDPProgram;
-class QERProgram;
+class QERTCProgram;
 
 /**
  * @class SessionPrograms
@@ -138,7 +138,7 @@ class SessionPrograms {
    * @brief Destructor — tears down per-session resources only.
    *
    * Cleanup order (ordering is significant — see SessionPrograms.cpp):
-   *   1. Tear down QERProgram (TC-BPF rate shaping classes) — must precede
+   *   1. Tear down QERTCProgram (TC-BPF rate shaping classes) — must precede
    *      BPF map cleanup so QER map entries still exist for TearDown().
    *   2. Remove per-session BPF map entries:
    *        urr_config_map, urr_volume_counters_map  (if URR enabled)
@@ -181,18 +181,18 @@ class SessionPrograms {
    *
    * The QER program manages per-session TC HTB classes for MBR/GBR rate
    * shaping (3GPP TS 29.244 V17.10.0 §8.2.8 MBR / §8.2.9 GBR).
-   * One QERProgram per session.  Ownership is transferred — the program
+   * One QERTCProgram per session.  Ownership is transferred — the program
    * is torn down in the destructor.
    *
    * @param qer_program Shared pointer to the TC-BPF QER program.
    */
-  void SetQERProgram(std::shared_ptr<QERProgram> qer_program);
+  void SetQERProgram(std::shared_ptr<QERTCProgram> qer_program);
 
   /**
    * @brief Return the QER TC-BPF program for this session.
    * @return Shared pointer to the QER program, or nullptr if none.
    */
-  std::shared_ptr<QERProgram> GetQERProgram() const;
+  std::shared_ptr<QERTCProgram> GetQERProgram() const;
 
   /** @brief Return true if a QER TC-BPF program is attached. */
   bool HasQERProgram() const;
@@ -243,7 +243,7 @@ class SessionPrograms {
   /**
    * @brief Remove per-session entries from all relevant BPF maps.
    *
-   * Called by the destructor after QERProgram has been torn down.
+   * Called by the destructor after QERTCProgram has been torn down.
    * Only touches maps for rule types that were actually enabled
    * (checked via the rules_enabled bitmask).
    */
@@ -257,7 +257,7 @@ class SessionPrograms {
 
   /// Per-session QER TC-BPF program (OWNING — torn down in destructor).
   /// Manages HTB qdisc classes for MBR/GBR rate shaping (§8.2.8 / §8.2.9).
-  std::shared_ptr<QERProgram> qer_program_;
+  std::shared_ptr<QERTCProgram> qer_program_;
 
   /// Per-session bitmask of enabled rules (mirrors BPF map entry).
   /// @see rules_enabled_flags.h

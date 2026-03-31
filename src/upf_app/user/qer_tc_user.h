@@ -129,13 +129,13 @@ class BPFMap;
 /**
  * @brief Type alias for QER TC-BPF program lifecycle
  */
-using QerProgramLifeCycle = ProgramLifeCycle<qer_tc_kern_c>;
+using QerTCProgramLifeCycle = ProgramLifeCycle<qer_tc_kern_c>;
 
 /* ==========================================================================
- * QERProgram
+ * QERTCProgram
  * ========================================================================== */
 /**
- * @class QERProgram
+ * @class QERTCProgram
  * @brief Manages TC-BPF programs for QoS Enforcement Rules
  *
  * This class implements 5G QoS enforcement using Linux Traffic Control (TC)
@@ -164,7 +164,7 @@ using QerProgramLifeCycle = ProgramLifeCycle<qer_tc_kern_c>;
  * @note This implementation follows Google C++ Style Guide
  * @note Inherits from BPFProgram base class
  */
-class QERProgram : public BPFProgram {
+class QERTCProgram : public BPFProgram {
  public:
   /**
    * @brief Constructor - initializes QER TC-BPF program
@@ -179,16 +179,16 @@ class QERProgram : public BPFProgram {
    *
    * Network configuration (interface names, map sizing limits) is read
    * from upf::g_net_cfg which must be populated by
-   * control/Configuration.cpp before the first QERProgram is created.
+   * control/Configuration.cpp before the first QERTCProgram is created.
    *
    * @throws std::runtime_error if skeleton creation fails
    */
-  explicit QERProgram();
+  explicit QERTCProgram();
 
   /**
    * @brief Destructor - cleans up TC-BPF program
    */
-  virtual ~QERProgram();
+  virtual ~QERTCProgram();
 
   /**
    * @brief Setup TC-BPF program for a PDU session
@@ -319,8 +319,8 @@ class QERProgram : public BPFProgram {
   // ==========================================================================
   // Skeleton and lifecycle
   // ==========================================================================
-  qer_tc_kern_c* skeleton_;                         ///< BPF skeleton
-  std::shared_ptr<QerProgramLifeCycle> lifecycle_;  ///< Lifecycle manager
+  qer_tc_kern_c* skeleton_;                           ///< BPF skeleton
+  std::shared_ptr<QerTCProgramLifeCycle> lifecycle_;  ///< Lifecycle manager
 
   // ==========================================================================
   // Maps

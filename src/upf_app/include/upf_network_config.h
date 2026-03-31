@@ -91,7 +91,7 @@ struct NetworkConfig {
   /// eBPF/XDP datapath acceleration — upf_cfg.enable_bpf_datapath
   bool bpf_datapath = false;
 
-  /// TC-BPF QoS enforcement (QER) — upf_cfg.enable_qos
+  /// TC-BPF QoS enforcement (QER) — upf_cfg.enable_qer
   bool qos = false;
 
   /// Usage Reporting Rule support — upf_cfg.enable_urr

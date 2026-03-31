@@ -91,7 +91,7 @@ class UPF_XDPProgram;
  *
  * Configuration (from YAML):
  *   - enable_bpf_datapath: Master switch for BPF acceleration
- *   - enable_qos: QER enforcement (XDP gate + TC rate shaping)
+ *   - enable_qer: QER enforcement (XDP gate + TC rate shaping)
  *   - enable_urr: Usage reporting (volume/time measurement)
  *   - enable_bar: Buffering action (DL data notification)
  *   - enable_mar: Multi-access steering (ATSSS)

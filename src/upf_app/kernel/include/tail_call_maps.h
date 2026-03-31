@@ -53,9 +53,18 @@
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
 #include "tail_call_types.h"
+#include "upf_xdp_limits.h"
 
-#define MAX_TAIL_CALL_PROGS 16
-#define MAX_CPUS 256
+/* ==========================================================================
+ * .rodata — runtime-configurable size constants
+ * ========================================================================== */
+
+/**
+ * Set by userspace via bpf_map__set_value_size() / skeleton globals
+ * before skel->load(). Shared across all programs via .rodata section.
+ */
+
+const volatile int MAX_PDU_SESSIONS SEC(".rodata");
 
 /* ==========================================================================
  * tail_call_progs_map

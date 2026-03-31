@@ -85,7 +85,7 @@ PipelineFeatureFlags UserPlaneComponent::BuildFeatureFlags() const {
   const bool bpf = upf::IsBpfDatapathEnabled();
 
   // QoS: gate status in XDP + rate shaping in TC
-  flags.enable_qos = bpf && upf::IsQosEnabled();
+  flags.enable_qer = bpf && upf::IsQosEnabled();
 
   // Usage Reporting Rules (volume/time measurement)
   flags.enable_urr = bpf && upf::IsUrrEnabled();
@@ -128,9 +128,7 @@ void UserPlaneComponent::SetMembers(
     throw std::runtime_error("BPF pipeline initialization failed");
   }
 
-  Logger::upf_app().info(
-      "UPF_XDPProgram initialized (N3: %s, N6: %s)", gtp_interface.c_str(),
-      non_gtp_interface.c_str());
+  Logger::upf_app().info("UPF_XDPProgram initialized");
 }
 
 //------------------------------------------------------------------------------
@@ -193,7 +191,7 @@ void UserPlaneComponent::Setup(
 
   // Count loaded features
   int feature_count = 3;  // Core: session_lookup + pdr_match + far
-  if (flags.enable_qos) feature_count++;
+  if (flags.enable_qer) feature_count++;
   if (flags.enable_urr) feature_count++;
   if (flags.enable_bar) feature_count++;
   if (flags.enable_mar) feature_count++;
@@ -206,7 +204,7 @@ void UserPlaneComponent::Setup(
   Logger::upf_app().info(
       "UPF Data Plane setup complete (PDU: %s, QoS: %s, "
       "URR: %s, BAR: %s, MAR: %s, pipeline programs: %d)",
-      pdu_str, flags.enable_qos ? "on" : "off", flags.enable_urr ? "on" : "off",
+      pdu_str, flags.enable_qer ? "on" : "off", flags.enable_urr ? "on" : "off",
       flags.enable_bar ? "on" : "off", flags.enable_mar ? "on" : "off",
       feature_count);
 
@@ -217,7 +215,7 @@ void UserPlaneComponent::Setup(
 
   std::string n3_mode = upf_xdp_program_->GetXdpModeString(upf::GetN3Iface());
   std::string n6_mode = upf_xdp_program_->GetXdpModeString(upf::GetN6Iface());
-  size_t total_maps   = upf_xdp_program_->GetMapCount();
+  size_t total_maps   = upf_xdp_program_->GetTotalMapCount();
   DisplayXdpConfiguration(n3_mode, n6_mode, total_maps);
 
   DisplayReadyMessage();

@@ -308,7 +308,7 @@ void DisplayPipelineConfig(const PipelineFeatureFlags& flags) {
       "──────┤");
   Logger::upf_app().startup(
       "│ QER Enforcement [slot %-2d] (optional)  │ %-36s │", PROG_QER_APPLY,
-      flags.enable_qos ? "✓ Loaded" : "— Skipped");
+      flags.enable_qer ? "✓ Loaded" : "— Skipped");
   Logger::upf_app().startup(
       "│ URR Reporting   [slot %-2d] (optional)  │ %-36s │", PROG_URR_APPLY,
       flags.enable_urr ? "✓ Loaded" : "— Skipped");

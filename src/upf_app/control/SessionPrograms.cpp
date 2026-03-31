@@ -121,12 +121,12 @@ std::shared_ptr<UPF_XDPProgram> SessionPrograms::GetPipelineProgram() const {
 // QER Program (per-session TC-BPF)
 // =============================================================================
 
-void SessionPrograms::SetQERProgram(std::shared_ptr<QERProgram> qer_program) {
+void SessionPrograms::SetQERProgram(std::shared_ptr<QERTCProgram> qer_program) {
   qer_program_ = qer_program;
 }
 
 //------------------------------------------------------------------------------
-std::shared_ptr<QERProgram> SessionPrograms::GetQERProgram() const {
+std::shared_ptr<QERTCProgram> SessionPrograms::GetQERProgram() const {
   return qer_program_;
 }
 

@@ -75,7 +75,7 @@ add_custom_target(upf_xdp_all DEPENDS upf_xdp qer_tc)
 #   xdp_session_lookup_eth_kern.c -- slot 1   PROG_SESSION_LOOKUP_ETH             #
 #   xdp_pdr_match_kern.c          -- slot 2   PROG_PDR_MATCH                      #
 #   xdp_far_apply_kern.c          -- slot 3   PROG_FAR_APPLY                      #
-#   xdp_qer_apply_kern.c          -- slot 4   PROG_QER_APPLY  (enable_qos)        #
+#   xdp_qer_apply_kern.c          -- slot 4   PROG_QER_APPLY  (enable_qer)        #
 #   xdp_urr_apply_kern.c          -- slot 5   PROG_URR_APPLY  (enable_urr)        #
 #   xdp_bar_apply_kern.c          -- slot 6   PROG_BAR_APPLY  (enable_bar)        #
 #   xdp_mar_apply_kern.c          -- slot 7   PROG_MAR_APPLY  (enable_mar)        #

@@ -66,8 +66,6 @@
 #include "pfcp/pfcp_pdr.h"
 #include "pfcp/pfcp_far.h"
 
-#define MAX_TAIL_CALL_PROGS 16
-
 /* ==========================================================================
  * .rodata — runtime-configurable size constants
  * ========================================================================== */

@@ -48,7 +48,7 @@
  *     -> PROG_SESSION_LOOKUP_ETH (1)  xdp_session_lookup_eth.c
  *     -> PROG_PDR_MATCH          (2)  pdr_match.c
  *     -> PROG_FAR_APPLY          (3)  xdp_far_apply.c
- *     -> PROG_QER_APPLY          (4)  xdp_qer_apply.c   [enable_qos: yes]
+ *     -> PROG_QER_APPLY          (4)  xdp_qer_apply.c   [enable_qer: yes]
  *     -> PROG_URR_APPLY          (5)  xdp_urr_apply.c   [enable_urr: yes]
  *     -> PROG_BAR_APPLY          (6)  xdp_bar_apply.c   [enable_bar: yes]
  *     -> PROG_MAR_APPLY          (7)  xdp_mar_apply.c   [enable_mar: yes]
@@ -92,7 +92,7 @@ enum upf_prog_index {
   PROG_SESSION_LOOKUP_ETH = 1, /**< Always present -- ETH PDU session lookup */
   PROG_PDR_MATCH          = 2, /**< Always present -- PDR matching           */
   PROG_FAR_APPLY          = 3, /**< Always present -- forwarding action      */
-  PROG_QER_APPLY          = 4, /**< enable_qos: yes -- QoS enforcement       */
+  PROG_QER_APPLY          = 4, /**< enable_qer: yes -- QoS enforcement       */
   PROG_URR_APPLY          = 5, /**< enable_urr: yes -- usage reporting       */
   PROG_BAR_APPLY          = 6, /**< enable_bar: yes -- buffering action      */
   PROG_MAR_APPLY          = 7, /**< enable_mar: yes -- multi-access routing  */
