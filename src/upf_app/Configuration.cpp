@@ -11,9 +11,9 @@ using namespace oai::config;
 
 extern upf_config upf_cfg;
 
-std::string Configuration::sGTPInterface            = upf_cfg.n3.if_name;
-std::string Configuration::sUDPInterface            = upf_cfg.n6.if_name;
-unsigned char Configuration::sIsSocketBufferEnabled = 0;
+std::string Configuration::sGTPInterface   = upf_cfg.n3.if_name;
+std::string Configuration::sUDPInterface   = upf_cfg.n6.if_name;
+bool Configuration::sIsSocketBufferEnabled = false;
 
 Configuration::Configuration(int argc, char** argv) {
   if (argc >= 2) {
@@ -27,5 +27,18 @@ Configuration::Configuration(int argc, char** argv) {
       "UDPInteface %s", Configuration::sUDPInterface.c_str());
   for (int i = 1; i < argc; ++i) {
     Logger::upf_app().debug("arg %d = %d", i, argv[i]);
+  }
+}
+
+void Configuration::updateXdpMode() {
+  // Update XDP mode from runtime configuration
+  // "generic" or "skb" -> true (use generic XDP mode)
+  // "driver" or anything else -> false (use driver mode)
+  if (upf_cfg.xdp_mode == "generic" || upf_cfg.xdp_mode == "skb") {
+    sIsSocketBufferEnabled = true;
+    Logger::upf_app().info("XDP mode set to GENERIC (SKB mode)");
+  } else {
+    sIsSocketBufferEnabled = false;
+    Logger::upf_app().info("XDP mode set to DRIVER mode");
   }
 }

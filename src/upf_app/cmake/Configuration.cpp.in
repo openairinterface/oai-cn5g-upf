@@ -5,12 +5,17 @@
 #include "Configuration.h"
 #include <string>
 #include "logger.hpp"
+#include "upf_config.hpp"
+
+using namespace oai::config;
+
+extern upf_config upf_cfg;
 
 // Values get from enviroment variable GTP_INTERFACE and UDP_INTERFACE
 // Consider to update these variables with you want to update the default values.
 std::string Configuration::sGTPInterface = "@GTP_INTERFACE@";
 std::string Configuration::sUDPInterface = "@UDP_INTERFACE@";
-unsigned char Configuration::sIsSocketBufferEnabled = @SOCKET_BUFFER_ENABLED@;
+bool Configuration::sIsSocketBufferEnabled = false;
 
 Configuration::Configuration(int argc, char **argv)
 {
@@ -21,8 +26,21 @@ Configuration::Configuration(int argc, char **argv)
 
   Logger::upf_app().debug("GTP Inteface %s", Configuration::sGTPInterface.c_str());
   Logger::upf_app().debug("UDPInteface %s", Configuration::sUDPInterface.c_str());
-  
+
   for(int i = 1; i < argc; ++i) {
     Logger::upf_app().debug("arg %d = %d", i, argv[i]);
+  }
+}
+
+void Configuration::updateXdpMode() {
+  // Update XDP mode from runtime configuration
+  // "generic" or "skb" -> true (use generic XDP mode)
+  // "driver" or anything else -> false (use driver mode)
+  if (upf_cfg.xdp_mode == "generic" || upf_cfg.xdp_mode == "skb") {
+    sIsSocketBufferEnabled = true;
+    Logger::upf_app().info("XDP mode set to GENERIC (SKB mode)");
+  } else {
+    sIsSocketBufferEnabled = false;
+    Logger::upf_app().info("XDP mode set to DRIVER mode");
   }
 }

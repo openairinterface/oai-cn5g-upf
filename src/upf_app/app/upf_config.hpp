@@ -98,6 +98,8 @@ class upf_config {
   bool enable_snat;
   bool enable_fr;
 
+  std::string xdp_mode;
+
   std::vector<pdn_cfg_t> pdns;
   std::vector<pfcp::node_id_t> smfs;
 
@@ -140,6 +142,7 @@ class upf_config {
         nsf(),
         enable_snat(false),
         enable_fr(false),
+        xdp_mode("generic"),
         nrf_addr() {
     itti.itti_timer_sched_params.sched_priority = 85;
     itti.n3_sched_params.sched_priority         = 84;
