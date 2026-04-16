@@ -68,6 +68,9 @@ constexpr auto UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK =
 constexpr auto UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK_LABEL =
     "Ignore QFI For Uplink Classification";
 
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_XDP_MODE       = "xdp_mode";
+constexpr auto UPF_CONFIG_SUPPORT_FEATURES_XDP_MODE_LABEL = "XDP Mode";
+
 constexpr auto UPF_CONFIG_REMOTE_N6_GW       = "remote_n6_gw";
 constexpr auto UPF_CONFIG_REMOTE_N6_GW_LABEL = "Remote N6 Gateway";
 
@@ -93,6 +96,7 @@ class upf_support_features : public config_type {
   option_config_value m_enable_fr{};
   option_config_value m_enable_eth_pdu{};
   option_config_value m_ignore_qfi_for_uplink{};
+  string_config_value m_xdp_mode{};
 
  public:
   explicit upf_support_features(
@@ -120,6 +124,7 @@ class upf_support_features : public config_type {
   [[nodiscard]] bool get_option_enable_fr() const;
   [[nodiscard]] bool get_option_enable_eth_pdu() const;
   [[nodiscard]] bool get_option_ignore_qfi_for_uplink() const;
+  [[nodiscard]] std::string get_option_xdp_mode() const;
 };
 
 class upf_interface_config : public local_interface {

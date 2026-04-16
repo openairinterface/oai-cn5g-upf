@@ -64,6 +64,8 @@ upf_support_features::upf_support_features(
   m_ignore_qfi_for_uplink = option_config_value(
       UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK_LABEL,
       (int) ignore_qfi_for_uplink);
+  m_xdp_mode = string_config_value(
+      UPF_CONFIG_SUPPORT_FEATURES_XDP_MODE_LABEL, "generic");
 }
 
 //------------------------------------------------------------------------------
@@ -124,6 +126,9 @@ void upf_support_features::from_yaml(const YAML::Node& node) {
   if (node[UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK]) {
     m_ignore_qfi_for_uplink.from_yaml(
         node[UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK]);
+  }
+  if (node[UPF_CONFIG_SUPPORT_FEATURES_XDP_MODE]) {
+    m_xdp_mode.from_yaml(node[UPF_CONFIG_SUPPORT_FEATURES_XDP_MODE]);
   }
 }
 
@@ -226,6 +231,12 @@ std::string upf_support_features::to_string(const std::string& indent) const {
       BASE_FORMATTER, INNER_LIST_ELEM,
       UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK_LABEL, inner_width,
       ignore_qfi_for_uplink));
+
+  // XDP Mode
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, INNER_LIST_ELEM,
+      UPF_CONFIG_SUPPORT_FEATURES_XDP_MODE_LABEL, inner_width,
+      m_xdp_mode.get_value()));
   return out;
 }
 
@@ -396,6 +407,11 @@ bool upf_support_features::get_option_enable_eth_pdu() const {
 //------------------------------------------------------------------------------
 bool upf_support_features::get_option_ignore_qfi_for_uplink() const {
   return m_ignore_qfi_for_uplink.get_value();
+}
+
+//------------------------------------------------------------------------------
+std::string upf_support_features::get_option_xdp_mode() const {
+  return m_xdp_mode.get_value();
 }
 
 //------------------------------------------------------------------------------
@@ -600,6 +616,7 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
       upf_local->get_support_features().get_option_enable_eth_pdu();
   cfg.ignore_qfi_for_uplink =
       upf_local->get_support_features().get_option_ignore_qfi_for_uplink();
+  cfg.xdp_mode = upf_local->get_support_features().get_option_xdp_mode();
 
   auto snssai_upf_list = upf_local->get_upf_info().getSNssaiUpfInfoList();
   for (const auto& snssai : snssai_upf_list) {

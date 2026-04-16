@@ -12,7 +12,8 @@ class Configuration {
   Configuration(int argc, char** argv);
   static std::string sGTPInterface;
   static std::string sUDPInterface;
-  static unsigned char sIsSocketBufferEnabled;
+  static bool sIsSocketBufferEnabled;
+  static void updateXdpMode();
 };
 
 #endif  // __CONFIGURATION_H__

@@ -210,8 +210,12 @@ upf:
   support_features:
     enable_bpf_datapath: yes    # If "on": BPF is used as datapath else simpleswitch is used, DEFAULT= off
     enable_qos: yes
+    # XDP Mode Configuration:
+    #   - "driver": Use native XDP driver mode (hardware-accelerated, requires NIC driver support)
+    #   - "generic": Use generic XDP mode (software-based, works on any NIC, also known as SKB mode) - DEFAULT
+    xdp_mode: generic
     # OAI UPF EBPF MAP SIZES Configuration File
-    # These configuration map entries define key parameters for optimizing memory allocation and tuning the UPF. 
+    # These configuration map entries define key parameters for optimizing memory allocation and tuning the UPF.
     # The values set in this file directly impact the size of eBPF maps used for packet processing.
     # Configuration Parameters: Each parameter in this file controls a specific aspect of UPF behavior.
     # 1. Network Interface Limits
@@ -237,7 +241,7 @@ upf:
     #     max_sdf_filters_per_pdu_session (Default: 8)
     #         Specifies the maximum number of Service Data Flow (SDF) filters per session.
     #         SDF filters define how traffic is classified within a QoS flow.
-    max_pdu_session: 10000 
+    max_pdu_session: 10000
     max_pdrs_per_pdu_session: 8
     #max_qos_flows_per_pdu_session: 8
     max_sdf_filters_per_pdu_session: 8

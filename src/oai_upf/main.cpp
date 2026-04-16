@@ -4,6 +4,7 @@
 
 #include "async_shell_cmd.hpp"
 #include "common_defs.h"
+#include "Configuration.h"
 #include "http_client.hpp"
 #include "itti.hpp"
 #include "logger.hpp"
@@ -155,6 +156,9 @@ int main(int argc, char** argv) {
   // Convert from YAML to internal structure
   upf_cfg_yaml->to_upf_config(upf_cfg);
   upf_cfg_yaml->display();
+
+  // Update XDP mode from configuration
+  Configuration::updateXdpMode();
 
   // HTTP Client
   // HTTP Client
