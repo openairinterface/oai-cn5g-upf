@@ -75,7 +75,7 @@ void URRProgram::ConfigureMaps(struct xdp_urr_apply_kern_c* skel) {
 
 //------------------------------------------------------------------------------
 URRProgram::URRProgram() : BPFProgram() {
-  Logger::upf_app().info("Initializing URR XDP Program...");
+  Logger::upf_app().debug("Initializing URR XDP Program ...");
 
   auto open_fn = [this]() -> xdp_urr_apply_kern_c* {
     struct xdp_urr_apply_kern_c* s = xdp_urr_apply_kern_c__open();
@@ -94,7 +94,7 @@ URRProgram::URRProgram() : BPFProgram() {
       open_fn,
       /* load    */ xdp_urr_apply_kern_c__load,
       /* attach  */ xdp_urr_apply_kern_c__attach,
-      /* destroy */ xdp_urr_apply_kern_c__destroy);
+      /* destroy */ xdp_urr_apply_kern_c__destroy, "URRProgram");
 }
 
 //------------------------------------------------------------------------------
@@ -107,7 +107,6 @@ void URRProgram::Setup() {
   skeleton_ = lifecycle_->open();
   InitializeMaps();
   lifecycle_->load();
-  Logger::upf_app().debug("URRProgram: loaded (no attach -- stage program)");
 }
 
 //------------------------------------------------------------------------------

@@ -46,6 +46,7 @@
 #include <UserPlaneComponent.h>
 
 #include "helpers/ConfigLoader.hpp"
+#include "upf_banner.hpp"
 #include "startup_banner.hpp"
 
 using namespace oai::upf::app;
@@ -130,6 +131,7 @@ void setup_bpf() {
 
 //------------------------------------------------------------------------------
 int main(int argc, char** argv) {
+  oai::upf::print_banner();
   if (!Options::parse(argc, argv)) {
     std::cout << "Options::parse() failed" << std::endl;
     return 1;

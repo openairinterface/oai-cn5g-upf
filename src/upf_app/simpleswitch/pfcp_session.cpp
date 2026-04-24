@@ -485,6 +485,88 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_urr> urr) {
   }
   Logger::upf_n4().info(
       "  └─ Adding new URR %u to session " SEID_FMT, urr_id, seid);
+
+  // Measurement Method (§8.2.64)
+  if (urr->measurement_method.first) {
+    auto& mm = urr->measurement_method.second;
+    std::ostringstream ms;
+    if (mm.volum) ms << "VOLUM ";
+    if (mm.durat) ms << "DURAT ";
+    if (mm.event) ms << "EVENT ";
+    Logger::upf_n4().debug("     • Measurement Method: %s", ms.str().c_str());
+  }
+
+  // Reporting Triggers (§8.2.65)
+  if (urr->reporting_triggers.first) {
+    auto& rt = urr->reporting_triggers.second;
+    std::ostringstream ts;
+    if (rt.perio) ts << "PERIO ";
+    if (rt.volth) ts << "VOLTH ";
+    if (rt.timth) ts << "TIMTH ";
+    if (rt.quhti) ts << "QUHTI ";
+    if (rt.start) ts << "START ";
+    if (rt.stop) ts << "STOP ";
+    if (rt.droth) ts << "DROTH ";
+    if (rt.liusa) ts << "LIUSA ";
+    Logger::upf_n4().debug("     • Reporting Triggers: %s", ts.str().c_str());
+  }
+
+  // Measurement Period (§8.2.66)
+  if (urr->measurement_period.first)
+    Logger::upf_n4().debug(
+        "     • Measurement Period: %u s",
+        urr->measurement_period.second.measurement_period);
+
+  // Volume Threshold (§8.2.68)
+  if (urr->volume_threshold.first) {
+    auto& vt = urr->volume_threshold.second;
+    if (vt.tovol)
+      Logger::upf_n4().debug(
+          "     • Volume Threshold Total: %llu bytes",
+          (unsigned long long) vt.total_volume);
+    if (vt.ulvol)
+      Logger::upf_n4().debug(
+          "     • Volume Threshold UL: %llu bytes",
+          (unsigned long long) vt.uplink_volume);
+    if (vt.dlvol)
+      Logger::upf_n4().debug(
+          "     • Volume Threshold DL: %llu bytes",
+          (unsigned long long) vt.downlink_volume);
+  }
+
+  // Time Threshold (§8.2.70)
+  if (urr->time_threshold.first)
+    Logger::upf_n4().debug(
+        "     • Time Threshold: %u s",
+        urr->time_threshold.second.time_threshold);
+
+  // Volume Quota (§8.2.73)
+  if (urr->volume_quota.first) {
+    auto& vq = urr->volume_quota.second;
+    if (vq.tovol)
+      Logger::upf_n4().debug(
+          "     • Volume Quota Total: %llu bytes",
+          (unsigned long long) vq.total_volume);
+    if (vq.ulvol)
+      Logger::upf_n4().debug(
+          "     • Volume Quota UL: %llu bytes",
+          (unsigned long long) vq.uplink_volume);
+    if (vq.dlvol)
+      Logger::upf_n4().debug(
+          "     • Volume Quota DL: %llu bytes",
+          (unsigned long long) vq.downlink_volume);
+  }
+
+  // Time Quota (§8.2.74)
+  if (urr->time_quota.first)
+    Logger::upf_n4().debug(
+        "     • Time Quota: %u s", urr->time_quota.second.time_quota);
+
+  // Linked URR ID (§8.2.72)
+  if (urr->linked_urr_id.first)
+    Logger::upf_n4().debug(
+        "     • Linked URR ID: %u", urr->linked_urr_id.second.linked_urr_id);
+
   urrs.push_back(urr);
   Logger::upf_n4().debug("     • Total URRs in session: %zu", urrs.size());
 }
@@ -618,6 +700,19 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_bar> bar) {
   }
   Logger::upf_n4().info(
       "  └─ Adding new BAR %u to session " SEID_FMT, bar_id, seid);
+
+  // Downlink Data Notification Delay (§8.2.28)
+  if (bar->downlink_data_notification_delay.first)
+    Logger::upf_n4().debug(
+        "     • DDN Delay: %u × 50ms",
+        bar->downlink_data_notification_delay.second.delay_value);
+
+  // Suggested Buffering Packets Count (§8.2.100)
+  if (bar->suggested_buffering_packets_count.first)
+    Logger::upf_n4().debug(
+        "     • Suggested Buffer Packets: %u",
+        bar->suggested_buffering_packets_count.second.packet_count);
+
   bars.push_back(bar);
   Logger::upf_n4().debug("     • Total BARs in session: %zu", bars.size());
 }
@@ -745,6 +840,60 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_mar> mar) {
   }
   Logger::upf_n4().info(
       "  └─ Adding new MAR %u to session " SEID_FMT, mar_id, seid);
+
+  // Steering Functionality (§8.2.124)
+  if (mar->steering_functionality.first) {
+    uint8_t sf =
+        mar->steering_functionality.second.steering_functionality_value;
+    const char* sf_str = (sf == 0) ? "ATSSS-LL" : (sf == 1) ? "MPTCP" : "?";
+    Logger::upf_n4().debug("     • Steering Functionality: %s", sf_str);
+  }
+
+  // Steering Mode (§8.2.125)
+  if (mar->steering_mode.first) {
+    uint8_t sm         = mar->steering_mode.second.steering_mode_value;
+    const char* sm_str = (sm == 0) ? "Active-Standby" :
+                         (sm == 1) ? "Smallest Delay" :
+                         (sm == 2) ? "Load Balancing" :
+                         (sm == 3) ? "Priority-based" :
+                                     "?";
+    Logger::upf_n4().debug("     • Steering Mode: %s", sm_str);
+  }
+
+  // Access Forwarding Action Info 1 (§8.2.129)
+  if (mar->access_forwarding_action_info_1.first) {
+    auto& afai = mar->access_forwarding_action_info_1.second;
+    uint8_t prio_val =
+        afai.priority_present ? (uint8_t) afai.priority.priority_value : 0;
+    uint8_t weight_val =
+        afai.weight_present ? (uint8_t) afai.weight.weight_value : 0;
+    Logger::upf_n4().debug(
+        "     • AFAI-1: FAR=%u%s%s", afai.far_id.far_id,
+        afai.urr_id_present ?
+            fmt::format(", URR={}", afai.urr_id.urr_id).c_str() :
+            "",
+        afai.weight_present   ? fmt::format(", weight={}", weight_val).c_str() :
+        afai.priority_present ? fmt::format(", priority={}", prio_val).c_str() :
+                                "");
+  }
+
+  // Access Forwarding Action Info 2 (§8.2.130)
+  if (mar->access_forwarding_action_info_2.first) {
+    auto& afai = mar->access_forwarding_action_info_2.second;
+    uint8_t prio_val =
+        afai.priority_present ? (uint8_t) afai.priority.priority_value : 0;
+    uint8_t weight_val =
+        afai.weight_present ? (uint8_t) afai.weight.weight_value : 0;
+    Logger::upf_n4().debug(
+        "     • AFAI-2: FAR=%u%s%s", afai.far_id.far_id,
+        afai.urr_id_present ?
+            fmt::format(", URR={}", afai.urr_id.urr_id).c_str() :
+            "",
+        afai.weight_present   ? fmt::format(", weight={}", weight_val).c_str() :
+        afai.priority_present ? fmt::format(", priority={}", prio_val).c_str() :
+                                "");
+  }
+
   mars.push_back(mar);
   Logger::upf_n4().debug("     • Total MARs in session: %zu", mars.size());
 }
@@ -1891,26 +2040,36 @@ std::string pfcp_session::to_string() const {
   oss << "\n";
   oss << "  "
          "┌────────────────────────────────────────────────────────────────────"
-         "──────────────────────────────────────────────────────────────────"
-         "─────────────────────────────────┐\n";
+         "──"
+         "─────────────────────────────────────────────────────────────────────"
+         "─"
+         "───────────────────────────────────────────────────┐\n";
   oss << fmt::format(
-      "  │{:^167}│\n", fmt::format("PDU SESSION RULES - Session {:#x}", seid));
+      "  │{:^191}│\n", fmt::format("PDU SESSION RULES - Session {:#x}", seid));
   oss << "  "
-         "├────────┬───────┬───────┬────────────┬───────────┬─────────────────┬"
-         "────────────┬────────────┬───────┬────────────────────────────────┬──"
-         "──────────────────────────────┤\n";
-  oss << "  │  PDR   │  FAR  │  QER  │ Precedence │ Direction │    UE IPv4     "
-         " │   Action   │  Dest If   │  QFI  │       Create Outer Hdr         "
-         "│       Remove Outer Hdr         │\n";
+         "├────────┬───────┬───────┬───────┬───────┬───────┬────────────┬──────"
+         "─"
+         "────┬─────────────────┬────────────┬────────────┬───────┬────────────"
+         "──"
+         "──────────────────┬────────────────────────────────┤\n";
+  oss << "  │  PDR   │  FAR  │  QER  │  URR  │  BAR  │  MAR  │ Precedence │ "
+         "Direction │"
+         "    UE IPv4      │   Action   │  Dest If   │  QFI  │       Create "
+         "Outer Hdr         │       Remove Outer Hdr         │\n";
   oss << "  "
-         "├────────┼───────┼───────┼────────────┼───────────┼─────────────────┼"
-         "────────────┼────────────┼───────┼────────────────────────────────┼──"
-         "──────────────────────────────┤\n";
+         "├────────┼───────┼───────┼───────┼───────┼───────┼────────────┼──────"
+         "─"
+         "────┼─────────────────┼────────────┼────────────┼───────┼────────────"
+         "──"
+         "──────────────────┼────────────────────────────────┤\n";
 
   // Process each PDR
   for (const auto& pdr : pdrs) {
     std::shared_ptr<pfcp::pfcp_far> far = nullptr;
     std::shared_ptr<pfcp::pfcp_qer> qer = nullptr;
+    std::shared_ptr<pfcp::pfcp_urr> urr = nullptr;
+    std::shared_ptr<pfcp::pfcp_bar> bar = nullptr;
+    std::shared_ptr<pfcp::pfcp_mar> mar = nullptr;
 
     // Get associated FAR
     if (pdr->far_id.first) {
@@ -1920,6 +2079,11 @@ std::string pfcp_session::to_string() const {
     // Get associated QER
     if (pdr->qer_id.first) {
       get(pdr->qer_id.second.qer_id, qer);
+    }
+
+    // Get associated URR
+    if (pdr->urr_id.first) {
+      get(pdr->urr_id.second.urr_id, urr);
     }
 
     // PDR ID (left-aligned)
@@ -1935,6 +2099,27 @@ std::string pfcp_session::to_string() const {
     // QER ID (left-aligned)
     if (qer) {
       oss << fmt::format(" {:<5} │", qer->qer_id.second.qer_id);
+    } else {
+      oss << " -     │";
+    }
+
+    // URR ID
+    if (urr) {
+      oss << fmt::format(" {:<5} │", urr->urr_id.second.urr_id);
+    } else {
+      oss << " -     │";
+    }
+
+    // BAR ID — session-level BARs (not linked per PDR; show first BAR if any)
+    if (!bars.empty() && bars.front()->bar_id.first) {
+      oss << fmt::format(" {:<5} │", bars.front()->bar_id.second.bar_id);
+    } else {
+      oss << " -     │";
+    }
+
+    // MAR ID — session-level MARs (not linked per PDR; show first MAR if any)
+    if (!mars.empty() && mars.front()->mar_id.first) {
+      oss << fmt::format(" {:<5} │", mars.front()->mar_id.second.mar_id);
     } else {
       oss << " -     │";
     }
@@ -2123,9 +2308,11 @@ std::string pfcp_session::to_string() const {
 
   // Table footer
   oss << "  "
-         "└────────┴───────┴───────┴────────────┴───────────┴─────────────────┴"
-         "────────────┴────────────┴───────┴────────────────────────────────┴──"
-         "──────────────────────────────┘\n";
+         "└────────┴───────┴───────┴───────┴───────┴───────┴────────────┴──────"
+         "─"
+         "────┴─────────────────┴────────────┴────────────┴───────┴────────────"
+         "──"
+         "──────────────────┴────────────────────────────────┘\n";
   oss << "\n";
 
   return oss.str();

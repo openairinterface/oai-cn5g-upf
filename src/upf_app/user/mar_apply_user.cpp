@@ -73,7 +73,7 @@ void MARProgram::ConfigureMaps(struct xdp_mar_apply_kern_c* skel) {
 
 //------------------------------------------------------------------------------
 MARProgram::MARProgram() : BPFProgram() {
-  Logger::upf_app().info("Initializing MAR XDP Program...");
+  Logger::upf_app().debug("Initializing MAR XDP Program ...");
 
   auto open_fn = [this]() -> xdp_mar_apply_kern_c* {
     struct xdp_mar_apply_kern_c* s = xdp_mar_apply_kern_c__open();
@@ -92,7 +92,7 @@ MARProgram::MARProgram() : BPFProgram() {
       open_fn,
       /* load    */ xdp_mar_apply_kern_c__load,
       /* attach  */ xdp_mar_apply_kern_c__attach,
-      /* destroy */ xdp_mar_apply_kern_c__destroy);
+      /* destroy */ xdp_mar_apply_kern_c__destroy, "MARProgram");
 }
 
 //------------------------------------------------------------------------------
@@ -105,7 +105,6 @@ void MARProgram::Setup() {
   skeleton_ = lifecycle_->open();
   InitializeMaps();
   lifecycle_->load();
-  Logger::upf_app().debug("MARProgram: loaded (no attach -- stage program)");
 }
 
 //------------------------------------------------------------------------------

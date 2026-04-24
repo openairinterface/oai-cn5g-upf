@@ -78,10 +78,13 @@ typedef enum {
  *
  * Populated by userspace (SessionProgramManager) before BPF program load.
  */
+
+#define IF_NAME_MAX_LEN 16 /* IFNAMSIZ = 16, fits all Linux interface names */
+
 struct interface_config {
-  u32 ipv4_address;    /**< Interface IPv4 address (network byte order) */
-  u32 port;            /**< Port number (PFCP/N4 use; 0 for data-plane) */
-  const char* if_name; /**< Linux netdev name (e.g. "eth0", "n3upf0")   */
+  u32 ipv4_address;              /**< IPv4 address (network byte order)       */
+  u32 port;                      /**< Port (PFCP/N4); 0 for data-plane ifaces */
+  char if_name[IF_NAME_MAX_LEN]; /**< Linux netdev name, NUL-terminated       */
 };
 
 #endif /* __INTERFACES_TYPES_H__ */

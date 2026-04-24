@@ -90,7 +90,7 @@ void PdrMatchProgram::ConfigureMaps(struct xdp_pdr_match_kern_c* skel) {
 
 //------------------------------------------------------------------------------
 PdrMatchProgram::PdrMatchProgram() : BPFProgram() {
-  Logger::upf_app().info("Initializing PDR Match XDP Program...");
+  Logger::upf_app().debug("Initializing PDR Match XDP Program ...");
 
   auto open_fn = [this]() -> xdp_pdr_match_kern_c* {
     struct xdp_pdr_match_kern_c* s = xdp_pdr_match_kern_c__open();
@@ -109,7 +109,7 @@ PdrMatchProgram::PdrMatchProgram() : BPFProgram() {
       open_fn,
       /* load    */ xdp_pdr_match_kern_c__load,
       /* attach  */ xdp_pdr_match_kern_c__attach,
-      /* destroy */ xdp_pdr_match_kern_c__destroy);
+      /* destroy */ xdp_pdr_match_kern_c__destroy, "PdrMatchProgram");
 }
 
 //------------------------------------------------------------------------------
@@ -122,8 +122,6 @@ void PdrMatchProgram::Setup() {
   skeleton_ = lifecycle_->open();
   InitializeMaps();
   lifecycle_->load();
-  Logger::upf_app().debug(
-      "PdrMatchProgram: loaded (no attach -- stage program)");
 }
 
 //------------------------------------------------------------------------------

@@ -55,7 +55,7 @@ void N6EntryProgram::ConfigureMaps(struct xdp_n6_entry_kern_c* skel) {
 //------------------------------------------------------------------------------
 N6EntryProgram::N6EntryProgram(const std::string& non_gtp_interface)
     : BPFProgram(), non_gtp_interface_(non_gtp_interface) {
-  Logger::upf_app().info("Initializing N6 Entry XDP Program...");
+  Logger::upf_app().debug("Initializing N6 Entry XDP Program ...");
 
   auto open_fn = [this]() -> xdp_n6_entry_kern_c* {
     struct xdp_n6_entry_kern_c* skel = xdp_n6_entry_kern_c__open();
@@ -73,7 +73,7 @@ N6EntryProgram::N6EntryProgram(const std::string& non_gtp_interface)
       open_fn,
       /* load    */ xdp_n6_entry_kern_c__load,
       /* attach  */ xdp_n6_entry_kern_c__attach,
-      /* destroy */ xdp_n6_entry_kern_c__destroy);
+      /* destroy */ xdp_n6_entry_kern_c__destroy, "N6EntryProgram");
 }
 
 //------------------------------------------------------------------------------

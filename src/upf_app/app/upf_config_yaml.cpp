@@ -1178,14 +1178,14 @@ void upf_datapath_configuration::validate() {
 
   logger::logger_registry::get_logger(LOGGER_NAME)
       .info(
-          "Estimated BPF map memory usage: ~{} MB",
+          "Estimated BPF map memory usage: %d MB",
           static_cast<int>(total_memory_mb));
 
   // Rule 4.1: Warn if > 1GB
   if (total_memory_mb > 1024) {
     logger::logger_registry::get_logger(LOGGER_NAME)
         .warn(
-            "Estimated BPF map memory usage (~{} MB) exceeds 1GB. "
+            "Estimated BPF map memory usage (%d MB) exceeds 1GB. "
             "This is a large deployment. Ensure sufficient system resources.",
             static_cast<int>(total_memory_mb));
   }
@@ -1193,7 +1193,7 @@ void upf_datapath_configuration::validate() {
   // Rule 4.2: Error if > 8GB
   if (total_memory_mb > 8192) {
     throw std::runtime_error(fmt::format(
-        "Estimated BPF map memory usage (~{} MB) exceeds 8GB. "
+        "Estimated BPF map memory usage (%d MB) exceeds 8GB. "
         "This configuration is unsafe. Reduce session count or per-session "
         "limits.",
         static_cast<int>(total_memory_mb)));

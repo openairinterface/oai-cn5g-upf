@@ -46,17 +46,7 @@
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
 #include "arp_types.h"
-
-/* ==========================================================================
- * .rodata — runtime-configurable size constants
- * ========================================================================== */
-
-/**
- * Set by userspace via bpf_map__set_value_size() / skeleton globals
- * before skel->load(). Shared across all programs via .rodata section.
- */
-
-const volatile int MAX_ARP_ENTRIES SEC(".rodata");
+#include "upf_map_limits.h"
 
 /* ==========================================================================
  * arp_table_map

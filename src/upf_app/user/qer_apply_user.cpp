@@ -75,7 +75,7 @@ void QERProgram::ConfigureMaps(struct xdp_qer_apply_kern_c* skel) {
 
 //------------------------------------------------------------------------------
 QERProgram::QERProgram() : BPFProgram() {
-  Logger::upf_app().info("Initializing QER XDP Program...");
+  Logger::upf_app().debug("Initializing QER XDP Program ...");
 
   auto open_fn = [this]() -> xdp_qer_apply_kern_c* {
     struct xdp_qer_apply_kern_c* s = xdp_qer_apply_kern_c__open();
@@ -94,7 +94,7 @@ QERProgram::QERProgram() : BPFProgram() {
       open_fn,
       /* load    */ xdp_qer_apply_kern_c__load,
       /* attach  */ xdp_qer_apply_kern_c__attach,
-      /* destroy */ xdp_qer_apply_kern_c__destroy);
+      /* destroy */ xdp_qer_apply_kern_c__destroy, "QERProgram");
 }
 
 //------------------------------------------------------------------------------
@@ -107,7 +107,6 @@ void QERProgram::Setup() {
   skeleton_ = lifecycle_->open();
   InitializeMaps();
   lifecycle_->load();
-  Logger::upf_app().debug("QERProgram: loaded (no attach -- stage program)");
 }
 
 //------------------------------------------------------------------------------

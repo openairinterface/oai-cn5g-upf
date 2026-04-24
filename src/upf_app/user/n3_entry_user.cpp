@@ -37,25 +37,37 @@
 #include <wrappers/BPFMaps.h>
 #include "logger.hpp"
 #include "xdp_hook_section.h"
+#include "upf_xdp_limits.h"
+#include "utils/bpf_utils.hpp"
+
+using namespace oai::utils::bpf;
 
 //------------------------------------------------------------------------------
 void N3EntryProgram::ConfigureMaps(struct xdp_n3_entry_kern_c* skel) {
-  (void) skel;
-  /*
-   * All maps in xdp_n3_entry_kern.c have fixed max_entries or sized by the
-   * owning program: stats_maps.h           -> mc_stats_map             (fixed)
-   *   tail_call_dispatcher.h -> tail_call_progs_map       (fixed = 16)
-   *                          -> packet_context_map        (fixed = 1)
-   *                          -> session_rules_enabled_map (placeholder = 1,
-   *                             sized by the program that owns it to
-   * max_pdu_session) No runtime configuration needed here.
-   */
+  if (!skel) return;
+
+  /* n3_ owns session_rules_enabled_map (defined in tail_call_maps.h).
+   * Size it before load so ShareMaps gives all other programs
+   * a correctly-sized instance. */
+  ConfigureMapMaxEntries(
+      skel->maps.session_rules_enabled_map, "session_rules_enabled_map",
+      upf::GetMaxPduSessions());
+
+  /* rodata bounds constants (used by BPF program for bounds checking only,
+   * NOT for map sizing -- see upf_map_limits.h). */
+  if (skel->rodata) {
+    skel->rodata->MAX_UPF_INTERFACES = upf::GetMaxUpfInterfaces();
+    skel->rodata->MAX_UPF_REDIRECT_INTERFACES =
+        upf::GetMaxUpfRedirectInterfaces();
+    skel->rodata->MAX_ARP_ENTRIES  = upf::GetMaxArpEntries();
+    skel->rodata->MAX_PDU_SESSIONS = upf::GetMaxPduSessions();
+  }
 }
 
 //------------------------------------------------------------------------------
 N3EntryProgram::N3EntryProgram(const std::string& gtp_interface)
     : BPFProgram(), gtp_interface_(gtp_interface) {
-  Logger::upf_app().info("Initializing N3 Entry XDP Program...");
+  Logger::upf_app().debug("Initializing N3 Entry XDP Program ...");
 
   auto open_fn = [this]() -> xdp_n3_entry_kern_c* {
     struct xdp_n3_entry_kern_c* skel = xdp_n3_entry_kern_c__open();
@@ -76,7 +88,7 @@ N3EntryProgram::N3EntryProgram(const std::string& gtp_interface)
       open_fn,
       /* load    */ xdp_n3_entry_kern_c__load,
       /* attach  */ xdp_n3_entry_kern_c__attach,
-      /* destroy */ xdp_n3_entry_kern_c__destroy);
+      /* destroy */ xdp_n3_entry_kern_c__destroy, "N3EntryProgram");
 }
 
 //------------------------------------------------------------------------------

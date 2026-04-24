@@ -201,17 +201,33 @@ void UserPlaneComponent::Setup(
   const char* pdu_str =
       (flags.pdu_type == PduSessionType::Ethernet) ? "Ethernet" : "IP";
 
+  // Logger::upf_app().info(
+  //     "UPF Data Plane setup complete (PDU: %s, QoS: %s, "
+  //     "URR: %s, BAR: %s, MAR: %s, pipeline programs: %d)",
+  //     pdu_str, flags.enable_qer ? "on" : "off", flags.enable_urr ? "on" :
+  //     "off", flags.enable_bar ? "on" : "off", flags.enable_mar ? "on" :
+  //     "off", feature_count);
+
+  Logger::upf_app().info("");
+  Logger::upf_app().info(" Data Plane setup complete");
+  Logger::upf_app().info("  ├─ PDU Session Type  :  %s", pdu_str);
   Logger::upf_app().info(
-      "UPF Data Plane setup complete (PDU: %s, QoS: %s, "
-      "URR: %s, BAR: %s, MAR: %s, pipeline programs: %d)",
-      pdu_str, flags.enable_qer ? "on" : "off", flags.enable_urr ? "on" : "off",
-      flags.enable_bar ? "on" : "off", flags.enable_mar ? "on" : "off",
-      feature_count);
+      "  ├─ QoS Enforcement   :  %s", flags.enable_qer ? "✓ on" : "✗ off");
+  Logger::upf_app().info(
+      "  ├─ URR Reporting     :  %s", flags.enable_urr ? "✓ on" : "✗ off");
+  Logger::upf_app().info(
+      "  ├─ BAR Buffering     :  %s", flags.enable_bar ? "✓ on" : "✗ off");
+  Logger::upf_app().info(
+      "  ├─ MAR Steering      :  %s", flags.enable_mar ? "✓ on" : "✗ off");
+  Logger::upf_app().info("  └─ Pipeline slots    :  %d", feature_count);
+  Logger::upf_app().info("");
 
   // Display startup banners
   DisplayConfigSummary();
   DisplayNetworkInterfaces();
   DisplayDataPlaneStatus();
+  DisplayPipelineConfig(flags);
+  DisplayDataPathArchitecture(flags);
 
   std::string n3_mode = upf_xdp_program_->GetXdpModeString(upf::GetN3Iface());
   std::string n6_mode = upf_xdp_program_->GetXdpModeString(upf::GetN6Iface());

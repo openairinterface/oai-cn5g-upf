@@ -123,14 +123,6 @@ class N6EthEntryProgram : public BPFProgram {
    */
   void TearDown();
 
-  /**
-   * @brief Populate the upf_interface_map entry for a reference point.
-   *
-   * Called from Setup() for N3, N6, N4. Uses upf:: getters for addresses.
-   *
-   * @param reference_point Reference point enum value (N3, N6, N4).
-   */
-  void CreateUpfInterfaceMapEntry(reference_point_t reference_point);
 
   /** @brief Returns the container of all maps in this skeleton. */
   std::shared_ptr<BPFMaps> GetMaps();
@@ -144,7 +136,6 @@ class N6EthEntryProgram : public BPFProgram {
 
   /** @name Direct map accessors */
   ///@{
-  std::shared_ptr<BPFMap> GetUpfInterfaceMap() const;
   std::shared_ptr<BPFMap> GetRedirectInterfacesMap() const;
   std::shared_ptr<BPFMap> GetSessionByMacMap() const;
   std::shared_ptr<BPFMap> GetEthSessionMappingMap() const;
