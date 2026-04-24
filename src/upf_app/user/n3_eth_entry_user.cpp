@@ -54,7 +54,7 @@ void N3EthEntryProgram::ConfigureMaps(struct xdp_n3_eth_entry_kern_c* skel) {
 //------------------------------------------------------------------------------
 N3EthEntryProgram::N3EthEntryProgram(const std::string& gtp_interface)
     : BPFProgram(), gtp_interface_(gtp_interface) {
-  Logger::upf_app().info("Initializing N3 ETH Entry XDP Program...");
+  Logger::upf_app().debug("Initializing N3 ETH Entry XDP Program ...");
 
   auto open_fn = [this]() -> xdp_n3_eth_entry_kern_c* {
     struct xdp_n3_eth_entry_kern_c* skel = xdp_n3_eth_entry_kern_c__open();
@@ -72,7 +72,7 @@ N3EthEntryProgram::N3EthEntryProgram(const std::string& gtp_interface)
       open_fn,
       /* load    */ xdp_n3_eth_entry_kern_c__load,
       /* attach  */ xdp_n3_eth_entry_kern_c__attach,
-      /* destroy */ xdp_n3_eth_entry_kern_c__destroy);
+      /* destroy */ xdp_n3_eth_entry_kern_c__destroy, "N3EthEntryProgram");
 }
 
 //------------------------------------------------------------------------------

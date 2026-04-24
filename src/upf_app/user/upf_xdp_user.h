@@ -76,6 +76,7 @@
 #include <linux/bpf.h>
 #include <memory>
 #include <string>
+#include <initializer_list>
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
 #include <BPFProgram.h>
@@ -100,6 +101,7 @@
 #include "urr_apply_user.h"
 #include "bar_apply_user.h"
 #include "mar_apply_user.h"
+#include "startup_banner.hpp"
 
 class BPFMaps;
 class BPFMap;
@@ -303,6 +305,10 @@ class UPF_XDPProgram : public BPFProgram {
    */
   std::string GetXdpModeString(const std::string& iface) const;
 
+  /** @brief Build ordered program load info for DisplayPipelineLoadTree(). */
+  std::vector<ProgramLoadInfo> BuildPipelineLoadInfo(
+      const PipelineFeatureFlags& flags) const;
+
  private:
   // ==========================================================================
   // Internal helpers
@@ -315,6 +321,9 @@ class UPF_XDPProgram : public BPFProgram {
    * calls bpf_map__reuse_fd so both objects use the same kernel map.
    * Must be called after the primary program is loaded and before others.
    */
+  void ShareMapsOwned(
+      struct bpf_object* src, struct bpf_object* dst,
+      const std::initializer_list<const char*>& owned_maps);
   void ShareMaps(struct bpf_object* src_obj, struct bpf_object* dst_obj);
 
   /**

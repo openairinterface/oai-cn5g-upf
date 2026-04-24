@@ -49,17 +49,7 @@
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
 #include "sdf_types.h"
-
-/* ==========================================================================
- * .rodata — runtime-configurable size constants
- * ========================================================================== */
-
-/**
- * Set by userspace via bpf_map__set_value_size() / skeleton globals
- * before skel->load(). Shared across all programs via .rodata section.
- */
-const volatile int MAX_PDU_SESSIONS SEC(".rodata");
-const volatile int MAX_SDF_FILTERS_PER_PDU_SESSION SEC(".rodata");
+#include "upf_map_limits.h"
 
 /* ==========================================================================
  * sdf_filters_map

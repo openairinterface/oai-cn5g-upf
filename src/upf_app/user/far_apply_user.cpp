@@ -94,26 +94,27 @@ void FARProgram::ConfigureMaps(struct xdp_far_apply_kern_c* skel) {
 
 //------------------------------------------------------------------------------
 FARProgram::FARProgram() : BPFProgram() {
-  Logger::upf_app().info("Initializing FAR XDP Program...");
+  Logger::upf_app().debug("Initializing FAR XDP Program ...");
 
   auto open_fn = [this]() -> xdp_far_apply_kern_c* {
-    struct xdp_far_apply_kern_c* s = xdp_far_apply_kern_c__open();
-    if (!s) {
+    struct xdp_far_apply_kern_c* skel = xdp_far_apply_kern_c__open();
+    if (!skel) {
       Logger::upf_app().error("Failed to open xdp_far_apply skeleton");
       return nullptr;
     }
+
     // Configure maps and rodata before skeleton is loaded
-    this->ConfigureMaps(s);
+    this->ConfigureMaps(skel);
     // Store skeleton pointer -- available from this point onwards
-    skeleton_ = s;
-    return s;
+    skeleton_ = skel;
+    return skel;
   };
 
   lifecycle_ = std::make_shared<FarProgramLifeCycle>(
       open_fn,
       /* load    */ xdp_far_apply_kern_c__load,
       /* attach  */ xdp_far_apply_kern_c__attach,
-      /* destroy */ xdp_far_apply_kern_c__destroy);
+      /* destroy */ xdp_far_apply_kern_c__destroy, "FARProgram");
 }
 
 //------------------------------------------------------------------------------
@@ -121,15 +122,9 @@ FARProgram::~FARProgram() {}
 
 //------------------------------------------------------------------------------
 void FARProgram::Setup() {
-  /*
-   * lifecycle_->open() is idempotent: if UPF_XDPProgram already called it
-   * (to get the bpf_object for ShareMaps before loading), this returns the
-   * cached skeleton with no side effects.
-   */
   skeleton_ = lifecycle_->open();
   InitializeMaps();
   lifecycle_->load();
-  Logger::upf_app().debug("FARProgram: loaded (no attach -- stage program)");
 }
 
 //------------------------------------------------------------------------------
@@ -144,7 +139,13 @@ void FARProgram::InitializeMaps() {
     return std::make_shared<BPFMap>(maps_->GetMap(name));
   };
   /* interfaces_maps.h -- owned */
-  upf_interface_map_       = get("upf_interface_map");
+  upf_interface_map_ = get("upf_interface_map");
+  {
+    struct bpf_map* _m = skeleton_->maps.upf_interface_map;
+    Logger::upf_app().info(
+        "TRACE [FARProgram::InitializeMaps] upf_interface_map: fd=%d  max=%u",
+        _m ? bpf_map__fd(_m) : -1, _m ? bpf_map__max_entries(_m) : 0);
+  }
   redirect_interfaces_map_ = get("redirect_interfaces_map");
   /* arp_maps.h -- owned */
   arp_table_map_ = get("arp_table_map");

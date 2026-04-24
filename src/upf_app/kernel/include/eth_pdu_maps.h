@@ -64,20 +64,7 @@
 #include "upf_xdp_limits.h"
 #include "pfcp/pfcp_pdr.h"
 #include "pfcp/pfcp_far.h"
-
-/* ==========================================================================
- * .rodata — runtime-configurable size constants
- * ========================================================================== */
-
-/**
- * Set by userspace via bpf_map__set_value_size() / skeleton globals
- * before skel->load(). Shared across all programs via .rodata section.
- */
-const volatile int MAX_UPF_INTERFACES SEC(".rodata");
-const volatile int MAX_PDU_SESSIONS SEC(".rodata");
-const volatile int MAX_PDRS_PER_PDU_SESSION SEC(".rodata");
-const volatile int MAX_UPF_REDIRECT_INTERFACES SEC(".rodata");
-// const volatile int MAX_USER_EQUIPMENTS SEC(".rodata");
+#include "upf_map_limits.h"
 
 /* ==========================================================================
  * session_by_mac_map

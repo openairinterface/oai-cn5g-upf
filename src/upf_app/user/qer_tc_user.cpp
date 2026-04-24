@@ -114,7 +114,7 @@ QERTCProgram::QERTCProgram()
       default_class_rate_(1024),
       default_class_ceil_(2048),
       r2q_root_(1000) {
-  Logger::upf_app().info("Initializing QER TC BPF program...");
+  Logger::upf_app().debug("Initializing QER TC BPF program ...");
 
   // open lambda: configuration sourced from upf::g_net_cfg
   auto open_fn = [this]() -> qer_tc_kern_c* {
@@ -134,7 +134,7 @@ QERTCProgram::QERTCProgram()
       open_fn,
       /* load */ qer_tc_kern_c__load,
       /* attach */ qer_tc_kern_c__attach,
-      /* destroy */ qer_tc_kern_c__destroy);
+      /* destroy */ qer_tc_kern_c__destroy, "QERTCProgram");
 }
 
 //------------------------------------------------------------------------------

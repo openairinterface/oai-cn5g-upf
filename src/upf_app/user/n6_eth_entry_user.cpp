@@ -94,14 +94,8 @@ void N6EthEntryProgram::ConfigureMaps(struct xdp_n6_eth_entry_kern_c* skel) {
 
   bool ok = true;
 
-  /* interfaces_maps.h */
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.upf_interface_map, "upf_interface_map",
-      upf::GetMaxUpfInterfaces());
-
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.redirect_interfaces_map, "redirect_interfaces_map",
-      upf::GetMaxUpfRedirectInterfaces());
+  /* interfaces_maps.h -- upf_interface_map and redirect_interfaces_map
+   * are owned and sized by FARProgram. Do NOT size them here. */
 
   /* eth_pdu_maps.h */
   ok &= ConfigureMapMaxEntries(
@@ -147,7 +141,7 @@ void N6EthEntryProgram::ConfigureMaps(struct xdp_n6_eth_entry_kern_c* skel) {
 //------------------------------------------------------------------------------
 N6EthEntryProgram::N6EthEntryProgram(const std::string& non_gtp_interface)
     : BPFProgram(), non_gtp_interface_(non_gtp_interface) {
-  Logger::upf_app().info("Initializing N6 ETH Entry XDP Program...");
+  Logger::upf_app().debug("Initializing N6 ETH Entry XDP Program ...");
 
   auto open_fn = [this]() -> xdp_n6_eth_entry_kern_c* {
     struct xdp_n6_eth_entry_kern_c* skel = xdp_n6_eth_entry_kern_c__open();
@@ -166,7 +160,7 @@ N6EthEntryProgram::N6EthEntryProgram(const std::string& non_gtp_interface)
       open_fn,
       /* load    */ xdp_n6_eth_entry_kern_c__load,
       /* attach  */ xdp_n6_eth_entry_kern_c__attach,
-      /* destroy */ xdp_n6_eth_entry_kern_c__destroy);
+      /* destroy */ xdp_n6_eth_entry_kern_c__destroy, "N6EthEntryProgram");
 }
 
 //------------------------------------------------------------------------------
@@ -189,10 +183,9 @@ void N6EthEntryProgram::Setup() {
   redirect_interfaces_map_->Update(uplink_key, n6_ifindex, BPF_ANY);
   redirect_interfaces_map_->Update(downlink_key, n3_ifindex, BPF_ANY);
 
-  /* Populate upf_interface_map for all reference points */
-  CreateUpfInterfaceMapEntry(N3_INTERFACE);
-  CreateUpfInterfaceMapEntry(N6_INTERFACE);
-  CreateUpfInterfaceMapEntry(N4_INTERFACE);
+  /* upf_interface_map is populated by
+   * UPF_XDPProgram::CreateUpfInterfaceMapEntry after all programs are loaded.
+   * Do NOT populate it here. */
 
   Logger::upf_app().debug(
       "Link N6 ETH Entry XDP to interface %s", non_gtp_interface_.c_str());
@@ -203,41 +196,6 @@ void N6EthEntryProgram::Setup() {
 //------------------------------------------------------------------------------
 void N6EthEntryProgram::TearDown() {
   lifecycle_->tearDown();
-}
-
-//------------------------------------------------------------------------------
-void N6EthEntryProgram::CreateUpfInterfaceMapEntry(reference_point_t s) {
-  struct interface_config iface;
-  __builtin_memset(&iface, 0, sizeof(iface));
-
-  switch (s) {
-    case N3_INTERFACE:
-      iface.ipv4_address = upf::GetN3Ip();
-      iface.port         = upf::GetN3Port();
-      iface.if_name      = upf::GetN3Iface().c_str();
-      upf_interface_map_->Update(s, iface, BPF_ANY);
-      break;
-    case N6_INTERFACE:
-      iface.ipv4_address = upf::GetN6Ip();
-      iface.port         = 0;
-      iface.if_name      = upf::GetN6Iface().c_str();
-      upf_interface_map_->Update(s, iface, BPF_ANY);
-      break;
-    case N4_INTERFACE:
-      iface.ipv4_address = upf::GetN4Ip();
-      iface.port         = upf::GetN4Port();
-      iface.if_name      = upf::GetN4Iface().c_str();
-      upf_interface_map_->Update(s, iface, BPF_ANY);
-      break;
-    case N9_INTERFACE:
-      Logger::upf_app().error("Reference Point N9 not defined");
-      break;
-    case N19_INTERFACE:
-      Logger::upf_app().error("Reference Point N19 not defined");
-      break;
-    default:
-      Logger::upf_app().error("Unknown reference point %d", s);
-  }
 }
 
 //------------------------------------------------------------------------------
@@ -284,9 +242,6 @@ std::shared_ptr<BPFMaps> N6EthEntryProgram::GetMaps() {
 }
 
 //------------------------------------------------------------------------------
-std::shared_ptr<BPFMap> N6EthEntryProgram::GetUpfInterfaceMap() const {
-  return upf_interface_map_;
-}
 std::shared_ptr<BPFMap> N6EthEntryProgram::GetRedirectInterfacesMap() const {
   return redirect_interfaces_map_;
 }

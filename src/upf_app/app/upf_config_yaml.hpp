@@ -33,10 +33,10 @@ constexpr auto UPF_ENABLE_FR      = "enable_fr";
 constexpr auto UPF_ENABLE_ETH_PDU = "enable_eth_pdu";
 
 constexpr auto UPF_ENABLE_BPF_LABEL     = "Enable BPF Datapath";
-constexpr auto UPF_ENABLE_QOS_LABEL     = "Enable QoS Enforcement (QER)";
-constexpr auto UPF_ENABLE_URR_LABEL     = "Enable Usage Reporting (URR)";
-constexpr auto UPF_ENABLE_BAR_LABEL     = "Enable Buffering (BAR)";
-constexpr auto UPF_ENABLE_MAR_LABEL     = "Enable Multi Access (MAR)";
+constexpr auto UPF_ENABLE_QOS_LABEL     = "Enable QoS Enforcement  (QER)";
+constexpr auto UPF_ENABLE_URR_LABEL     = "Enable Usage Reporting  (URR)";
+constexpr auto UPF_ENABLE_BAR_LABEL     = "Enable Buffering Action (BAR)";
+constexpr auto UPF_ENABLE_MAR_LABEL     = "Enable Multi Access     (MAR)";
 constexpr auto UPF_ENABLE_SNAT_LABEL    = "Enable SNAT";
 constexpr auto UPF_ENABLE_FR_LABEL      = "Enable Framed Routing";
 constexpr auto UPF_ENABLE_ETH_PDU_LABEL = "Enable Ethernet PDU Sessions";

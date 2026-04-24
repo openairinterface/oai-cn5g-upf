@@ -74,7 +74,7 @@ void BARProgram::ConfigureMaps(struct xdp_bar_apply_kern_c* skel) {
 
 //------------------------------------------------------------------------------
 BARProgram::BARProgram() : BPFProgram() {
-  Logger::upf_app().info("Initializing BAR XDP Program...");
+  Logger::upf_app().debug("Initializing BAR XDP Program ...");
 
   auto open_fn = [this]() -> xdp_bar_apply_kern_c* {
     struct xdp_bar_apply_kern_c* s = xdp_bar_apply_kern_c__open();
@@ -93,7 +93,7 @@ BARProgram::BARProgram() : BPFProgram() {
       open_fn,
       /* load    */ xdp_bar_apply_kern_c__load,
       /* attach  */ xdp_bar_apply_kern_c__attach,
-      /* destroy */ xdp_bar_apply_kern_c__destroy);
+      /* destroy */ xdp_bar_apply_kern_c__destroy, "BARProgram");
 }
 
 //------------------------------------------------------------------------------
@@ -106,7 +106,6 @@ void BARProgram::Setup() {
   skeleton_ = lifecycle_->open();
   InitializeMaps();
   lifecycle_->load();
-  Logger::upf_app().debug("BARProgram: loaded (no attach -- stage program)");
 }
 
 //------------------------------------------------------------------------------

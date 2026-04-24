@@ -25,6 +25,36 @@ struct QosFlowInfo {
 // Must be called after Configuration::BuildNetworkConfig().
 // ==========================================================================
 
+/**
+ * @brief Display program creation tree (called from upf_xdp_user after Step 2)
+ * @param flags Pipeline feature flags
+ */
+void DisplayPipelineCreationTree(const PipelineFeatureFlags& flags);
+
+/**
+ * @brief Per-program load info for the load tree display
+ */
+struct ProgramLoadInfo {
+  std::string name;   ///< Program class name
+  size_t map_count;   ///< Number of BPF maps
+  std::string iface;  ///< Interface name (entry programs only)
+  bool is_tc;         ///< true for TC-BPF programs
+  bool is_child;      ///< true for QERTCProgram (child of QERProgram)
+};
+
+/**
+ * @brief Display program load tree with map counts (called from UPF_XDPProgram
+ *        after all programs are loaded)
+ * @param programs  Ordered list of program load info
+ */
+void DisplayPipelineLoadTree(const std::vector<ProgramLoadInfo>& programs);
+
+/**
+ * @brief Display full data-path call flow and architecture diagram
+ * @param flags Pipeline feature flags (only enabled programs are drawn)
+ */
+void DisplayDataPathArchitecture(const PipelineFeatureFlags& flags);
+
 /** @brief Display startup banner with version information */
 void DisplayStartupBanner();
 

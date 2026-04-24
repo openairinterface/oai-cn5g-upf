@@ -105,7 +105,7 @@ void SessionLookupETHProgram::ConfigureMaps(
 
 //------------------------------------------------------------------------------
 SessionLookupETHProgram::SessionLookupETHProgram() : BPFProgram() {
-  Logger::upf_app().info("Initializing SessionLookupETH XDP Program...");
+  Logger::upf_app().debug("Initializing SessionLookupETH XDP Program ...");
 
   auto open_fn = [this]() -> xdp_session_lookup_eth_kern_c* {
     struct xdp_session_lookup_eth_kern_c* s =
@@ -125,7 +125,8 @@ SessionLookupETHProgram::SessionLookupETHProgram() : BPFProgram() {
       open_fn,
       /* load    */ xdp_session_lookup_eth_kern_c__load,
       /* attach  */ xdp_session_lookup_eth_kern_c__attach,
-      /* destroy */ xdp_session_lookup_eth_kern_c__destroy);
+      /* destroy */ xdp_session_lookup_eth_kern_c__destroy,
+      "SessionLookupETHProgram");
 }
 
 //------------------------------------------------------------------------------
@@ -141,8 +142,6 @@ void SessionLookupETHProgram::Setup() {
   skeleton_ = lifecycle_->open();
   InitializeMaps();
   lifecycle_->load();
-  Logger::upf_app().debug(
-      "SessionLookupETHProgram: loaded (no attach -- stage program)");
 }
 
 //------------------------------------------------------------------------------
