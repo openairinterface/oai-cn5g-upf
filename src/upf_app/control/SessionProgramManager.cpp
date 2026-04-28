@@ -439,7 +439,8 @@ void SessionProgramManager::CreatePipeline(
               char buf_gnb_ip[INET_ADDRSTRLEN];
               struct in_addr addr_gnb_ip = {.s_addr = gnb_ip};
               inet_ntop(AF_INET, &addr_gnb_ip, buf_gnb_ip, INET_ADDRSTRLEN);
-
+              Logger::upf_app().error(
+                  "1111111111111111111111111111111111111111111");
               std::string mac =
                   UpdateArpTableForN3(upf_xdp_program, gnb_ip, upf_n3_ip, seid);
               Logger::upf_app().debug(
@@ -738,7 +739,6 @@ void SessionProgramManager::ModifyPipeline(
                 char buf_gnb_ip[INET_ADDRSTRLEN];
                 struct in_addr addr_gnb_ip = {.s_addr = gnb_ip};
                 inet_ntop(AF_INET, &addr_gnb_ip, buf_gnb_ip, INET_ADDRSTRLEN);
-
                 std::string mac = UpdateArpTableForN3(
                     upf_xdp_program, gnb_ip, upf_n3_ip, seid);
                 Logger::upf_app().debug(
