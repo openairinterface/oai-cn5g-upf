@@ -1,6 +1,3 @@
-/*
- * SPDX-License-Identifier: LicenseRef-CSSL-1.0
- */
 #include "NextHopFinder.hpp"
 
 #include <algorithm>
@@ -109,6 +106,10 @@ int NextHopFinder::sameSubnet(uint32_t local_ip_be, uint32_t remote_ip_be) {
   }
 
   const int result = (local_ip_be & mask_be) == (remote_ip_be & mask_be);
+
+  Logger::upf_app().debug(
+      "sameSubnet: local=0x%08x remote=0x%08x mask=0x%08x -> %d", local_ip_be,
+      remote_ip_be, mask_be, result);
 
   return result;
 }
@@ -249,30 +250,22 @@ ether_addr* NextHopFinder::retrieveNextHopMAC(uint32_t nextHopIp_be) {
   std::string nextHopMac;
 
   for (int attempt = 1; attempt <= MAX_RETRIES; ++attempt) {
-    // Build the arping invocation.
-    // The result is parsed via a fixed shell pipeline that extracts the
-    // first MAC-address-shaped token from arping's output. We split the
-    // command in two so that the log only shows the meaningful arping
-    // call, not the boilerplate filter pipeline.
-    std::string probe;
-    std::string filter =
-        " 2>&1 | grep -oE '([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}' | head -1";
-
+    std::string cmd;
     if (!ifname.empty()) {
-      probe = "arping -c " + std::to_string(ARPING_COUNT) + " -w " +
-              std::to_string(ARPING_TIMEOUT_SEC) + " -I " + ifname + " " +
-              ip_str;
+      cmd = "arping -c " + std::to_string(ARPING_COUNT) + " -w " +
+            std::to_string(ARPING_TIMEOUT_SEC) + " -I " + ifname + " " +
+            ip_str +
+            " 2>&1 | grep -oE '([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}' | head -1";
     } else {
       // Fallback when interface lookup failed: let arping pick the iface.
-      probe = "arping -c " + std::to_string(ARPING_COUNT) + " -w " +
-              std::to_string(ARPING_TIMEOUT_SEC) + " " + ip_str;
+      cmd = "arping -c " + std::to_string(ARPING_COUNT) + " -w " +
+            std::to_string(ARPING_TIMEOUT_SEC) + " " + ip_str +
+            " 2>&1 | grep -oE '([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}' | head -1";
     }
 
-    const std::string cmd = probe + filter;
-
     Logger::upf_app().debug(
-        "retrieveNextHopMAC: attempt %d/%d on iface='%s' probe='%s'", attempt,
-        MAX_RETRIES, ifname.c_str(), probe.c_str());
+        "retrieveNextHopMAC: attempt %d/%d on iface='%s' cmd='%s'", attempt,
+        MAX_RETRIES, ifname.c_str(), cmd.c_str());
 
     nextHopMac = CmdRunner::exec(cmd);
     rtrim_in_place(nextHopMac);
