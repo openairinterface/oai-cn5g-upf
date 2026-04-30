@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-CSSL-1.0
 // API base URL
 const API_BASE_URL = '/api';
 

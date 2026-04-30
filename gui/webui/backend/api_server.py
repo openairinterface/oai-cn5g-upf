@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
 """
 OAI-UPF Web Monitoring Backend API Service
 Provides UPF configuration, user session information, and real-time BPF statistics
