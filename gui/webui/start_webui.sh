@@ -6,7 +6,22 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/backend"
 WEBUI_DIR="$SCRIPT_DIR"
-PORT=5001
+DATA_DIR="$WEBUI_DIR/data"
+ENV_FILE="${WEBUI_ENV_FILE:-$WEBUI_DIR/.env}"
+mkdir -p "$DATA_DIR"
+
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$ENV_FILE"
+    set +a
+fi
+
+export WEBUI_CONFIG_FILE="${WEBUI_CONFIG_FILE:-$SCRIPT_DIR/../../etc/config.yaml}"
+export WEBUI_SESSIONS_FILE="${WEBUI_SESSIONS_FILE:-$DATA_DIR/sessions.json}"
+export WEBUI_NUM_USERS="${WEBUI_NUM_USERS:-10}"
+PORT="${WEBUI_PORT:-5001}"
+export WEBUI_PORT="$PORT"
 
 # Color definitions
 RED='\033[0;31m'
@@ -95,7 +110,7 @@ else
 fi
 
 # Check config file
-CONFIG_FILE="$SCRIPT_DIR/../etc/config.yaml"
+CONFIG_FILE="$WEBUI_CONFIG_FILE"
 if [ ! -f "$CONFIG_FILE" ]; then
     echo -e "${YELLOW}⚠${NC}  Warning: UPF config file not found: $CONFIG_FILE"
     echo -e "${YELLOW}   Config panel may display incomplete information${NC}"

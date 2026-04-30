@@ -21,13 +21,53 @@ app = Flask(__name__)
 CORS(app)  # Allow cross-origin requests
 
 # Configuration paths
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), "../../etc/config.yaml")
-SESSIONS_FILE = os.path.join(os.path.dirname(__file__), "../data/sessions.json")
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+REPO_ROOT = os.path.abspath(os.path.join(BASE_DIR, "..", ".."))
 
-# BPF monitoring configuration - 10 users
-NUM_USERS = 10
-TEID_BASE = 0x10
-DISPLAY_TARGET_MULTIPLIER = 1.05
+
+def load_env_file(env_file):
+    """Load simple KEY=VALUE entries from a local .env file if present."""
+    if not env_file or not os.path.exists(env_file):
+        return
+
+    with open(env_file, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip("'\"")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
+load_env_file(os.environ.get("WEBUI_ENV_FILE", os.path.join(BASE_DIR, ".env")))
+
+CONFIG_FILE = os.environ.get(
+    "WEBUI_CONFIG_FILE",
+    os.path.join(REPO_ROOT, "etc", "config.yaml"),
+)
+SESSIONS_FILE = os.environ.get(
+    "WEBUI_SESSIONS_FILE",
+    os.path.join(BASE_DIR, "data", "sessions.json"),
+)
+
+# BPF monitoring configuration
+NUM_USERS = int(os.environ.get("WEBUI_NUM_USERS", "10"))
+TEID_BASE = int(os.environ.get("WEBUI_TEID_BASE", "0x10"), 0)
+DISPLAY_TARGET_MULTIPLIER = float(
+    os.environ.get("WEBUI_DISPLAY_TARGET_MULTIPLIER", "1.05")
+)
+
+WEBUI_HOST = os.environ.get("WEBUI_HOST", "0.0.0.0")
+WEBUI_PORT = int(os.environ.get("WEBUI_PORT", "5001"))
+WEBUI_DEBUG = os.environ.get("WEBUI_DEBUG", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
 
 # User QoS configuration: 2 High + 3 Medium + 5 Low
 # Stable official-source profile
@@ -869,7 +909,7 @@ if __name__ == '__main__':
     print("=" * 60)
     print(f"Config file: {CONFIG_FILE}")
     print(f"Session data: {SESSIONS_FILE}")
-    print(f"Access URL: http://0.0.0.0:5001")
+    print(f"Access URL: http://{WEBUI_HOST}:{WEBUI_PORT}")
     print("=" * 60)
 
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    app.run(host=WEBUI_HOST, port=WEBUI_PORT, debug=WEBUI_DEBUG)

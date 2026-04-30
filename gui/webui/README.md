@@ -65,8 +65,7 @@ This means:
 gui/webui/
 ├── backend/
 │   └── api_server.py       # Flask backend API
-├── data/
-│   └── .gitkeep            # Placeholder for optional runtime metadata
+├── data/                  # Runtime directory created on demand
 ├── frontend/
 │   ├── index.html          # WebUI page
 │   ├── app.js              # Frontend logic
@@ -93,6 +92,30 @@ Then open:
 - `http://<UPF-host-ip>:5001`
 
 Run with `sudo` so the backend can access `bpftool`, `tc`, and interface statistics when required by the environment.
+
+## Environment Variables
+
+The WebUI backend can be configured through environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `WEBUI_ENV_FILE` | `gui/webui/.env` | Optional local environment file loaded by `start_webui.sh` |
+| `WEBUI_CONFIG_FILE` | `../../etc/config.yaml` from `gui/webui/` | UPF configuration file path |
+| `WEBUI_SESSIONS_FILE` | `gui/webui/data/sessions.json` | Optional PFCP session metadata file |
+| `WEBUI_NUM_USERS` | `10` | Number of users monitored by the WebUI |
+| `WEBUI_TEID_BASE` | `0x10` | Base TEID used for user mapping |
+| `WEBUI_DISPLAY_TARGET_MULTIPLIER` | `1.05` | Display multiplier used for expected QoS targets |
+| `WEBUI_HOST` | `0.0.0.0` | Flask bind address |
+| `WEBUI_PORT` | `5001` | Flask listen port |
+| `WEBUI_DEBUG` | `true` | Enable or disable Flask debug mode |
+
+These variables can be exported from the shell or placed in a local `.env` file under `gui/webui/`. The `.env` file is intended to remain local and should not be committed.
+
+Example:
+
+```bash
+sudo WEBUI_NUM_USERS=50 WEBUI_PORT=5001 ./start_webui.sh
+```
 
 ## Data Sources
 
