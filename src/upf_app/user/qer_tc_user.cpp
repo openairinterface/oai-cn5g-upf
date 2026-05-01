@@ -376,7 +376,11 @@ void QERProgram::Setup(
 
         uint64_t dl_rate = 1;
 
-        if (not qer->guaranteed_bitrate.first) {
+        if (qer->guaranteed_bitrate.first) {
+          // GBR present: use the SMF-provided GBR value
+          dl_rate = std::max(qer->guaranteed_bitrate.second.dl_gbr, 1UL);
+        } else {
+          // GBR absent: fallback to 80% of MBR
           dl_rate = std::max(static_cast<unsigned long>(dl_ceil * 0.8), 1UL);
           Logger::upf_app().warn("QoS Flow missing GBR: set it to 0.8 x MBR");
         }
