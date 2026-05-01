@@ -127,8 +127,8 @@ static u32 cached_n6_ip = 0;
 /**
  * @brief Cached MAC addresses for next-hop routing
  */
-static u8 cached_n3_next_hop_mac[ETH_ALEN] = {0};
-static u8 cached_n6_next_hop_mac[ETH_ALEN] = {0};
+// static u8 cached_n3_next_hop_mac[ETH_ALEN] = {0};
+// static u8 cached_n6_next_hop_mac[ETH_ALEN] = {0};
 
 /**
  * @brief Cache validity flags
@@ -150,6 +150,11 @@ static bool n6_cache_valid = false;
 
 // //#define MAX_PDRS_PER_SESSION 32
 
+/*
+ * NOTE: Next-hop MAC is NOT cached anymore.
+ * It must be looked up per-packet using the per-session peer IP from FAR,
+ * because a UPF may talk to several gNBs (one per session).
+ */
 /* ========================================================================== */
 /*                              VLAN SUPPORT                                  */
 /* ========================================================================== */
@@ -321,8 +326,51 @@ gtpu_encap_ipv4(struct xdp_md* ctx, struct pfcp_far* far, u8 qfi) {
   void* data_end = (void*) (long) ctx->data_end;
 
   /* Get next-hop MAC for N3 */
+  // if (!n3_cache_valid) {
+  //   // Retrieve N3 interface configuration
+  //   reference_point_t iface_key = N3_INTERFACE;
+  //   struct interface_config* iface =
+  //       bpf_map_lookup_elem(&upf_interface_map, &iface_key);
+
+  //   if (!iface) {
+  //     bpf_debug("N3 interface not configured");
+  //     return RET_FAILURE;
+  //   }
+
+  //   cached_n3_ip   = iface->ipv4_address;
+  //   n3_cache_valid = true;
+
+  //   struct arp_entry* arp = {0};
+  //   arp                   = bpf_map_lookup_elem(&arp_table_map,
+  //   &cached_n3_ip);
+
+  //   if (!arp) {
+  //     bpf_debug("N3 next-hop MAC not found");
+  //     return RET_FAILURE;
+  //   }
+
+  //   __builtin_memcpy(cached_n3_next_hop_mac, arp->mac_address, ETH_ALEN);
+  // }
+
+  /*
+   * Per-session next-hop MAC resolution.
+   * The peer IP (gNB) is taken from the FAR's outer header creation,
+   * which is per-PDR/per-session. This guarantees that each session
+   * is forwarded to its own gNB even when several gNBs are attached
+   * to the UPF concurrently.
+   */
+  u32 peer_gnb_ip =
+      far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
+
+  struct arp_entry* arp = bpf_map_lookup_elem(&arp_table_map, &peer_gnb_ip);
+
+  if (!arp) {
+    bpf_debug("N3 next-hop MAC not found for gNB %pI4", &peer_gnb_ip);
+    return RET_FAILURE;
+  }
+
+  /* Cache the local N3 IP only (it is unique per UPF) */
   if (!n3_cache_valid) {
-    // Retrieve N3 interface configuration
     reference_point_t iface_key = N3_INTERFACE;
     struct interface_config* iface =
         bpf_map_lookup_elem(&upf_interface_map, &iface_key);
@@ -334,16 +382,6 @@ gtpu_encap_ipv4(struct xdp_md* ctx, struct pfcp_far* far, u8 qfi) {
 
     cached_n3_ip   = iface->ipv4_address;
     n3_cache_valid = true;
-
-    struct arp_entry* arp = {0};
-    arp                   = bpf_map_lookup_elem(&arp_table_map, &cached_n3_ip);
-
-    if (!arp) {
-      bpf_debug("N3 next-hop MAC not found");
-      return RET_FAILURE;
-    }
-
-    __builtin_memcpy(cached_n3_next_hop_mac, arp->mac_address, ETH_ALEN);
   }
 
   /*
@@ -367,7 +405,9 @@ gtpu_encap_ipv4(struct xdp_md* ctx, struct pfcp_far* far, u8 qfi) {
   __builtin_memcpy(eth_outer, eth_inner, sizeof(*eth_outer));
 
   /* Update destination MAC to N3 next-hop */
-  __builtin_memcpy(eth_outer->h_dest, cached_n3_next_hop_mac, ETH_ALEN);
+  //__builtin_memcpy(eth_outer->h_dest, cached_n3_next_hop_mac, ETH_ALEN);
+
+  __builtin_memcpy(eth_outer->h_dest, arp->mac_address, ETH_ALEN);
 
   // bpf_debug(
   //     "Destination MAC:%x:%x:%x:", ethh->h_dest[0], ethh->h_dest[1],
@@ -536,8 +576,52 @@ gtpu_decap_ipv4(struct xdp_md* ctx, struct pfcp_far* far) {
   __builtin_memcpy(eth_inner, eth_outer, sizeof(*eth_inner));
 
   /* Get next-hop MAC for N6 */
+  // if (!n6_cache_valid) {
+  //   /* Retrieve N6 interface configuration */
+  //   reference_point_t iface_key = N6_INTERFACE;
+  //   struct interface_config* iface =
+  //       bpf_map_lookup_elem(&upf_interface_map, &iface_key);
+
+  //   if (!iface) {
+  //     bpf_debug("N6 interface not configured");
+  //     return RET_FAILURE;
+  //   }
+
+  //   cached_n6_ip   = iface->ipv4_address;
+  //   n6_cache_valid = true;
+
+  //   struct arp_entry* arp = {0};
+  //   arp                   = bpf_map_lookup_elem(&arp_table_map,
+  //   &cached_n6_ip);
+
+  //   if (!arp) {
+  //     bpf_debug("N6 next-hop MAC not found");
+  //     return RET_FAILURE;
+  //   }
+
+  //   __builtin_memcpy(cached_n6_next_hop_mac, arp->mac_address, ETH_ALEN);
+  // }
+
+  // /* Update destination MAC */
+  // memcpy(eth_inner->h_dest, cached_n6_next_hop_mac,
+  // sizeof(eth_inner->h_dest));
+
+  /*
+   * Per-session next-hop MAC resolution for N6.
+   * NOTE: For uplink, the N6 next-hop is typically a single gateway
+   * (DN ingress router), so the previous global cache happened to work.
+   * However, in deployments with multiple DNs (multiple DNNs), the
+   * next-hop varies per session. We therefore do a per-packet lookup
+   * keyed by the FAR's outer-header creation IP if present, falling
+   * back to the cached N6 IP otherwise.
+   *
+   * IMPORTANT: For uplink decapsulation, the FAR may not carry an
+   * outer-header creation (the packet is being de-encapsulated, not
+   * encapsulated), so we use a per-DN routing key. For now, we keep
+   * keying on the N6 local IP — this is a known limitation that should
+   * be addressed when multi-DN support is added.
+   */
   if (!n6_cache_valid) {
-    /* Retrieve N6 interface configuration */
     reference_point_t iface_key = N6_INTERFACE;
     struct interface_config* iface =
         bpf_map_lookup_elem(&upf_interface_map, &iface_key);
@@ -549,20 +633,25 @@ gtpu_decap_ipv4(struct xdp_md* ctx, struct pfcp_far* far) {
 
     cached_n6_ip   = iface->ipv4_address;
     n6_cache_valid = true;
-
-    struct arp_entry* arp = {0};
-    arp                   = bpf_map_lookup_elem(&arp_table_map, &cached_n6_ip);
-
-    if (!arp) {
-      bpf_debug("N6 next-hop MAC not found");
-      return RET_FAILURE;
-    }
-
-    __builtin_memcpy(cached_n6_next_hop_mac, arp->mac_address, ETH_ALEN);
   }
 
-  /* Update destination MAC */
-  memcpy(eth_inner->h_dest, cached_n6_next_hop_mac, sizeof(eth_inner->h_dest));
+  /*
+   * Resolve N6 next-hop MAC.
+   * In single-DN deployments this resolves the gateway towards the DN.
+   * The userspace populates arp_table_map with key = N6 gateway IP
+   * (NOT the local N6 IP).
+   */
+  /* TODO: replace cached_n6_ip with FAR-provided next-hop IP for
+   * multi-DN deployments. */
+  struct arp_entry* arp = bpf_map_lookup_elem(&arp_table_map, &cached_n6_ip);
+
+  if (!arp) {
+    bpf_debug("N6 next-hop MAC not found");
+    return RET_FAILURE;
+  }
+
+  memcpy(eth_inner->h_dest, arp->mac_address, ETH_ALEN);
+
   bpf_debug("Dst MAC: %pM", eth_inner->h_dest);
   // bpf_debug(
   //     "Destination MAC  %x:%x:%x:", new_ethh->h_dest[0], new_ethh->h_dest[1],
