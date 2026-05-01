@@ -2224,10 +2224,18 @@ std::string SessionProgramManager::UpdateArpTableForN3(
     memcpy(entry.mac_address, remote_mac, ETH_ALEN);
     entry.ipv4_address = ip_for_mac_lookup;
 
+    /*
+     * Bug fix: the key must be the peer IP (gNB),
+     * not the UPF's local IP.
+     * Otherwise every session overwrites the same entry.
+     *
+     */
+    uint32_t arp_key = ip_for_mac_lookup;  // = gNB IP in kernel byte order
+
     // Update ARP table in BPF map
     auto arp_table_map = upf_xdp_program->GetMapByName("arp_table_map");
     if (arp_table_map) {
-      arp_table_map->Update(upf_n3_ip, entry, BPF_ANY);
+      arp_table_map->Update(arp_key, entry, BPF_ANY);
     }
 
     for (auto it = pfcp_programs->begin(); it != pfcp_programs->end(); ++it) {
@@ -2237,7 +2245,7 @@ std::string SessionProgramManager::UpdateArpTableForN3(
       if (savedSeid == seid) {
         auto arp_table_map = upf_xdp_program->GetMapByName("arp_table_map");
         if (arp_table_map) {
-          arp_table_map->Update(upf_n3_ip, entry, BPF_ANY);
+          arp_table_map->Update(arp_key, entry, BPF_ANY);
         } else {
           Logger::upf_app().error("UpdateArpTable: arp_table map not found");
         }
