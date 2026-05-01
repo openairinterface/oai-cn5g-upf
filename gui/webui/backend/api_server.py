@@ -16,6 +16,7 @@ import socket
 from datetime import datetime
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
+from dotenv import load_dotenv
 
 app = Flask(__name__)
 CORS(app)  # Allow cross-origin requests
@@ -25,24 +26,10 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 REPO_ROOT = os.path.abspath(os.path.join(BASE_DIR, "..", ".."))
 
 
-def load_env_file(env_file):
-    """Load simple KEY=VALUE entries from a local .env file if present."""
-    if not env_file or not os.path.exists(env_file):
-        return
-
-    with open(env_file, "r") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            key = key.strip()
-            value = value.strip().strip("'\"")
-            if key and key not in os.environ:
-                os.environ[key] = value
-
-
-load_env_file(os.environ.get("WEBUI_ENV_FILE", os.path.join(BASE_DIR, ".env")))
+load_dotenv(
+    os.environ.get("WEBUI_ENV_FILE", os.path.join(BASE_DIR, ".env")),
+    override=False,
+)
 
 CONFIG_FILE = os.environ.get(
     "WEBUI_CONFIG_FILE",
