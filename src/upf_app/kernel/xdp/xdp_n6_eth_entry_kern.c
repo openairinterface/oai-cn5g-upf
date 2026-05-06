@@ -88,6 +88,7 @@
 #include "utils/csum.h"
 #include "utils/logger.h"
 #include "utils/bpf_utils.h"
+#include "utils/mac_resolution.h"
 
 /* Protocol headers (for IP_CSUM_OFFSET and struct definitions) */
 #include "protocols/eth.h"

@@ -163,7 +163,8 @@ gtpu_encap_ipv4(struct xdp_md* ctx, struct pfcp_far* far, u8 qfi) {
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
 
-  /* Resolve N3 next-hop MAC (cached after first lookup) */
+  /* Cache UPF N3 source IP (used as outer ip_saddr below). It never changes,
+   * so caching is fine. */
   if (!n3_cache_valid) {
     reference_point_t iface_key = N3_INTERFACE;
     struct interface_config* iface =
@@ -173,18 +174,33 @@ gtpu_encap_ipv4(struct xdp_md* ctx, struct pfcp_far* far, u8 qfi) {
       bpf_debug("N3 interface not configured");
       return RET_FAILURE;
     }
-
     cached_n3_ip   = iface->ipv4_address;
     n3_cache_valid = true;
-
-    struct arp_entry* arp = bpf_map_lookup_elem(&arp_table_map, &cached_n3_ip);
-
-    if (!arp) {
-      bpf_debug("N3 next-hop MAC not found in ARP table");
-      return RET_FAILURE;
-    }
-    __builtin_memcpy(cached_n3_next_hop_mac, arp->mac_address, ETH_ALEN);
   }
+
+  /* Resolve next-hop MAC PER PACKET, keyed by the gNB IP from the FAR.
+   *
+   * Userspace (SessionProgramManager::UpdateArpTableForN3) writes
+   * arp_table_map[gNB_ip] = {gNB_MAC, gNB_ip}. The previous code looked up
+   * by `cached_n3_ip` (UPF's own N3 IP) which is never a key in the map
+   * since the user-side fix at SessionProgramManager.cpp:2231 -- so the
+   * lookup silently failed and the GTP-U packet left demo-n3 with a zero
+   * destination MAC, dropped by the bridge before reaching the gNB.
+   *
+   * Caching the MAC by `cached_n3_ip` was also unsound for multi-gNB
+   * deployments (one cache slot, many possible peers). Doing the lookup
+   * per-packet costs one HASH map_lookup_elem -- cheap on the hot path. */
+  u32 next_hop_n3_ip =
+      far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
+  struct arp_entry* arp =
+      bpf_map_lookup_elem(&arp_table_map, &next_hop_n3_ip);
+  if (!arp) {
+    bpf_debug(
+        "N3 next-hop MAC not found in ARP table for gNB %pI4",
+        &next_hop_n3_ip);
+    return RET_FAILURE;
+  }
+  __builtin_memcpy(cached_n3_next_hop_mac, arp->mac_address, ETH_ALEN);
 
   /*
  |----------------------------------------------------------------|
@@ -562,13 +578,21 @@ int far_apply(struct xdp_md* ctx) {
 
       pctx->final_action = FINAL_ACTION_REDIRECT_UL;
 
-      /* Dispatch: [QER] → [URR] → [MAR] → redirect */
-      bool qer_needed = (flags & RULE_QER_ENABLED) != 0;
+      /* Dispatch: [URR] → [MAR] → redirect.
+       *
+       * QER is intentionally skipped on UL: there is no rate enforcement on
+       * the uplink data path (no TC HTB on the N6 egress), so calling QER
+       * would only do a UL-gate check that is OPEN in all production
+       * configurations. URR is still chained (volume/time accounting is
+       * direction-aware in 3GPP TS 29.244 §8.2.46) and MAR likewise. To
+       * re-enable UL QER processing later, replace `false` with
+       * `(flags & RULE_QER_ENABLED) != 0` and re-introduce a UL-QoS TC
+       * stage.
+       */
+      dispatch_after_far(ctx, flags, false /* qer_needed -- UL skips QER */);
 
-      dispatch_after_far(ctx, flags, qer_needed);
-
-      /* All disabled - redirect directly to N6 */
-      bpf_debug("Direct redirect to N6 (no downstream rules)");
+      /* No downstream tail call fired -- redirect directly to N6 */
+      bpf_debug("UL: redirect to N6 (slot UPLINK)");
       return xdp_stats_record_action(
           ctx, bpf_redirect_map(&redirect_interfaces_map, UPLINK, 0));
 

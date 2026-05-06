@@ -625,6 +625,12 @@ bool SessionManager::AddPdr(
     CategorizePdrs(session);
     SortPdrs(session->pdrs_uplink);
     SortPdrs(session->pdrs_downlink);
+    for (int i = 0; i++; i < session->pdrs.size()) {
+      Logger::upf_app().error(
+          "xxxxxxxxxxxxxxxxXXXXXXXXXXXxxxxxx PDR ID: %d "
+          "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+          session->pdrs[i]->pdr_id.rule_id);
+    }
 
     // Update BPF maps
     session_program_manager_->CreatePipeline(session);

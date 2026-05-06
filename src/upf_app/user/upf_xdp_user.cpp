@@ -163,64 +163,36 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   if (bar_) bar_->GetLifeCycle()->open();
   if (mar_) mar_->GetLifeCycle()->open();
 
-  /* ── Step 2: Load far_ FIRST
-   *   far_ owns upf_interface_map / arp_table_map / redirect_interfaces_map.
-   *   Loading it now creates those kernel maps with the correct max_entries
-   *   (set by FARProgram::ConfigureMaps via bpf_map__set_max_entries).
-   */
-  far_->GetLifeCycle()->load();
-  Logger::upf_app().info("UPF_XDPProgram: far_ loaded (map owner)");
-
-  /* ── Step 3: Share far_-owned maps to ALL other programs BEFORE they load.
-   *   bpf_map__reuse_fd must be called before bpf_object__load.
-   *   Targets: n3_, n6_, sl_ip_, pdr_, qer_, urr_, bar_, mar_
-   */
-  /* far_ owns: upf_interface_map, arp_table_map, redirect_interfaces_map.
-   * Share ONLY these to avoid overwriting maps owned by other programs. */
-  const std::initializer_list<const char*> far_owned = {
-      "upf_interface_map", "arp_table_map", "redirect_interfaces_map"};
-  struct bpf_object* far_obj = far_->GetBpfObject();
-  if (!is_eth) {
-    ShareMapsOwned(far_obj, n3_->GetBpfObject(), far_owned);
-    ShareMapsOwned(far_obj, n6_->GetBpfObject(), far_owned);
-  } else {
-    ShareMapsOwned(far_obj, n3_eth_->GetBpfObject(), far_owned);
-    ShareMapsOwned(far_obj, n6_eth_->GetBpfObject(), far_owned);
-  }
-  if (sl_ip_) ShareMapsOwned(far_obj, sl_ip_->GetBpfObject(), far_owned);
-  if (sl_eth_) ShareMapsOwned(far_obj, sl_eth_->GetBpfObject(), far_owned);
-  ShareMapsOwned(far_obj, pdr_->GetBpfObject(), far_owned);
-  ShareMapsOwned(far_obj, n3_->GetBpfObject(), far_owned);
-  if (qer_) ShareMapsOwned(far_obj, qer_->GetBpfObject(), far_owned);
-  if (urr_) ShareMapsOwned(far_obj, urr_->GetBpfObject(), far_owned);
-  if (bar_) ShareMapsOwned(far_obj, bar_->GetBpfObject(), far_owned);
-  if (mar_) ShareMapsOwned(far_obj, mar_->GetBpfObject(), far_owned);
-  Logger::upf_app().debug(
-      "ShareMaps: far_-owned maps shared "
-      "(upf_interface/arp_table/redirect_interfaces)");
-
-  /* ── Step 4: Load n3_ (primary entry)
-   *   n3_ owns packet_context_map, tail_call_progs_map,
-   *   session_rules_enabled_map, mc_stats_map.
-   *   It reuses far_'s upf_interface_map (reuse_fd done in Step 3).
+  /* ── Step 2: Load the n3 primary FIRST so it materialises its owned maps.
+   *   n3_ owns: packet_context_map, tail_call_progs_map,
+   *             session_rules_enabled_map, mc_stats_map.
+   *   These must be created before we redirect any peer's symbols at them,
+   *   because bpf_map__reuse_fd() only works while the target object is
+   *   still unloaded.
    */
   if (!is_eth) {
     n3_->GetLifeCycle()->load();
-    Logger::upf_app().info("UPF_XDPProgram: n3_entry loaded");
+    Logger::upf_app().info(
+        "UPF_XDPProgram: n3_entry loaded (n3_owned creator)");
   } else {
     n3_eth_->GetLifeCycle()->load();
-    Logger::upf_app().info("UPF_XDPProgram: n3_eth_entry loaded");
+    Logger::upf_app().info(
+        "UPF_XDPProgram: n3_eth_entry loaded (n3_owned creator)");
   }
 
-  /* ── Step 5: Share n3_-owned maps to ALL other programs BEFORE they load. */
-  /* n3_ owns: packet_context_map, tail_call_progs_map,
-   *            session_rules_enabled_map, mc_stats_map.
-   * Share ONLY these to avoid overwriting maps owned by other programs. */
+  /* ── Step 3: Share n3_-owned maps to ALL other programs (far_ included)
+   *   BEFORE they load. far_ MUST receive these here -- once it is loaded
+   *   in Step 5, bpf_map__reuse_fd() against its bpf_object becomes a
+   *   silent no-op and far_apply ends up with private dead copies of
+   *   tail_call_progs_map / packet_context_map / mc_stats_map /
+   *   session_rules_enabled_map.
+   */
   const std::initializer_list<const char*> n3_owned = {
       "packet_context_map", "tail_call_progs_map", "session_rules_enabled_map",
       "mc_stats_map"};
   struct bpf_object* primary =
       !is_eth ? n3_->GetBpfObject() : n3_eth_->GetBpfObject();
+  ShareMapsOwned(primary, far_->GetBpfObject(), n3_owned);
   if (!is_eth)
     ShareMapsOwned(primary, n6_->GetBpfObject(), n3_owned);
   else
@@ -228,14 +200,89 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   if (sl_ip_) ShareMapsOwned(primary, sl_ip_->GetBpfObject(), n3_owned);
   if (sl_eth_) ShareMapsOwned(primary, sl_eth_->GetBpfObject(), n3_owned);
   ShareMapsOwned(primary, pdr_->GetBpfObject(), n3_owned);
-  ShareMapsOwned(primary, far_->GetBpfObject(), n3_owned);
   if (qer_) ShareMapsOwned(primary, qer_->GetBpfObject(), n3_owned);
   if (urr_) ShareMapsOwned(primary, urr_->GetBpfObject(), n3_owned);
   if (bar_) ShareMapsOwned(primary, bar_->GetBpfObject(), n3_owned);
   if (mar_) ShareMapsOwned(primary, mar_->GetBpfObject(), n3_owned);
+  Logger::upf_app().debug(
+      "ShareMaps: n3_-owned maps shared "
+      "(packet_context/tail_call_progs/session_rules_enabled/mc_stats)");
+
+  /* ── Step 4a: Load the IP session-lookup primary (sl_ip_) BEFORE far_/pdr_/
+   *   qer_/urr_ so that pipeline_maps.h-declared maps are created with the
+   *   correct sizes (set by SessionLookupIPProgram::ConfigureMaps in open())
+   *   and can then be shared into the other programs' bpf_objects via
+   *   bpf_map__reuse_fd while they are still unloaded.
+   *
+   *   Owned by sl_ip_:
+   *     session_by_ue_ip_map, pdrs_per_session_map, session_qos_enabled_map,
+   *     rules_match_pdr_map, m_framed_route_mapping (sized in ConfigureMaps),
+   *     framed_routing_flag, feature_dispatch_map (placeholder size 1).
+   *
+   *   ETH path: xdp_session_lookup_eth_kern.c does not include pipeline_maps.h,
+   *   so there is nothing to share. Skip Step 4a/4b in that case.
+   */
+  if (sl_ip_) {
+    sl_ip_->GetLifeCycle()->load();
+    Logger::upf_app().info(
+        "UPF_XDPProgram: sl_ip loaded (pipeline_owned creator)");
+
+    /* ── Step 4b: Share sl_ip_-owned pipeline maps to all peers BEFORE they
+     *   load. n6_ / n3_ / n6_eth_ / n3_eth_ do not include pipeline_maps.h,
+     *   so no share is needed for them.
+     */
+    const std::initializer_list<const char*> pipeline_owned = {
+        "session_by_ue_ip_map", "pdrs_per_session_map",
+        "session_qos_enabled_map", "rules_match_pdr_map",
+        "m_framed_route_mapping", "framed_routing_flag",
+        "feature_dispatch_map"};
+    struct bpf_object* sl_obj = sl_ip_->GetBpfObject();
+    ShareMapsOwned(sl_obj, far_->GetBpfObject(), pipeline_owned);
+    ShareMapsOwned(sl_obj, pdr_->GetBpfObject(), pipeline_owned);
+    if (qer_) ShareMapsOwned(sl_obj, qer_->GetBpfObject(), pipeline_owned);
+    if (urr_) ShareMapsOwned(sl_obj, urr_->GetBpfObject(), pipeline_owned);
+    if (bar_) ShareMapsOwned(sl_obj, bar_->GetBpfObject(), pipeline_owned);
+    if (mar_) ShareMapsOwned(sl_obj, mar_->GetBpfObject(), pipeline_owned);
+    Logger::upf_app().debug(
+        "ShareMaps: pipeline_maps.h maps shared from sl_ip_ "
+        "(session_by_ue_ip / pdrs_per_session / rules_match_pdr / "
+        "session_qos_enabled / m_framed_route / framed_routing_flag / "
+        "feature_dispatch)");
+  }
+
+  /* ── Step 4: Load far_ now that its n3_-owned symbols point at n3_'s maps
+   *   and its pipeline_maps.h-declared symbols (in IP mode) point at sl_ip_'s.
+   *   far_ creates its own kernel maps for upf_interface_map, arp_table_map,
+   *   redirect_interfaces_map (sized by FARProgram::ConfigureMaps in open()).
+   */
+  far_->GetLifeCycle()->load();
+  Logger::upf_app().info("UPF_XDPProgram: far_ loaded (far_owned creator)");
+
+  /* ── Step 5: Share far_-owned maps to ALL other programs BEFORE they load.
+   *   far_ owns upf_interface_map, arp_table_map, redirect_interfaces_map.
+   */
+  const std::initializer_list<const char*> far_owned = {
+      "upf_interface_map", "arp_table_map", "redirect_interfaces_map"};
+  struct bpf_object* far_obj = far_->GetBpfObject();
+  if (!is_eth)
+    ShareMapsOwned(far_obj, n6_->GetBpfObject(), far_owned);
+  else
+    ShareMapsOwned(far_obj, n6_eth_->GetBpfObject(), far_owned);
+  if (sl_ip_) ShareMapsOwned(far_obj, sl_ip_->GetBpfObject(), far_owned);
+  if (sl_eth_) ShareMapsOwned(far_obj, sl_eth_->GetBpfObject(), far_owned);
+  ShareMapsOwned(far_obj, pdr_->GetBpfObject(), far_owned);
+  if (qer_) ShareMapsOwned(far_obj, qer_->GetBpfObject(), far_owned);
+  if (urr_) ShareMapsOwned(far_obj, urr_->GetBpfObject(), far_owned);
+  if (bar_) ShareMapsOwned(far_obj, bar_->GetBpfObject(), far_owned);
+  if (mar_) ShareMapsOwned(far_obj, mar_->GetBpfObject(), far_owned);
+  /* n3_ is already loaded by Step 2, so reuse_fd against it is no longer
+   * possible. That is harmless here: xdp_n3_entry_kern.c does not include
+   * interfaces_maps.h or arp_maps.h and therefore declares none of
+   * upf_interface_map / arp_table_map / redirect_interfaces_map -- so it
+   * does not need them shared. */
   Logger::upf_app().info("UPF_XDPProgram: map sharing complete");
 
-  /* Step 5: Each remaining program manages its own lifecycle
+  /* ── Step 6: Each remaining program manages its own lifecycle.
    * The secondary entry program calls Setup() -- its full lifecycle:
    *   open(idempotent) + InitializeMaps + load + attach + link.
    * Stage programs call Setup() -- their public program-level lifecycle:
@@ -267,7 +314,7 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   DisplayPipelineLoadTree(BuildPipelineLoadInfo(flags));
   Logger::upf_app().info("UPF_XDPProgram: all programs loaded");
 
-  /* Step 6: Wrap the primary skeleton's 4 infrastructure maps
+  /* ── Step 7: Wrap the primary skeleton's 4 infrastructure maps.
    * tail_call_progs_map, packet_context_map, session_rules_enabled_map,
    * mc_stats_map -- present in both n3_entry and n3_eth_entry skeletons.
    */
@@ -295,10 +342,10 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
     }
   }
 
-  /* Step 7: Complete the PRIMARY entry program's lifecycle
-   * The primary was opened+loaded manually in Step 3. Now attach and link
-   * it to complete its lifecycle. The secondary already did its full
-   * lifecycle via Setup() in Step 5 (open+InitMaps+load+attach+link).
+  /* ── Step 8: Complete the PRIMARY entry program's lifecycle.
+   * The primary was opened in Step 1b and loaded manually in Step 2. Now
+   * attach and link it to complete its lifecycle. The secondary already did
+   * its full lifecycle via Setup() in Step 6 (open+InitMaps+load+attach+link).
    * upf_interface_map is populated by CreateUpfInterfaceMapEntry below
    * for both IP and ETH paths. far_ is the owner for both paths.
    */
@@ -311,6 +358,44 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
     CreateUpfInterfaceMapEntry(N3_INTERFACE);
     CreateUpfInterfaceMapEntry(N6_INTERFACE);
     CreateUpfInterfaceMapEntry(N4_INTERFACE);
+
+    /* Populate redirect_interfaces_map (DEVMAP) for the IP-PDU path.
+     * far_apply.c terminates each direction with
+     *   bpf_redirect_map(&redirect_interfaces_map, UPLINK, 0)   // UL → N6
+     *   bpf_redirect_map(&redirect_interfaces_map, DOWNLINK, 0) // DL → N3
+     * which fails silently (packet drop) if the slot is empty. The ETH-PDU
+     * path already does this in n6_eth_entry_user.cpp; the IP path was
+     * missing it.
+     *
+     * FlowDirection enum (kernel/include/linux/custom_types.h):
+     *   DOWNLINK = 0  -- redirect to N3 (gtp_interface_)
+     *   UPLINK   = 1  -- redirect to N6 (non_gtp_interface_)
+     */
+    auto redir = far_ ? far_->GetRedirectInterfacesMap() : nullptr;
+    if (redir) {
+      uint32_t n3_ifindex = if_nametoindex(gtp_interface_.c_str());
+      uint32_t n6_ifindex = if_nametoindex(non_gtp_interface_.c_str());
+      if (n3_ifindex == 0 || n6_ifindex == 0) {
+        Logger::upf_app().error(
+            "redirect_interfaces_map: if_nametoindex failed (N3=%s -> %u, "
+            "N6=%s -> %u)",
+            gtp_interface_.c_str(), n3_ifindex, non_gtp_interface_.c_str(),
+            n6_ifindex);
+      } else {
+        uint32_t downlink_key = 0; /* FlowDirection::DOWNLINK */
+        uint32_t uplink_key   = 1; /* FlowDirection::UPLINK   */
+        redir->Update(downlink_key, n3_ifindex, BPF_ANY);
+        redir->Update(uplink_key, n6_ifindex, BPF_ANY);
+        Logger::upf_app().info(
+            "redirect_interfaces_map populated: "
+            "DOWNLINK[0]=ifindex(%s)=%u  UPLINK[1]=ifindex(%s)=%u",
+            gtp_interface_.c_str(), n3_ifindex,
+            non_gtp_interface_.c_str(), n6_ifindex);
+      }
+    } else {
+      Logger::upf_app().error(
+          "redirect_interfaces_map wrapper unavailable (FAR not loaded?)");
+    }
   } else {
     Logger::upf_app().info(
         "UPF_XDPProgram: attaching ETH PDU primary (n3_eth_entry)");
@@ -323,8 +408,7 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
     /* n6_eth_ interface maps already populated inside n6_eth_->Setup() */
   }
 
-  /* Step 8: Populate tail_call_progs_map
-   */
+  /* ── Step 9: Populate tail_call_progs_map. */
   PopulateProgramArray(flags);
 
   Logger::upf_app().info("UPF_XDPProgram::Setup complete");
