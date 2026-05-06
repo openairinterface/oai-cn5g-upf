@@ -145,7 +145,7 @@ int session_lookup_ip(struct xdp_md* ctx) {
   if (flags) {
     pctx->rules_enabled = *flags;
     bpf_debug(
-        "Rules enabled: 0x%x: QER = %d, URR = %d, BAR = %d MAR = %d)", *flags,
+        "Rules enabled: 0x%x: QER = %d, URR = %d", *flags,
         !!(*flags & RULE_QER_ENABLED), !!(*flags & RULE_URR_ENABLED));
     bpf_debug(
         "                     BAR = %d, MAR = %d",

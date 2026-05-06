@@ -77,7 +77,9 @@
 #include "utils/csum.h"
 #include "utils/logger.h"
 #include "utils/bpf_utils.h"
-#include "interfaces_maps.h"
+/* interfaces_maps.h removed: qer_tc_kern.c uses none of upf_interface_map /
+ * arp_table_map / redirect_interfaces_map; including the header would
+ * materialise dead per-program copies at load time. */
 #include "qer_maps.h"
 #include "sdf_types.h"
 /* ========================================================================== */

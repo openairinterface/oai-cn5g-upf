@@ -130,6 +130,7 @@
 #include "pipeline_maps.h"
 #include "mar_maps.h"
 #include "interfaces_types.h"
+#include "interfaces_maps.h"  /* declares redirect_interfaces_map (used below) */
 #include "tail_call_dispatcher.h"
 #include "stats_types.h"
 #include "stats_maps.h"

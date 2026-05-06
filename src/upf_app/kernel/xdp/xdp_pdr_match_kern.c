@@ -315,15 +315,14 @@ static __always_inline struct pfcp_pdr* match_pdr_n3(
     /* QFI match if present (§8.2.89) */
     if ((pdi.qfi.qfi != 0) && (pdi.qfi.qfi != pkt_qfi)) continue;
 
-    // bpf_debug("PDR matched : Rule ID = %u", pdr->pdr_id.rule_id);
-    // bpf_debug(
-    //     "  PDI: ( pkt_ue_ip, pdi_ue_ip ) = ( %pI4, %pI4 )", &pkt_ue_ip,
-    //     &ipaddr);
-    // bpf_debug(
-    //     "  PDI: ( pkt_teid, pdi_fteid ) = ( %d, %d )", pkt_teid,
-    //     pdi.fteid.teid);
-    // bpf_debug("  PDI: ( pkt_qfi, pdi_qfi ) = ( %u, %u )", pkt_qfi,
-    // pdi.qfi.qfi);
+    bpf_debug("PDR matched : Rule ID = %u", pdr->pdr_id.rule_id);
+    bpf_debug(
+        "  PDI: ( pkt_ue_ip, pdi_ue_ip ) = ( %pI4, %pI4 )", &pkt_ue_ip,
+        &ipaddr);
+    bpf_debug(
+        "  PDI: ( pkt_teid, pdi_fteid ) = ( %d, %d )", pkt_teid,
+        pdi.fteid.teid);
+    bpf_debug("  PDI: ( pkt_qfi, pdi_qfi ) = ( %u, %u )", pkt_qfi, pdi.qfi.qfi);
     return pdr;
   }
 
@@ -417,10 +416,10 @@ static __always_inline struct pfcp_pdr* match_pdr_n6(
 
     /* QoS disabled: return first matching DL PDR */
     if (!qos_enabled) {
-      // bpf_debug(
-      //     "QER not enabled for SEID = %llu - "
-      //     "first-match PDR",
-      //     seid);
+      bpf_debug(
+          "QER not enabled for SEID = %llu - "
+          "first-match PDR",
+          seid);
       *qfi_out = pdr_qfi;
       return pdr;
     }
@@ -439,38 +438,37 @@ static __always_inline struct pfcp_pdr* match_pdr_n6(
        * No SDF filter for this QFI - default/non-GBR
        * traffic. Only select if no better match found.
        */
-      // bpf_debug(
-      //     "SDF not found for QFI = %u - "
-      //     "treating as non-GBR flow",
-      //     pdr_qfi);
+      bpf_debug(
+          "SDF not found for QFI = %u - "
+          "treating as non-GBR flow",
+          pdr_qfi);
       if (!best_pdr) {
         best_pdr        = pdr;
         best_precedence = precedence;
         best_qfi        = pdr_qfi;
-        // bpf_debug(
-        //     "First match (no SDF): PDR %u (precedence = %u, QFI = %u)",
-        //     pdr->pdr_id.rule_id, precedence, pdr_qfi);
+        bpf_debug(
+            "First match (no SDF): PDR %u (precedence = %u, QFI = %u)",
+            pdr->pdr_id.rule_id, precedence, pdr_qfi);
       }
       continue;
     }
 
     /* Log SDF lookup */
-    // bpf_debug("SDF key ( seid, qfi ): ( %llu, %u )", sdf_key.seid,
-    // sdf_key.qfi);
+    bpf_debug("SDF key ( seid, qfi ): ( %llu, %u )", sdf_key.seid, sdf_key.qfi);
 
     /* Check SDF filter match */
     if (!match_sdf_filter(pctx, sdf)) {
-      // bpf_debug("SDF not matched for PDR %u", pdr->pdr_id.rule_id);
+      bpf_debug("SDF not matched for PDR %u", pdr->pdr_id.rule_id);
       continue;
     }
 
     /* SDF matched - calculate specificity */
     u32 specificity = calc_sdf_specificity(sdf, pctx->pkt_filter_protocol);
 
-    // bpf_debug("PDR %u Matched: ", pdr->pdr_id.rule_id);
-    // bpf_debug("   - Specificity = %u", specificity);
-    // bpf_debug("   - Precedence  = %u", precedence);
-    // bpf_debug("   - QFI         = %u", pdr_qfi);
+    bpf_debug("PDR %u Matched: ", pdr->pdr_id.rule_id);
+    bpf_debug("   - Specificity = %u", specificity);
+    bpf_debug("   - Precedence  = %u", precedence);
+    bpf_debug("   - QFI         = %u", pdr_qfi);
 
     /* Determine if this is a better match (§8.2.25) */
     bool is_better = false;
@@ -481,9 +479,9 @@ static __always_inline struct pfcp_pdr* match_pdr_n6(
     } else if (specificity > best_specificity) {
       /* Higher specificity wins */
       is_better = true;
-      // bpf_debug(
-      //     "PDR %u has higher specificity (%u > %u)", pdr->pdr_id.rule_id,
-      //     specificity, best_specificity);
+      bpf_debug(
+          "PDR %u has higher specificity (%u > %u)", pdr->pdr_id.rule_id,
+          specificity, best_specificity);
     } else if (
         (specificity == best_specificity) && (precedence < best_precedence)) {
       /* Same specificity, use precedence (lower is better) */
@@ -498,19 +496,19 @@ static __always_inline struct pfcp_pdr* match_pdr_n6(
       best_specificity = specificity;
       best_precedence  = precedence;
       best_qfi         = pdr_qfi;
-      // bpf_debug("New best match PDR %u: ", pdr->pdr_id.rule_id);
-      // bpf_debug("   - Specificity = %u", specificity);
-      // bpf_debug("   - Precedence  = %u", precedence);
-      // bpf_debug("   - QFI         = %u", pdr_qfi);
+      bpf_debug("New best match PDR %u: ", pdr->pdr_id.rule_id);
+      bpf_debug("   - Specificity = %u", specificity);
+      bpf_debug("   - Precedence  = %u", precedence);
+      bpf_debug("   - QFI         = %u", pdr_qfi);
     }
   }
 
   if (best_pdr) {
     *qfi_out = best_qfi;
-    // bpf_debug("Selected PDR %u :", best_pdr->pdr_id.rule_id);
-    // bpf_debug("   - Specificity = %u", best_specificity);
-    // bpf_debug("   - Precedence  = %u", best_precedence);
-    // bpf_debug("   - QFI         = %u", best_qfi);
+    bpf_debug("Selected PDR %u :", best_pdr->pdr_id.rule_id);
+    bpf_debug("   - Specificity = %u", best_specificity);
+    bpf_debug("   - Precedence  = %u", best_precedence);
+    bpf_debug("   - QFI         = %u", best_qfi);
   }
 
   return best_pdr;
@@ -568,12 +566,11 @@ static __always_inline struct pfcp_pdr* match_pdr_eth_n3(
     /* QFI match if present (§8.2.89) */
     if ((pdi.qfi.qfi != 0) && (pdi.qfi.qfi != pkt_qfi)) continue;
 
-    // bpf_debug("ETH PDR matched: Rule ID = %u", pdr->pdr_id.rule_id);
-    // bpf_debug(
-    //     "  PDI: ( pkt_teid, pdi_fteid ) = ( %d, %d )", pkt_teid,
-    //     pdi.fteid.teid);
-    // bpf_debug("  PDI: ( pkt_qfi, pdi_qfi ) = ( %u, %u )", pkt_qfi,
-    // pdi.qfi.qfi);
+    bpf_debug("ETH PDR matched: Rule ID = %u", pdr->pdr_id.rule_id);
+    bpf_debug(
+        "  PDI: ( pkt_teid, pdi_fteid ) = ( %d, %d )", pkt_teid,
+        pdi.fteid.teid);
+    bpf_debug("  PDI: ( pkt_qfi, pdi_qfi ) = ( %u, %u )", pkt_qfi, pdi.qfi.qfi);
     return pdr;
   }
 
@@ -594,56 +591,42 @@ int pdr_match(struct xdp_md* ctx) {
   |--- (Find matching PDR of the PFCP session with highest precedence) ---|
   |-----------------------------------------------------------------------|
  */
-
-  // bpf_debug(
-  //     "|-----------------------------------------------------------------------"
-  //     "|");
-  // bpf_debug(
-  //     "|------------------------ PFCP Session's Lookup "
-  //     "------------------------|");
-  // bpf_debug(
-  //     "|--- (Find matching PDR of the PFCP session with highest precedence) "
-  //     "---|");
-  // bpf_debug(
-  //     "|-----------------------------------------------------------------------"
-  //     "|");
-
   struct packet_context* pctx = GET_PACKET_CONTEXT();
 
   if (!pctx) {
-    // bpf_debug("Error: Failed to get packet context");
+    bpf_debug("Error: Failed to get packet context");
     return xdp_stats_record_action(ctx, XDP_DROP);
   }
 
-  __attribute__((unused)) u64 seid  = pctx->seid;
-  __attribute__((unused)) u32 ue_ip = pctx->ue_ip;
+  u64 seid  = pctx->seid;
+  u32 ue_ip = pctx->ue_ip;
 
   struct pfcp_pdr* pdr = NULL;
   u8 qfi               = pctx->qfi;
 
-  // if (IS_ETH_PDU(pctx->session_type)) {
-  //   /*
-  //    * ETH PDU UL: match by TEID + QFI only (no UE IP, no SDF).
-  //    * ETH PDU DL is self-contained in upf_n6_eth_entry.c and
-  //    * never reaches PDR match.
-  //    */
-  //   pdr = match_pdr_eth_n3(seid, pctx->pkt_teid, qfi);
-  // } else if (IS_UPLINK(pctx->session_type)) {
-  //   /* IP PDU UL: match by F-TEID, QFI, Source Interface=ACCESS */
-  //   pdr = match_pdr_n3(seid, pctx->pkt_teid, ue_ip, qfi);
-  // } else {
-  //   /* IP PDU DL: match by UE IP, SDF, Source Interface=CORE */
-  //   pdr = match_pdr_n6(seid, ue_ip, &qfi, pctx);
-  // }
+  if (IS_ETH_PDU(pctx->session_type)) {
+    /*
+     * ETH PDU UL: match by TEID + QFI only (no UE IP, no SDF).
+     * ETH PDU DL is self-contained in upf_n6_eth_entry.c and
+     * never reaches PDR match.
+     */
+    pdr = match_pdr_eth_n3(seid, pctx->pkt_teid, qfi);
+  } else if (IS_UPLINK(pctx->session_type)) {
+    /* IP PDU UL: match by F-TEID, QFI, Source Interface=ACCESS */
+    pdr = match_pdr_n3(seid, pctx->pkt_teid, ue_ip, qfi);
+  } else {
+    /* IP PDU DL: match by UE IP, SDF, Source Interface=CORE */
+    pdr = match_pdr_n6(seid, ue_ip, &qfi, pctx);
+  }
 
   if (!pdr) {
-    // bpf_debug("PDR match failed for SEID = %llu", seid);
+    bpf_debug("PDR match failed for SEID = %llu", seid);
     return xdp_stats_record_action(ctx, XDP_PASS);
   }
 
   u32 pdr_id = pdr->pdr_id.rule_id;
 
-  // bpf_debug("PDR selected: Rule ID = 0x%x", pdr_id);
+  bpf_debug("PDR selected: Rule ID = 0x%x", pdr_id);
 
   pctx->pdr_id = pdr_id;
   pctx->qfi    = qfi; /* Updated by match_pdr_n6 for downlink */
@@ -659,10 +642,10 @@ int pdr_match(struct xdp_md* ctx) {
    */
   pctx->pdr_mar_id = pdr->mar_id; /* 0 if no MAR associated */
 
-  // bpf_debug(
-  //     "PDR selected: Rule ID = 0x%x, MAR ID = %u", pdr_id, pctx->pdr_mar_id);
-
-  // bpf_debug("Error: Tail call to PROG_FAR_APPLY failed");
+  bpf_debug(
+      "PDR selected: Rule ID = 0x%x, MAR ID = %u", pdr_id, pctx->pdr_mar_id);
+  TAIL_CALL_NEXT(ctx, PROG_FAR_APPLY);
+  bpf_debug("Error: Tail call to PROG_FAR_APPLY failed");
   return xdp_stats_record_action(ctx, XDP_PASS);
 }
 

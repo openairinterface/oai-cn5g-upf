@@ -77,16 +77,18 @@ struct {
 /**
  * @brief XDP_REDIRECT target interface index map.
  *
- * Key:   u32   slot index (UPLINK=0, DOWNLINK=1, N9=2 ...)
+ * Key:   u32   slot index (FlowDirection enum, see linux/custom_types.h)
  * Value: u32   ifindex of the target Linux network device
  * Size:  MAX_UPF_REDIRECT_INTERFACES (typically 2-3, set at runtime)
  *
- * Slot assignments (from tail_call_dispatch.h):
- *   UPLINK   = 0  -- redirect to N6 interface
- *   DOWNLINK = 1  -- redirect to N3 interface
+ * Slot assignments (FlowDirection enum, kernel/include/linux/custom_types.h):
+ *   DOWNLINK = 0  -- redirect to N3 interface (gNB-facing, GTP-U encapped)
+ *   UPLINK   = 1  -- redirect to N6 interface (DN-facing, after decap)
  *
  * Populated by userspace via bpf_map_update_elem() with the ifindex
- * of each interface obtained from if_nametoindex().
+ * of each interface obtained from if_nametoindex():
+ *   - IP-PDU path:  UPF_XDPProgram::Setup() (upf_xdp_user.cpp)
+ *   - ETH-PDU path: N6EthEntryProgram::Setup() (n6_eth_entry_user.cpp)
  */
 struct {
   __uint(type, BPF_MAP_TYPE_DEVMAP);

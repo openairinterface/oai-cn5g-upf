@@ -93,18 +93,11 @@ void QERTCProgram::ConfigureQerMaps(struct qer_tc_kern_c* skel) {
     throw std::runtime_error("QER Program map configuration failed");
   }
 
-  // Configure .rodata constants (if available)
-  /*
-   * qer_tc_kern.c includes interfaces_maps.h which declares:
-   *   const volatile int MAX_UPF_INTERFACES SEC(".rodata");
-   *   const volatile int MAX_UPF_REDIRECT_INTERFACES SEC(".rodata");
-   * NOT MAX_EGRESS_INTERFACES (that field does not exist).
-   */
-  if (skel->rodata) {
-    skel->rodata->MAX_UPF_INTERFACES = upf::GetMaxUpfInterfaces();
-    skel->rodata->MAX_UPF_REDIRECT_INTERFACES =
-        upf::GetMaxUpfRedirectInterfaces();
-  }
+  /* qer_tc_kern.c does not declare MAX_UPF_INTERFACES /
+   * MAX_UPF_REDIRECT_INTERFACES in its .rodata (those came from
+   * interfaces_maps.h, which qer_tc_kern.c no longer includes -- it does not
+   * use any of upf_interface_map / arp_table_map / redirect_interfaces_map).
+   * The egress_ifindex map is sized above via ConfigureMapMaxEntries. */
 }
 
 //------------------------------------------------------------------------------

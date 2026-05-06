@@ -808,16 +808,16 @@ void SessionProgramManager::CreatePipeline(
       rules.mar                    = bpf_mar;
 
       // Populate dedicated config maps for URR/BAR/MAR (runtime state init)
-     /* if (bpf_urr.urr_id != 0) {
-        PopulateUrrConfigMap(upf_xdp_program, seid, bpf_urr);
-      }
-      if (bpf_bar.bar_id != 0) {
-        PopulateBarConfigMap(upf_xdp_program, seid, bpf_bar);
-      }
-      if (bpf_mar.mar_id != 0) {
-        PopulateMarRulesMap(upf_xdp_program, seid, bpf_mar);
-      }
-*/
+      /* if (bpf_urr.urr_id != 0) {
+         PopulateUrrConfigMap(upf_xdp_program, seid, bpf_urr);
+       }
+       if (bpf_bar.bar_id != 0) {
+         PopulateBarConfigMap(upf_xdp_program, seid, bpf_bar);
+       }
+       if (bpf_mar.mar_id != 0) {
+         PopulateMarRulesMap(upf_xdp_program, seid, bpf_mar);
+       }
+ */
       struct pdrs_per_session pdr_key = {0};
       pdr_key.pdr_id                  = pdr_id;
       pdr_key.seid                    = seid;
@@ -868,8 +868,6 @@ void SessionProgramManager::CreatePipeline(
               char buf_gnb_ip[INET_ADDRSTRLEN];
               struct in_addr addr_gnb_ip = {.s_addr = gnb_ip};
               inet_ntop(AF_INET, &addr_gnb_ip, buf_gnb_ip, INET_ADDRSTRLEN);
-              Logger::upf_app().error(
-                  "1111111111111111111111111111111111111111111");
               std::string mac =
                   UpdateArpTableForN3(upf_xdp_program, gnb_ip, upf_n3_ip, seid);
               Logger::upf_app().debug(
@@ -1211,16 +1209,16 @@ void SessionProgramManager::ModifyPipeline(
       rules.mar                    = bpf_mar;
 
       // Populate dedicated config maps for URR/BAR/MAR (runtime state init)
-     /* if (bpf_urr.urr_id != 0) {
-        PopulateUrrConfigMap(upf_xdp_program, seid, bpf_urr);
-      }
-      if (bpf_bar.bar_id != 0) {
-        PopulateBarConfigMap(upf_xdp_program, seid, bpf_bar);
-      }
-      if (bpf_mar.mar_id != 0) {
-        PopulateMarRulesMap(upf_xdp_program, seid, bpf_mar);
-      }
-*/
+      /* if (bpf_urr.urr_id != 0) {
+         PopulateUrrConfigMap(upf_xdp_program, seid, bpf_urr);
+       }
+       if (bpf_bar.bar_id != 0) {
+         PopulateBarConfigMap(upf_xdp_program, seid, bpf_bar);
+       }
+       if (bpf_mar.mar_id != 0) {
+         PopulateMarRulesMap(upf_xdp_program, seid, bpf_mar);
+       }
+ */
       struct pdrs_per_session pdr_key = {0};
       pdr_key.pdr_id                  = pdr_id;
       pdr_key.seid                    = seid;
