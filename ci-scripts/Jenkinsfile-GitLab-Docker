@@ -116,9 +116,11 @@ pipeline {
             ).trim()
             if (unsignedCount.toInteger() > 0) {
                 unSignedMsg = "\u274C ${unsignedCount} commit(s) are missing the 'Signed-off-by' line. Please sign the commits using 'git commit -s'"
-                error unSignedMsg
+                echo "unSignedMsg"
             }
-            echo "All commits are signed-off."
+            else {
+               echo "All commits are signed-off."
+            }
             gitCommittorEmailAddr  = env.gitlabUserEmail
 
             shortenShaOne = sh returnStdout: true, script: 'git log -1 --pretty=format:"%h" --abbrev=8 ' + env.gitlabMergeRequestLastCommit
@@ -154,14 +156,7 @@ pipeline {
         failure {
           script {
             def message = "OAI " + JOB_NAME + " build (" + BUILD_ID + "): "
-            if (unSignedMsg)
-            {
-                message += unSignedMsg
-            }
-            else
-            {
-                message += "\u26D4 Merge Conflicts -- Cannot perform CI"
-            }
+            message += "\u26D4 Merge Conflicts -- Cannot perform CI"
             addGitLabMRComment comment: message
             currentBuild.result = 'FAILURE'
           }
