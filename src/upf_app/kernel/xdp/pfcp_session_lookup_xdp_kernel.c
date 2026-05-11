@@ -60,7 +60,6 @@ const volatile struct pdr_lookup_config config = {
     .ignore_qfi_for_uplink = true,  // Default: enable QFI ignore mode
 };
 
-
 /*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline u32 match_sdf_filter_ipv4(
     const struct packet_filter* filter, const struct sdf_filtr* sdf) {

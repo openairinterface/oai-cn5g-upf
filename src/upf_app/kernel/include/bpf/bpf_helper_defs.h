@@ -3877,4 +3877,6 @@ static long (*bpf_ima_inode_hash)(struct inode* inode, void* dst, __u32 size) =
  */
 static struct socket* (*bpf_sock_from_file)(struct file* file) = (void*) 162;
 
-static long (*bpf_for_each_map_elem)(void* map, void* callback_fn, void* callback_ctx, __u64 flags) = (void*) 164;
+static long (*bpf_for_each_map_elem)(
+    void* map, void* callback_fn, void* callback_ctx,
+    __u64 flags) = (void*) 164;
