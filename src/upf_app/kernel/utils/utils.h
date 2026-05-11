@@ -5,12 +5,11 @@
 #include <linux/if_ether.h>
 #include <linux/ip.h>
 #include <sys/socket.h>
-#include <bpf_helpers.h>
-#include <bpf_endian.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>
 #include <stdbool.h>
 #include <interfaces.h>
 // #include <arp_table_maps.h>
-#include <far_maps.h>
 #include <pfcp_session_lookup_maps.h>
 
 // Dictionary

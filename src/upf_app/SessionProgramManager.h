@@ -58,6 +58,9 @@ class SessionProgramManager {
   void modifyPipeline(
       std::shared_ptr<pfcp::pfcp_session> session, uint32_t teid_ul,
       uint32_t teid_dl);
+  void modifyETHPipeline(
+      std::shared_ptr<pfcp::pfcp_session> session, uint32_t teid_ul,
+      uint32_t teid_dl);
   //   void addFramedRoutes(
   //       uint32_t ueIpAddress,
   //       const std::vector<pfcp::framed_route_t>& framedRoutes);

@@ -2,11 +2,11 @@
 #define __PFCP_SESSION_ETH_PDU_H
 
 // clang-format off
-#include <types.h>
+#include <utils/types.h>
 // clang-format on
 #include <linux/bpf.h>
-#include <bpf_helpers.h>
-#include <bpf_endian.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>
 #include <endian.h>
 #include <utils/logger.h>
 #include <linux/if_ether.h>
@@ -23,7 +23,6 @@
 
 #include <mac_pdu_session_key.h>
 #include <pfcp_session_eth__lookup_maps.h>
-#include <far_maps.h>
 
 /*----------------------------------------------------------------------------------------------------------------*/
 struct arphdr {
@@ -528,7 +527,7 @@ handle_downlink_traffic__eth_pdu(struct xdp_md* ctx) {
       return XDP_PASS;
     }
   } else if (bpf_htons(eth->h_proto) == ETH_P_ARP) {
-    struct arphdr* arp = (struct arphdr_ipv4*) (eth + 1);
+    struct arphdr* arp = (struct arphdr*) (eth + 1);
     if ((void*) (arp + 1) > data_end) {
       bpf_debug("ETH PDU: Invalid ARP Packet");
       return XDP_DROP;

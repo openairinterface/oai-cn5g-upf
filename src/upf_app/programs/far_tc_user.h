@@ -15,7 +15,6 @@
 #include <BPFProgram.h>
 #include "interfaces.h"
 
-#include <qos_flow.h>
 #include <pfcp_session.hpp>
 class BPFMaps;
 class BPFMap;

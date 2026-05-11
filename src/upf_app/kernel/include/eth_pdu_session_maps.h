@@ -2,7 +2,7 @@
 #define __ETH_PDU_SESSION_MAPS_H__
 
 #include <linux/bpf.h>
-#include <bpf_helpers.h>
+#include <bpf/bpf_helpers.h>
 #include <mac_pdu_session_key.h>
 
 #define MAX_LENGTH 5000  // 10

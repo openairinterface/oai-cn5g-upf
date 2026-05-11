@@ -41,6 +41,7 @@
 #include "xdp_stats_kern_user.h"
 #include <linux/types.h>
 #include <stdbool.h>
+#include "pfcp_session_eth_pdu.h"
 struct vlan_hdr {
   __be16 h_vlan_TCI;
   __be16 h_vlan_encapsulated_proto;
