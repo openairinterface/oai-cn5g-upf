@@ -2156,10 +2156,21 @@ std::string SessionProgramManager::UpdateArpTableForN6(
     memcpy(entry.mac_address, remote_mac, ETH_ALEN);
     entry.ipv4_address = ip_for_mac_lookup;
 
-    // Update ARP table in BPF map
+    /* Harmonised arp_table_map convention (matches UpdateArpTableForN3):
+     *   key   = peer / next-hop IP (network byte order in u32)
+     *   value = { peer MAC, peer IP }
+     *
+     * Previously this used `upf_n6_ip` as the key (UPF's own N6 IP), which
+     * was internally consistent with the old kernel-side lookup but
+     * inconsistent with N3 and broke for multi-DN deployments (single
+     * cache slot for all peers). Kernel-side gtpu_decap_ipv4 now looks
+     * up by the inner packet's destination IP, which equals the next-hop
+     * IP for directly-connected DN setups. */
+    uint32_t arp_key = ip_for_mac_lookup;  // = remote/peer IP, same as N3
+
     auto arp_table_map = upf_xdp_program->GetMapByName("arp_table_map");
     if (arp_table_map) {
-      arp_table_map->Update(upf_n6_ip, entry, BPF_ANY);
+      arp_table_map->Update(arp_key, entry, BPF_ANY);
     } else {
       Logger::upf_app().error("UpdateArpTable: arp_table map not found");
     }
