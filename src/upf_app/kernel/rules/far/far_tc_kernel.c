@@ -13,10 +13,10 @@
 
 #include <linux/pkt_cls.h>
 
-#include <bpf_helpers.h>
-#include <bpf_endian.h>
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_endian.h>
 
-#include <far_broadcast.h>
+#include "far_broadcast.h"
 
 #include <eth_pdu_session_maps.h>
 #include <mac_pdu_session_key.h>

@@ -1,7 +1,7 @@
 #ifndef __PFCP_SESSION_ETH__LOOKUP_MAPS_H__
 #define __PFCP_SESSION_ETH__LOOKUP_MAPS_H__
 
-#include <bpf_helpers.h>
+#include <bpf/bpf_helpers.h>
 #include <ie/group_ie/create_pdr.h>
 #include <pfcp/pfcp_pdr.h>
 #include <pfcp/pfcp_far.h>

@@ -13,6 +13,7 @@
 #include "session_id.h"
 
 #include <linux/bpf.h>
+#include <linux/if_ether.h>
 #include <stdint.h>
 
 #define MAX_PDRS_PER_SESSION 32
@@ -95,6 +96,8 @@ struct {
   __type(key, u8);         // Key is a constant, e.g., 0
   __type(value, u8);       // Value indicates if framed routing is enabled
 } framed_routing_flag SEC(".maps");
+
+#include "mac_pdu_session_key.h"
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);

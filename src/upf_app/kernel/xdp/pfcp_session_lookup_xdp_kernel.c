@@ -41,6 +41,7 @@
 #include "xdp_stats_kern_user.h"
 #include <linux/types.h>
 #include <stdbool.h>
+#include "pfcp_session_eth_pdu.h"
 struct vlan_hdr {
   __be16 h_vlan_TCI;
   __be16 h_vlan_encapsulated_proto;
@@ -58,6 +59,7 @@ static bool cached_n3 = false;
 const volatile struct pdr_lookup_config config = {
     .ignore_qfi_for_uplink = true,  // Default: enable QFI ignore mode
 };
+
 
 /*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline u32 match_sdf_filter_ipv4(
