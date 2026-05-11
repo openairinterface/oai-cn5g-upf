@@ -16,6 +16,7 @@ if(DEFINED BPF_DEBUG)
 endif()
 
 add_custom_target(upf_xdp_all DEPENDS pfcp_session_lookup_xdp)
+add_custom_target(upf_tc_all DEPENDS far_tc)
 
 ###########################################################################
 #                       GENERATE eBPF XDP Skeletons                       #
