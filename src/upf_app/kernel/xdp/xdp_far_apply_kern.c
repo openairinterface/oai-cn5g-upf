@@ -114,17 +114,19 @@
 /* ========================================================================== */
 
 /**
- * @brief Cached UPF interface IP addresses and next-hop MACs
+ * @brief Cached UPF N3 source IP.
  *
- * Loaded once from BPF maps and cached for performance.
- * Reduces per-packet map lookups in the hot path.
+ * The UPF's own N3 IP is used as the outer source IP for every GTP-U
+ * encapsulation. It never changes after process start, so caching it
+ * avoids a per-packet upf_interface_map lookup.
+ *
+ * Next-hop MACs are NOT cached: the harmonised arp_table_map convention
+ * is "key = peer IP" (multi-gNB / multi-DN deployments need one entry per
+ * peer), so a single static slot would be unsound. Per-packet HASH lookup
+ * in arp_table_map is cheap enough on the hot path.
  */
 static u32 cached_n3_ip;
-static u32 cached_n6_ip;
-static u8 cached_n3_next_hop_mac[ETH_ALEN];
-static u8 cached_n6_next_hop_mac[ETH_ALEN];
 static bool n3_cache_valid;
-static bool n6_cache_valid;
 
 /* ========================================================================== */
 /*               GTP-U ENCAPSULATION — DOWNLINK (TS 29.281 §5.1)             */
@@ -192,15 +194,14 @@ gtpu_encap_ipv4(struct xdp_md* ctx, struct pfcp_far* far, u8 qfi) {
    * per-packet costs one HASH map_lookup_elem -- cheap on the hot path. */
   u32 next_hop_n3_ip =
       far->forwarding_parameters.outer_header_creation.ipv4_address.s_addr;
-  struct arp_entry* arp =
+  struct arp_entry* arp_n3 =
       bpf_map_lookup_elem(&arp_table_map, &next_hop_n3_ip);
-  if (!arp) {
+  if (!arp_n3) {
     bpf_debug(
         "N3 next-hop MAC not found in ARP table for gNB %pI4",
         &next_hop_n3_ip);
     return RET_FAILURE;
   }
-  __builtin_memcpy(cached_n3_next_hop_mac, arp->mac_address, ETH_ALEN);
 
   /*
  |----------------------------------------------------------------|
@@ -224,8 +225,8 @@ gtpu_encap_ipv4(struct xdp_md* ctx, struct pfcp_far* far, u8 qfi) {
   /* Copy inner Ethernet header to outer position */
   __builtin_memcpy(eth_outer, eth_inner, sizeof(*eth_outer));
 
-  /* Update destination MAC to N3 next-hop */
-  __builtin_memcpy(eth_outer->h_dest, cached_n3_next_hop_mac, ETH_ALEN);
+  /* Update destination MAC to N3 next-hop (gNB) */
+  __builtin_memcpy(eth_outer->h_dest, arp_n3->mac_address, ETH_ALEN);
 
   /*
   |----------------------------------------------------------------|
@@ -396,32 +397,38 @@ gtpu_decap_ipv4(struct xdp_md* ctx, struct pfcp_far* far) {
   /* Copy outer ethernet to inner position */
   __builtin_memcpy(eth_inner, eth_outer, sizeof(*eth_inner));
 
-  /* Resolve N6 next-hop MAC (cached after first lookup) */
-  if (!n6_cache_valid) {
-    /* Retrieve N6 interface configuration */
-    reference_point_t iface_key = N6_INTERFACE;
-    struct interface_config* iface =
-        bpf_map_lookup_elem(&upf_interface_map, &iface_key);
-
-    if (!iface) {
-      bpf_debug("N6 interface not configured");
-      return RET_FAILURE;
-    }
-
-    cached_n6_ip   = iface->ipv4_address;
-    n6_cache_valid = true;
-
-    struct arp_entry* arp = bpf_map_lookup_elem(&arp_table_map, &cached_n6_ip);
-
-    if (!arp) {
-      bpf_debug("N6 next-hop MAC not found in ARP table");
-      return RET_FAILURE;
-    }
-    __builtin_memcpy(cached_n6_next_hop_mac, arp->mac_address, ETH_ALEN);
+  /* Resolve N6 next-hop MAC PER PACKET, keyed by the inner packet's
+   * destination IP. This matches the harmonised arp_table_map convention:
+   *
+   *   key   = peer / next-hop IP (network byte order)
+   *   value = { peer MAC, peer IP }
+   *
+   * Userspace (SessionProgramManager::UpdateArpTableForN6) writes
+   * arp_table_map[remote_ip] -- where remote_ip is the resolved next-hop
+   * for the N6 interface (the DN gateway in directly-connected setups).
+   *
+   * Limitation: this assumes the inner packet's destination is reachable
+   * via a directly-connected next-hop (inner_dst_ip == next_hop_ip). For
+   * routed setups (e.g. UE traffic to 8.8.8.8 via an upstream router),
+   * the kernel should fall back to bpf_fib_lookup() -- see the helper
+   * update_mac_address() in utils/mac_resolution.h. */
+  struct iphdr* inner_iph =
+      (void*) ((u8*) eth_inner + sizeof(struct ethhdr));
+  if ((void*) (inner_iph + 1) > data_end) {
+    bpf_debug("Error: Invalid inner IP header for ARP key");
+    return RET_DROP;
+  }
+  u32 next_hop_n6_ip      = inner_iph->daddr;
+  struct arp_entry* arp_n6 =
+      bpf_map_lookup_elem(&arp_table_map, &next_hop_n6_ip);
+  if (!arp_n6) {
+    bpf_debug(
+        "N6 next-hop MAC not found in ARP table for %pI4", &next_hop_n6_ip);
+    return RET_FAILURE;
   }
 
   /* Update destination MAC */
-  memcpy(eth_inner->h_dest, cached_n6_next_hop_mac, sizeof(eth_inner->h_dest));
+  __builtin_memcpy(eth_inner->h_dest, arp_n6->mac_address, ETH_ALEN);
   bpf_debug("Dst MAC: %pM", eth_inner->h_dest);
 
   /* Strip outer headers */
