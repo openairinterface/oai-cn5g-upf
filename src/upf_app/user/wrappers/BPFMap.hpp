@@ -2,55 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file BPFMap.hpp
- * @brief C++ wrapper for BPF/eBPF maps
- *
- * This header-only wrapper class provides a type-safe, RAII-compliant
- * interface to BPF maps. It abstracts the low-level libbpf map operations
- * and provides:
- * - Type-safe map operations via templates
- * - Automatic error handling and logging
- * - CRUD operations: lookup, update, remove
- * - Map iteration support
- *
- * BPF Map Types Supported:
- * - HASH: Key-value hash table
- * - ARRAY: Zero-based indexed array
- * - LRU_HASH: Hash with LRU eviction
- * - PERCPU variants: Per-CPU versions of above
- *
- * Usage Example:
- * @code
- * BPFMap session_map(bpf_map_ptr, "session_map");
- *
- * // Lookup
- * uint32_t session_id;
- * if (session_map.Lookup(ue_ip, &session_id) == 0) {
- *   // Found session
- * }
- *
- * // Update
- * session_map.Update(ue_ip, session_id, BPF_ANY);
- *
- * // Remove
- * session_map.Remove(ue_ip);
- *
- * // Iterate
- * uint32_t key, next_key;
- * while (session_map.GetNextKey(key, next_key) == 0) {
- *   // Process key
- *   key = next_key;
- * }
- * @endcode
- *
- * Thread Safety: Operations are atomic at the BPF map level, but multiple
- * operations are not atomic as a group. Use external synchronization if needed.
- *
- * @note This implementation follows Google C++ Style Guide
- * @note Header-only for template functions
- */
-
 #ifndef BPFMAP_HPP_
 #define BPFMAP_HPP_
 

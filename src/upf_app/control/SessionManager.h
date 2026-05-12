@@ -2,43 +2,12 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file SessionManager.h
- * @brief PFCP Session Manager for User Plane Function
- * @author OpenAirInterface
- * @date 2025
- *
- * This module implements session management functionality for the UPF control
- * plane, handling PFCP session establishment, modification, and deletion as
- * defined in 3GPP TS 29.244.
- *
- * Key 3GPP References:
- * - 3GPP TS 29.244 V17.10.0: Interface between the Control Plane and the User
- *                              Plane nodes
- * - 3GPP TS 29.281 V17.3.0: General Packet Radio System (GPRS) Tunnelling
- *                             Protocol User Plane (GTPv1-U)
- * - 3GPP TS 23.501: System architecture for the 5G System (5GS)
- * - §5.2  PFCP Session procedures (overview)
- * - §7.5  N4 Session procedure message IEs
- * - §8.2  Information Element definitions
- *
- * @par Changelog
- * | Date       | Author | Description                                        |
- * |------------|--------|----------------------------------------------------|
- * | 2025-xx-xx | OAI    | Initial implementation                             |
- * | 2026-03-11 | OAI    | Harmonised §-refs to TS 29.244 V17.10.0; fixed     |
- * |            |        | Source Interface §-ref in TrafficDirection; removed |
- * |            |        | vacuous Google Style Guide note; fixed "Baffering"  |
- * |            |        | typo; corrected MBR/GBR/Gate Status/URR ID §-refs. |
- */
-
 #ifndef SESSION_MANAGER_H_
 #define SESSION_MANAGER_H_
 
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <string>
 #include <unordered_map>
 #include <vector>
 

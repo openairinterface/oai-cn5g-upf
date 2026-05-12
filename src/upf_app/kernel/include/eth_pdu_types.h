@@ -1,53 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — split mac_pdu_session_key.h into
- *              eth_pdu_types.h (plain-C types, this file) and
- *              eth_pdu_maps.h (BPF map definitions).
- *              Renamed eth_session_id -> eth_session_id (removed double
- *              underscore convention).
- *              Replaced legacy <ie/teid.h> / <types.h> includes with
- *              concrete types (teid_t_ = u32).
- * 3GPP Refs:   3GPP TS 23.501 §5.6.10.3 — Ethernet PDU Session Type
- *              3GPP TS 29.281 V17.x.x §5.1 — GTP-U header
- */
-// clang-format on
-
-/**
- * @file  eth_pdu_types.h
- * @brief Ethernet PDU session type definitions.
- *
- * Defines the structs used for Ethernet PDU session MAC learning
- * and session context:
- *   - struct mac_pdu_session_value  DL tunnel info keyed by inner src MAC
- *   - struct eth_session_id         full session context keyed by UL TEID
- *
- * Contains only plain-C types — no BPF map definitions.
- * The BPF maps are in eth_pdu_maps.h.
- *
- * Used by: session_lookup_eth.c, xdp_n3_eth_entry.c, xdp_n6_eth_entry.c
- *
- * 3GPP Ref: 3GPP TS 23.501 §5.6.10.3 — Ethernet PDU Session Type
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef __ETH_PDU_TYPES_H__

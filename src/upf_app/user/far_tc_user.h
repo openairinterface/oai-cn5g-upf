@@ -1,6 +1,7 @@
 /*
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
+
 #ifndef __FAR_TC_USER_H__
 #define __FAR_TC_USER_H__
 
@@ -15,6 +16,7 @@
 #include <BPFProgram.h>
 #include "interfaces.h"
 
+#include <qos_flow.h>
 #include <pfcp_session.hpp>
 class BPFMaps;
 class BPFMap;

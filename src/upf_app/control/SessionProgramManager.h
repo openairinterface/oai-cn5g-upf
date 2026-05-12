@@ -2,30 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file SessionProgramManager.h
- * @brief BPF Program Manager for PFCP Sessions
- *
- * This module manages BPF/eBPF programs and maps for PFCP session processing
- * in the user plane data path. It handles the translation between PFCP IEs
- * and BPF data structures.
- *
- * Tail Call Architecture:
- *   Entry -> Session Lookup -> PDR Match -> FAR -> [QER] -> [URR] -> [BAR] ->
- * [MAR] Programs in brackets conditional on RULE_*_ENABLED flags in
- *   session_rules_enabled_map (replaces old session_qos_enabled_map).
- *
- * ETH PDU Session Support (TS 23.501 Section 5.6.10.3):
- *   ETH sessions keyed by TEID (not UE IP), use separate BPF maps:
- *   eth_session_mapping_map, eth_session_pdrs_map, eth_rules_match_pdr_map
- * Key 3GPP References:
- * - 3GPP TS 29.244: PFCP protocol specification
- * - 3GPP TS 29.281: GTPv1-U protocol for tunneling
- * - 3GPP TS 23.501: 5G System Architecture
- * - 3GPP TS 29.244 Section 8.2: Information Elements for PDR, FAR, QER
- * - 3GPP TS 29.244 Section 8.2.74: Outer Header Creation
- */
-
 #ifndef SESSION_PROGRAM_MANAGER_H_
 #define SESSION_PROGRAM_MANAGER_H_
 
@@ -175,9 +151,6 @@ class SessionProgramManager {
   void StorePduSessionInMap(
       std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t ue_ip,
       uint32_t teid_dl, uint32_t teid_ul, uint64_t seid);
-  void storeETHPduSessionInMap(
-      std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram, uint32_t teid_ul,
-      uint32_t teid_dl, uint32_t n3IpAddress, uint64_t seid);
 
   /**
    * @brief Store ETH PDU session information in BPF map
@@ -743,29 +716,6 @@ class SessionProgramManager {
    * @return Index of empty slot, or -1 if none available
    */
   int32_t GetEmptySlot();
-
-  /**
-   * @brief Remove all BPF map entries for a single ETH PDU session
-   *
-   * Cleans m_eth__session_mapping, m_eth__session_pdrs,
-   * m_eth__rules_match_pdr, and m_mac_pdu_session entries for the
-   * given seid so stale data doesn't interfere with the next run.
-   *
-   * @param xdp_program XDP program providing map access
-   * @param seid Session to remove
-   */
-  void RemoveETHPduSessionFromMaps(
-      std::shared_ptr<UPF_XDPProgram> xdp_program, uint64_t seid);
-
-  /**
-   * @brief Delete all entries from all four ETH PDU BPF maps
-   *
-   * Called during teardown so the pinned maps start clean on the
-   * next UPF startup.
-   *
-   * @param xdp_program XDP program providing map access
-   */
-  void ClearAllETHPduMaps(std::shared_ptr<UPF_XDPProgram> xdp_program);
 
   // ==========================================================================
   // Member Variables

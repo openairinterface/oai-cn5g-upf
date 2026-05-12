@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file BPFMaps.cpp
- * @brief Implementation of BPF maps container
- */
-
 #include "BPFMaps.h"
 #include <bpf/libbpf.h>
 #include <cassert>

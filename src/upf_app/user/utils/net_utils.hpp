@@ -2,38 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file net_utils.hpp
- * @brief Network interface utility functions
- *
- * This header provides utility functions for network interface operations:
- * - Interface enumeration and counting
- * - Interface existence checks
- * - Interface index lookup
- *
- * These utilities are used during BPF program initialization to validate
- * network interfaces and retrieve interface indices for XDP attachment.
- *
- * All functions are in the oai::utils::net namespace.
- *
- * Usage:
- * @code
- * using namespace oai::utils::net;
- *
- * // Check if interface exists
- * if (!InterfaceExists("eth0")) {
- *   Logger::upf_app().error("Interface eth0 not found");
- *   return;
- * }
- *
- * // Get interface index for XDP attachment
- * int if_index = GetInterfaceIndex("eth0");
- * bpf_xdp_attach(if_index, prog_fd, flags, nullptr);
- * @endcode
- *
- * @note This implementation follows Google C++ Style Guide
- */
-
 #ifndef NET_UTILS_HPP_
 #define NET_UTILS_HPP_
 
@@ -58,7 +26,7 @@ namespace net {
  * @code
  * int num_interfaces = CountAvailableInterfaces();
  * Logger::upf_app().info("Found %d active interfaces", num_interfaces);
- *
+ * 
  * if (config.max_interfaces > num_interfaces) {
  *   Logger::upf_app().warn(
  *       "Configured max_interfaces (%d) exceeds available (%d)",
@@ -90,13 +58,13 @@ int CountAvailableInterfaces();
  * Usage:
  * @code
  * std::string gtp_interface = "n3";
- *
+ * 
  * if (!InterfaceExists(gtp_interface)) {
- *   Logger::upf_app().error("GTP interface '%s' not found",
+ *   Logger::upf_app().error("GTP interface '%s' not found", 
  *                           gtp_interface.c_str());
  *   throw std::runtime_error("Invalid interface configuration");
  * }
- *
+ * 
  * Logger::upf_app().info("GTP interface '%s' found", gtp_interface.c_str());
  * @endcode
  *
@@ -129,17 +97,17 @@ bool InterfaceExists(const std::string& interface_name);
  * Usage:
  * @code
  * std::string udp_interface = "eth0";
- *
+ * 
  * int if_index = GetInterfaceIndex(udp_interface);
  * if (if_index == 0) {
- *   Logger::upf_app().error("Interface '%s' not found",
+ *   Logger::upf_app().error("Interface '%s' not found", 
  *                           udp_interface.c_str());
  *   return;
  * }
- *
- * Logger::upf_app().info("Interface '%s' has index %d",
+ * 
+ * Logger::upf_app().info("Interface '%s' has index %d", 
  *                        udp_interface.c_str(), if_index);
- *
+ * 
  * // Use for XDP attachment
  * int ret = bpf_xdp_attach(if_index, prog_fd, XDP_FLAGS_DRV_MODE, nullptr);
  * @endcode

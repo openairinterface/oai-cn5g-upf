@@ -1,47 +1,6 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
-
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — Doxygen, 3GPP §-refs.
- *              V17.10.0 harmonisation:
- *                - Fixed §-refs (BAR ID §8.2.57, SugBuffPktCnt §8.2.100).
- *                - Renamed dl_buffering_suggested_packet_count →
- *                  downlink_data_notification_delay throughout.
- *                - Added update() overload for Session Report Response which
- *                  carries DL Buffering Duration (§8.2.29) and DL Buffering
- *                  Suggested Packet Count (§8.2.30).
- *                - Added TODO markers for lib gap in Session Modification
- *                  Request path (missing §8.2.29 / §8.2.30).
- *                - Added Table cross-references to every inline IE comment
- *                  in both update() overloads (Table 7.5.4.11-1 for
- *                  Modification Request, Table 7.5.9.2-1 for Report Response).
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
- */
-
-/*! \file pfcp_bar.cpp
-   \author  Franck MESSAOUDI
-   \date 2026
-   \email: franck.messaoudi@eurecom.fr
-*/
 
 #include "pfcp_bar.hpp"
 

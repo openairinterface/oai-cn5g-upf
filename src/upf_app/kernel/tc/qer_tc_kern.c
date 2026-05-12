@@ -1,46 +1,5 @@
-/**
- * @file qer_tc_kern.c
- * @brief QER (QoS Enforcement Rules) TC datapath kernel program
- *
- * This program implements QoS enforcement using Linux Traffic Control (TC)
- * in the 5G UPF datapath. It works in tandem with the XDP program to provide:
- *
- * Traffic Flow:
- * - XDP → [metadata: seid, qfi] → TC Egress (this program)
- * - TC Egress: Classifies traffic into QoS flows (sets tc_classid)
- * - TC Ingress: Redirects classified traffic to egress interface
- *
- * Key Operations:
- * - Extract QoS metadata (seid, qfi) from XDP
- * - Look up QER rules for rate limiting parameters
- * - Generate TC classid for HTB/FQ_CODEL integration
- * - Update QoS flow statistics
- * - Redirect packets to appropriate egress interface
- *
- * Architecture:
- * ```
- * XDP (N3/N6 Interface)
- *        ↓ [metadata: seid, qfi]
- * TC Egress Classifier (tc_filter_traffic)
- *        ↓ [set tc_classid]
- * TC Qdisc (HTB/FQ_CODEL)
- *        ↓ [rate shaping]
- * TC Ingress (tc_redirect_traffic)
- *        ↓
- * Egress Interface (N3)
- * ```
- *
- * TC Classid Format:
- * - Major: 1 (HTB root handle)
- * - Minor: Hash of (seid, qfi) - uniquely identifies QoS flow
- * - Format: 0x00010000 | minor_id
- *
- * @see 3GPP TS 23.501 - 5G QoS Framework
- * @see 3GPP TS 29.244 - PFCP QER IE
- * @see Linux TC documentation
- *
- * @copyright 2024 OpenAirInterface
- * @license GPL-2.0
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #define KBUILD_MODNAME qer_tc_kern

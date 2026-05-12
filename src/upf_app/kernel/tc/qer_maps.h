@@ -1,36 +1,5 @@
-/**
- * @file qer_maps.h
- * @brief QER (QoS Enforcement Rules) TC datapath map definitions
- *
- * This header defines BPF maps used by the QER TC (Traffic Control) programs
- * for QoS enforcement in the 5G UPF datapath. These maps enable:
- *
- * - Egress interface configuration for packet redirection
- * - QER rules storage per session and QFI
- * - QoS flow classification and rate limiting parameters
- * - Traffic statistics tracking per QoS flow
- *
- * Map Size Configuration:
- * All maps use dynamic sizing through volatile constants that are set from
- * userspace during BPF program loading. This allows flexible configuration
- * based on deployment requirements.
- *
- * Architecture:
- * ```
- * XDP (upf_xdp_kern) → [metadata: seid, qfi] → TC Egress (qer_tc_kernel)
- *                                                      ↓
- *                                               [QoS Classification]
- *                                                      ↓
- *                                               TC Ingress (redirect)
- *                                                      ↓
- *                                               N3 Interface
- * ```
- *
- * @see 3GPP TS 23.501 - QoS Framework
- * @see 3GPP TS 29.244 - PFCP QER IE
- *
- * @copyright 2024 OpenAirInterface
- * @license GPL-2.0
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef __QER_MAPS_H__

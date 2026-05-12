@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Application ID
- * Reference: 3GPP TS 29.244 Section 8.2.6
- */
-
 #ifndef _PFCP_APPLICATION_ID_H
 #define _PFCP_APPLICATION_ID_H
 

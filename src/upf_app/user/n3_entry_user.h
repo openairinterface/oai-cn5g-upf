@@ -1,55 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     New file. Dedicated user-space class for xdp_n3_entry_kern_c.
- *              xdp_n3_entry_kern.c includes only stats_maps.h (mc_stats_map,
- *              fixed size) and tail_call_dispatcher.h (tail_call_progs_map,
- *              packet_context_map, session_rules_enabled_map -- all fixed or
- *              sized by the owning program).
- *              No runtime map configuration needed in ConfigureMaps().
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 -- PFCP Protocol
- *              3GPP TS 23.501          -- 5G System Architecture (N3 interface)
- */
-// clang-format on
-
-/**
- * @file  n3_entry_user.h
- * @brief User-space lifecycle manager for the xdp_n3_entry XDP program.
- *
- * Responsibilities:
- *   - Open the xdp_n3_entry_kern_c skeleton and configure its maps.
- *   - Load, attach, and link the program to the GTP (N3) interface.
- *   - Expose the maps it owns for use by the orchestrator UPF_XDPProgram.
- *
- * Maps owned (from xdp_n3_entry_kern.c includes):
- *   - tail_call_progs_map      (tail_call_dispatcher.h, fixed size)
- *   - packet_context_map       (tail_call_dispatcher.h, fixed size)
- *   - session_rules_enabled_map(tail_call_dispatcher.h, fixed size)
- *   - mc_stats_map             (stats_maps.h,           fixed size)
- *
- * @note This class does NOT own pipeline maps, interface maps, or ARP maps.
- *       Those belong to the programs whose kernel files include the
- *       corresponding map headers.
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef N3_ENTRY_USER_H_

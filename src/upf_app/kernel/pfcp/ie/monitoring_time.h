@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Monitoring Time
- * Reference: 3GPP TS 29.244 Section 8.2.49
- */
-
 #ifndef _PFCP_MONITORING_TIME_H
 #define _PFCP_MONITORING_TIME_H
 

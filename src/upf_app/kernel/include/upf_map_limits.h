@@ -1,50 +1,6 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
-// clang-format off
-/* Author: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:   2026-04
- * Purpose: Single source of truth for all BPF .rodata size constants.
- *
- * Problem solved:
- *   Before this file, every map header (interfaces_maps.h, pipeline_maps.h,
- *   eth_pdu_maps.h, arp_maps.h, ...) redeclared the same
- *   `const volatile int MAX_* SEC(".rodata")` variables independently.
- *   Any kernel program including more than one of those headers got duplicate
- *   symbol errors or — worse — multiple independent rodata variables that
- *   each had to be set separately by userspace.
- *
- * Solution:
- *   All `const volatile int MAX_*` declarations live here ONLY.
- *   Every map header that needs a size constant includes this file instead
- *   of re-declaring it. The include guard prevents duplicate declarations
- *   within a single compilation unit.
- *
- * Userspace counterpart:
- *   Each variable here is set before bpf_object__load() via:
- *     skel->rodata->MAX_XXX = upf::GetMaxXxx();
- *   and the map is resized via:
- *     bpf_map__set_max_entries(skel->maps.xxx_map, upf::GetMaxXxx());
- *   See FARProgram::ConfigureMaps() for the canonical pattern.
- */
-// clang-format on
 
 #ifndef __UPF_RODATA_CONSTANT_H__
 #define __UPF_RODATA_CONSTANT_H__

@@ -1,58 +1,7 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — Doxygen, 3GPP §-refs, separator lines,
- *              Google C++ include order.
- *              V17.10.0 harmonisation:
- *                - Version bump V17.6.0 → V17.10.0.
- *                - Removed duplicate #include "pfcp_pdr.hpp".
- *                - Fixed update() parameter: renamed update → updated_pdr
- *                  (shadowed method name — boy scout fix).
- *                - Added §-refs, interface applicability, and Table 7.5.4.2-1
- *                  cross-references to every inline IE comment in update().
- *                - Added TODO stubs for IEs absent from this impl or lib:
- *                  Activate Predefined Rules §8.2.72,
- *                  Activation/Deactivation Time §8.2.121/§8.2.122,
- *                  Transport Delay Reporting (grouped), RAT Type §8.2.186.
- *                - Fixed cause_value not set on success in update() —
- *                  was returning true with cause_value uninitialised.
- *                - Fixed §8.2.10 → §8.2.64 (Outer Header Removal) in
- *                  look_up_pack_in_access comment.
- *                - Fixed §8.2.6 → §8.2.21 (Report Type) in
- *                  notify_cp_requested comment (§8.2.6 = Application ID
- *                  in V17.10.0 — V17.6.0 §-ref bleed).
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
- */
-// clang-format on
-
-/*! \file pfcp_pdr.cpp
-   \author  Lionel GAUTHIER
-   \date 2019
-   \email: lionel.gauthier@eurecom.fr
-*/
-
-// Google C++ style include order: own header, C system, C++ standard, project
 #include "pfcp_pdr.hpp"
 
 #include "common_defs.h"

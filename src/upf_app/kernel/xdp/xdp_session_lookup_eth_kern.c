@@ -1,54 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — added Boy Scout header and section
- *              separators for consistency with xdp_* entry programs.
- *              Updated includes: removed interfaces.h (not used directly);
- *              removed local redirect_interfaces_map definition;
- *              xdp_stats_kern.h -> stats_maps.h, xdp_stats_kern_user.h -> stats_types.h.
- * 3GPP Refs:   3GPP TS 23.501 §5.6.10.3 — Ethernet PDU Session Type
- *              3GPP TS 29.244 V17.10.0 §7.2.2   — PFCP Session Establishment
- */
-// clang-format on
-
-/**
- * @file session_lookup_eth.c
- * @brief PFCP session lookup for Ethernet PDU sessions (uplink)
- *
- * Maps the GTP-U TEID from the incoming uplink packet to the PFCP
- * session context. Unlike IP PDU sessions (keyed by UE IP), ETH PDU
- * sessions are keyed by uplink TEID since Ethernet frames have no
- * UE IP address.
- *
- * Additionally performs MAC address learning: records the inner source
- * MAC to (teid_dl, gNB_ip) mapping so that downlink traffic to this
- * MAC can be encapsulated and sent to the correct gNB.
- *
- * Chain: Entry -> [SESSION_LOOKUP_ETH] -> PDR Match -> FAR -> ...
- *
- * @see 3GPP TS 23.501 §5.6.10.3 - Ethernet PDU Session Type
- * @see 3GPP TS 29.244 §7.2.2 - PFCP Session Establishment
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #define KBUILD_MODNAME session_lookup_eth

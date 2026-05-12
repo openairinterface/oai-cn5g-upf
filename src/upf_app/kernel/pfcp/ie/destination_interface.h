@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Destination Interface
- * Reference: 3GPP TS 29.244 Section 8.2.24
- */
-
 #ifndef _PFCP_DESTINATION_INTERFACE_H
 #define _PFCP_DESTINATION_INTERFACE_H
 

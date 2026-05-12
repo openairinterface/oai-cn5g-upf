@@ -1,54 +1,6 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Rewritten to use dedicated program class instances.
- *
- *              Primary program selection (corrected from previous version):
- *                IP PDU  -> n3_ is primary.
- *                ETH PDU -> n3_eth_ is primary.
- *              n3_ is NOT instantiated in ETH PDU mode. Both kernel programs
- *              include tail_call_dispatcher.h so either can be primary.
- *
- *              Setup() logic:
- *                Step 1: Instantiate entry programs based on pdu_type.
- *                Step 2: Instantiate stage programs based on pdu_type +
- *                        feature flags.
- *                Step 3: Open + load the primary entry program only.
- *                Step 4: ShareMaps(primary, all_others).
- *                Step 5: Each remaining program calls its own Setup()/Load().
- *                Step 6: InitializeMaps from the primary skeleton.
- *                Step 7: Attach + link the primary entry program.
- *                Step 8: PopulateProgramArray.
- *
- *              TODOs resolved (from n3_entry_user.cpp):
- *                TODO 1: GetTotalMapCount() sums over all non-null programs.
- *                TODO 2: IsNativeXdp() / GetXdpModeString() delegate to
- *                        GetLifeCycle() on the attached entry program.
- *
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 -- PFCP Protocol
- *              3GPP TS 23.501          -- 5G System Architecture
- */
-// clang-format on
 
 #include "upf_xdp_user.h"
 #include "startup_banner.hpp"

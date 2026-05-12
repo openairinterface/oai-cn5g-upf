@@ -1,45 +1,6 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
-
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — Doxygen, 3GPP §-refs, separator lines.
- *              V17.10.0 harmonisation: corrected §-refs on all update() IE
- *              lines and table reference in function comment. No structural
- *              changes — URR tables are identical between V17.6.0 and
- *              V17.10.0 (no URR-specific CRs in that range).
- *              Added TODO stubs with table refs (7.5.4.4-1) for all IEs
- *              missing from lib: Subsequent Event Threshold §8.2.107,
- *              Subsequent Event Quota §8.2.106, Number of Reports §8.2.133,
- *              User Plane Inactivity Timer §8.2.83, Exempted App ID for
- *              Quota Action §8.2.78, Exempted SDF Filter for Quota Action
- *              §8.2.5.
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
- */
-
-/*! \file pfcp_urr.cpp
-   \author  Franck MESSAOUDI
-   \date 2026
-   \email: franck.messaoudi@eurecom.fr
-*/
 
 #include "pfcp_urr.hpp"
 

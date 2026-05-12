@@ -1,52 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — added two inline helpers:
- *                parse_gtpu_hdr()    validates GTP-U header, extracts F-TEID
- *                parse_gtpu_ext_hdr() validates PDU Session Container,
- *                                        extracts QFI
- *              Removed stale gtp_handle() forward declaration (unused).
- *              Structs, constants, and macros unchanged.
- * 3GPP Refs:   3GPP TS 29.281 V17.x.x §5.1    — GTP-U header format
- *              3GPP TS 29.281 V17.x.x §5.5.3.3 — PDU Session Container
- *              3GPP TS 29.244 V17.10.0 §8.2.3  — F-TEID IE
- *              3GPP TS 29.244 V17.10.0 §8.2.89 — QFI IE
- */
-// clang-format on
-
-/**
- * @file  protocols/gtpu.h
- * @brief GTP-U header definitions and parsing helpers for XDP programs.
- *
- * Structs, constants, and macros are the original baseline.
- * Two inline helpers have been added to centralise the GTP-U parsing
- * logic duplicated across xdp_n3_entry.c and xdp_n3_eth_entry.c.
- *
- * Used by:
- *    xdp_n3_entry.c,
- *    xdp_n3_eth_entry.c,
- *    xdp_n6_eth_entry.c,
- *    protocols/udp.h
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef PROTOCOLS_GTP_H

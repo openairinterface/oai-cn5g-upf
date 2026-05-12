@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef __FAR_BROADCAST_H__
 #define __FAR_BROADCAST_H__
 

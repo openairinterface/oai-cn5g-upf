@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef OPENAIRINTERFACE_FRAMED_ROUTING_BPF_H
 #define OPENAIRINTERFACE_FRAMED_ROUTING_BPF_H
 

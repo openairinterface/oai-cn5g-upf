@@ -1,47 +1,6 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
-
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — Doxygen, 3GPP §-refs, separator lines.
- *              V17.10.0 harmonisation: corrected §-refs in update() comments
- *              to match V17.10.0 numbering. See pfcp_qer.hpp for full IE
- *              applicability table and lib gap notes.
- *              Added Table(s) cross-reference to every inline IE comment
- *              (Table 7.5.4.5-1 for all Update QER IEs).
- *              Added TODO stubs for excluded/missing IEs: Packet Rate §8.2.63,
- *              DL Flow Level Marking §8.2.66, QER Control Indications §8.2.174,
- *              QER Indications §8.2.216.
- *              Added cause_value = CAUSE_VALUE_REQUEST_ACCEPTED on success
- *              (was missing — update() returned true but left cause undefined).
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
- */
-// clang-format on
-
-/*! \file pfcp_qer.cpp
-   \author  Franck MESSAOUDI
-   \date 2026
-   \email: franck.messaoudi@eurecom.fr
-*/
 
 #include "pfcp_qer.hpp"
 

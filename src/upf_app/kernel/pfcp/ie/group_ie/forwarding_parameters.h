@@ -2,12 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Forwarding Parameters
- * Reference: 3GPP TS 29.244 Section 7.5.2.3
- * Table 7.5.2.3-2: Forwarding Parameters IE in FAR
- */
-
 #ifndef _PFCP_FORWARDING_PARAMETERS_H
 #define _PFCP_FORWARDING_PARAMETERS_H
 

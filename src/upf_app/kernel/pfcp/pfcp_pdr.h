@@ -2,63 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     V17.10.0 audit — fixed §-ref in file-level comment:
- *                - Section 7.5.2.2: §7.5.2.2 is the PFCP Session
- *                  Establishment Request message overview in V17.10.0;
- *                  the Create PDR grouped IE table is at §7.5.2.3.
- *                  Fixed: §7.5.2.3.
- *              V17.10.0 struct additions — 1 active IE added:
- *                - mar_id (__u16, §8.2.123): required for ATSSS — the
- *                  fast path must know which MAR rule applies to the
- *                  matched PDR.  Without this field the PDR→MAR chain
- *                  cannot be followed in the XDP pipeline.
- *              Control-plane-only IEs — added as comments, not active fields:
- *                - activate_predefined_rules (§8.2.76): CP expands rule
- *                  names into concrete map entries before XDP runs; XDP
- *                  never interprets predefined rule name strings.
- *                - deactivate_predefined_rules (§8.2.97): same reason;
- *                  mid-session CP operation only.
- *              Boy Scout cleanup:
- *                - Replaced bare block comment with changelog + clang-format
- *                  guards and @file Doxygen block.
- *                - "Section X.X.X" notation → §X.X.X throughout.
- *                - Replaced kernel-doc @field list with ///< §-ref inline
- *                  comments on every struct field.
- *   ABI BREAK: adding mar_id changes struct size.  Update ConvertPdr() /
- *     SessionProgramManager and the kernel pdr_match.c simultaneously.
- *   ie/deactivate_predefined_rules.h is referenced in comments only;
- *     no include required until the field is activated.
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
- *              §7.5.2.3   Create PDR grouped IE
- *              §8.2.36    PDR ID         §8.2.11  Precedence
- *              §8.2.2     Outer Header Removal
- *              §8.2.74    FAR ID         §8.2.54  URR ID
- *              §8.2.75    QER ID         §8.2.76  Activate Predefined Rules
- *              §8.2.97    Deactivate Predefined Rules
- *              §8.2.123   MAR ID
- */
-// clang-format on
-
-/**
- * @file pfcp_pdr.h
- * @brief Kernel/user-space shared struct for Packet Detection Rule (PDR)
- * @author OpenAirInterface, Franck Messaoudi
- * @date 2025 / 2026-03
- *
- * BPF-compatible representation of the PFCP Create PDR IE (§7.5.2.3).
- * Shared between the kernel BPF program (pdr_match.c) and the
- * user-space manager (pdr_match_user.h).
- *
- * @warning Changing field order or types is an ABI break — kernel and
- *          user-space must be updated simultaneously.
- *
- * @see 3GPP TS 29.244 §7.5.2.3  — Create PDR grouped IE
- * @see pdr_match_user.h          — User-space PDR map manager
- */
-
 #ifndef _PFCP_PDR_H
 #define _PFCP_PDR_H
 
@@ -109,7 +52,5 @@ struct pfcp_pdr {
    * struct deactivate_predefined_rules deactivate_predefined_rules; §8.2.97
    */
 } __attribute__((packed));
-
-typedef struct pfcp_pdr pfcp_pdr_t;
 
 #endif /* _PFCP_PDR_H */

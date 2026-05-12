@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file bpf_utils.cpp
- * @brief Implementation of BPF utility functions
- */
-
 #include "bpf_utils.hpp"
 #include <cstring>
 #include "logger.hpp"

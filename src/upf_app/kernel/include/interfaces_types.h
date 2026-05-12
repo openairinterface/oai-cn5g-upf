@@ -1,44 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — split interfaces.h into
- *              interfaces_types.h (plain-C types, this file) and
- *              interfaces_maps.h (BPF map definitions).
- *              No functional changes to struct or enum content.
- */
-// clang-format on
-
-/**
- * @file  interfaces_types.h
- * @brief UPF reference-point type definitions shared between kernel and user.
- *
- * Contains only plain-C types — no BPF map definitions.
- * BPF maps that use these types are in interfaces_maps.h.
- *
- * Used by: all XDP entry programs, xdp_far_apply.c,
- *          session_lookup_eth.c, xdp_n6_eth_entry.c
- *
- * 3GPP Ref: 3GPP TS 23.501 Table 6.3.3-1 — UPF reference points
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef __INTERFACES_TYPES_H__

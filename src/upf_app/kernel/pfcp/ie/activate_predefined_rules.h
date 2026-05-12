@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Activate Predefined Rules
- * Reference: 3GPP TS 29.244 Section 8.2.72
- */
-
 #ifndef _PFCP_ACTIVATE_PREDEFINED_RULES_H
 #define _PFCP_ACTIVATE_PREDEFINED_RULES_H
 

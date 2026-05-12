@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Forwarding Policy
- * Reference: 3GPP TS 29.244 Section 8.2.23
- */
-
 #ifndef _PFCP_FORWARDING_POLICY_H
 #define _PFCP_FORWARDING_POLICY_H
 

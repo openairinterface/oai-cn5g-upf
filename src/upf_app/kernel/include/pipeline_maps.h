@@ -1,58 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — refactored upf_xdp_maps.h into
- *              dedicated *_maps.h files per concern:
- *                interfaces_maps.h  -- upf_interface_map, redirect_interfaces_map
- *                arp_maps.h         -- arp_table_map
- *                sdf_maps.h         -- sdf_filters_map
- *                pipeline_maps.h    -- session, PDR, framed routing, dispatch (this file)
- *              All max_entries = 1 are runtime placeholders.
- *              Removed .rodata constants (moved to upf_xdp_limits.h).
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 §7.5.2 — Session Establishment
- *              3GPP TS 29.244 V17.10.0 §8.2.21 — PDR ID IE
- */
-// clang-format on
-
-/**
- * @file  pipeline_maps.h
- * @brief BPF map definitions for the UPF XDP forwarding pipeline.
- *
- * Provides the core session and rule lookup maps:
- *   session_by_ue_ip_map    -- UE IP -> session context (IP PDU DL lookup)
- *   pdrs_per_session_map    -- SEID -> PDR array (PDR matching)
- *   session_qos_enabled_map -- SEID -> QoS enable flag (legacy, kept for
- * compat) rules_match_pdr_map     -- {pdr_id, seid} -> full rule set
- *   m_framed_route_mapping  -- framed route hash -> UE IP
- *   framed_routing_flag     -- global framed routing enable flag
- *   feature_dispatch_map    -- BPF PROG_ARRAY for tail calls
- *
- * .rodata constants (MAX_PDU_SESSIONS etc.) are defined in upf_xdp_limits.h
- * and set by userspace before BPF program load.
- *
- * Depends on: pipeline_types.h, sdf_types.h
- *
- * 3GPP Ref: 3GPP TS 29.244 V17.10.0 §7.5.2 — PFCP Session Establishment
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef __PIPELINE_MAPS_H__

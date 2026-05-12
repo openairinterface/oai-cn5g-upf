@@ -1,58 +1,6 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
-
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — Doxygen on all public methods, 3GPP §-refs,
- *              separator lines, grouped public/private sections.
- *              V17.3.0 audit (2026-03, harmonisation pass):
- *                - GTP-U §-refs (§4.4, §5.1, §7.2.1, §7.2.2, §7.3.1, §8.3,
- *                  §8.10) confirmed correct for TS 29.281 V17.3.0; no changes.
- *                - Cross-spec refs clarified: §8.2.3 and §8.2.89 now
- *                  explicitly cite 3GPP TS 29.244 V17.10.0 to distinguish
- *                  them from the GTP-U §-refs above.
- *                - Fixed send_g_pdu() Doxygen: broken indentation on the
- *                  @param qfi continuation line.
- *                - Added ///< doc-comments to all undocumented private
- *                  members (thread_id, thread).
- *                - Added Doxygen to undocumented methods:
- *                  upf_n3() constructor, time_out_itti_event().
- *                - Added brief description to \file block.
- * 3GPP Refs:   3GPP TS 29.281 V17.3.0 (Release 17, 2022-09) — GTP-U Protocol
- *              3GPP TS 38.415          (NR User Plane Protocol — PDU Session
- *                                       Container extension header)
- *              3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
- *                (cross-refs only: §8.2.3 F-TEID, §8.2.89 QFI)
- */
-// clang-format on
-
-/*! \file simple_switch.hpp
-   \brief   upf_n3 — GTP-U handler for the N3 interface (UPF ↔ gNB).
-            Receives G-PDU packets, strips the GTP-U header, and dispatches
-            the inner IP packet for PFCP rule matching.
-   \author  Lionel GAUTHIER
-   \date    2019
-   \email   lionel.gauthier@eurecom.fr
-*/
 
 #ifndef FILE_SGWU_SIMPLESWITCH_HPP_SEEN
 #define FILE_SGWU_SIMPLESWITCH_HPP_SEEN

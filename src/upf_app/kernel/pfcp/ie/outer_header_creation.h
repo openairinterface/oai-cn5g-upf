@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Outer Header Creation
- * Reference: 3GPP TS 29.244 Section 8.2.56
- */
-
 #ifndef _PFCP_OUTER_HEADER_CREATION_H
 #define _PFCP_OUTER_HEADER_CREATION_H
 

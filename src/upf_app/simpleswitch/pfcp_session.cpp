@@ -1,60 +1,6 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
-
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — Doxygen, 3GPP §-refs.
- *              Bug fix: pfcp_session::update(bar) replaced incompatible direct
- *              pair assignments with explicit field-by-field conversion.
- *              V17.10.0 harmonisation: renamed dl_buffering_suggested_packet_
- *              count → downlink_data_notification_delay in BAR update block
- *              (the old name stored a delay, not a packet count). Fixed §-refs:
- *              BAR ID §8.2.57 (was §8.2.49), SugBuffPktCnt §8.2.100 (was
- *              §8.2.50). See pfcp_bar.hpp for full BAR IE applicability table.
- *              MAR block: fixed table refs (create_mar 7.5.2.9-1 → 7.5.2.8-1,
- *              remove_mar 7.5.4.14-1 → 7.5.4.15-1). Fixed silent bug: weight_
- *              present and priority_present were never set after copying weight/
- *              priority from AFAI in create_mar and the update_mar lambda.
- *              Added TODO markers for V17.10.0 new IEs not yet in OAI lib:
- *              RAT Type in AFAI (§8.2.186), Thresholds (§8.2.196), Steering
- *              Mode Indicator (§8.2.197).
- *              V17.10.0 audit pass (2026-03):
- *                - Fixed PDN Type section header §-ref: §8.2.38 (= Node ID)
- *                  → §8.2.79 (= PDN Type).
- *                - Bug fix: create_far(), create_pdr(), create_qer() all
- *                  missing cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED
- *                  on the success path — same bug pattern fixed in far/qer/
- *                  pdr/bar/urr/mar in earlier sessions.
- *                - Fixed create_qer comment §8.2.20/§8.2.21 (= Redirect
- *                  Info / Report Type) → §8.2.8 (MBR) / §8.2.9 (GBR).
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
- */
-// clang-format on
-
-/*! \file pfcp_session.cpp
-   \author  Lionel GAUTHIER
-   \date 2019
-   \email: lionel.gauthier@eurecom.fr
-*/
 
 #include "pfcp_session.hpp"
 

@@ -2,12 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Duplicating Parameters
- * Reference: 3GPP TS 29.244 Section 7.5.2.3
- * Table 7.5.2.3-3: Duplicating Parameters IE in FAR
- */
-
 #ifndef _PFCP_DUPLICATING_PARAMETERS_H
 #define _PFCP_DUPLICATING_PARAMETERS_H
 

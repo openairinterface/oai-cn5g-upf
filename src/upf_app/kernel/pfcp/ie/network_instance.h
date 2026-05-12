@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Network Instance
- * Reference: 3GPP TS 29.244 Section 8.2.4
- */
-
 #ifndef _PFCP_NETWORK_INSTANCE_H
 #define _PFCP_NETWORK_INSTANCE_H
 

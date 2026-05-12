@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP F-TEID (Fully Qualified TEID)
- * Reference: 3GPP TS 29.244 Section 8.2.3
- */
-
 #ifndef _PFCP_FTEID_H
 #define _PFCP_FTEID_H
 

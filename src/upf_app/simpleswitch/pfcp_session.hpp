@@ -1,62 +1,6 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
-
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — Doxygen on all public methods, 3GPP §-refs
- *              on rule vectors, add/create/update/remove for URR/BAR/MAR,
- *              separator lines, field grouping.
- *              V17.10.0 audit (2026-03, harmonisation pass):
- *                - Version bump V17.6.0 → V17.10.0.
- *                - `mars` vector doc: §7.5.2.9 (= Create SRR in V17.10.0)
- *                  → §7.5.2.8 (= Create MAR).
- *                - create_mar Doxygen table ref: 7.5.2.9-1 → 7.5.2.8-1.
- *                - remove_mar Doxygen table ref: 7.5.4.14-1 (= Remove
- *                  Traffic Endpoint) → 7.5.4.15-1 (= Remove MAR).
- *                - Removed dead declaration get(uint16_t, pfcp_qer&):
- *                  no implementation exists; @brief promoted to the
- *                  uint32_t overload.
- *                - Fixed three wrong §-refs in get() Doxygen:
- *                    PDR ID §8.2.1 (= Cause/General) → §8.2.36
- *                    URR ID §8.2.44 (= Volume Measurement) → §8.2.54
- *                    BAR ID §8.2.49 (= Dropped DL Threshold) → §8.2.57
- *                - Added ///< doc-comments to teid_mutex, pdn_type_mutex.
- *                - Added @brief Doxygen to private set(fteid) and
- *                  set(pdn_type_value_e) helpers.
- *                - Added ///< brief comments to private add() overloads.
- *                - Added \brief to \file block.
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
- */
-// clang-format on
-
-/*! \file pfcp_session.hpp
-   \brief  Per-PDU-session container that holds all active PDRs, FARs,
-           QERs, URRs, BARs and MARs.  Provides typed create / update /
-           remove entry-points that map to 3GPP TS 29.244 V17.10.0
-           Session-Establishment (§7.5.2) and Session-Modification (§7.5.4).
-   \author  Lionel GAUTHIER
-   \date    2019
-   \email   lionel.gauthier@eurecom.fr
-*/
 
 #ifndef FILE_PFCP_SESSION_HPP_SEEN
 #define FILE_PFCP_SESSION_HPP_SEEN

@@ -2,64 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     V17.10.0 audit — §7.5.2.5 is correct for Create QER IE;
- *              no §-ref correction needed.
- *              V17.10.0 struct addition — 1 active data-plane IE added:
- *                - averaging_window (§8.2.134): GBR flow smoothing window;
- *                  used by TC shaper for accurate GBR enforcement in 5G NR.
- *              Control-plane / SMF-signalling IEs — added as comments:
- *                - qer_correlation_id (§8.2.19): CP cross-session grouping;
- *                  qer_tc BPF classifier never reads it.
- *                - paging_policy_indicator (§8.2.64): value forwarded to AMF,
- *                  not a per-packet forwarding decision.
- *                - qer_control_indications (§8.2.140): RCSRT/MTES are
- *                  SMF-facing reporting flags; no per-packet role.
- *              Boy Scout cleanup:
- *                - Replaced bare block comment with changelog + clang-format
- *                  guards and @file Doxygen block.
- *                - "Section X.X.X" notation → §X.X.X throughout.
- *                - Replaced kernel-doc @field list with ///< §-ref inline
- *                  comments on every struct field.
- *   ABI BREAK: adding averaging_window changes struct size.  Update
- *     ConvertQer() in qer_tc_user.cpp and kernel qer_tc_kern.c simultaneously.
- *   ie/averaging_window.h must exist in kernel/ie/.
- *   Commented-out IEs (qer_correlation_id, paging_policy_indicator,
- *     qer_control_indications) require no includes until activated.
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
- *              §7.5.2.5   Create QER grouped IE
- *              §8.2.75    QER ID         §8.2.7   Gate Status
- *              §8.2.8     MBR            §8.2.9   GBR
- *              §8.2.19    QER Correlation ID
- *              §8.2.64    Paging Policy Indicator
- *              §8.2.88    RQI            §8.2.89  QFI
- *              §8.2.134   Averaging Window
- *              §8.2.140   QER Control Indications
- */
-// clang-format on
-
-/**
- * @file pfcp_qer.h
- * @brief Kernel/user-space shared struct for QoS Enforcement Rule (QER)
- * @author OpenAirInterface, Franck Messaoudi
- * @date 2025 / 2026-03
- *
- * BPF-compatible representation of the PFCP Create QER IE (§7.5.2.5).
- * Shared between the kernel BPF program (qer_tc_kern.c) and the
- * user-space manager (qer_tc_user.h).
- *
- * @warning Changing field order or types is an ABI break — kernel and
- *          user-space must be updated simultaneously.
- * @warning New fields added in this revision (V17.10.0 update) change
- *          the struct size.  ConvertQer() in qer_tc_user.cpp and the
- *          kernel qer_tc_kern.c must be updated before enabling new fields.
- *
- * @see 3GPP TS 29.244 §7.5.2.5  — Create QER grouped IE
- * @see qer_tc_user.h             — User-space QER map manager
- */
-
 #ifndef _PFCP_QER_H
 #define _PFCP_QER_H
 

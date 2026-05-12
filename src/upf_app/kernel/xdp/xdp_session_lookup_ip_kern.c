@@ -1,56 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — added Boy Scout header and section
- *              separators for consistency with xdp_* entry programs.
- *              Updated includes: removed unused pfcp_far/pfcp_pdr;
- *              upf_xdp_maps.h -> pipeline_maps.h (session_by_ue_ip_map);
- *              xdp_stats_kern.h -> stats_maps.h, xdp_stats_kern_user.h -> stats_types.h.
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 §7.2.2.1 — SEID
- *              3GPP TS 29.244 V17.10.0 §8.2.36  — UE IP Address IE
- *              3GPP TS 29.244 V17.10.0 §8.2.3   — F-TEID IE
- */
-// clang-format on
-
-/**
- * @file session_lookup_ip.c
- * @brief PFCP Session Lookup for IP PDU sessions
- *
- * Resolves UE IP Address to PFCP session context. Used by both uplink
- * and downlink paths (N3 and N6 entry points).
- *
- * Lookup: UE IP → session_by_ue_ip_map → {SEID, TEID_UL, TEID_DL}
- *
- * Also reads the per-session rule enable flags from
- * session_rules_enabled_map and caches them in pctx->rules_enabled
- * for use by all downstream programs.
- *
- * Chain: Entry → [SESSION_LOOKUP_IP] → PDR_MATCH → FAR → ...
- *
- * @see 3GPP TS 29.244 §7.2.2.1 - SEID
- * @see 3GPP TS 29.244 §8.2.36 - UE IP Address IE
- * @see 3GPP TS 29.244 §8.2.3 - F-TEID IE
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #define KBUILD_MODNAME session_lookup_ip

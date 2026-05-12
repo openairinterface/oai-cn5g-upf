@@ -2,36 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file BPFMaps.h
- * @brief Container for all BPF maps from a skeleton
- *
- * This class provides centralized access to all BPF maps within a
- * libbpf skeleton. It creates BPFMap wrappers for each map and provides
- * lookup by name.
- *
- * Usage Pattern:
- * @code
- * // During BPF program initialization:
- * auto maps = std::make_shared<BPFMaps>(skeleton->skeleton);
- *
- * // Access maps by name:
- * BPFMap& session_map = maps->GetMap("session_map");
- * BPFMap& arp_table = maps->GetMap("arp_table_map");
- *
- * // Use the maps:
- * session_map.Update(ue_ip, session_id, BPF_ANY);
- * @endcode
- *
- * Design:
- * - Wraps the skeleton's bpf_object_skeleton structure
- * - Creates BPFMap wrappers for all maps at construction
- * - Provides map lookup by name
- * - RAII-compliant (cleans up wrappers automatically)
- *
- * @note This implementation follows Google C++ Style Guide
- */
-
 #ifndef BPFMAPS_H_
 #define BPFMAPS_H_
 

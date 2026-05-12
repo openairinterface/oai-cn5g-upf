@@ -1,54 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — consolidated session_id.h and
- *              rules_matching_pdr.h into this single file since both
- *              serve the pipeline dispatch purpose.
- *              No functional changes to struct content.
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 §8.2.21 — PDR ID IE
- *              3GPP TS 29.244 V17.10.0 §7.5.2   — Session Establishment
- */
-// clang-format on
-
-/**
- * @file  pipeline_types.h
- * @brief Core pipeline data types: session identity and PDR rule association.
- *
- * Consolidates session_id.h and rules_matching_pdr.h into one file:
- *
- *   - struct session_id       session lookup result (SEID + TEIDs)
- *   - struct pdrs_per_session map key: {pdr_id, seid}
- *   - struct rules_match_pdr  full rule set for a matched PDR
- *
- * Contains only plain-C types — no BPF map definitions.
- * The BPF maps are in pipeline_maps.h.
- *
- * Used by: session_lookup_ip.c, pdr_match.c, xdp_far_apply.c,
- *          xdp_qer_apply.c, xdp_urr_apply.c, xdp_bar_apply.c,
- *          xdp_mar_apply.c, session_lookup_eth.c
- *
- * 3GPP Ref: 3GPP TS 29.244 V17.10.0 §7.5.2 — PFCP Session Establishment
- *           3GPP TS 29.244 V17.10.0 §8.2.21 — PDR ID IE
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef __PIPELINE_TYPES_H__

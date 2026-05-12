@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Transport Level Marking
- * Reference: 3GPP TS 29.244 Section 8.2.12
- */
-
 #ifndef _PFCP_TRANSPORT_LEVEL_MARKING_H
 #define _PFCP_TRANSPORT_LEVEL_MARKING_H
 

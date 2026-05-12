@@ -1,54 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-
-/**
- * @file  mar_types.h
- * @brief Multi-Access Rule (MAR) data structures for ATSSS.
- *
- * Defines all types shared between xdp_mar_apply_kern.c and the
- * userspace path probe daemon:
- *
- *   - enum mar_access_type   3GPP vs non-3GPP access path identifier
- *   - enum mar_steer_mode    ATSSS steering algorithm selection
- *   - enum mar_path_status   per-access-path liveness state
- *   - struct mar_config      CP-configured MAR rule
- *   - struct mar_access_state runtime RTT / liveness state
- *   - REDIRECT_N3 / REDIRECT_N9 interface slot constants
- *
- * Contains only plain-C types — no BPF map definitions.
- *
- * 3GPP Ref: 3GPP TS 29.244 V17.10.0
- *   §8.2.123  MAR ID
- *   §8.2.124  Steering Functionality
- *   §8.2.125  Steering Mode
- *   §8.2.126  Weight
- *   §8.2.127  Priority
- *   TS 23.501 §5.32  — ATSSS (Access Traffic Steering, Switching, Splitting)
- */
-
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Refactoring — split into *_types.h / *_maps.h pairs,
- *              corrected 3GPP TS 29.244 V17.10.0 section references,
- *              removed Unicode symbols, applied Boy Scout cleanup.
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef __MAR_TYPES_H__

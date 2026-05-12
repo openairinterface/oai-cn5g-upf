@@ -1,6 +1,7 @@
 /*
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
+
 #ifndef SDF_FILTER_PARSER_HPP
 #define SDF_FILTER_PARSER_HPP
 

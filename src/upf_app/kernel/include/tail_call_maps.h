@@ -1,50 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — added OAI license header and section
- *              separators. Replaced Unicode dashes with plain ASCII.
- *              Fixed include: replaced pipeline_types.h with
- *              tail_call_types.h (packet_context is defined there, not
- *              in pipeline_types.h).
- */
-// clang-format on
-
-/**
- * @file  tail_call_maps.h
- * @brief BPF map definitions for the tail-call dispatch infrastructure.
- *
- * Provides:
- *   tail_call_progs_map       -- PROG_ARRAY for program dispatch
- *   packet_context_map        -- per-CPU packet state (cross-stage)
- *   session_rules_enabled_map -- per-session feature enable flags
- *
- * These maps are included by every entry-point and pipeline program.
- *
- * Depends on: tail_call_types.h
- *
- * NOTE: tail_call_progs_map (this file) is separate from
- * feature_dispatch_map (pipeline_maps.h). Both are PROG_ARRAYs used at
- * different call sites — they may be consolidated in a future cleanup.
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef __TAIL_CALL_MAPS_H__
