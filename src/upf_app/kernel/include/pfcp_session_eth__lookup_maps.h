@@ -5,7 +5,6 @@
 #include <ie/group_ie/create_pdr.h>
 #include <pfcp/pfcp_pdr.h>
 #include <pfcp/pfcp_far.h>
-#include <pfcp/pfcp_session.h>
 #include <linux/bpf.h>
 #include <stdint.h>
 #include <ie/teid.h>
@@ -31,7 +30,7 @@ struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, MAX_LENGTH);
   __type(key, u64);  // seid
-  __type(value, pfcp_pdr_t_[MAX_PDRS_PER_SESSION]);
+  __type(value, pfcp_pdr_t[MAX_PDRS_PER_SESSION]);
   __uint(pinning, 1);
 } m_eth__session_pdrs SEC(".maps");
 

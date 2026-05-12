@@ -19,9 +19,3 @@ SessionPrograms::~SessionPrograms() {
 std::shared_ptr<UPF_XDPProgram> SessionPrograms::getPFCPProgram() const {
   return mpUPF_XDPProgram;
 }
-
-/**************************************************************************************************/
-pdn_type_e SessionPrograms::getPdnType() const {
-  return mPdnType;
-}
-/**************************************************************************************************/

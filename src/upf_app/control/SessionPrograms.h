@@ -22,8 +22,6 @@ class SessionPrograms {
   virtual ~SessionPrograms();
   std::shared_ptr<UPF_XDPProgram> getPFCPProgram() const;
 
-  pdn_type_e getPdnType() const;
-
  private:
   std::shared_ptr<UPF_XDPProgram> mpUPF_XDPProgram;
 };

@@ -7,6 +7,7 @@
 #include <SessionProgramManager.h>
 #include <SignalHandler.h>
 #include <upf_xdp_user.h>
+#include <far_tc_user.h>
 #include "logger.hpp"
 #include <helpers/GetNicInformation.hpp>
 

@@ -39,7 +39,7 @@ struct arphdr {
 } __attribute__((packed));
 
 static __always_inline u32 create_outer_header_gtpu_ethernet(
-    struct xdp_md* ctx, teid_t_ teid, u32 ipv4_address, u32 qfi) {
+    struct xdp_md* ctx, teid_t teid, u32 ipv4_address, u32 qfi) {
   // bpf_debug("Create Outer Header GTPU_IPv4");
   // bpf_debug("Original Packet: Data/UDP/IP/ETH");
   void* data     = (void*) (long) ctx->data;
@@ -57,7 +57,7 @@ static __always_inline u32 create_outer_header_gtpu_ethernet(
   data_end = (void*) (long) ctx->data_end;
 
   // Retrieve the N3 Interface IP address:
-  e_reference_point n3_key = N3_INTERFACE;
+  reference_point_t n3_key = N3_INTERFACE;
   u32 n3_ip;
   if (!retrieve_upf_iface_from_map(n3_key, &n3_ip)) {
     bpf_debug("N3 interface is missing in UPF map, Drop the packet");
@@ -178,9 +178,9 @@ static __always_inline u32 create_outer_header_gtpu_ethernet(
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
-static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence__uplink(
+static __always_inline pfcp_pdr_t* pfcp_session_s_lookup_precedence__uplink(
     u64 seid, u32 packet_teid, u8 packet_qfi) {
-  pfcp_pdr_t_(*pdrs)[MAX_PDRS_PER_SESSION] =
+  pfcp_pdr_t(*pdrs)[MAX_PDRS_PER_SESSION] =
       bpf_map_lookup_elem(&m_eth__session_pdrs, &seid);
 
   if (!pdrs) {
@@ -200,8 +200,8 @@ static __always_inline pfcp_pdr_t_* pfcp_session_s_lookup_precedence__uplink(
 
 #pragma clang loop unroll(full)
   for (int i = 0; i < MAX_PDRS_PER_SESSION; i++) {
-    pfcp_pdr_t_* pdr_high_prec = &(*pdrs)[i];
-    pdi_t_ pdi                 = pdr_high_prec->pdi;
+    pfcp_pdr_t* pdr_high_prec = &(*pdrs)[i];
+    pdi_t pdi                 = pdr_high_prec->pdi;
 
     // TODO [ETH-PDU] support filtering by ethernet packet filters
 
@@ -254,7 +254,7 @@ static int prepare_and_pass_to_tc(
 
 /*---------------------------------------------------------------------------------------------------------------*/
 static __always_inline u32 handle_far__uplink(
-    struct xdp_md* ctx, teid_t_ teid, u8 qfi, u8 source_value,
+    struct xdp_md* ctx, teid_t teid, u8 qfi, u8 source_value,
     struct ethhdr* eth) {
   bpf_debug("Handling uplink FAR ETH PDU session traffic");
   void* data     = (void*) (long) ctx->data;
@@ -320,7 +320,7 @@ static __always_inline u32 handle_far__uplink(
     return XDP_DROP;
   }
 
-  pfcp_pdr_t_* pdr_high_precedence =
+  pfcp_pdr_t* pdr_high_precedence =
       pfcp_session_s_lookup_precedence__uplink(seid, teid_ul, qfi);
 
   if (!pdr_high_precedence) {
@@ -352,7 +352,7 @@ static __always_inline u32 handle_far__uplink(
     return XDP_PASS;
   }
 
-  pfcp_far_t_* p_far = &rules->far;
+  pfcp_far_t* p_far = &rules->far;
 
   if (p_far) {
     // TODO [ETH-PDU] support other destinations and actions on the packet
@@ -509,7 +509,7 @@ handle_downlink_traffic__eth_pdu(struct xdp_md* ctx) {
 
   // For IP packet with dest IP equal to N6 interface IP address, we don't
   // need to do anything. Pass it up the network stack.
-  e_reference_point n6_key = N6_INTERFACE;
+  reference_point_t n6_key = N6_INTERFACE;
   u32 n6_ip                = 0;
   if (!retrieve_upf_iface_from_map(n6_key, &n6_ip)) {
     bpf_debug("N6 interface is missing in UPF map, Doing nothing");

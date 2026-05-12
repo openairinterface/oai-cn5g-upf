@@ -51,6 +51,7 @@ add_library(UPF_XDP STATIC
   control/SessionManager.cpp
   control/SessionPrograms.cpp
   user/upf_xdp_user.cpp
+  user/far_tc_user.cpp
   user/BPFProgram.cpp
   user/wrappers/BPFMaps.cpp
   user/wrappers/BPFMap.cpp
@@ -104,6 +105,7 @@ install(
   control/SessionManager.cpp
   control/SessionPrograms.cpp
   user/qer_tc_user.cpp
+  user/far_tc_user.cpp
   user/BPFProgram.cpp
   user/wrappers/BPFMaps.cpp
   user/wrappers/BPFMap.cpp
