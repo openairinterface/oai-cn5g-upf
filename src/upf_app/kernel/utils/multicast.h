@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef BPF_MULTICAST_H
 #define BPF_MULTICAST_H
 

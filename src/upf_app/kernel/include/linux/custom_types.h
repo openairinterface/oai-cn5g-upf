@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #if !defined(CUSTOM_TYPES_H)
 #define CUSTOM_TYPES_H
 

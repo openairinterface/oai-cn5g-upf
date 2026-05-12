@@ -1,6 +1,6 @@
-//
-// Created by root on 6/25/24.
-//
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 
 #pragma once
 

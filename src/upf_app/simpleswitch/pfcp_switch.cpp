@@ -1,68 +1,6 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
-
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — Doxygen on session handlers, 3GPP section
- *              references on PFCP message processing, separator lines,
- *              Google C++ include order.
- *              V17.10.0 harmonisation:
- *                - Version bump V17.6.0 → V17.10.0.
- *                - Fixed §7.5.5 → §7.5.6 in section header and comment for
- *                  handle_pfcp_session_deletion_request (§7.5.5 = Modification
- *                  Response in V17.10.0; §7.5.6 = Deletion Request).
- *                - Fixed mangled \file Doxygen block (single-line formatter
- *                  artefact).
- *                - Confirmed correct §-refs (no change needed):
- *                    §7.5.2  Session Establishment Request
- *                    §7.5.4  Session Modification Request
- *                    §8.2.3  F-TEID (generate_fteid_n3)
- *                - Added §8.2.37 F-SEID annotation to fseid handling in
- *                  establishment handler.
- *                - Added §8.2.38 Node ID annotation to node_id lookup.
- *              Bug fix (functional):
- *                - Added create_urr / create_bar / create_mar to
- *                  handle_pfcp_session_establishment_request.
- *                - Added remove_urr / remove_bar / remove_mar,
- *                  create_urr / create_bar / create_mar, and
- *                  update_urr / update_bar / update_mar to
- *                  handle_pfcp_session_modification_request.
- *                  session->urrs/bars/mars were never populated, so
- *                  SessionProgramManager::CreatePipeline/ModifyPipeline
- *                  never wrote urr_config_map, bar_config_map, or
- *                  mar_rules_map in BPF — silently dropping all URR
- *                  measurement, BAR buffering, and MAR steering.
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
- */
-// clang-format on
-
-/*! \file pfcp_switch.cpp
-   \brief   PFCP switching engine — session management and per-packet
-            forwarding.
-   \author  Lionel Gauthier
-   \date    2019
-   \company Eurecom
-   \email   lionel.gauthier@eurecom.fr
-*/
 
 #include "pfcp_switch.hpp"
 

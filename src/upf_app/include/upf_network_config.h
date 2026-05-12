@@ -1,47 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-
-/**
- * @file upf_network_config.h
- * @brief Shared UPF network and feature-flag configuration
- * @author OpenAirInterface
- * @date 2025
- *
- * Lives in include/ so it is visible to kernel/, control/, and user/
- * without any cross-folder dependency.
- *
- * Contains:
- *   - NetworkConfig struct  — flat snapshot of the upf_config fields needed
- *                             outside of app/ (interfaces, IPs, flags, sizing)
- *   - upf::g_net_cfg        — the single global instance (defined in
- *                             control/Configuration.cpp, the sole writer)
- *   - upf::Get*()/Is*()     — inline convenience getters (zero overhead)
- *
- * Ownership
- * ---------
- *   Writer  : control/Configuration::BuildNetworkConfig()
- *             Called once by UserPlaneComponent::Setup() before any BPF work.
- *   Readers : user/, kernel include headers, control/ (except Configuration)
- *
- * No dependency on upf_config.hpp — safe to include anywhere.
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef UPF_NETWORK_CONFIG_H_

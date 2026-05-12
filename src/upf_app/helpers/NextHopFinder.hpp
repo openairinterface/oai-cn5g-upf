@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef NEXT_HOP_FINDER_HPP
 #define NEXT_HOP_FINDER_HPP
 

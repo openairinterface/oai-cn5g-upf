@@ -1,52 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-
-/**
- * @file SessionManager.h
- * @brief PFCP Session Manager for User Plane Function
- * @author OpenAirInterface
- * @date 2025
- *
- * This module implements session management functionality for the UPF control
- * plane, handling PFCP session establishment, modification, and deletion as
- * defined in 3GPP TS 29.244.
- *
- * Key 3GPP References:
- * - 3GPP TS 29.244 V17.10.0: Interface between the Control Plane and the User
- *                              Plane nodes
- * - 3GPP TS 29.281 V17.3.0: General Packet Radio System (GPRS) Tunnelling
- *                             Protocol User Plane (GTPv1-U)
- * - 3GPP TS 23.501: System architecture for the 5G System (5GS)
- * - §5.2  PFCP Session procedures (overview)
- * - §7.5  N4 Session procedure message IEs
- * - §8.2  Information Element definitions
- *
- * @par Changelog
- * | Date       | Author | Description                                        |
- * |------------|--------|----------------------------------------------------|
- * | 2025-xx-xx | OAI    | Initial implementation                             |
- * | 2026-03-11 | OAI    | Harmonised §-refs to TS 29.244 V17.10.0; fixed     |
- * |            |        | Source Interface §-ref in TrafficDirection; removed |
- * |            |        | vacuous Google Style Guide note; fixed "Baffering"  |
- * |            |        | typo; corrected MBR/GBR/Gate Status/URR ID §-refs. |
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef SESSION_MANAGER_H_

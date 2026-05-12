@@ -1,59 +1,6 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
-
-/**
- * @file SessionPrograms.cpp
- * @brief Per-session BPF program and rule state container implementation
- * @author OpenAirInterface
- * @date 2025
- *
- * Key difference from old monolithic architecture:
- *   OLD: SessionPrograms owned a UPF_XDPProgram instance and called
- *        TearDown() on it in the destructor. This was correct when each
- *        session had its own XDP program.
- *
- *   NEW (tail-call): UPF_XDPProgram is the GLOBAL shared pipeline.
- *        All sessions share one pipeline and store per-session state
- *        in BPF maps keyed by SEID. The destructor ONLY cleans up:
- *        1. The per-session QER TC-BPF program (rate shaping)
- *        2. Per-session BPF map entries (URR/BAR/MAR config+state)
- *        3. The rules_enabled entry from session_rules_enabled_map
- */
-
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     V17.10.0 boy scout pass — no functional changes in this file.
- *              This file was correct as-is; changes are documentation only:
- *                - Added this changelog block.
- *                - All BPF map cleanup entries (urr_config_map,
- *                  bar_config_map, mar_rules_map) guard-checked against
- *                  rules_enabled_flags — no change needed; already correct.
- *              §-refs used in this file:
- *                §8.2.54  URR ID — urr_config_map / urr_volume_counters_map keyed by SEID
- *                §8.2.57  BAR ID — bar_config_map / bar_state_map keyed by SEID
- *                §8.2.123 MAR ID — mar_rules_map keyed by SEID
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
- */
-// clang-format on
 
 #include "SessionPrograms.h"
 #include <upf_xdp_user.h>

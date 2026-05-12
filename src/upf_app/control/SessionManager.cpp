@@ -1,55 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-
-/**
- * @file SessionManager.cpp
- * @brief PFCP Session Manager Implementation
- * @author OpenAirInterface
- * @date 2025
- *
- * Implements complete CRUD operations for PFCP sessions, PDRs, FARs, and QERs
- * according to 3GPP TS 29.244 V17.10.0 specifications.
- *
- * @par Changelog
- * | Date       | Author | Description                                        |
- * |------------|--------|----------------------------------------------------|
- * | 2025-xx-xx | OAI    | Initial implementation                             |
- * | 2026-03-11 | OAI    | Harmonised §-refs to TS 29.244 V17.10.0; fixed     |
- * |            |        | missing lock in UpdateSession (TODO); removed      |
- * |            |        | duplicate urr_id update and double updated_count++ |
- * |            |        | in HandlePdrUpdates; fixed §8.2.50→§8.2.100 in     |
- * |            |        | HandleBarUpdates; corrected OHC §-ref comment.     |
- * | 2026-03-11 | OAI    | Bug fixes (functional):                            |
- * |            |        | HandleUrrUpdates: added measurement_method,        |
- * |            |        |   time_quota, quota_holding_time, linked_urr_id    |
- * |            |        |   (all absent from previous implementation).       |
- * |            |        | HandleBarUpdates: field name wrong —               |
- * |            |        |   dl_buffering_suggested_packet_count renamed to   |
- * |            |        | downlink_data_notification_delay in pfcp_bar.hpp;  |
- * |            |        | fixed to write correct field.                      |
- * |            |        | HandleMarUpdates: added steering_functionality     |
- * |            |        | (§8.2.124); AFAI now copies weight (§8.2.126),     |
- * |            |        | priority (§8.2.127), urr_id (§8.2.54) in addition  |
- * |            |        | to far_id; shared lambda used for both AFAI paths. |
- * |            |        | All Section x.y refs → §x.y procedure refs.        |
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #include "SessionManager.h"
@@ -625,12 +575,6 @@ bool SessionManager::AddPdr(
     CategorizePdrs(session);
     SortPdrs(session->pdrs_uplink);
     SortPdrs(session->pdrs_downlink);
-    for (int i = 0; i++; i < session->pdrs.size()) {
-      Logger::upf_app().error(
-          "xxxxxxxxxxxxxxxxXXXXXXXXXXXxxxxxx PDR ID: %d "
-          "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-          session->pdrs[i]->pdr_id.rule_id);
-    }
 
     // Update BPF maps
     session_program_manager_->CreatePipeline(session);

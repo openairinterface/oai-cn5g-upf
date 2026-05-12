@@ -1,48 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-
-/**
- * @file SessionProgramManager.h
- * @brief BPF Program Manager for PFCP Sessions
- * @author OpenAirInterface
- * @date 2025
- *
- * This module manages BPF/eBPF programs and maps for PFCP session processing
- * in the user plane data path. It handles the translation between PFCP IEs
- * and BPF data structures.
- *
- * Tail Call Architecture:
- *   Entry -> Session Lookup -> PDR Match -> FAR -> [QER] -> [URR] -> [BAR] ->
- * [MAR] Programs in brackets conditional on RULE_*_ENABLED flags in
- *   session_rules_enabled_map (replaces old session_qos_enabled_map).
- *
- * ETH PDU Session Support (TS 23.501 Section 5.6.10.3):
- *   ETH sessions keyed by TEID (not UE IP), use separate BPF maps:
- *   eth_session_mapping_map, eth_session_pdrs_map, eth_rules_match_pdr_map
- * Key 3GPP References:
- * - 3GPP TS 29.244: PFCP protocol specification
- * - 3GPP TS 29.281: GTPv1-U protocol for tunneling
- * - 3GPP TS 23.501: 5G System Architecture
- * - 3GPP TS 29.244 Section 8.2: Information Elements for PDR, FAR, QER
- * - 3GPP TS 29.244 Section 8.2.74: Outer Header Creation
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef SESSION_PROGRAM_MANAGER_H_

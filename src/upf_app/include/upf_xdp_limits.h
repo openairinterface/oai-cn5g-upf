@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef __UPF_XDP_LIMITS_H__
 #define __UPF_XDP_LIMITS_H__
 

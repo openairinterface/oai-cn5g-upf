@@ -1,51 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-
-/**
- * @file upf_pipeline_config.h
- * @brief BPF tail-call pipeline types shared across control/, user/, and
- * kernel/
- * @author OpenAirInterface
- * @date 2025 / 2026-03
- *
- * Changes (2026-03): Removed stale ProgIndex enum -- it duplicated
- *   enum upf_prog_index from kernel/include/tail_call_types.h with
- *   wrong values, causing redefinition errors. User-space files that
- *   need PROG_* slot indices must include tail_call_types.h directly.
- *   PduSessionType and PipelineFeatureFlags are unchanged.
- *
- * Lives in include/ — the only folder visible to control/, user/, and kernel/
- * without cross-folder dependencies.
- *
- * Defines:
- *   - PduSessionType       — IP or Ethernet entry program selection
- *   - PipelineFeatureFlags — which optional PROG_ARRAY slots to load
- *   - upf_prog_index       — PROG_* slot indices (in tail_call_types.h)
- *
- * These types are intentionally kept here and NOT in user/upf_xdp_user.h
- * because control/UserPlaneComponent and helpers/startup_banner need them
- * without being allowed to depend on user/.
- *
- * No dependency on upf_config.hpp or any generated skeleton header.
- * Safe to include anywhere.
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef UPF_PIPELINE_CONFIG_H_

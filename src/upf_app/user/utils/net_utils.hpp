@@ -1,56 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-
-/**
- * @file net_utils.hpp
- * @brief Network interface utility functions
- * @author OpenAirInterface
- * @date 2025
- *
- * This header provides utility functions for network interface operations:
- * - Interface enumeration and counting
- * - Interface existence checks
- * - Interface index lookup
- *
- * These utilities are used during BPF program initialization to validate
- * network interfaces and retrieve interface indices for XDP attachment.
- *
- * All functions are in the oai::utils::net namespace.
- *
- * Usage:
- * @code
- * using namespace oai::utils::net;
- * 
- * // Check if interface exists
- * if (!InterfaceExists("eth0")) {
- *   Logger::upf_app().error("Interface eth0 not found");
- *   return;
- * }
- * 
- * // Get interface index for XDP attachment
- * int if_index = GetInterfaceIndex("eth0");
- * bpf_xdp_attach(if_index, prog_fd, flags, nullptr);
- * @endcode
- *
- * @note This implementation follows Google C++ Style Guide
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef NET_UTILS_HPP_

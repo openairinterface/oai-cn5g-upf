@@ -1,57 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — merged bpf_eth_utils.h into this file
- *              (bpf_eth_utils.h had the same include guard BPF_UTILS_H,
- *              causing silent ODR conflicts when both were included).
- *              Removed legacy functions using old map names:
- *                - retrieve_upf_iface_from_map() used m_upf_interfaces ->
- *                  replaced by direct upf_interface_map lookup in callers.
- *                - update_dst_mac_address() used m_arp_table ->
- *                  inlined into update_mac_address() FIB fallback.
- *              Updated update_mac_address() FIB fallback to use:
- *                - upf_interface_map  (was m_upf_interfaces)
- *                - arp_table_map      (was m_arp_table)
- *                - struct interface_config / struct arp_entry
- *                  (were struct s_interface / struct s_arp_mapping)
- *              Removed <sys/socket.h> (invalid in BPF); AF_INET defined
- *              directly to avoid kernel vs userspace header conflicts.
- *              Added OAI license and section separators.
- */
-// clang-format on
-
-/**
- * @file  bpf_utils.h
- * @brief BPF utility helpers shared across all XDP/TC programs.
- *
- * Provides:
- *   htons/htonl/ntohs/ntohl macros  -- byte-order conversion guards
- *   swap_src_dst_mac()              -- in-place Ethernet MAC swap
- *
- * Deliberately map-free so it can be safely included from every BPF compile
- * unit. FIB-based next-hop MAC resolution lives in utils/mac_resolution.h.
- *
- * Depends on: utils/logger.h
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef BPF_UTILS_H

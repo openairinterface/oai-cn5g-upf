@@ -1,53 +1,6 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
-
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — Doxygen on all public methods, 3GPP §-refs,
- *              separator lines, Google C++ include order.
- *              V17.3.0 audit (2026-03, harmonisation pass):
- *                - GTP-U §-refs confirmed correct; no changes.
- *                - Fixed \file block: added missing \date field.
- *                - Added Doxygen section header for upf_n3_task() forward
- *                  declaration and implementation.
- *                - Normalised all section-header spec citations to include
- *                  "3GPP TS 29.281 V17.3.0" consistently (previously some
- *                  section headers used bare §x.x without spec name).
- *                - Cross-spec refs in send_g_pdu section header updated to
- *                  reference 3GPP TS 29.244 V17.10.0 for §8.2.3/§8.2.89.
- * 3GPP Refs:   3GPP TS 29.281 V17.3.0 (Release 17, 2022-09) — GTP-U Protocol
- *              3GPP TS 38.415          (NR User Plane Protocol)
- *              3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
- *                (cross-refs only: §8.2.3 F-TEID, §8.2.89 QFI)
- */
-// clang-format on
-
-/*! \file simple_switch.cpp
-   \brief   GTP-U N3 interface handler — receive, dispatch, send.
-   \author  Lionel Gauthier
-   \date    2019
-   \company Eurecom
-   \email   lionel.gauthier@eurecom.fr
-*/
 
 #include "simple_switch.hpp"
 

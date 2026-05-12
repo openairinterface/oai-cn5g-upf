@@ -1,57 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — added OAI license header, section
- *              separators, and Doxygen field comments.
- *              Fixed includes: replaced legacy <bpf_helpers.h> with
- *              <bpf/bpf_helpers.h>. All max_entries = 1 are runtime
- *              placeholders.
- * 3GPP Refs:   3GPP TS 23.501 §5.6.10.3 — Ethernet PDU Session Type
- */
-// clang-format on
-
-/**
- * @file  eth_pdu_maps.h
- * @brief BPF map definitions for Ethernet PDU session processing.
- *
- * Provides all maps required by the ETH PDU pipeline:
- *   session_by_mac_map      -- UE MAC -> session_id  (ETH DL session lookup)
- *   eth_session_mapping_map  -- uplink TEID -> ETH session context
- *   eth_session_pdrs_map     -- SEID -> PDR array     (ETH PDR matching)
- *   eth_rules_match_pdr_map  -- {pdr_id, seid} -> rules (ETH rule dispatch)
- *   eth_egress_ifindex_map        -- slot -> egress ifindex (DEVMAP redirect)
- *
- * NOTE: eth_session_pdrs_map and eth_rules_match_pdr_map are kept separate
- * from the IP PDU maps (pdrs_per_session_map, rules_match_pdr_map) because
- * the ETH PDU path is compiled as a separate BPF object.
- *
- * All max_entries = 1 are placeholders set at runtime via
- * bpf_map__set_max_entries() before skel->load().
- * Active only when PDU session type is Ethernet (pdu_type: eth in YAML).
- *
- * Depends on: eth_pdu_types.h, pipeline_types.h
- *
- * 3GPP Ref: 3GPP TS 23.501 §5.6.10.3 — Ethernet PDU Session Type
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef __ETH_PDU_MAPS_H__

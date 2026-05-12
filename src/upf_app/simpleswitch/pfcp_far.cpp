@@ -1,59 +1,6 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
-
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — Doxygen, 3GPP §-refs, separator lines,
- *              Google C++ include order.
- *              V17.10.0 harmonisation:
- *                - Version bump V17.6.0 → V17.10.0.
- *                - Fixed §8.2.17 → §8.2.26 (Apply Action) in section header
- *                  and inline comment.
- *                - Fixed §8.2.15 → grouped IE type=4 (Forwarding Parameters)
- *                  in inline comment.
- *                - Fixed update() parameter: renamed update → updated_far
- *                  (shadowed method name — boy scout fix).
- *                - Added §-refs, interface applicability, and Table 7.5.4.3-1
- *                  cross-references to every IE line in update().
- *                - Added TODO stubs for IEs absent from lib: Redundant
- *                  Transmission Forwarding Parameters (grouped=270), Add MBS
- *                  Unicast Parameters (grouped=302), Remove MBS Unicast
- *                  Parameters (grouped=303).
- *                - Fixed cause_value not set on success in update() —
- *                  was returning true with cause_value uninitialised.
- *                - Fixed build error: added reinterpret_cast<struct ::iphdr*>
- *                  at no_internal_loop() / send_to_core() call sites.
- *                  pfcp_far.cpp does `using namespace pfcp` so unqualified
- *                  `iphdr` resolves to pfcp::iphdr; pfcp_switch expects the
- *                  Linux kernel ::iphdr.  Both types are layout-identical.
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 (Release 17, 2024-04) — PFCP Protocol
- */
-// clang-format on
-
-/*! \file pfcp_far.cpp
-   \author  Lionel GAUTHIER
-   \date 2019
-   \email: lionel.gauthier@eurecom.fr
-*/
 
 #include "pfcp_far.hpp"
 

@@ -1,57 +1,7 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup:
- *                - Fixed static member initialisation-order hazard: the
- *                  previous code initialised gtp_interface_ and
- *                  non_gtp_interface_ directly from upf_cfg.n3.if_name /
- *                  upf_cfg.n6.if_name at file scope.  upf_cfg lives in
- *                  another TU; C++ does not guarantee its static initialiser
- *                  runs before this TU's — so those strings could be empty.
- *                  Fixed by initialising both to "" (populated at runtime by
- *                  the constructor from upf_cfg, which by then is fully
- *                  loaded).
- *                - Fixed argc guard in constructor: was `if (argc >= 2)` but
- *                  then dereferenced argv[2] — UB if exactly one argument is
- *                  passed.  Corrected to `if (argc >= 3)`.
- *                - Fixed include order to follow Google C++ style:
- *                  own header → system headers → project headers.
- *                - Fixed inconsistent comment style: ---BPF map sizing--
- *                  replaced with a standard `// ---` separator.
- *                - Fixed g_net_cfg definition comment: "populated in
- *                  Configuration()" → "populated in BuildNetworkConfig()".
- *                - Added changelog block with clang-format guards.
- */
-// clang-format on
-
-/*! \file Configuration.cpp
-   \brief  UPF configuration management implementation.
-   \author OpenAirInterface, Franck Messaoudi
-   \date   2025 / 2026-03
-*/
-
-// Google C++ include order: own header, system, project
 #include "Configuration.h"
 
 #include <string>

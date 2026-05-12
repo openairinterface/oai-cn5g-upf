@@ -1,5 +1,6 @@
-// BPFMapFormatters.hpp - FIXED VERSION
-// Fixes: Missing includes for struct definitions
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 
 #pragma once
 

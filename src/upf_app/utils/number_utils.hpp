@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef NUMBER_UTILS_HPP
 #define NUMBER_UTILS_HPP
 

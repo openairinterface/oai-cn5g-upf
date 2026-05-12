@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef __FAR_TC_USER_H__
 #define __FAR_TC_USER_H__
 

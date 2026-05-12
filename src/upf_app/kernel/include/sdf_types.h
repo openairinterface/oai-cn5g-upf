@@ -1,54 +1,5 @@
 /*
- * Licensed to the OpenAirInterface (OAI) Software Alliance under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The OpenAirInterface Software Alliance licenses this file to You under
- * the OAI Public License, Version 1.1  (the "License"); you may not use this
- * file except in compliance with the License. You may obtain a copy of the
- * License at
- *
- *      http://www.openairinterface.org/?page_id=698
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *-------------------------------------------------------------------------------
- * For more information about the OpenAirInterface (OAI) Software Alliance:
- *      contact@openairinterface.org
- */
-// clang-format off
-/* Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
- * Date:        2026-03
- * Changes:     Boy Scout cleanup — split sdf_filter.h into
- *              sdf_types.h (plain-C types, this file) and
- *              sdf_maps.h (BPF map definitions).
- *              Removed large block of commented-out dead code.
- *              No functional changes to struct or helper content.
- * 3GPP Refs:   3GPP TS 29.244 V17.10.0 §8.2.5  — SDF Filter IE
- *              3GPP TS 23.501 §5.7.1            — QoS Flow concept
- */
-// clang-format on
-
-/**
- * @file  sdf_types.h
- * @brief Service Data Flow (SDF) filter type definitions.
- *
- * Defines the structs and helper used for SDF filter matching:
- *   - struct ip_subnet      IP address + mask (v4 or v6)
- *   - struct port_range     L4 port lower/upper bounds
- *   - struct packet_filter  5-tuple extracted from a packet
- *   - struct session_qfi    map key: {SEID, QFI}
- *   - struct sdf_filtr      full SDF filter rule
- *   - generate_minor_id()   TC classid minor-ID hash helper
- *
- * Contains only plain-C types and inline helpers — no BPF map definitions.
- * The BPF map (sdf_filters_map) is in sdf_maps.h.
- *
- * Used by: pdr_match.c, xdp_qer_apply.c, qer_tc_kern.c
- *
- * 3GPP Ref: 3GPP TS 29.244 V17.10.0 §8.2.5 — SDF Filter IE
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
 #ifndef __SDF_TYPES_H__
