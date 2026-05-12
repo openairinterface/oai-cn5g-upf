@@ -329,23 +329,19 @@ void UPF_XDPProgram::setFramedRouting(bool enable) {
 
 // ---------------------------------------------------------------------------------------------------------------*/
 // For ETH PDU session
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getETHMacPduSessionMap()
-    const {
+std::shared_ptr<BPFMap> UPF_XDPProgram::getETHMacPduSessionMap() const {
   return mpETHMacPduSessionMap;
 }
 
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getETHSessionMappingMap()
-    const {
+std::shared_ptr<BPFMap> UPF_XDPProgram::getETHSessionMappingMap() const {
   return mpETHSessionMappingMap;
 }
 
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getETHRulesMatchPdrMap()
-    const {
+std::shared_ptr<BPFMap> UPF_XDPProgram::getETHRulesMatchPdrMap() const {
   return mpETHRulesMatchPdrMap;
 }
 
-std::shared_ptr<BPFMap> PFCP_Session_LookupProgram::getETHSessionPdrsMap()
-    const {
+std::shared_ptr<BPFMap> UPF_XDPProgram::getETHSessionPdrsMap() const {
   return mpETHSessionPdrsMap;
 }
 

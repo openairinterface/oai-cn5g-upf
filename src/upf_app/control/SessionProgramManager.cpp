@@ -362,8 +362,8 @@ void SessionProgramManager::storePduSessionInMap(
 //---------------------------------------------------------------------------------------------------------------
 // Helper function to store ETH PDU Session mapping
 void SessionProgramManager::storeETHPduSessionInMap(
-    std::shared_ptr<PFCP_Session_LookupProgram> pPFCP_Session_LookupProgram,
-    uint32_t teid_ul, uint32_t teid_dl, uint32_t n3IpAddress, uint64_t seid) {
+    std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram, uint32_t teid_ul,
+    uint32_t teid_dl, uint32_t n3IpAddress, uint64_t seid) {
   // Normalize TEIDs and SEID for little-endian systems
   if (likely(is_little_endian())) {
     teid_ul     = htonl(teid_ul);
@@ -375,8 +375,8 @@ void SessionProgramManager::storeETHPduSessionInMap(
   struct eth__session_id eth_pdu_session = {0};
   uint32_t key = teid_ul;  // Use teid_ul as the key for ETH PDU session
   // Perform the lookup
-  int ret = pPFCP_Session_LookupProgram->getETHSessionMappingMap()->lookup(
-      key, &eth_pdu_session);
+  int ret =
+      pUPF_XDPProgram->getETHSessionMappingMap()->lookup(key, &eth_pdu_session);
   // If the session exists, update the relevant fields
   if (ret == 0) {
     if (eth_pdu_session.teid_ul == 0) {
@@ -404,7 +404,7 @@ void SessionProgramManager::storeETHPduSessionInMap(
         n3IpAddress;  // To support multiple N3 interfaces
     eth_pdu_session.seid = seid;
   }
-  pPFCP_Session_LookupProgram->getETHSessionMappingMap()->update(
+  pUPF_XDPProgram->getETHSessionMappingMap()->update(
       key, eth_pdu_session, BPF_ANY);
   Logger::upf_app().debug(
       "Stored ETH PDU session in map with TEID_UL: %u, TEID_DL: %u, SEID: "
@@ -664,8 +664,8 @@ void SessionProgramManager::createPipeline(
           "UE IP Address for PDR %d: %s", pdr_id,
           inet_ntoa(ueIpAddress.ipv4_address));
       storePduSessionInMap(
-          pPFCP_Session_LookupProgram, ueIpAddress.ipv4_address.s_addr,
-          fteid.teid, 0, seid);
+          pUPF_XDPProgram, ueIpAddress.ipv4_address.s_addr, fteid.teid, 0,
+          seid);
     } else if (
         sourceInterface.interface_value == INTERFACE_VALUE_ACCESS &&
         pdi.get(ethernetPacketFilter)) {  // UL only. For DL we will used the
@@ -682,8 +682,7 @@ void SessionProgramManager::createPipeline(
       // TODO [ETH-PDU] store in the session map
       logger.info(
           "ETH PDU: Storing ETH PDU session in map with TEID %u", fteid.teid);
-      storeETHPduSessionInMap(
-          pPFCP_Session_LookupProgram, fteid.teid, 0, upfn3IP, seid);
+      storeETHPduSessionInMap(pUPF_XDPProgram, fteid.teid, 0, upfn3IP, seid);
     } else {
       ueIpAddress.ipv4_address.s_addr = 0;
       logger.warn("UE IP Address is missing for PDR %d", pdr_id);
@@ -801,19 +800,18 @@ void SessionProgramManager::modifyETHPipeline(
         "vector:");
   }
 
-  auto pPFCP_Session_LookupProgram =
-      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram();
+  auto pUPF_XDPProgram = UserPlaneComponent::getInstance().getUPF_XDPProgram();
 
   logger.debug(
       "ETH-PDU: Storing ETH PDU session in map with TEID_UL: %u, TEID_DL: %u, "
       "SEID: %llu",
       teid_ul, teid_dl, seid);
   storeETHPduSessionInMap(
-      UserPlaneComponent::getInstance().getPFCP_Session_LookupProgram(),
-      teid_ul, teid_dl, upfn3Ip, session->get_up_seid());
+      UserPlaneComponent::getInstance().getUPF_XDPProgram(), teid_ul, teid_dl,
+      upfn3Ip, session->get_up_seid());
 
-  pfcp_pdr_t_ pdrs[MAX_PDRS_SESSION] = {0};
-  int i                              = 0;
+  pfcp_pdr_t pdrs[MAX_PDRS_SESSION] = {0};
+  int i                             = 0;
 
   for (const auto& pdr : session->pdrs) {
     pdr_id = pdr->pdr_id.rule_id;
@@ -836,8 +834,7 @@ void SessionProgramManager::modifyETHPipeline(
     pdr_key.pdr_id                  = pdr_id;
     pdr_key.seid                    = seid;
 
-    pPFCP_Session_LookupProgram->getETHRulesMatchPdrMap()->update(
-        pdr_key, rules, BPF_ANY);
+    pUPF_XDPProgram->getETHRulesMatchPdrMap()->update(pdr_key, rules, BPF_ANY);
 
     // TODO [ETH-PDU] support ] SDF Flow Description
 
@@ -845,8 +842,7 @@ void SessionProgramManager::modifyETHPipeline(
     i++;
   }
 
-  pPFCP_Session_LookupProgram->getETHSessionPdrsMap()->update(
-      seid, pdrs, BPF_ANY);
+  pUPF_XDPProgram->getETHSessionPdrsMap()->update(seid, pdrs, BPF_ANY);
 }
 
 //---------------------------------------------------------------------------------------------------------------

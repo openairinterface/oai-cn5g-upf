@@ -79,6 +79,9 @@ class SessionProgramManager {
   void storePduSessionInMap(
       std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram, uint32_t ue_ip_address,
       uint32_t teid_dl, uint32_t teid_ul, uint64_t seid);
+  void storeETHPduSessionInMap(
+      std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram, uint32_t teid_ul,
+      uint32_t teid_dl, uint32_t n3IpAddress, uint64_t seid);
 
   void updateARPTableForN6(
       std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram, uint32_t dnIP,

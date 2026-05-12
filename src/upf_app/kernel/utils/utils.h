@@ -10,7 +10,7 @@
 #include <stdbool.h>
 #include <interfaces.h>
 // #include <arp_table_maps.h>
-#include <pfcp_session_lookup_maps.h>
+#include <upf_xdp_maps.h>
 
 // Dictionary
 // htons() - host to network short
@@ -38,9 +38,9 @@
 /*****************************************************************************************************************/
 
 static __always_inline bool retrieve_upf_iface_from_map(
-    e_reference_point key, u32* iface_ip) {
-  struct s_interface* map_element =
-      bpf_map_lookup_elem(&m_upf_interfaces, &key);
+    reference_point_t key, u32* iface_ip) {
+  struct interface_config* map_element =
+      bpf_map_lookup_elem(&upf_interface_map, &key);
 
   if (map_element) {
     *iface_ip = map_element->ipv4_address;
@@ -53,10 +53,10 @@ static __always_inline bool retrieve_upf_iface_from_map(
 /*****************************************************************************************************************/
 static __always_inline bool update_dst_mac_address(
     u32 ip, struct ethhdr* p_eth) {
-  struct s_arp_mapping* map_entry = {0};
-  // memset(&map_entry, 0, sizeof(struct s_arp_mapping));
+  struct arp_entry* map_entry = {0};
+  // memset(&map_entry, 0, sizeof(struct arp_entry));
 
-  map_entry = bpf_map_lookup_elem(&m_arp_table, &ip);
+  map_entry = bpf_map_lookup_elem(&arp_table_map, &ip);
 
   if (map_entry) {
     __builtin_memcpy(
@@ -72,7 +72,7 @@ static __always_inline bool update_dst_mac_address(
  */
 static __always_inline int update_mac_address(
     struct xdp_md* ctx, struct ethhdr* ethh, struct iphdr* iph,
-    e_reference_point direction) {
+    reference_point_t direction) {
   void* data_end = (void*) (long) ctx->data_end;
 
   struct bpf_fib_lookup fib_params = {};
@@ -117,7 +117,7 @@ static __always_inline int update_mac_address(
       bpf_debug("BPF_FIB_LOOKUP Failed, rc: %d, try the UPF arp table", rc);
 
       // Retrieve the N6 Interface IP address:
-      e_reference_point nx_key = direction;
+      reference_point_t nx_key = direction;
       u32 nx_ip;
       if (retrieve_upf_iface_from_map(nx_key, &nx_ip)) {
         if (!update_dst_mac_address(nx_ip, ethh)) {
