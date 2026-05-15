@@ -417,7 +417,7 @@ static __always_inline u32 handle_far__uplink(
 
     bpf_debug("The Packet is redirected for transmission to DN ...");
 
-    return bpf_redirect_map(&m_redirect_interfaces, UPLINK, 0);
+    return bpf_redirect_map(&redirect_interfaces_map, UPLINK, 0);
 
   } else {
     bpf_debug("ETH PDU: No FAR entry found for TEID %u", teid);
@@ -504,7 +504,7 @@ handle_downlink_traffic__eth_pdu(struct xdp_md* ctx) {
         pdu_session->teid);
     create_outer_header_gtpu_ethernet(
         ctx, pdu_session->teid, pdu_session->ipv4_address, 1);
-    return bpf_redirect_map(&m_redirect_interfaces, DOWNLINK, 0);
+    return bpf_redirect_map(&redirect_interfaces_map, DOWNLINK, 0);
   }
 
   // For IP packet with dest IP equal to N6 interface IP address, we don't
