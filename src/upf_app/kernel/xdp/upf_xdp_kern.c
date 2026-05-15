@@ -81,6 +81,7 @@
 /* Maps and definitions */
 #include "upf_xdp_maps.h"
 #include "interfaces.h"
+#include "pfcp_session_eth_pdu.h"
 #include "sdf_filter.h"
 #include "framed_routing_bpf.h"
 #include "xdp_stats_kern.h"
@@ -1348,6 +1349,7 @@ apply_far_n6(struct xdp_md* ctx, struct pdrs_per_session pdr_key, u8 qfi) {
 SEC("xdp")
 int xdp_uplink(struct xdp_md* ctx) {
   bpf_debug("========< XDP Uplink: N3 --> N6 >========");
+  int action = XDP_PASS;
 
   /*
     |-----------------------------------------------------------------------|
@@ -1383,8 +1385,11 @@ int xdp_uplink(struct xdp_md* ctx) {
         "No "
         "session for UE IP: %pI4",
         ue_ip);
-    return xdp_stats_record_action(ctx, XDP_PASS);
-    // return XDP_PASS;
+    action = xdp_stats_record_action(ctx, XDP_PASS);
+    if (action != XDP_PASS) {
+      return action;
+    }
+    return entry_point_uplink__eth_pdu(ctx);
   }
 
   u64 seid    = session->seid;
@@ -1439,7 +1444,11 @@ int xdp_uplink(struct xdp_md* ctx) {
     case RET_FAILURE:
     default: {
       bpf_debug("PASS: something went wrong! pass packet to kernel");
-      return xdp_stats_record_action(ctx, XDP_PASS);
+      action = xdp_stats_record_action(ctx, XDP_PASS);
+      if (action != XDP_PASS) {
+        return action;
+      }
+      return entry_point_uplink__eth_pdu(ctx);
     }
   }
 }
@@ -1598,6 +1607,7 @@ int xdp_qos(struct xdp_md* ctx) {
 SEC("xdp")
 int xdp_downlink(struct xdp_md* ctx) {
   bpf_debug("========< XDP Downlink: N6 --> N3 >========");
+  int action = XDP_PASS;
 
   /*
    |-----------------------------------------------------------------------|
@@ -1627,7 +1637,11 @@ int xdp_downlink(struct xdp_md* ctx) {
   if (!session) {
     bpf_debug(
         "PFCP Session Lookup (Find PFCP session with matching PDRs) failed");
-    return xdp_stats_record_action(ctx, XDP_PASS);
+    action = xdp_stats_record_action(ctx, XDP_PASS);
+    if (action != XDP_PASS) {
+      return action;
+    }
+    return entry_point_downlink__eth_pdu(ctx);
   }
 
   u64 seid    = session->seid;
@@ -1682,7 +1696,11 @@ int xdp_downlink(struct xdp_md* ctx) {
     }
     default: {
       bpf_debug("PASS: something went wrong! pass packet to kernel");
-      return xdp_stats_record_action(ctx, XDP_PASS);
+      action = xdp_stats_record_action(ctx, XDP_PASS);
+      if (action != XDP_PASS) {
+        return action;
+      }
+      return entry_point_downlink__eth_pdu(ctx);
     }
   }
 }
