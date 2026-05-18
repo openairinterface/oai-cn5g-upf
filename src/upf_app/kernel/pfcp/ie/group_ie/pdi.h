@@ -60,4 +60,6 @@ struct pdi {
   struct framed_ipv6_route framed_ipv6_route;
 } __attribute__((packed));
 
+typedef struct pdi pdi_t;
+
 #endif /* _PFCP_PDI_H */

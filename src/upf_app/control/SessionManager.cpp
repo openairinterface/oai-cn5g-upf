@@ -1056,6 +1056,8 @@ void SessionManager::CategorizePdrs(
     std::shared_ptr<pfcp::pfcp_qer> qer;
     bool has_qer = GetQerForPdr(session, pdr, qer);
 
+    pfcp::precedence_t precedence;
+
     // 3GPP TS 29.244 Section 8.2.62 - Source Interface
     switch (source_interface.interface_value) {
       case INTERFACE_VALUE_ACCESS: {
@@ -1063,9 +1065,9 @@ void SessionManager::CategorizePdrs(
         if (has_qer) {
           session->qers_uplink.push_back(qer);
         }
-        logger.debug(
+        Logger::upf_app().debug(
             "  PDR %u -> UPLINK (Precedence: %u, QFI: %u)", pdr->pdr_id.rule_id,
-            pdr->get(precedence) ? precedence.precedence : 0, qfi);
+            pdr->get(precedence) ? precedence.precedence : 0, session->qfi);
         break;
       }
       case INTERFACE_VALUE_CORE: {
@@ -1073,10 +1075,10 @@ void SessionManager::CategorizePdrs(
         if (has_qer) {
           session->qers_downlink.push_back(qer);
         }
-        logger.debug(
+        Logger::upf_app().debug(
             "  PDR %u -> DOWNLINK (Precedence: %u, QFI: %u)",
             pdr->pdr_id.rule_id,
-            pdr->get(precedence) ? precedence.precedence : 0, qfi);
+            pdr->get(precedence) ? precedence.precedence : 0, session->qfi);
         break;
       }
       case INTERFACE_VALUE_SGI_LAN_N6_LAN:
@@ -1263,8 +1265,8 @@ size_t SessionManager::HandlePdrUpdates(
     }
 
     // Handle Activate Predefined Rules (3GPP TS 29.244 Table 7.5.4.2-1)
-    if (update_pdr.has_activate_predefined_rules()) {
-      const auto& activate_rules = update_pdr.get_activate_predefined_rules();
+    if (!update_pdr.activate_predefined_rules.empty()) {
+      const auto& activate_rules = update_pdr.activate_predefined_rules;
       for (const auto& rule : activate_rules) {
         Logger::upf_app().info(
             "Activating predefined rule '%s' for PDR %u in session " SEID_FMT,
@@ -1290,9 +1292,8 @@ size_t SessionManager::HandlePdrUpdates(
     }
 
     // Handle Deactivate Predefined Rules (3GPP TS 29.244 Table 7.5.4.2-1)
-    if (update_pdr.has_deactivate_predefined_rules()) {
-      const auto& deactivate_rules =
-          update_pdr.get_deactivate_predefined_rules();
+    if (!update_pdr.deactivate_predefined_rules.empty()) {
+      const auto& deactivate_rules = update_pdr.deactivate_predefined_rules;
       for (const auto& rule : deactivate_rules) {
         Logger::upf_app().info(
             "Deactivating predefined rule '%s' for PDR %u in "
@@ -1559,18 +1560,6 @@ size_t SessionManager::HandleQerUpdates(
     if (update_qer.get(rqi)) {
       existing_qer->reflective_qos.first  = true;
       existing_qer->reflective_qos.second = rqi;
-    }
-
-    pfcp::paging_policy_indicator_t ppi;
-    if (update_qer.get(ppi)) {
-      existing_qer->paging_policy_indicator.first  = true;
-      existing_qer->paging_policy_indicator.second = ppi;
-    }
-
-    pfcp::averaging_window_t avg_window;
-    if (update_qer.get(avg_window)) {
-      existing_qer->averaging_window.first  = true;
-      existing_qer->averaging_window.second = avg_window;
     }
 
     updated_count++;

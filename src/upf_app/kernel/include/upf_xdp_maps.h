@@ -60,6 +60,8 @@ const volatile int MAX_SDF_FILTERS_PER_PDU_SESSION SEC(".rodata");
 const volatile int MAX_ARP_ENTRIES SEC(".rodata");
 const volatile int MAX_QOS_ENABLING SEC(".rodata");
 
+#define MAX_ETH_PDU_SESSIONS 500
+
 /*
  * =============================================================================
  * INTERFACE MAPS (fixed size)

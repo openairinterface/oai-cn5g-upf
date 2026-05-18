@@ -18,8 +18,5 @@ bool pfcp_qer::update(const pfcp::update_qer& update, uint8_t& cause_value) {
   if (update.get(guaranteed_bitrate.second)) guaranteed_bitrate.first = true;
   if (update.get(qos_flow_id.second)) qos_flow_id.first = true;
   if (update.get(reflective_qos.second)) reflective_qos.first = true;
-  if (update.get(paging_policy_indicator.second))
-    paging_policy_indicator.first = true;
-  if (update.get(averaging_window.second)) averaging_window.first = true;
   return true;
 }

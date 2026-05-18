@@ -192,7 +192,7 @@ struct vlan_hdr {
  * }
  * ```
  */
-static __always_inline bool update_dst_mac(u32 ip, struct ethhdr* eth) {
+static __noinline bool update_dst_mac(u32 ip, struct ethhdr* eth) {
   struct arp_entry* arp = {0};
 
   if (!eth) {
@@ -233,7 +233,7 @@ static __always_inline bool update_dst_mac(u32 ip, struct ethhdr* eth) {
  * - IPs: (packet_ip & mask) must equal (sdf_ip & mask)
  * - Ports: packet_port must be within [lower_bound, upper_bound]
  */
-static __always_inline u32 match_sdf_filter(
+static __noinline u32 match_sdf_filter(
     const struct packet_filter* pkt_filter, const struct sdf_filtr* sdf) {
   u8 pkt_proto     = pkt_filter->protocol;
   u16 pkt_src_port = pkt_filter->src_port;
@@ -315,7 +315,7 @@ static __always_inline u32 match_sdf_filter(
  * @return RET_SUCCESS, RET_DROP, or RET_FAILURE
  */
 
-static __always_inline u32
+static __noinline u32
 gtpu_encap_ipv4(struct xdp_md* ctx, struct pfcp_far* far, u8 qfi) {
   /* Expand headroom for GTP-U encapsulation */
   if (bpf_xdp_adjust_head(ctx, (int32_t) -GTP_ENCAPSULATED_SIZE)) {
@@ -546,7 +546,7 @@ gtpu_encap_ipv4(struct xdp_md* ctx, struct pfcp_far* far, u8 qfi) {
  * @return RET_SUCCESS, RET_DROP, or RET_FAILURE
  */
 
-static __always_inline u32
+static __noinline u32
 gtpu_decap_ipv4(struct xdp_md* ctx, struct pfcp_far* far) {
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
@@ -691,7 +691,7 @@ gtpu_decap_ipv4(struct xdp_md* ctx, struct pfcp_far* far) {
  * @param pkt_filter_out Output: extracted packet filter
  * @return RET_SUCCESS or RET_FAILURE
  */
-static __always_inline int extract_pkt_filter(
+static __noinline int extract_pkt_filter(
     void* data, void* data_end, struct iphdr* ip,
     struct packet_filter* pkt_filter_out) {
   if (!ip) {
@@ -765,7 +765,7 @@ static __always_inline int extract_pkt_filter(
  * order)
  * @return Pointer to session_id or NULL
  */
-static __always_inline struct session_id* lookup_session_n3(
+static __noinline struct session_id* lookup_session_n3(
     void* data, void* data_end, struct ethhdr* eth, u32* ue_ip_out, u8* qfi_out,
     u32* pkt_teid_out) {
   if (!eth) {
@@ -879,7 +879,7 @@ static __always_inline struct session_id* lookup_session_n3(
  * @return Pointer to session_id or NULL
  */
 
-static __always_inline struct session_id* lookup_session_n6(
+static __noinline struct session_id* lookup_session_n6(
     void* data, void* data_end, struct ethhdr* eth, u32* ue_ip_out,
     struct packet_filter* pkt_filter_out) {
   if (!eth) {
@@ -960,7 +960,7 @@ static __always_inline struct session_id* lookup_session_n6(
  * @return Pointer to matched PDR or NULL
  */
 
-static __always_inline struct pfcp_pdr* match_pdr_n3(
+static __noinline struct pfcp_pdr* match_pdr_n3(
     u64 seid, u32 pkt_teid, u32 pkt_ue_ip, u8 pkt_qfi) {
   struct pfcp_pdr(*pdrs)[MAX_PDRS_PER_PDU_SESSION] =
       bpf_map_lookup_elem(&pdrs_per_session_map, &seid);
@@ -1065,7 +1065,7 @@ static __always_inline struct pfcp_pdr* match_pdr_n3(
  * @param pkt_proto Packet's IP protocol number (1=ICMP, 6=TCP, 17=UDP, etc.)
  * @return Specificity score (higher = more specific)
  */
-static __always_inline u32
+static __noinline u32
 calc_sdf_specificity(const struct sdf_filtr* sdf, u8 pkt_proto) {
   u32 score = 0;
 
@@ -1121,7 +1121,7 @@ calc_sdf_specificity(const struct sdf_filtr* sdf, u8 pkt_proto) {
  * @param pkt_filter Packet 5-tuple for SDF matching
  * @return Pointer to matched PDR or NULL
  */
-static __always_inline struct pfcp_pdr* match_pdr_n6(
+static __noinline struct pfcp_pdr* match_pdr_n6(
     u64 seid, u32 pkt_ue_ip, u8* qfi_out, struct packet_filter* pkt_filter) {
   struct pfcp_pdr(*pdrs)[MAX_PDRS_PER_PDU_SESSION] =
       bpf_map_lookup_elem(&pdrs_per_session_map, &seid);
@@ -1313,13 +1313,13 @@ static __always_inline struct pfcp_pdr* match_pdr_n6(
  * @return RET_REDIRECT on success, RET_DROP to drop, RET_FAILURE on error
  */
 
-static __always_inline u32
-apply_far_n3(struct xdp_md* ctx, struct pdrs_per_session pdr_key) {
+static __noinline u32
+apply_far_n3(struct xdp_md* ctx, struct pdrs_per_session* pdr_key) {
   struct rules_match_pdr* rules    = {0};
-  __attribute__((unused)) u64 seid = pdr_key.seid;
+  __attribute__((unused)) u64 seid = pdr_key->seid;
 
   /* Lookup the rules associated with this PDR */
-  rules = bpf_map_lookup_elem(&rules_match_pdr_map, &pdr_key);
+  rules = bpf_map_lookup_elem(&rules_match_pdr_map, pdr_key);
 
   if (!rules) {
     bpf_debug("No rules found for PDR (seid=%llu)", seid);
@@ -1429,12 +1429,12 @@ apply_far_n3(struct xdp_md* ctx, struct pdrs_per_session pdr_key) {
  *
  * @note Based on 3GPP TS 29.244 Release 16
  */
-static __always_inline u32
-apply_far_n6(struct xdp_md* ctx, struct pdrs_per_session pdr_key, u8 qfi) {
+static __noinline u32
+apply_far_n6(struct xdp_md* ctx, struct pdrs_per_session* pdr_key, u8 qfi) {
   struct rules_match_pdr* rules = {0};
-  u64 seid                      = pdr_key.seid;
+  u64 seid                      = pdr_key->seid;
 
-  rules = bpf_map_lookup_elem(&rules_match_pdr_map, &pdr_key);
+  rules = bpf_map_lookup_elem(&rules_match_pdr_map, pdr_key);
 
   if (!rules) {
     bpf_debug("No rules found for PDR (seid=%llu)", seid);
@@ -1656,7 +1656,7 @@ int xdp_uplink(struct xdp_md* ctx) {
   pdr_key.pdr_id                  = pdr_id;
   pdr_key.seid                    = seid;
 
-  u32 ret = apply_far_n3(ctx, pdr_key);
+  u32 ret = apply_far_n3(ctx, &pdr_key);
   switch (ret) {
     case RET_REDIRECT: {
       return xdp_stats_record_action(
@@ -1791,7 +1791,7 @@ int xdp_qos(struct xdp_md* ctx) {
   pdr_key.pdr_id                  = pdr_id;
   pdr_key.seid                    = seid;
 
-  u32 ret = apply_far_n6(ctx, pdr_key, qfi);
+  u32 ret = apply_far_n6(ctx, &pdr_key, qfi);
 
   switch (ret) {
     case RET_PASS: {
@@ -1909,7 +1909,7 @@ int xdp_downlink(struct xdp_md* ctx) {
   pdr_key.pdr_id                  = pdr_id;
   pdr_key.seid                    = seid;
 
-  u32 ret = apply_far_n6(ctx, pdr_key, qfi);
+  u32 ret = apply_far_n6(ctx, &pdr_key, qfi);
 
   switch (ret) {
     case RET_REDIRECT: {

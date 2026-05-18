@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 #include "far_tc_user.h"
+#include "UserPlaneComponent.h"
 #include <SessionManager.h>
 #include <bpf/bpf.h>  // bpf calls
 #include <iostream>   // cout
@@ -20,11 +21,11 @@
 #include <bpf/bpf.h>
 
 #ifndef UDP_INTERFACE
-#define UDP_INTERFACE UserPlaneComponent::getInstance().getUDPInterface()
+#define UDP_INTERFACE UserPlaneComponent::GetInstance().GetUDPInterface()
 #endif  // UDP_INTERFACE
 
 #ifndef GTP_INTERFACE
-#define GTP_INTERFACE UserPlaneComponent::getInstance().getGTPInterface()
+#define GTP_INTERFACE UserPlaneComponent::GetInstance().GetGTPInterface()
 #endif  // GTP_INTERFACE
 
 static int verbose = 1;
@@ -63,8 +64,8 @@ void FARTCProgram::setup() {
   uint32_t gtpInterfaceIndex = if_nametoindex(GTP_INTERFACE.c_str());
   uint32_t uplinkId          = static_cast<uint32_t>(FlowDirection::UPLINK);
   uint32_t downlinkId        = static_cast<uint32_t>(FlowDirection::DOWNLINK);
-  mpEgressInterfaceMap->update(uplinkId, udpInterfaceIndex, BPF_ANY);
-  mpEgressInterfaceMap->update(downlinkId, gtpInterfaceIndex, BPF_ANY);
+  mpEgressInterfaceMap->Update(uplinkId, udpInterfaceIndex, BPF_ANY);
+  mpEgressInterfaceMap->Update(downlinkId, gtpInterfaceIndex, BPF_ANY);
 
   // Ethernet PDU requures udpInterface (N6) to be in promiscuous mode.
   cmd = fmt::format("ip link set dev {} promisc on", UDP_INTERFACE);
@@ -76,12 +77,10 @@ void FARTCProgram::setup() {
   }
 
   Logger::upf_app().info("Attach Section far_tc_kernel to gtp interface");
-  mpLifeCycle->tcAttachIngress(
-      "handle_broadcast", GTP_INTERFACE.c_str(), INGRESS_BROADCAST_PRIORITY);
+  mpLifeCycle->tcAttachIngress("handle_broadcast", GTP_INTERFACE.c_str());
 
   Logger::upf_app().info("Attach Sesction far_tc_kernel to udp interface");
-  mpLifeCycle->tcAttachIngress(
-      "handle_broadcast", UDP_INTERFACE.c_str(), INGRESS_BROADCAST_PRIORITY);
+  mpLifeCycle->tcAttachIngress("handle_broadcast", UDP_INTERFACE.c_str());
 }
 
 /*---------------------------------------------------------------------------------------------------------------*/
@@ -93,11 +92,7 @@ std::shared_ptr<BPFMaps> FARTCProgram::getMaps() {
 // TODO: Check when kill when running.
 // It was noted the infinity loop.
 void FARTCProgram::tearDown() {
-  mpLifeCycle->tcDetachIngress(
-      GTP_INTERFACE.c_str(), INGRESS_BROADCAST_PRIORITY);
-  mpLifeCycle->tcDetachIngress(
-      UDP_INTERFACE.c_str(), INGRESS_BROADCAST_PRIORITY);
-  mpLifeCycle->unpin_maps();
+  mpLifeCycle->tearDown();
 }
 
 std::shared_ptr<BPFMap> FARTCProgram::getETHSessionMappingMap() const {
@@ -116,7 +111,7 @@ void FARTCProgram::initializeMaps() {
 
   // Warning - The name of the map must be the same of the BPF program.
   mpETHSessionMappingMap =
-      std::make_shared<BPFMap>(mpMaps->getMap("m_eth__session_mapping"));
+      std::make_shared<BPFMap>(mpMaps->GetMap("m_eth__session_mapping"));
   mpEgressInterfaceMap =
-      std::make_shared<BPFMap>(mpMaps->getMap("m_egress_ifindex"));
+      std::make_shared<BPFMap>(mpMaps->GetMap("m_egress_ifindex"));
 }

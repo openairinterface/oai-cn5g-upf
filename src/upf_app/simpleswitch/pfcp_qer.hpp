@@ -49,9 +49,7 @@ class pfcp_qer {
         maximum_bitrate(c.maximum_bitrate),
         guaranteed_bitrate(c.guaranteed_bitrate),
         qos_flow_id(c.qos_flow_identifier),
-        reflective_qos(c.reflective_qos),
-        paging_policy_indicator(c.paging_policy_indicator),
-        averaging_window(c.averaging_window) {}
+        reflective_qos(c.reflective_qos) {}
 
   //------------------------------------------------------------------------------
   pfcp_qer(const pfcp_qer& c)

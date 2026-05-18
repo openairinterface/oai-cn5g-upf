@@ -51,6 +51,17 @@ bool pfcp_session::get(
 }
 
 //------------------------------------------------------------------------------
+bool pfcp_session::get(pfcp::fteid_t& fteid) {
+  fteid = teid_uplink;
+  return true;
+}
+
+//------------------------------------------------------------------------------
+pfcp::pdn_type_value_e pfcp_session::get_pdn_type() {
+  return pdn_type;
+}
+
+//------------------------------------------------------------------------------
 void pfcp_session::add(std::shared_ptr<pfcp::pfcp_far> far) {
   uint32_t far_id = far->far_id.far_id;
 
@@ -942,7 +953,7 @@ bool pfcp_session::create(
       pdr->pdi.second.set(allocated_fteid);
     }
 
-    set(allocated_fteid);
+    teid_uplink = allocated_fteid;
 
     // Check if s_allocated_fteid is set
     pfcp::fteid_t fteid;
@@ -999,7 +1010,7 @@ bool pfcp_session::create(
     Logger::upf_n4().info(
         "ETH-PDU: Senting PDN type to ETHERNET based on "
         "ethernet_pdu_session_information or ethernet_packet_filter");
-    set(pfcp::pdn_type_value_e::ETHERNET);
+    pdn_type = pfcp::pdn_type_value_e::ETHERNET;
   }
   return true;
 }

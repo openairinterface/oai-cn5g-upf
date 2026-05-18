@@ -42,4 +42,6 @@ struct pfcp_pdr {
   struct activate_predefined_rules activate_predefined_rules;
 } __attribute__((packed));
 
+typedef struct pfcp_pdr pfcp_pdr_t;
+
 #endif /* _PFCP_PDR_H */

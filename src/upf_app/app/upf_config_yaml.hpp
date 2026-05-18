@@ -280,19 +280,6 @@ class upf_support_features : public config_type {
   option_config_value m_enable_eth_pdu{};
   option_config_value m_ignore_qfi_for_uplink{};
 
-  /**
-   * @brief Enable Ethernet PDU sessions
-   *
-   * When enabled, the UPF supports Ethernet PDU Session Type for non-IP
-   * traffic (Layer 2 connectivity).
-   *
-   * Default: false
-   *
-   * @note Requires Ethernet packet filter support (max_ethernet_packet_filters)
-   * @see 3GPP TS 29.244 Section 8.2.66 (Ethernet Packet Filter)
-   */
-  option_config_value m_enable_eth_pdu{};
-
  public:
   /**
    * @brief Construct with explicit feature flags

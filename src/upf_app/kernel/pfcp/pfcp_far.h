@@ -34,4 +34,6 @@ struct pfcp_far {
   struct bar_id bar_id;
 } __attribute__((packed));
 
+typedef struct pfcp_far pfcp_far_t;
+
 #endif /* _PFCP_FAR_H */
