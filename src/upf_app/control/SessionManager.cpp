@@ -1126,9 +1126,25 @@ size_t SessionManager::HandlePdrRemoval(
   for (const auto& remove_pdr : mod_req->pfcp_ies.remove_pdrs) {
     pfcp::pdr_id_t pdr_id;
     if (remove_pdr.get(pdr_id)) {
-      if (RemovePdr(session->get_up_seid(), pdr_id.rule_id)) {
-        removed_count++;
-      }
+      uint16_t rule_id = pdr_id.rule_id;
+      auto remove_from = [rule_id](auto& vec) {
+        vec.erase(
+            std::remove_if(
+                vec.begin(), vec.end(),
+                [rule_id](const auto& p) {
+                  return p->pdr_id.rule_id == rule_id;
+                }),
+            vec.end());
+      };
+      remove_from(session->pdrs);
+      remove_from(session->pdrs_uplink);
+      remove_from(session->pdrs_downlink);
+      SortPdrs(session->pdrs_uplink);
+      SortPdrs(session->pdrs_downlink);
+      Logger::upf_app().info(
+          "Removed PDR %u from session " SEID_FMT, rule_id,
+          session->get_up_seid());
+      removed_count++;
     }
   }
 
@@ -1144,9 +1160,15 @@ size_t SessionManager::HandleFarRemoval(
   for (const auto& remove_far : mod_req->pfcp_ies.remove_fars) {
     pfcp::far_id_t far_id;
     if (remove_far.get(far_id)) {
-      if (RemoveFar(session->get_up_seid(), far_id.far_id)) {
-        removed_count++;
-      }
+      uint32_t fid = far_id.far_id;
+      session->fars.erase(
+          std::remove_if(
+              session->fars.begin(), session->fars.end(),
+              [fid](const auto& f) { return f->far_id.far_id == fid; }),
+          session->fars.end());
+      Logger::upf_app().info(
+          "Removed FAR %u from session " SEID_FMT, fid, session->get_up_seid());
+      removed_count++;
     }
   }
 
@@ -1162,9 +1184,22 @@ size_t SessionManager::HandleQerRemoval(
   for (const auto& remove_qer : mod_req->pfcp_ies.remove_qers) {
     pfcp::qer_id_t qer_id;
     if (remove_qer.get(qer_id)) {
-      if (RemoveQer(session->get_up_seid(), qer_id.qer_id)) {
-        removed_count++;
-      }
+      uint32_t qid     = qer_id.qer_id;
+      auto remove_from = [qid](auto& vec) {
+        vec.erase(
+            std::remove_if(
+                vec.begin(), vec.end(),
+                [qid](const auto& q) {
+                  return q->qer_id.second.qer_id == qid;
+                }),
+            vec.end());
+      };
+      remove_from(session->qers);
+      remove_from(session->qers_uplink);
+      remove_from(session->qers_downlink);
+      Logger::upf_app().info(
+          "Removed QER %u from session " SEID_FMT, qid, session->get_up_seid());
+      removed_count++;
     }
   }
 
