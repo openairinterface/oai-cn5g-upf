@@ -365,6 +365,22 @@ std::shared_ptr<BPFMap> UPF_XDPProgram::GetMapByName(
     return framed_route_flag_map_;
   }
 
+  if (map_name == "m_eth__session_mapping") {
+    return eth_session_mapping_map_;
+  }
+
+  if (map_name == "m_eth__rules_match_pdr") {
+    return eth_rules_match_pdr_map_;
+  }
+
+  if (map_name == "m_eth__session_pdrs") {
+    return eth_session_pdrs_map_;
+  }
+
+  if (map_name == "m_mac_pdu_session") {
+    return mac_pdu_session_map_;
+  }
+
   // Map not found
   Logger::upf_app().warn("Map '%s' not found in XDP program", map_name.c_str());
   return nullptr;
@@ -462,6 +478,23 @@ void UPF_XDPProgram::InitializeMaps() {
       std::make_shared<BPFMap>(maps_->GetMap("m_framed_route_mapping"));
   framed_route_flag_map_ =
       std::make_shared<BPFMap>(maps_->GetMap("framed_routing_flag"));
+
+  // Ethernet PDU session maps — optional; absent if ETH support not compiled in
+  try {
+    eth_session_mapping_map_ =
+        std::make_shared<BPFMap>(maps_->GetMap("m_eth__session_mapping"));
+    eth_rules_match_pdr_map_ =
+        std::make_shared<BPFMap>(maps_->GetMap("m_eth__rules_match_pdr"));
+    eth_session_pdrs_map_ =
+        std::make_shared<BPFMap>(maps_->GetMap("m_eth__session_pdrs"));
+    mac_pdu_session_map_ =
+        std::make_shared<BPFMap>(maps_->GetMap("m_mac_pdu_session"));
+    Logger::upf_app().debug("ETH-PDU BPF maps initialized");
+  } catch (const std::exception& e) {
+    Logger::upf_app().warn(
+        "ETH-PDU BPF maps not found — Ethernet PDU sessions disabled: %s",
+        e.what());
+  }
 }
 
 //------------------------------------------------------------------------------

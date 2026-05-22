@@ -37,6 +37,9 @@
  * - sdf_filters_map: SDF filter definitions
  * - session_qos_enabled_map: QoS enablement per session
  * - framed_route_mapping: Framed routing mappings
+ * - eth_session_mapping_map : ETH TEID to session
+ * - eth_rules_match_pdr_map : ETH rule matching
+ * - eth_session_pdrs_map : ETH PDRs per session
  *
  * XDP Performance:
  * - Native/Driver mode: Best performance, hardware offload
@@ -329,6 +332,11 @@ class UPF_XDPProgram : public BPFProgram {
   std::shared_ptr<BPFMap> qos_enabling_map_;      ///< QoS per session
   std::shared_ptr<BPFMap> framed_route_mapping_map_;  ///< Framed route mapping
   std::shared_ptr<BPFMap> framed_route_flag_map_;  ///< Framed route enable flag
+  // Ethernet PDU session maps (3GPP TS 29.244)
+  std::shared_ptr<BPFMap> eth_session_mapping_map_;  ///< ETH TEID to session
+  std::shared_ptr<BPFMap> eth_rules_match_pdr_map_;  ///< ETH rule matching
+  std::shared_ptr<BPFMap> eth_session_pdrs_map_;     ///< ETH PDRs per session
+  std::shared_ptr<BPFMap> mac_pdu_session_map_;      ///< UE MAC to DL session
 };
 
 #endif  // UPF_XDP_USER_H_

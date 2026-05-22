@@ -433,6 +433,29 @@ class SessionProgramManager {
    */
   int32_t GetEmptySlot();
 
+  /**
+   * @brief Remove all BPF map entries for a single ETH PDU session
+   *
+   * Cleans m_eth__session_mapping, m_eth__session_pdrs,
+   * m_eth__rules_match_pdr, and m_mac_pdu_session entries for the
+   * given seid so stale data doesn't interfere with the next run.
+   *
+   * @param xdp_program XDP program providing map access
+   * @param seid Session to remove
+   */
+  void RemoveETHPduSessionFromMaps(
+      std::shared_ptr<UPF_XDPProgram> xdp_program, uint64_t seid);
+
+  /**
+   * @brief Delete all entries from all four ETH PDU BPF maps
+   *
+   * Called during teardown so the pinned maps start clean on the
+   * next UPF startup.
+   *
+   * @param xdp_program XDP program providing map access
+   */
+  void ClearAllETHPduMaps(std::shared_ptr<UPF_XDPProgram> xdp_program);
+
   // ==========================================================================
   // Member Variables
   // ==========================================================================

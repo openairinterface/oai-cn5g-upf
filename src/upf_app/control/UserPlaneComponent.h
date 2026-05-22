@@ -28,6 +28,7 @@
 // Forward declarations
 class SessionManager;
 class UPF_XDPProgram;
+class FARTCProgram;
 
 /**
  * @class UserPlaneComponent
@@ -208,6 +209,9 @@ class UserPlaneComponent : public ISessionObserver {
 
   /// UPF XDP program (BPF program entry point)
   std::shared_ptr<UPF_XDPProgram> upf_xdp_program_;
+
+  /// FAR TC program for Ethernet PDU broadcast/multicast forwarding
+  std::shared_ptr<FARTCProgram> far_tc_program_;
 
   /// N3 GTP-U interface name
   std::string gtp_interface_;

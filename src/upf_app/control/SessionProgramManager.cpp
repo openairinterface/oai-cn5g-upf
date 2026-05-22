@@ -39,6 +39,7 @@
 #include <pfcp_far.h>  // BPF FAR structure
 #include <pfcp_qer.h>  // BPF QER structure
 #include <sdf_filter.h>
+#include <mac_pdu_session_key.h>
 
 using namespace oai::config;
 using namespace upf::utils;
@@ -116,6 +117,15 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
           pfcp_programs->begin(), pfcp_programs->end(),
           [seid](const PfcpProgramInfo& info) { return info.seid == seid; }),
       pfcp_programs->end());
+
+  // Clean ETH PDU BPF maps so stale entries don't survive across restarts
+  try {
+    auto xdp = UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
+    RemoveETHPduSessionFromMaps(xdp, seid);
+  } catch (const std::exception& e) {
+    Logger::upf_app().warn(
+        "ETH-PDU: map cleanup failed for seid %" PRIu64 ": %s", seid, e.what());
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -140,6 +150,15 @@ void SessionProgramManager::RemoveAllSessions() {
   session_programs_map_.clear();
   pfcp_programs->clear();
   program_array_.fill(kEmptySlot);
+
+  // Clear all ETH PDU BPF maps so pinned maps start clean on next startup
+  try {
+    auto xdp = UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
+    ClearAllETHPduMaps(xdp);
+  } catch (const std::exception& e) {
+    Logger::upf_app().warn(
+        "ETH-PDU: map teardown cleanup failed: %s", e.what());
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -531,7 +550,73 @@ void SessionProgramManager::ModifyPipeline(
     auto& n6_ips_updated = session_n6_arp_cache_[seid];
     auto& n3_ips_updated = session_n3_arp_cache_[seid];
 
-    // Retrieve UE and gNB IPs (mandatory for modification)
+    // Ethernet PDU sessions have no UE IP — route to dedicated handler
+    if (session->get_pdn_type() == pfcp::pdn_type_value_e::ETHERNET) {
+      logger.debug(
+          "ETH-PDU: modifying pipeline for ETH PDU session " SEID_FMT, seid);
+
+      // Extract primary UL/DL TEIDs from session PDRs/FARs
+      uint32_t primary_teid_ul = 0, primary_teid_dl = 0;
+      for (const auto& pdr : session->pdrs_uplink) {
+        primary_teid_ul = SessionManager::GetUplinkTeidFromPdr(pdr);
+        if (primary_teid_ul) break;
+      }
+      for (const auto& pdr : session->pdrs_downlink) {
+        std::shared_ptr<pfcp::pfcp_far> far;
+        if (GetFarForPdr(session, pdr, far)) {
+          primary_teid_dl = SessionManager::GetDownlinkTeidFromFar(far);
+          if (primary_teid_dl) break;
+        }
+      }
+
+      // Use gNB IP so broadcast_callback_fn sets correct iph->daddr
+      uint32_t gnb_ip = RetrieveGnbIp(session);
+      storeETHPduSessionInMap(
+          upf_xdp_program, primary_teid_ul, primary_teid_dl, gnb_ip, seid);
+
+      // Update ETH-specific PDR and rules maps
+      struct pfcp_pdr eth_pdrs[MAX_PDRS_PER_PDU_SESSION_LIMIT] = {0};
+      int eth_pdr_index                                        = 0;
+
+      for (const auto& pdr : session->pdrs) {
+        uint16_t pdr_id = pdr->pdr_id.rule_id;
+        std::shared_ptr<pfcp::pfcp_far> far;
+        if (!GetFarForPdr(session, pdr, far)) {
+          throw std::runtime_error(
+              "ETH-PDU: FAR not found for PDR " + std::to_string(pdr_id));
+        }
+        std::shared_ptr<pfcp::pfcp_qer> qer = nullptr;
+        GetQerForPdr(session, pdr, qer);
+
+        struct rules_match_pdr rules = {0};
+        rules.far                    = ConvertFar(far);
+        rules.qer                    = ConvertQer(qer);
+
+        struct pdrs_per_session pdr_key = {0};
+        pdr_key.pdr_id                  = pdr_id;
+        pdr_key.seid                    = seid;
+
+        auto eth_rules_map =
+            upf_xdp_program->GetMapByName("m_eth__rules_match_pdr");
+        if (eth_rules_map) {
+          eth_rules_map->Update(pdr_key, rules, BPF_ANY);
+        }
+
+        eth_pdrs[eth_pdr_index++] = ConvertPdr(pdr);
+      }
+
+      auto eth_pdrs_map = upf_xdp_program->GetMapByName("m_eth__session_pdrs");
+      if (eth_pdrs_map) {
+        eth_pdrs_map->Update(seid, eth_pdrs, BPF_ANY);
+      }
+
+      logger.info(
+          "ETH-PDU: Pipeline modified for session " SEID_FMT " with %d PDRs",
+          seid, eth_pdr_index);
+      return;
+    }
+
+    // Retrieve UE and gNB IPs (mandatory for non-ETH modification)
     uint32_t ue_ip = RetrieveUeIp(session);
     if (!ue_ip) {
       logger.error(
@@ -803,6 +888,221 @@ void SessionProgramManager::ModifyPipeline(
         e.what());
     throw;  // Re-throw to caller
   }
+}
+
+//------------------------------------------------------------------------------
+void SessionProgramManager::storeETHPduSessionInMap(
+    std::shared_ptr<UPF_XDPProgram> pUPF_XDPProgram, uint32_t teid_ul,
+    uint32_t teid_dl, uint32_t n3IpAddress, uint64_t seid) {
+  auto eth_session_map =
+      pUPF_XDPProgram->GetMapByName("m_eth__session_mapping");
+  if (!eth_session_map) {
+    Logger::upf_app().error(
+        "ETH-PDU: m_eth__session_mapping BPF map not found");
+    return;
+  }
+
+  if (likely(IsLittleEndian())) {
+    teid_ul     = htonl(teid_ul);
+    teid_dl     = htonl(teid_dl);
+    n3IpAddress = htole32(n3IpAddress);
+  }
+
+  struct eth__session_id eth_session = {0};
+  uint32_t key                       = teid_ul;
+
+  const bool exists = (eth_session_map->Lookup(key, &eth_session) == 0);
+  if (exists) {
+    if (eth_session.teid_ul == 0)
+      eth_session.teid_ul = (teid_ul != 0 ? teid_ul : teid_dl);
+    if (eth_session.teid_dl == 0)
+      eth_session.teid_dl = (teid_dl != 0 ? teid_dl : teid_ul);
+  } else {
+    eth_session.teid_ul      = teid_ul;
+    eth_session.teid_dl      = teid_dl;
+    eth_session.ipv4_address = n3IpAddress;
+    eth_session.seid         = seid;
+  }
+  eth_session_map->Update(key, eth_session, BPF_ANY);
+  Logger::upf_app().debug(
+      "ETH-PDU: Stored session map TEID_UL=%u TEID_DL=%u SEID=%" PRIu64,
+      teid_ul, teid_dl, seid);
+}
+
+//------------------------------------------------------------------------------
+void SessionProgramManager::RemoveETHPduSessionFromMaps(
+    std::shared_ptr<UPF_XDPProgram> xdp_program, uint64_t seid) {
+  if (!xdp_program) return;
+
+  // --- m_eth__session_mapping (key: uint32_t teid_ul) ---
+  // Collect matching keys and DL TEIDs, then delete.
+  std::vector<uint32_t> teid_keys;
+  std::vector<uint32_t> dl_teids;
+  auto eth_session_map = xdp_program->GetMapByName("m_eth__session_mapping");
+  if (eth_session_map) {
+    uint32_t key = 0, next;
+    while (eth_session_map->GetNextKey(key, next) == 0) {
+      struct eth__session_id val = {};
+      if (eth_session_map->Lookup(next, &val) == 0 && val.seid == seid) {
+        teid_keys.push_back(next);
+        dl_teids.push_back(val.teid_dl);
+      }
+      key = next;
+    }
+    for (auto& k : teid_keys) {
+      try {
+        eth_session_map->Remove(k);
+      } catch (...) {
+      }
+    }
+    Logger::upf_app().debug(
+        "ETH-PDU: removed %zu m_eth__session_mapping entries for seid %" PRIu64,
+        teid_keys.size(), seid);
+  }
+
+  // --- m_eth__session_pdrs (key: uint64_t seid) ---
+  auto eth_pdrs_map = xdp_program->GetMapByName("m_eth__session_pdrs");
+  if (eth_pdrs_map) {
+    try {
+      eth_pdrs_map->Remove(seid);
+    } catch (...) {
+    }
+  }
+
+  // --- m_eth__rules_match_pdr (key: struct pdrs_per_session {pdr_id, seid})
+  // ---
+  auto eth_rules_map = xdp_program->GetMapByName("m_eth__rules_match_pdr");
+  if (eth_rules_map) {
+    std::vector<struct pdrs_per_session> rule_keys;
+    struct pdrs_per_session key = {0, 0}, next;
+    while (eth_rules_map->GetNextKey(key, next) == 0) {
+      if (next.seid == seid) rule_keys.push_back(next);
+      key = next;
+    }
+    for (auto& k : rule_keys) {
+      try {
+        eth_rules_map->Remove(k);
+      } catch (...) {
+      }
+    }
+    Logger::upf_app().debug(
+        "ETH-PDU: removed %zu m_eth__rules_match_pdr entries for seid %" PRIu64,
+        rule_keys.size(), seid);
+  }
+
+  // --- m_mac_pdu_session (key: uint8_t[6] MAC) ---
+  // Delete entries whose DL TEID matches this session.
+  auto mac_map = xdp_program->GetMapByName("m_mac_pdu_session");
+  if (mac_map && !dl_teids.empty()) {
+    std::set<uint32_t> dl_teid_set(dl_teids.begin(), dl_teids.end());
+    std::vector<std::array<uint8_t, ETH_ALEN>> mac_keys;
+    std::array<uint8_t, ETH_ALEN> key = {}, next;
+    while (mac_map->GetNextKey(key, next) == 0) {
+      struct mac_pdu_session_value val = {};
+      if (mac_map->Lookup(next, &val) == 0 && dl_teid_set.count(val.teid)) {
+        mac_keys.push_back(next);
+      }
+      key = next;
+    }
+    for (auto& k : mac_keys) {
+      try {
+        mac_map->Remove(k);
+      } catch (...) {
+      }
+    }
+    Logger::upf_app().debug(
+        "ETH-PDU: removed %zu m_mac_pdu_session entries for seid %" PRIu64,
+        mac_keys.size(), seid);
+  }
+}
+
+//------------------------------------------------------------------------------
+void SessionProgramManager::ClearAllETHPduMaps(
+    std::shared_ptr<UPF_XDPProgram> xdp_program) {
+  if (!xdp_program) return;
+
+  auto delete_all_uint32 = [](std::shared_ptr<BPFMap> map, const char* label) {
+    if (!map) return;
+    std::vector<uint32_t> keys;
+    uint32_t key = 0, next;
+    while (map->GetNextKey(key, next) == 0) {
+      keys.push_back(next);
+      key = next;
+    }
+    for (auto& k : keys) {
+      try {
+        map->Remove(k);
+      } catch (...) {
+      }
+    }
+    Logger::upf_app().debug(
+        "ETH-PDU: cleared %zu entries from %s", keys.size(), label);
+  };
+
+  auto delete_all_uint64 = [](std::shared_ptr<BPFMap> map, const char* label) {
+    if (!map) return;
+    std::vector<uint64_t> keys;
+    uint64_t key = 0, next;
+    while (map->GetNextKey(key, next) == 0) {
+      keys.push_back(next);
+      key = next;
+    }
+    for (auto& k : keys) {
+      try {
+        map->Remove(k);
+      } catch (...) {
+      }
+    }
+    Logger::upf_app().debug(
+        "ETH-PDU: cleared %zu entries from %s", keys.size(), label);
+  };
+
+  auto delete_all_pdr_key = [](std::shared_ptr<BPFMap> map, const char* label) {
+    if (!map) return;
+    std::vector<struct pdrs_per_session> keys;
+    struct pdrs_per_session key = {0, 0}, next;
+    while (map->GetNextKey(key, next) == 0) {
+      keys.push_back(next);
+      key = next;
+    }
+    for (auto& k : keys) {
+      try {
+        map->Remove(k);
+      } catch (...) {
+      }
+    }
+    Logger::upf_app().debug(
+        "ETH-PDU: cleared %zu entries from %s", keys.size(), label);
+  };
+
+  auto delete_all_mac = [](std::shared_ptr<BPFMap> map, const char* label) {
+    if (!map) return;
+    std::vector<std::array<uint8_t, ETH_ALEN>> keys;
+    std::array<uint8_t, ETH_ALEN> key = {}, next;
+    while (map->GetNextKey(key, next) == 0) {
+      keys.push_back(next);
+      key = next;
+    }
+    for (auto& k : keys) {
+      try {
+        map->Remove(k);
+      } catch (...) {
+      }
+    }
+    Logger::upf_app().debug(
+        "ETH-PDU: cleared %zu entries from %s", keys.size(), label);
+  };
+
+  delete_all_uint32(
+      xdp_program->GetMapByName("m_eth__session_mapping"),
+      "m_eth__session_mapping");
+  delete_all_uint64(
+      xdp_program->GetMapByName("m_eth__session_pdrs"), "m_eth__session_pdrs");
+  delete_all_pdr_key(
+      xdp_program->GetMapByName("m_eth__rules_match_pdr"),
+      "m_eth__rules_match_pdr");
+  delete_all_mac(
+      xdp_program->GetMapByName("m_mac_pdu_session"), "m_mac_pdu_session");
 }
 
 //------------------------------------------------------------------------------

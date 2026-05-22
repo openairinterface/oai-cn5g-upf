@@ -67,6 +67,12 @@ void UserPlaneComponent::SetMembers(
     throw std::runtime_error("eBPF program initialization failed");
   }
 
+  far_tc_program_ = std::make_shared<FARTCProgram>();
+  if (!far_tc_program_) {
+    Logger::upf_app().error("Failed to initialize FAR TC program");
+    throw std::runtime_error("FAR TC program initialization failed");
+  }
+
   Logger::upf_app().info(
       "UPF XDP program initialized (N3: %s, N6: %s)", gtp_interface.c_str(),
       udp_interface.c_str());
@@ -88,6 +94,12 @@ void UserPlaneComponent::Setup(
 
   // Setup XDP program with QoS configuration
   upf_xdp_program_->Setup(is_qos_enabled);
+
+  // Setup FAR TC program for Ethernet PDU broadcast/multicast forwarding
+  if (upf_cfg.enable_bpf_datapath && upf_cfg.enable_eth_pdu) {
+    Logger::upf_app().info("ETH-PDU: setting up FAR TC broadcast program");
+    far_tc_program_->setup();
+  }
 
   // Get SessionProgramManager singleton
   SessionProgramManager& session_program_manager =
@@ -142,6 +154,11 @@ void UserPlaneComponent::TearDown() {
   // Tear down XDP program
   if (upf_xdp_program_) {
     upf_xdp_program_->TearDown();
+  }
+
+  // Tear down FAR TC program
+  if (far_tc_program_) {
+    far_tc_program_->tearDown();
   }
 
   // Reset session manager

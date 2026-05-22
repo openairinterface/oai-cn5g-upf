@@ -41,8 +41,8 @@ upf_support_features::upf_support_features(
 
   m_enable_fr = option_config_value(UPF_ENABLE_FR_LABEL, enable_fr);
 
-  // Ethernet PDU Sessions (Forced to false - no implementation yet)
-  m_enable_eth_pdu = option_config_value(UPF_ENABLE_ETH_PDU_LABEL, false);
+  m_enable_eth_pdu =
+      option_config_value(UPF_ENABLE_ETH_PDU_LABEL, enable_eth_pdu);
 }
 
 //------------------------------------------------------------------------------
@@ -103,17 +103,8 @@ void upf_support_features::from_yaml(const YAML::Node& node) {
     m_enable_fr.from_yaml(node[UPF_ENABLE_FR]);
   }
 
-  // Ethernet PDU Sessions (Parse from YAML but force to false)
   if (node[UPF_ENABLE_ETH_PDU]) {
     m_enable_eth_pdu.from_yaml(node[UPF_ENABLE_ETH_PDU]);
-    // Force to false - no implementation yet
-    if (m_enable_eth_pdu.get_value()) {
-      logger::logger_registry::get_logger(LOGGER_NAME)
-          .warn(
-              "Ethernet PDU Sessions requested but not implemented - forcing "
-              "to disabled");
-      m_enable_eth_pdu = option_config_value(UPF_ENABLE_ETH_PDU_LABEL, false);
-    }
   }
 }
 
@@ -225,7 +216,7 @@ bool upf_support_features::get_option_enable_fr() const {
 
 //------------------------------------------------------------------------------
 bool upf_support_features::get_option_enable_eth_pdu() const {
-  return m_enable_eth_pdu.get_value();  // Always returns false for now
+  return m_enable_eth_pdu.get_value();
 }
 
 //------------------------------------------------------------------------------

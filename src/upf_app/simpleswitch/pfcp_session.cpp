@@ -1008,7 +1008,7 @@ bool pfcp_session::create(
   if (pdi.ethernet_pdu_session_information.first ||
       pdi.ethernet_packet_filter.first) {
     Logger::upf_n4().info(
-        "ETH-PDU: Senting PDN type to ETHERNET based on "
+        "ETH-PDU: Sending PDN type to ETHERNET based on "
         "ethernet_pdu_session_information or ethernet_packet_filter");
     pdn_type = pfcp::pdn_type_value_e::ETHERNET;
   }
