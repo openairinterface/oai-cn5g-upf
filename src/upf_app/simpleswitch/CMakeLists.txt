@@ -9,8 +9,10 @@ include_directories(${SRC_TOP_DIR}/pfcp)
 include_directories(${SRC_TOP_DIR}/oai_upf)
 include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf)
-include_directories(${SRC_TOP_DIR}/upf_app/include)
+include_directories(${SRC_TOP_DIR}/upf_app/control)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel)
+#include_directories(${SRC_TOP_DIR}/upf_app/kernel/include)
+#include_directories(${SRC_TOP_DIR}/upf_app/include)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/udp) 
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
@@ -23,10 +25,6 @@ include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/bstr)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model)
 include_directories(${SRC_TOP_DIR}/upf_app/framed_routing)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf/nrf_model.cmake)
-
-
-
-#find_library(FOLLY folly)
 
 add_library (SIMPLE_SWITCH STATIC
   pfcp_far.cpp

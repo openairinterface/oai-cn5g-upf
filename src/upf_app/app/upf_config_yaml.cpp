@@ -14,116 +14,97 @@
 namespace oai::config {
 
 //------------------------------------------------------------------------------
+//          * Support Features *
+//------------------------------------------------------------------------------
+
 upf_support_features::upf_support_features(
-    bool enable_bpf_datapath, bool enable_qos, u_int16_t max_upf_interfaces,
-    u_int16_t max_upf_redirect_interfaces, u_int16_t max_pdu_session,
-    u_int16_t max_pdrs_per_pdu_session, u_int16_t max_qos_flows_per_pdu_session,
-    u_int16_t max_sdf_filters_per_pdu_session, u_int16_t max_arp_entries,
-    bool enable_snat, bool enable_fr, bool enable_eth_pdu,
-    bool ignore_qfi_for_uplink) {
+    bool enable_bpf_datapath, bool enable_qos, bool enable_urr, bool enable_bar,
+    bool enable_mar, bool enable_snat, bool enable_fr, bool enable_eth_pdu) {
   m_config_name = "Supported Features";
 
-  m_enable_bpf_datapath = option_config_value(
-      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF_LABEL, enable_bpf_datapath);
+  // Performance
+  m_enable_bpf_datapath =
+      option_config_value(UPF_ENABLE_BPF_LABEL, enable_bpf_datapath);
 
-  m_enable_qos = option_config_value(
-      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS_LABEL, enable_qos);
+  // PFCP Rules - QoS (QER)
+  m_enable_qos = option_config_value(UPF_ENABLE_QOS_LABEL, enable_qos);
 
-  m_max_upf_interfaces = int_config_value(
-      UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_INTERFACES_LABEL,
-      (int) max_upf_interfaces);
+  // PFCP Rules - URR, BAR, MAR (Forced to false - no implementation yet)
+  m_enable_urr = option_config_value(UPF_ENABLE_URR_LABEL, false);
 
-  m_max_upf_redirect_interfaces = int_config_value(
-      UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_REDIRECT_INTERFACES_LABEL,
-      (int) max_upf_redirect_interfaces);
+  m_enable_bar = option_config_value(UPF_ENABLE_BAR_LABEL, false);
 
-  m_max_pdu_session = int_config_value(
-      UPF_CONFIG_SUPPORT_FEATURES_MAX_PDU_SESSION_LABEL, (int) max_pdu_session);
+  m_enable_mar = option_config_value(UPF_ENABLE_MAR_LABEL, false);
 
-  m_max_pdrs_per_pdu_session = int_config_value(
-      UPF_CONFIG_SUPPORT_FEATURES_MAX_PDRS_PER_PDU_SESSION_LABEL,
-      (int) max_pdrs_per_pdu_session);
+  // Network Features
+  m_enable_snat = option_config_value(UPF_ENABLE_SNAT_LABEL, enable_snat);
 
-  m_max_qos_flows_per_pdu_session = int_config_value(
-      UPF_CONFIG_SUPPORT_FEATURES_MAX_QOS_FLOWS_PER_PDU_SESSION_LABEL,
-      (int) max_qos_flows_per_pdu_session);
+  m_enable_fr = option_config_value(UPF_ENABLE_FR_LABEL, enable_fr);
 
-  m_max_sdf_filters_per_pdu_session = int_config_value(
-      UPF_CONFIG_SUPPORT_FEATURES_MAX_SDF_FILTERS_PER_PDU_SESSION_LABEL,
-      (int) max_sdf_filters_per_pdu_session);
-
-  m_max_arp_entries = int_config_value(
-      UPF_CONFIG_SUPPORT_FEATURES_MAX_ARP_ENTRIES_LABEL, (int) max_arp_entries);
-
-  m_enable_snat = option_config_value(
-      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT_LABEL, (int) enable_snat);
-  m_enable_fr = option_config_value(
-      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR, (int) enable_fr);
-  m_enable_eth_pdu = option_config_value(
-      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_ETH_PDU_LABEL, (int) enable_eth_pdu);
-  m_ignore_qfi_for_uplink = option_config_value(
-      UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK_LABEL,
-      (int) ignore_qfi_for_uplink);
+  m_enable_eth_pdu =
+      option_config_value(UPF_ENABLE_ETH_PDU_LABEL, enable_eth_pdu);
 }
 
 //------------------------------------------------------------------------------
 void upf_support_features::from_yaml(const YAML::Node& node) {
-  if (node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF]) {
-    m_enable_bpf_datapath.from_yaml(
-        node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF]);
+  // Performance
+  if (node[UPF_ENABLE_BPF]) {
+    m_enable_bpf_datapath.from_yaml(node[UPF_ENABLE_BPF]);
   }
 
-  if (node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS]) {
-    m_enable_qos.from_yaml(node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS]);
+  // PFCP Rules - QoS (QER)
+  if (node[UPF_ENABLE_QOS]) {
+    m_enable_qos.from_yaml(node[UPF_ENABLE_QOS]);
   }
 
-  if (node[UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_INTERFACES]) {
-    m_max_upf_interfaces.from_yaml(
-        node[UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_INTERFACES]);
+  // PFCP Rules - URR, BAR, MAR (Parse from YAML but force to false)
+  if (node[UPF_ENABLE_URR]) {
+    m_enable_urr.from_yaml(node[UPF_ENABLE_URR]);
+    // Force to false - no implementation yet
+    if (m_enable_urr.get_value()) {
+      logger::logger_registry::get_logger(LOGGER_NAME)
+          .warn(
+              "URR (Usage Reporting Rules) requested but not implemented - "
+              "forcing to disabled");
+      m_enable_urr = option_config_value(UPF_ENABLE_URR_LABEL, false);
+    }
   }
 
-  if (node[UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_REDIRECT_INTERFACES]) {
-    m_max_upf_redirect_interfaces.from_yaml(
-        node[UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_REDIRECT_INTERFACES]);
+  if (node[UPF_ENABLE_BAR]) {
+    m_enable_bar.from_yaml(node[UPF_ENABLE_BAR]);
+    // Force to false - no implementation yet
+    if (m_enable_bar.get_value()) {
+      logger::logger_registry::get_logger(LOGGER_NAME)
+          .warn(
+              "BAR (Buffering Action Rules) requested but not implemented - "
+              "forcing to disabled");
+      m_enable_bar = option_config_value(UPF_ENABLE_BAR_LABEL, false);
+    }
   }
 
-  if (node[UPF_CONFIG_SUPPORT_FEATURES_MAX_PDU_SESSION]) {
-    m_max_pdu_session.from_yaml(
-        node[UPF_CONFIG_SUPPORT_FEATURES_MAX_PDU_SESSION]);
+  if (node[UPF_ENABLE_MAR]) {
+    m_enable_mar.from_yaml(node[UPF_ENABLE_MAR]);
+    // Force to false - no implementation yet
+    if (m_enable_mar.get_value()) {
+      logger::logger_registry::get_logger(LOGGER_NAME)
+          .warn(
+              "MAR (Modify Access Rules) requested but not implemented - "
+              "forcing to disabled");
+      m_enable_mar = option_config_value(UPF_ENABLE_MAR_LABEL, false);
+    }
   }
 
-  if (node[UPF_CONFIG_SUPPORT_FEATURES_MAX_PDRS_PER_PDU_SESSION]) {
-    m_max_pdrs_per_pdu_session.from_yaml(
-        node[UPF_CONFIG_SUPPORT_FEATURES_MAX_PDRS_PER_PDU_SESSION]);
+  // Network Features
+  if (node[UPF_ENABLE_SNAT]) {
+    m_enable_snat.from_yaml(node[UPF_ENABLE_SNAT]);
   }
 
-  if (node[UPF_CONFIG_SUPPORT_FEATURES_MAX_QOS_FLOWS_PER_PDU_SESSION]) {
-    m_max_qos_flows_per_pdu_session.from_yaml(
-        node[UPF_CONFIG_SUPPORT_FEATURES_MAX_QOS_FLOWS_PER_PDU_SESSION]);
+  if (node[UPF_ENABLE_FR]) {
+    m_enable_fr.from_yaml(node[UPF_ENABLE_FR]);
   }
 
-  if (node[UPF_CONFIG_SUPPORT_FEATURES_MAX_SDF_FILTERS_PER_PDU_SESSION]) {
-    m_max_sdf_filters_per_pdu_session.from_yaml(
-        node[UPF_CONFIG_SUPPORT_FEATURES_MAX_SDF_FILTERS_PER_PDU_SESSION]);
-  }
-
-  if (node[UPF_CONFIG_SUPPORT_FEATURES_MAX_ARP_ENTRIES]) {
-    m_max_arp_entries.from_yaml(
-        node[UPF_CONFIG_SUPPORT_FEATURES_MAX_ARP_ENTRIES]);
-  }
-
-  if (node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT]) {
-    m_enable_snat.from_yaml(node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT]);
-  }
-  if (node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR])
-    m_enable_fr.from_yaml(node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR]);
-  if (node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_ETH_PDU]) {
-    m_enable_eth_pdu.from_yaml(
-        node[UPF_CONFIG_SUPPORT_FEATURES_ENABLE_ETH_PDU]);
-  }
-  if (node[UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK]) {
-    m_ignore_qfi_for_uplink.from_yaml(
-        node[UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK]);
+  if (node[UPF_ENABLE_ETH_PDU]) {
+    m_enable_eth_pdu.from_yaml(node[UPF_ENABLE_ETH_PDU]);
   }
 }
 
@@ -132,110 +113,127 @@ std::string upf_support_features::to_string(const std::string& indent) const {
   std::string out;
   unsigned int inner_width = get_inner_width(indent.length());
 
-  // Enable BPF
+  // Performance
   std::string enable_bpf_datapath = m_enable_bpf_datapath.get_value() ?
                                         UPF_CONFIG_OPTION_YES_STR :
                                         UPF_CONFIG_OPTION_NO_STR;
   out.append(indent).append(fmt::format(
-      BASE_FORMATTER, INNER_LIST_ELEM,
-      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_BPF_LABEL, inner_width,
+      BASE_FORMATTER, INNER_LIST_ELEM, UPF_ENABLE_BPF_LABEL, inner_width,
       enable_bpf_datapath));
 
-  // Enable QoS
+  // PFCP Rules - QoS (QER)
   std::string enable_qos = m_enable_qos.get_value() ?
                                UPF_CONFIG_OPTION_YES_STR :
                                UPF_CONFIG_OPTION_NO_STR;
   out.append(indent).append(fmt::format(
-      BASE_FORMATTER, INNER_LIST_ELEM,
-      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_QOS_LABEL, inner_width, enable_qos));
+      BASE_FORMATTER, INNER_LIST_ELEM, UPF_ENABLE_QOS_LABEL, inner_width,
+      enable_qos));
 
-  u_int16_t max_upf_interfaces = m_max_upf_interfaces.get_value();
+  // PFCP Rules - URR (Usage Reporting Rule)
+  std::string enable_urr = m_enable_urr.get_value() ?
+                               UPF_CONFIG_OPTION_YES_STR :
+                               UPF_CONFIG_OPTION_NO_STR;
   out.append(indent).append(fmt::format(
-      BASE_FORMATTER, INNER_LIST_ELEM,
-      UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_INTERFACES_LABEL, inner_width,
-      max_upf_interfaces));
+      BASE_FORMATTER, INNER_LIST_ELEM, UPF_ENABLE_URR_LABEL, inner_width,
+      enable_urr));
 
-  u_int16_t max_upf_redirect_interfaces =
-      m_max_upf_redirect_interfaces.get_value();
+  // PFCP Rules - BAR (Buffering Action Rule)
+  std::string enable_bar = m_enable_bar.get_value() ?
+                               UPF_CONFIG_OPTION_YES_STR :
+                               UPF_CONFIG_OPTION_NO_STR;
   out.append(indent).append(fmt::format(
-      BASE_FORMATTER, INNER_LIST_ELEM,
-      UPF_CONFIG_SUPPORT_FEATURES_MAX_UPF_REDIRECT_INTERFACES_LABEL,
-      inner_width, max_upf_redirect_interfaces));
+      BASE_FORMATTER, INNER_LIST_ELEM, UPF_ENABLE_BAR_LABEL, inner_width,
+      enable_bar));
 
-  u_int16_t max_pdu_session = m_max_pdu_session.get_value();
+  // PFCP Rules - MAR (Modify Access Rule)
+  std::string enable_mar = m_enable_mar.get_value() ?
+                               UPF_CONFIG_OPTION_YES_STR :
+                               UPF_CONFIG_OPTION_NO_STR;
   out.append(indent).append(fmt::format(
-      BASE_FORMATTER, INNER_LIST_ELEM,
-      UPF_CONFIG_SUPPORT_FEATURES_MAX_PDU_SESSION_LABEL, inner_width,
-      max_pdu_session));
+      BASE_FORMATTER, INNER_LIST_ELEM, UPF_ENABLE_MAR_LABEL, inner_width,
+      enable_mar));
 
-  u_int16_t max_pdrs_per_pdu_session = m_max_pdrs_per_pdu_session.get_value();
-  out.append(indent).append(fmt::format(
-      BASE_FORMATTER, INNER_LIST_ELEM,
-      UPF_CONFIG_SUPPORT_FEATURES_MAX_PDRS_PER_PDU_SESSION_LABEL, inner_width,
-      max_pdrs_per_pdu_session));
-
-  u_int16_t max_qos_flows_per_pdu_session =
-      m_max_qos_flows_per_pdu_session.get_value();
-  out.append(indent).append(fmt::format(
-      BASE_FORMATTER, INNER_LIST_ELEM,
-      UPF_CONFIG_SUPPORT_FEATURES_MAX_QOS_FLOWS_PER_PDU_SESSION_LABEL,
-      inner_width, max_qos_flows_per_pdu_session));
-
-  u_int16_t max_sdf_filters_per_pdu_session =
-      m_max_sdf_filters_per_pdu_session.get_value();
-  out.append(indent).append(fmt::format(
-      BASE_FORMATTER, INNER_LIST_ELEM,
-      UPF_CONFIG_SUPPORT_FEATURES_MAX_SDF_FILTERS_PER_PDU_SESSION_LABEL,
-      inner_width, max_sdf_filters_per_pdu_session));
-
-  u_int16_t max_arp_entries = m_max_arp_entries.get_value();
-  out.append(indent).append(fmt::format(
-      BASE_FORMATTER, INNER_LIST_ELEM,
-      UPF_CONFIG_SUPPORT_FEATURES_MAX_ARP_ENTRIES_LABEL, inner_width,
-      max_arp_entries));
-
-  // Enable SNAT
+  // Network Features - SNAT
   std::string enable_snat = m_enable_snat.get_value() ?
                                 UPF_CONFIG_OPTION_YES_STR :
                                 UPF_CONFIG_OPTION_NO_STR;
   out.append(indent).append(fmt::format(
-      BASE_FORMATTER, INNER_LIST_ELEM,
-      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_SNAT_LABEL, inner_width, enable_snat));
+      BASE_FORMATTER, INNER_LIST_ELEM, UPF_ENABLE_SNAT_LABEL, inner_width,
+      enable_snat));
 
+  // Network Features - Framed Routing
   std::string enable_fr = m_enable_fr.get_value() ? UPF_CONFIG_OPTION_YES_STR :
                                                     UPF_CONFIG_OPTION_NO_STR;
-
   out.append(indent).append(fmt::format(
-      BASE_FORMATTER, INNER_LIST_ELEM, UPF_CONFIG_SUPPORT_FEATURES_ENABLE_FR,
-      inner_width, enable_fr));
+      BASE_FORMATTER, INNER_LIST_ELEM, UPF_ENABLE_FR_LABEL, inner_width,
+      enable_fr));
 
-  // Enable Ethernet PDU
+  // Network Features - Ethernet PDU Sessions
   std::string enable_eth_pdu = m_enable_eth_pdu.get_value() ?
                                    UPF_CONFIG_OPTION_YES_STR :
                                    UPF_CONFIG_OPTION_NO_STR;
   out.append(indent).append(fmt::format(
-      BASE_FORMATTER, INNER_LIST_ELEM,
-      UPF_CONFIG_SUPPORT_FEATURES_ENABLE_ETH_PDU_LABEL, inner_width,
+      BASE_FORMATTER, INNER_LIST_ELEM, UPF_ENABLE_ETH_PDU_LABEL, inner_width,
       enable_eth_pdu));
 
-  // Ignore QFI for Uplink
-  std::string ignore_qfi_for_uplink = m_ignore_qfi_for_uplink.get_value() ?
-                                          UPF_CONFIG_OPTION_YES_STR :
-                                          UPF_CONFIG_OPTION_NO_STR;
-  out.append(indent).append(fmt::format(
-      BASE_FORMATTER, INNER_LIST_ELEM,
-      UPF_CONFIG_SUPPORT_FEATURES_IGNORE_QFI_FOR_UPLINK_LABEL, inner_width,
-      ignore_qfi_for_uplink));
   return out;
 }
 
+//------------------------------------------------------------------------------
+bool upf_support_features::get_option_enable_bpf_datapath() const {
+  return m_enable_bpf_datapath.get_value();
+}
+
+//------------------------------------------------------------------------------
+bool upf_support_features::get_option_enable_qos() const {
+  return m_enable_qos.get_value();
+}
+
+//------------------------------------------------------------------------------
+bool upf_support_features::get_option_enable_urr() const {
+  return m_enable_urr.get_value();  // Always returns false for now
+}
+
+//------------------------------------------------------------------------------
+bool upf_support_features::get_option_enable_bar() const {
+  return m_enable_bar.get_value();  // Always returns false for now
+}
+
+//------------------------------------------------------------------------------
+bool upf_support_features::get_option_enable_mar() const {
+  return m_enable_mar.get_value();  // Always returns false for now
+}
+
+//------------------------------------------------------------------------------
+bool upf_support_features::get_option_enable_snat() const {
+  return m_enable_snat.get_value();
+}
+
+//------------------------------------------------------------------------------
+bool upf_support_features::get_option_enable_fr() const {
+  return m_enable_fr.get_value();
+}
+
+//------------------------------------------------------------------------------
+bool upf_support_features::get_option_enable_eth_pdu() const {
+  return m_enable_eth_pdu.get_value();
+}
+
+//------------------------------------------------------------------------------
+const upf_support_features& upf::get_support_features() const {
+  return m_upf_support_features;
+}
+
+//------------------------------------------------------------------------------
+//          * UPF *
 //------------------------------------------------------------------------------
 upf::upf(
     const std::string& name, const std::string& host, const sbi_interface& sbi,
     const std::map<std::string, upf_interface_config>& interfaces)
     : nf(name, host, sbi),
       m_upf_support_features(
-          false, false, 3, 2, 10000, 8, 8, 8, 2, false, false, false, true),
+          false, false, false, false, false, false, false, false),
+      m_upf_datapath_configuration(),
       m_interfaces(interfaces) {
   model::nrf::SnssaiUpfInfoItem item;
   item.setSNssai(DEFAULT_SNSSAI);
@@ -244,6 +242,7 @@ upf::upf(
       std::vector<oai::model::nrf::SnssaiUpfInfoItem>{item});
 }
 
+//------------------------------------------------------------------------------
 void upf::from_yaml(const YAML::Node& node) {
   nf::from_yaml(node);
   create_or_update_interface(
@@ -263,6 +262,10 @@ void upf::from_yaml(const YAML::Node& node) {
 
     if (key == UPF_CONFIG_SUPPORT_FEATURES) {
       m_upf_support_features.from_yaml(elem.second);
+    }
+
+    if (key == UPF_CONFIG_DATAPATH_CONFIGURATION) {
+      m_upf_datapath_configuration.from_yaml(elem.second);
     }
 
     if (key == UPF_CONFIG_REMOTE_N6_GW) {
@@ -332,78 +335,6 @@ const std::vector<string_config_value> upf::get_smf_list() const {
 }
 
 //------------------------------------------------------------------------------
-bool upf_support_features::get_option_enable_bpf_datapath() const {
-  return m_enable_bpf_datapath.get_value();
-}
-
-//------------------------------------------------------------------------------
-bool upf_support_features::get_option_enable_qos() const {
-  return m_enable_qos.get_value();
-}
-
-//------------------------------------------------------------------------------
-u_int16_t upf_support_features::get_option_max_upf_interfaces() const {
-  return m_max_upf_interfaces.get_value();
-}
-
-//------------------------------------------------------------------------------
-u_int16_t upf_support_features::get_option_max_upf_redirect_interfaces() const {
-  return m_max_upf_redirect_interfaces.get_value();
-}
-
-//------------------------------------------------------------------------------
-u_int16_t upf_support_features::get_option_max_pdu_session() const {
-  return m_max_pdu_session.get_value();
-}
-
-//------------------------------------------------------------------------------
-u_int16_t upf_support_features::get_option_max_pdrs_per_pdu_session() const {
-  return m_max_pdrs_per_pdu_session.get_value();
-}
-
-//------------------------------------------------------------------------------
-u_int16_t upf_support_features::get_option_max_qos_flows_per_pdu_session()
-    const {
-  return m_max_qos_flows_per_pdu_session.get_value();
-}
-
-//------------------------------------------------------------------------------
-u_int16_t upf_support_features::get_option_max_sdf_filters_per_pdu_session()
-    const {
-  return m_max_sdf_filters_per_pdu_session.get_value();
-}
-
-//------------------------------------------------------------------------------
-u_int16_t upf_support_features::get_option_max_arp_entries() const {
-  return m_max_arp_entries.get_value();
-}
-
-//------------------------------------------------------------------------------
-bool upf_support_features::get_option_enable_snat() const {
-  return m_enable_snat.get_value();
-}
-
-//------------------------------------------------------------------------------
-bool upf_support_features::get_option_enable_fr() const {
-  return m_enable_fr.get_value();
-}
-
-//------------------------------------------------------------------------------
-bool upf_support_features::get_option_enable_eth_pdu() const {
-  return m_enable_eth_pdu.get_value();
-}
-
-//------------------------------------------------------------------------------
-bool upf_support_features::get_option_ignore_qfi_for_uplink() const {
-  return m_ignore_qfi_for_uplink.get_value();
-}
-
-//------------------------------------------------------------------------------
-const upf_support_features& upf::get_support_features() const {
-  return m_upf_support_features;
-}
-
-//------------------------------------------------------------------------------
 const oai::model::nrf::UpfInfo& upf::get_upf_info() const {
   return m_upf_info;
 }
@@ -434,6 +365,7 @@ void upf::validate() {
     iface.second.validate();
   }
   m_upf_info.validate();
+  m_upf_datapath_configuration.validate();
 }
 
 //------------------------------------------------------------------------------
@@ -572,34 +504,66 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   cfg.sbi.addr4   = local().get_sbi().get_addr4();
   cfg.sbi.if_name = local().get_sbi().get_if_name();
 
+  // Feature flags - Performance
   cfg.enable_bpf_datapath =
       upf_local->get_support_features().get_option_enable_bpf_datapath();
+
+  // Feature flags - PFCP Rules
   cfg.enable_qos = upf_local->get_support_features().get_option_enable_qos();
+  cfg.enable_urr = upf_local->get_support_features().get_option_enable_urr();
+  cfg.enable_bar = upf_local->get_support_features().get_option_enable_bar();
+  cfg.enable_mar = upf_local->get_support_features().get_option_enable_mar();
 
-  cfg.max_upf_interfaces =
-      upf_local->get_support_features().get_option_max_upf_interfaces();
-  cfg.max_upf_redirect_interfaces =
-      upf_local->get_support_features()
-          .get_option_max_upf_redirect_interfaces();
-  cfg.max_pdu_session =
-      upf_local->get_support_features().get_option_max_pdu_session();
-  cfg.max_pdrs_per_pdu_session =
-      upf_local->get_support_features().get_option_max_pdrs_per_pdu_session();
-  cfg.max_qos_flows_per_pdu_session =
-      upf_local->get_support_features()
-          .get_option_max_qos_flows_per_pdu_session();
-  cfg.max_sdf_filters_per_pdu_session =
-      upf_local->get_support_features()
-          .get_option_max_sdf_filters_per_pdu_session();
-  cfg.max_arp_entries =
-      upf_local->get_support_features().get_option_max_arp_entries();
-
+  // Feature flags - Network Features
   cfg.enable_snat = upf_local->get_support_features().get_option_enable_snat();
   cfg.enable_fr   = upf_local->get_support_features().get_option_enable_fr();
   cfg.enable_eth_pdu =
       upf_local->get_support_features().get_option_enable_eth_pdu();
-  cfg.ignore_qfi_for_uplink =
-      upf_local->get_support_features().get_option_ignore_qfi_for_uplink();
+
+  // ==========================================================================
+  // Datapath Configuration Transfer
+  // Transfer values from upf_datapath_configuration to upf_config
+  // ==========================================================================
+
+  const upf_datapath_configuration& datapath_cfg =
+      upf_local->get_datapath_configuration();
+
+  cfg.max_pdu_sessions =
+      static_cast<uint32_t>(datapath_cfg.get_max_pdu_sessions());
+  cfg.max_upf_interfaces =
+      static_cast<uint16_t>(datapath_cfg.get_max_upf_interfaces());
+  cfg.max_upf_redirect_interfaces =
+      static_cast<uint16_t>(datapath_cfg.get_max_upf_redirect_interfaces());
+  cfg.max_pdrs_per_pdu_session =
+      static_cast<uint16_t>(datapath_cfg.get_max_pdrs_per_pdu_session());
+  cfg.max_fars_per_pdu_session =
+      static_cast<uint16_t>(datapath_cfg.get_max_fars_per_pdu_session());
+  cfg.max_qers_per_pdu_session =
+      static_cast<uint16_t>(datapath_cfg.get_max_qers_per_pdu_session());
+  cfg.max_urrs_per_pdu_session =
+      static_cast<uint16_t>(datapath_cfg.get_max_urrs_per_pdu_session());
+  cfg.max_bars_per_pdu_session =
+      static_cast<uint16_t>(datapath_cfg.get_max_bars_per_pdu_session());
+  cfg.max_sdf_filters_per_pdu_session =
+      static_cast<uint16_t>(datapath_cfg.get_max_sdf_filters_per_pdu_session());
+  cfg.max_sdf_filter_string_length =
+      static_cast<uint16_t>(datapath_cfg.get_max_sdf_filter_string_length());
+  cfg.max_arp_entries =
+      static_cast<uint16_t>(datapath_cfg.get_max_arp_entries());
+  cfg.max_application_ids_per_session =
+      static_cast<uint16_t>(datapath_cfg.get_max_application_ids_per_session());
+  cfg.max_traffic_endpoints_per_session = static_cast<uint16_t>(
+      datapath_cfg.get_max_traffic_endpoints_per_session());
+  cfg.max_ethernet_packet_filters_per_session = static_cast<uint16_t>(
+      datapath_cfg.get_max_ethernet_packet_filters_per_session());
+  cfg.max_redundant_transmission_params_per_session = static_cast<uint16_t>(
+      datapath_cfg.get_max_redundant_transmission_params_per_session());
+
+  logger::logger_registry::get_logger(LOGGER_NAME)
+      .info(
+          "Datapath configuration transferred: max_pdu_sessions=%u, "
+          "max_upf_interfaces=%u, max_arp_entries=%u",
+          cfg.max_pdu_sessions, cfg.max_upf_interfaces, cfg.max_arp_entries);
 
   auto snssai_upf_list = upf_local->get_upf_info().getSNssaiUpfInfoList();
   for (const auto& snssai : snssai_upf_list) {
@@ -738,6 +702,589 @@ interface_cfg_t upf_interface_config::to_interface_config() const {
   cfg.if_name = get_if_name();
 
   return cfg;
+}
+
+//==============================================================================
+// UPF BPF Map Configuration Implementation
+// Complete 5-Layer Validation Architecture
+//==============================================================================
+//------------------------------------------------------------------------------
+const upf_datapath_configuration& upf::get_datapath_configuration() const {
+  return m_upf_datapath_configuration;
+}
+
+upf_datapath_configuration::upf_datapath_configuration(
+    const std::string& name) {
+  m_config_name = name;
+  m_set         = false;
+
+  // Initialize with defaults and validation intervals
+  // Based on 3GPP TS 29.244 PFCP specification
+
+  // PFCP Session Limits (Section 7.2.2 - CP F-SEID)
+  m_max_pdu_sessions =
+      int_config_value(UPF_MAX_PDU_SESSIONS, UPF_DEFAULT_MAX_PDU_SESSIONS);
+  m_max_pdu_sessions.set_validation_interval(1, 100000);
+
+  // PDR Limits (Section 7.5.2.2 - Packet Detection Rule)
+  m_max_pdrs_per_pdu_session = int_config_value(
+      UPF_MAX_PDRS_PER_PDU_SESSION, UPF_DEFAULT_MAX_PDRS_PER_PDU_SESSION);
+  m_max_pdrs_per_pdu_session.set_validation_interval(1, 64);
+
+  // FAR Limits (Section 7.5.2.3 - Forwarding Action Rule)
+  m_max_fars_per_pdu_session = int_config_value(
+      UPF_MAX_FARS_PER_PDU_SESSION, UPF_DEFAULT_MAX_FARS_PER_PDU_SESSION);
+  m_max_fars_per_pdu_session.set_validation_interval(1, 64);
+
+  // QER Limits (Section 7.5.2.4 - QoS Enforcement Rule)
+  m_max_qers_per_pdu_session = int_config_value(
+      UPF_MAX_QERS_PER_PDU_SESSION, UPF_DEFAULT_MAX_QERS_PER_PDU_SESSION);
+  m_max_qers_per_pdu_session.set_validation_interval(1, 32);
+
+  // URR Limits (Section 7.5.2.5 - Usage Reporting Rule)
+  m_max_urrs_per_pdu_session = int_config_value(
+      UPF_MAX_URRS_PER_PDU_SESSION, UPF_DEFAULT_MAX_URRS_PER_PDU_SESSION);
+  m_max_urrs_per_pdu_session.set_validation_interval(0, 16);
+
+  // BAR Limits (Section 7.5.2.6 - Buffering Action Rule)
+  m_max_bars_per_pdu_session = int_config_value(
+      UPF_MAX_BARS_PER_PDU_SESSION, UPF_DEFAULT_MAX_BARS_PER_PDU_SESSION);
+  m_max_bars_per_pdu_session.set_validation_interval(0, 8);
+
+  // SDF Filter Limits (Table 7.5.2.2-2)
+  m_max_sdf_filters_per_pdu_session = int_config_value(
+      UPF_MAX_SDF_FILTERS_PER_PDU_SESSION,
+      UPF_DEFAULT_MAX_SDF_FILTERS_PER_PDU_SESSION);
+  m_max_sdf_filters_per_pdu_session.set_validation_interval(1, 32);
+
+  // SDF Filter String Length
+  m_max_sdf_filter_string_length = int_config_value(
+      UPF_MAX_SDF_FILTER_STRING_LENGTH,
+      UPF_DEFAULT_MAX_SDF_FILTER_STRING_LENGTH);
+  m_max_sdf_filter_string_length.set_validation_interval(64, 2048);
+
+  // Network Interfaces
+  m_max_upf_interfaces =
+      int_config_value(UPF_MAX_UPF_INTERFACES, UPF_DEFAULT_MAX_UPF_INTERFACES);
+  m_max_upf_interfaces.set_validation_interval(2, 16);
+
+  m_max_upf_redirect_interfaces = int_config_value(
+      UPF_MAX_UPF_REDIRECT_INTERFACES, UPF_DEFAULT_MAX_UPF_REDIRECT_INTERFACES);
+  m_max_upf_redirect_interfaces.set_validation_interval(1, 16);
+
+  // ARP Entries
+  m_max_arp_entries =
+      int_config_value(UPF_MAX_ARP_ENTRIES, UPF_DEFAULT_MAX_ARP_ENTRIES);
+  m_max_arp_entries.set_validation_interval(2, 4096);
+
+  // Advanced Features
+  m_max_application_ids_per_session = int_config_value(
+      UPF_MAX_APPLICATION_IDS_PER_SESSION,
+      UPF_DEFAULT_MAX_APPLICATION_IDS_PER_SESSION);
+  m_max_application_ids_per_session.set_validation_interval(0, 32);
+
+  m_max_traffic_endpoints_per_session = int_config_value(
+      UPF_MAX_TRAFFIC_ENDPOINTS_PER_SESSION,
+      UPF_DEFAULT_MAX_TRAFFIC_ENDPOINTS_PER_SESSION);
+  m_max_traffic_endpoints_per_session.set_validation_interval(1, 4);
+
+  m_max_ethernet_packet_filters_per_session = int_config_value(
+      UPF_MAX_ETHERNET_PACKET_FILTERS_PER_SESSION,
+      UPF_DEFAULT_MAX_ETHERNET_PACKET_FILTERS_PER_SESSION);
+  m_max_ethernet_packet_filters_per_session.set_validation_interval(0, 16);
+
+  m_max_redundant_transmission_params_per_session = int_config_value(
+      UPF_MAX_REDUNDANT_TRANSMISSION_PARAMS_PER_SESSION,
+      UPF_DEFAULT_MAX_REDUNDANT_TRANSMISSION_PARAMS_PER_SESSION);
+  m_max_redundant_transmission_params_per_session.set_validation_interval(0, 4);
+}
+
+void upf_datapath_configuration::from_yaml(const YAML::Node& node) {
+  if (node[UPF_MAX_PDU_SESSIONS]) {
+    m_max_pdu_sessions.from_yaml(node[UPF_MAX_PDU_SESSIONS]);
+  }
+  if (node[UPF_MAX_PDRS_PER_PDU_SESSION]) {
+    m_max_pdrs_per_pdu_session.from_yaml(node[UPF_MAX_PDRS_PER_PDU_SESSION]);
+  }
+  if (node[UPF_MAX_FARS_PER_PDU_SESSION]) {
+    m_max_fars_per_pdu_session.from_yaml(node[UPF_MAX_FARS_PER_PDU_SESSION]);
+  }
+  if (node[UPF_MAX_QERS_PER_PDU_SESSION]) {
+    m_max_qers_per_pdu_session.from_yaml(node[UPF_MAX_QERS_PER_PDU_SESSION]);
+  }
+  if (node[UPF_MAX_URRS_PER_PDU_SESSION]) {
+    m_max_urrs_per_pdu_session.from_yaml(node[UPF_MAX_URRS_PER_PDU_SESSION]);
+  }
+  if (node[UPF_MAX_BARS_PER_PDU_SESSION]) {
+    m_max_bars_per_pdu_session.from_yaml(node[UPF_MAX_BARS_PER_PDU_SESSION]);
+  }
+  if (node[UPF_MAX_SDF_FILTERS_PER_PDU_SESSION]) {
+    m_max_sdf_filters_per_pdu_session.from_yaml(
+        node[UPF_MAX_SDF_FILTERS_PER_PDU_SESSION]);
+  }
+  if (node[UPF_MAX_SDF_FILTER_STRING_LENGTH]) {
+    m_max_sdf_filter_string_length.from_yaml(
+        node[UPF_MAX_SDF_FILTER_STRING_LENGTH]);
+  }
+  if (node[UPF_MAX_UPF_INTERFACES]) {
+    m_max_upf_interfaces.from_yaml(node[UPF_MAX_UPF_INTERFACES]);
+  }
+  if (node[UPF_MAX_UPF_REDIRECT_INTERFACES]) {
+    m_max_upf_redirect_interfaces.from_yaml(
+        node[UPF_MAX_UPF_REDIRECT_INTERFACES]);
+  }
+  if (node[UPF_MAX_ARP_ENTRIES]) {
+    m_max_arp_entries.from_yaml(node[UPF_MAX_ARP_ENTRIES]);
+  }
+  if (node[UPF_MAX_APPLICATION_IDS_PER_SESSION]) {
+    m_max_application_ids_per_session.from_yaml(
+        node[UPF_MAX_APPLICATION_IDS_PER_SESSION]);
+  }
+  if (node[UPF_MAX_TRAFFIC_ENDPOINTS_PER_SESSION]) {
+    m_max_traffic_endpoints_per_session.from_yaml(
+        node[UPF_MAX_TRAFFIC_ENDPOINTS_PER_SESSION]);
+  }
+  if (node[UPF_MAX_ETHERNET_PACKET_FILTERS_PER_SESSION]) {
+    m_max_ethernet_packet_filters_per_session.from_yaml(
+        node[UPF_MAX_ETHERNET_PACKET_FILTERS_PER_SESSION]);
+  }
+  if (node[UPF_MAX_REDUNDANT_TRANSMISSION_PARAMS_PER_SESSION]) {
+    m_max_redundant_transmission_params_per_session.from_yaml(
+        node[UPF_MAX_REDUNDANT_TRANSMISSION_PARAMS_PER_SESSION]);
+  }
+  m_set = true;
+}
+
+nlohmann::json upf_datapath_configuration::to_json() {
+  nlohmann::json json_data;
+  json_data[UPF_MAX_PDU_SESSIONS] = m_max_pdu_sessions.to_json();
+  json_data[UPF_MAX_PDRS_PER_PDU_SESSION] =
+      m_max_pdrs_per_pdu_session.to_json();
+  json_data[UPF_MAX_FARS_PER_PDU_SESSION] =
+      m_max_fars_per_pdu_session.to_json();
+  json_data[UPF_MAX_QERS_PER_PDU_SESSION] =
+      m_max_qers_per_pdu_session.to_json();
+  json_data[UPF_MAX_URRS_PER_PDU_SESSION] =
+      m_max_urrs_per_pdu_session.to_json();
+  json_data[UPF_MAX_BARS_PER_PDU_SESSION] =
+      m_max_bars_per_pdu_session.to_json();
+  json_data[UPF_MAX_SDF_FILTERS_PER_PDU_SESSION] =
+      m_max_sdf_filters_per_pdu_session.to_json();
+  json_data[UPF_MAX_SDF_FILTER_STRING_LENGTH] =
+      m_max_sdf_filter_string_length.to_json();
+  json_data[UPF_MAX_UPF_INTERFACES] = m_max_upf_interfaces.to_json();
+  json_data[UPF_MAX_UPF_REDIRECT_INTERFACES] =
+      m_max_upf_redirect_interfaces.to_json();
+  json_data[UPF_MAX_ARP_ENTRIES] = m_max_arp_entries.to_json();
+  json_data[UPF_MAX_APPLICATION_IDS_PER_SESSION] =
+      m_max_application_ids_per_session.to_json();
+  json_data[UPF_MAX_TRAFFIC_ENDPOINTS_PER_SESSION] =
+      m_max_traffic_endpoints_per_session.to_json();
+  json_data[UPF_MAX_ETHERNET_PACKET_FILTERS_PER_SESSION] =
+      m_max_ethernet_packet_filters_per_session.to_json();
+  json_data[UPF_MAX_REDUNDANT_TRANSMISSION_PARAMS_PER_SESSION] =
+      m_max_redundant_transmission_params_per_session.to_json();
+  return json_data;
+}
+
+bool upf_datapath_configuration::from_json(const nlohmann::json& json_data) {
+  try {
+    if (json_data.contains(UPF_MAX_PDU_SESSIONS)) {
+      m_max_pdu_sessions.from_json(json_data[UPF_MAX_PDU_SESSIONS]);
+    }
+    if (json_data.contains(UPF_MAX_PDRS_PER_PDU_SESSION)) {
+      m_max_pdrs_per_pdu_session.from_json(
+          json_data[UPF_MAX_PDRS_PER_PDU_SESSION]);
+    }
+    if (json_data.contains(UPF_MAX_FARS_PER_PDU_SESSION)) {
+      m_max_fars_per_pdu_session.from_json(
+          json_data[UPF_MAX_FARS_PER_PDU_SESSION]);
+    }
+    if (json_data.contains(UPF_MAX_QERS_PER_PDU_SESSION)) {
+      m_max_qers_per_pdu_session.from_json(
+          json_data[UPF_MAX_QERS_PER_PDU_SESSION]);
+    }
+    if (json_data.contains(UPF_MAX_URRS_PER_PDU_SESSION)) {
+      m_max_urrs_per_pdu_session.from_json(
+          json_data[UPF_MAX_URRS_PER_PDU_SESSION]);
+    }
+    if (json_data.contains(UPF_MAX_BARS_PER_PDU_SESSION)) {
+      m_max_bars_per_pdu_session.from_json(
+          json_data[UPF_MAX_BARS_PER_PDU_SESSION]);
+    }
+    if (json_data.contains(UPF_MAX_SDF_FILTERS_PER_PDU_SESSION)) {
+      m_max_sdf_filters_per_pdu_session.from_json(
+          json_data[UPF_MAX_SDF_FILTERS_PER_PDU_SESSION]);
+    }
+    if (json_data.contains(UPF_MAX_SDF_FILTER_STRING_LENGTH)) {
+      m_max_sdf_filter_string_length.from_json(
+          json_data[UPF_MAX_SDF_FILTER_STRING_LENGTH]);
+    }
+    if (json_data.contains(UPF_MAX_UPF_INTERFACES)) {
+      m_max_upf_interfaces.from_json(json_data[UPF_MAX_UPF_INTERFACES]);
+    }
+    if (json_data.contains(UPF_MAX_UPF_REDIRECT_INTERFACES)) {
+      m_max_upf_redirect_interfaces.from_json(
+          json_data[UPF_MAX_UPF_REDIRECT_INTERFACES]);
+    }
+    if (json_data.contains(UPF_MAX_ARP_ENTRIES)) {
+      m_max_arp_entries.from_json(json_data[UPF_MAX_ARP_ENTRIES]);
+    }
+    if (json_data.contains(UPF_MAX_APPLICATION_IDS_PER_SESSION)) {
+      m_max_application_ids_per_session.from_json(
+          json_data[UPF_MAX_APPLICATION_IDS_PER_SESSION]);
+    }
+    if (json_data.contains(UPF_MAX_TRAFFIC_ENDPOINTS_PER_SESSION)) {
+      m_max_traffic_endpoints_per_session.from_json(
+          json_data[UPF_MAX_TRAFFIC_ENDPOINTS_PER_SESSION]);
+    }
+    if (json_data.contains(UPF_MAX_ETHERNET_PACKET_FILTERS_PER_SESSION)) {
+      m_max_ethernet_packet_filters_per_session.from_json(
+          json_data[UPF_MAX_ETHERNET_PACKET_FILTERS_PER_SESSION]);
+    }
+    if (json_data.contains(UPF_MAX_REDUNDANT_TRANSMISSION_PARAMS_PER_SESSION)) {
+      m_max_redundant_transmission_params_per_session.from_json(
+          json_data[UPF_MAX_REDUNDANT_TRANSMISSION_PARAMS_PER_SESSION]);
+    }
+    m_set = true;
+    return true;
+  } catch (nlohmann::detail::exception& e) {
+    return false;
+  } catch (std::exception& e) {
+    return false;
+  }
+}
+
+std::string upf_datapath_configuration::to_string(
+    const std::string& indent) const {
+  if (!m_set) return "";
+
+  std::string out;
+  std::string inner_indent = add_indent(indent);
+  unsigned int inner_width = get_inner_width(inner_indent.length());
+
+  out.append(indent).append(
+      fmt::format("{} {}:\n", OUTER_LIST_ELEM, "Datapath Configuration"));
+
+  // PFCP Session Limits
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, "Max PFCP Sessions", inner_width,
+          m_max_pdu_sessions.to_string("")));
+
+  // Rule Limits per PDU Session
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, "Max PDRs per Session", inner_width,
+          m_max_pdrs_per_pdu_session.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, "Max FARs per Session", inner_width,
+          m_max_fars_per_pdu_session.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, "Max QERs per Session", inner_width,
+          m_max_qers_per_pdu_session.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, "Max URRs per Session", inner_width,
+          m_max_urrs_per_pdu_session.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, "Max BARs per Session", inner_width,
+          m_max_bars_per_pdu_session.to_string("")));
+
+  // SDF Filters
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, "Max SDF Filters per Session",
+          inner_width, m_max_sdf_filters_per_pdu_session.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, "Max SDF Filter String Length",
+          inner_width, m_max_sdf_filter_string_length.to_string("")));
+
+  // Network Configuration
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, "Max UPF Interfaces", inner_width,
+          m_max_upf_interfaces.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, "Max Redirect Interfaces",
+          inner_width, m_max_upf_redirect_interfaces.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, "Max ARP Entries", inner_width,
+          m_max_arp_entries.to_string("")));
+
+  // Advanced Features
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, "Max Application IDs per Session",
+          inner_width, m_max_application_ids_per_session.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, "Max Traffic Endpoints per Session",
+          inner_width, m_max_traffic_endpoints_per_session.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM,
+          "Max Ethernet Packet Filters per Session", inner_width,
+          m_max_ethernet_packet_filters_per_session.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM,
+          "Max Redundant Transmission Params per Session", inner_width,
+          m_max_redundant_transmission_params_per_session.to_string("")));
+
+  return out;
+}
+
+void upf_datapath_configuration::validate() {
+  if (!m_set) return;
+
+  logger::logger_registry::get_logger(LOGGER_NAME)
+      .info("Validating UPF datapath configuration...");
+
+  //============================================================================
+  // LAYER 1: Basic Range Validation (15 rules)
+  //============================================================================
+  m_max_pdu_sessions.validate();
+  m_max_pdrs_per_pdu_session.validate();
+  m_max_fars_per_pdu_session.validate();
+  m_max_qers_per_pdu_session.validate();
+  m_max_urrs_per_pdu_session.validate();
+  m_max_bars_per_pdu_session.validate();
+  m_max_sdf_filters_per_pdu_session.validate();
+  m_max_sdf_filter_string_length.validate();
+  m_max_upf_interfaces.validate();
+  m_max_upf_redirect_interfaces.validate();
+  m_max_arp_entries.validate();
+  m_max_application_ids_per_session.validate();
+  m_max_traffic_endpoints_per_session.validate();
+  m_max_ethernet_packet_filters_per_session.validate();
+  m_max_redundant_transmission_params_per_session.validate();
+
+  //============================================================================
+  // LAYER 2: Cross-Parameter Validation (5 rules)
+  //============================================================================
+  int max_pdrs     = m_max_pdrs_per_pdu_session.get_value();
+  int max_fars     = m_max_fars_per_pdu_session.get_value();
+  int max_qers     = m_max_qers_per_pdu_session.get_value();
+  int max_urrs     = m_max_urrs_per_pdu_session.get_value();
+  int max_upf_if   = m_max_upf_interfaces.get_value();
+  int max_redirect = m_max_upf_redirect_interfaces.get_value();
+
+  // Rule 2.1: Redirect interfaces must be <= total interfaces
+  if (max_redirect > max_upf_if) {
+    throw std::runtime_error(fmt::format(
+        "max_upf_redirect_interfaces ({}) cannot exceed max_upf_interfaces "
+        "({})",
+        max_redirect, max_upf_if));
+  }
+
+  // Rule 2.2: FARs should equal PDRs (typical 1:1 mapping)
+  if (max_fars != max_pdrs) {
+    logger::logger_registry::get_logger(LOGGER_NAME)
+        .warn(
+            "max_fars_per_pdu_session ({}) does not equal "
+            "max_pdrs_per_pdu_session ({}). "
+            "Each PDR typically references exactly one FAR (3GPP TS 29.244 "
+            "Section 7.5.2.2). "
+            "This configuration is valid but unusual.",
+            max_fars, max_pdrs);
+  }
+
+  // Rule 2.3: FARs must be >= PDRs (each PDR needs a FAR)
+  if (max_fars < max_pdrs) {
+    throw std::runtime_error(fmt::format(
+        "max_fars_per_pdu_session ({}) cannot be less than "
+        "max_pdrs_per_pdu_session ({}) "
+        "because each PDR must reference at least one FAR (3GPP TS 29.244 "
+        "Section 7.5.2.2)",
+        max_fars, max_pdrs));
+  }
+
+  // Rule 2.4: QERs can be < PDRs (QERs are shared)
+  if (max_qers > max_pdrs) {
+    logger::logger_registry::get_logger(LOGGER_NAME)
+        .warn(
+            "max_qers_per_pdu_session ({}) exceeds max_pdrs_per_pdu_session "
+            "({}). "
+            "QERs are typically SHARED across multiple PDRs (3GPP TS 29.244 "
+            "Section 7.5.2.4), "
+            "so having more QERs than PDRs is unusual. This configuration is "
+            "valid but may indicate misconfiguration.",
+            max_qers, max_pdrs);
+  }
+
+  // Rule 2.5: URRs typically << PDRs (URRs are shared)
+  if (max_urrs > max_pdrs) {
+    logger::logger_registry::get_logger(LOGGER_NAME)
+        .warn(
+            "max_urrs_per_pdu_session ({}) exceeds max_pdrs_per_pdu_session "
+            "({}). "
+            "URRs are typically SHARED for charging/reporting across many PDRs "
+            "(3GPP TS 29.244 Section 7.5.2.5), "
+            "so this configuration is unusual. Consider if you need this many "
+            "URRs.",
+            max_urrs, max_pdrs);
+  }
+
+  //============================================================================
+  // LAYER 3: Overflow Prevention (2 rules)
+  //============================================================================
+  int max_sessions = m_max_pdu_sessions.get_value();
+  int max_sdfs     = m_max_sdf_filters_per_pdu_session.get_value();
+
+  const int MAX_SAFE_MAP_SIZE = 1000000;  // 1 million entries
+
+  // Rule 3.1: rules_match_pdr_map size check
+  long long rules_pdr_map_size =
+      static_cast<long long>(max_sessions) * max_pdrs;
+  if (rules_pdr_map_size > MAX_SAFE_MAP_SIZE) {
+    throw std::runtime_error(fmt::format(
+        "Derived BPF map 'rules_match_pdr_map' size ({} = {} sessions × {} "
+        "PDRs) "
+        "exceeds maximum safe size ({}). Reduce max_pdu_sessions or "
+        "max_pdrs_per_pdu_session.",
+        rules_pdr_map_size, max_sessions, max_pdrs, MAX_SAFE_MAP_SIZE));
+  }
+
+  // Rule 3.2: sdf_filters_map size check
+  long long sdf_map_size = static_cast<long long>(max_sessions) * max_sdfs;
+  if (sdf_map_size > MAX_SAFE_MAP_SIZE) {
+    throw std::runtime_error(fmt::format(
+        "Derived BPF map 'sdf_filters_map' size ({} = {} sessions × {} "
+        "filters) "
+        "exceeds maximum safe size ({}). Reduce max_pdu_sessions or "
+        "max_sdf_filters_per_pdu_session.",
+        sdf_map_size, max_sessions, max_sdfs, MAX_SAFE_MAP_SIZE));
+  }
+
+  //============================================================================
+  // LAYER 4: Memory Estimation (2 rules)
+  //============================================================================
+  int filter_len = m_max_sdf_filter_string_length.get_value();
+
+  // Memory estimation formula (bytes per session)
+  // Base overhead + PDRs + QERs + SDFs + FAR/URR/BAR overhead
+  long long bytes_per_session =
+      1024 +                             // Base overhead
+      (max_pdrs * 256) +                 // PDR entries
+      (max_qers * 128) +                 // QER entries
+      (max_sdfs * (128 + filter_len)) +  // SDF filter entries + strings
+      512;                               // FAR/URR/BAR overhead
+
+  long long total_memory_bytes = bytes_per_session * max_sessions;
+  double total_memory_mb       = total_memory_bytes / (1024.0 * 1024.0);
+
+  logger::logger_registry::get_logger(LOGGER_NAME)
+      .info(
+          "Estimated BPF map memory usage: ~{} MB",
+          static_cast<int>(total_memory_mb));
+
+  // Rule 4.1: Warn if > 1GB
+  if (total_memory_mb > 1024) {
+    logger::logger_registry::get_logger(LOGGER_NAME)
+        .warn(
+            "Estimated BPF map memory usage (~{} MB) exceeds 1GB. "
+            "This is a large deployment. Ensure sufficient system resources.",
+            static_cast<int>(total_memory_mb));
+  }
+
+  // Rule 4.2: Error if > 8GB
+  if (total_memory_mb > 8192) {
+    throw std::runtime_error(fmt::format(
+        "Estimated BPF map memory usage (~{} MB) exceeds 8GB. "
+        "This configuration is unsafe. Reduce session count or per-session "
+        "limits.",
+        static_cast<int>(total_memory_mb)));
+  }
+
+  //============================================================================
+  // LAYER 5: Deployment Size Validation (1 rule)
+  //============================================================================
+
+  // Rule 5.1: Warn if > 50K sessions (recommend multi-UPF deployment)
+  if (max_sessions > 50000) {
+    logger::logger_registry::get_logger(LOGGER_NAME)
+        .warn(
+            "max_pdu_sessions ({}) exceeds 50,000. For deployments of this "
+            "scale, "
+            "consider using multiple UPFs for redundancy, scalability, and "
+            "geographic distribution. "
+            "Operators typically deploy UPF pools rather than single large "
+            "UPFs.",
+            max_sessions);
+  }
+
+  logger::logger_registry::get_logger(LOGGER_NAME)
+      .info("UPF configuration validation successful");
+}
+
+// Getter implementations
+int upf_datapath_configuration::get_max_pdu_sessions() const {
+  return m_max_pdu_sessions.get_value();
+}
+
+int upf_datapath_configuration::get_max_pdrs_per_pdu_session() const {
+  return m_max_pdrs_per_pdu_session.get_value();
+}
+
+int upf_datapath_configuration::get_max_fars_per_pdu_session() const {
+  return m_max_fars_per_pdu_session.get_value();
+}
+
+int upf_datapath_configuration::get_max_qers_per_pdu_session() const {
+  return m_max_qers_per_pdu_session.get_value();
+}
+
+int upf_datapath_configuration::get_max_urrs_per_pdu_session() const {
+  return m_max_urrs_per_pdu_session.get_value();
+}
+
+int upf_datapath_configuration::get_max_bars_per_pdu_session() const {
+  return m_max_bars_per_pdu_session.get_value();
+}
+
+int upf_datapath_configuration::get_max_sdf_filters_per_pdu_session() const {
+  return m_max_sdf_filters_per_pdu_session.get_value();
+}
+
+int upf_datapath_configuration::get_max_sdf_filter_string_length() const {
+  return m_max_sdf_filter_string_length.get_value();
+}
+
+int upf_datapath_configuration::get_max_upf_interfaces() const {
+  return m_max_upf_interfaces.get_value();
+}
+
+int upf_datapath_configuration::get_max_upf_redirect_interfaces() const {
+  return m_max_upf_redirect_interfaces.get_value();
+}
+
+int upf_datapath_configuration::get_max_arp_entries() const {
+  return m_max_arp_entries.get_value();
+}
+
+int upf_datapath_configuration::get_max_application_ids_per_session() const {
+  return m_max_application_ids_per_session.get_value();
+}
+
+int upf_datapath_configuration::get_max_traffic_endpoints_per_session() const {
+  return m_max_traffic_endpoints_per_session.get_value();
+}
+
+int upf_datapath_configuration::get_max_ethernet_packet_filters_per_session()
+    const {
+  return m_max_ethernet_packet_filters_per_session.get_value();
+}
+
+int upf_datapath_configuration::
+    get_max_redundant_transmission_params_per_session() const {
+  return m_max_redundant_transmission_params_per_session.get_value();
 }
 
 }  // namespace oai::config

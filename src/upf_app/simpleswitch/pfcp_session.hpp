@@ -22,16 +22,6 @@ class pfcp_session {
   void add(std::shared_ptr<pfcp::pfcp_pdr>);
   void add(std::shared_ptr<pfcp::pfcp_qer>);
 
-  bool remove(const pfcp::far_id_t& far_id, uint8_t& cause_value);
-  bool remove(const pfcp::pdr_id_t& pdr_id, uint8_t& cause_value);
-  bool remove(const pfcp::qer_id_t& qer_id, uint8_t& cause_value);
-
-  std::mutex teid_mutex;
-  void set(const pfcp::fteid_t& fteid);
-
-  std::mutex pdn_type_mutex;
-  void set(pfcp::pdn_type_value_e type);
-
  public:
   pfcp::fseid_t cp_fseid;
   uint64_t seid;                    // User plane

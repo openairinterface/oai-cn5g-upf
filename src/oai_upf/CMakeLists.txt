@@ -192,9 +192,13 @@ if(GIT_FOUND)
   )
 endif()
 
+string(TIMESTAMP BUILD_DATE "%Y-%m-%d")
+string(TIMESTAMP BUILD_TIME "%H:%M:%S")
 
 add_definitions("-DPACKAGE_VERSION=\"Branch: ${GIT_BRANCH} Abrev. Hash: ${GIT_COMMIT_HASH} Date: ${GIT_COMMIT_DATE}\"")
 add_definitions("-DPACKAGE_BUGREPORT=\"openaircn-user@lists.eurecom.fr\"")
+add_definitions("-DBUILD_DATE=\"${BUILD_DATE}\"")
+add_definitions("-DBUILD_TIME=\"${BUILD_TIME}\"")
 
 ###############################################################################
 # Include CMake modules to find other library
@@ -264,8 +268,6 @@ ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/app ${CMAKE_CURRENT_BINARY_DIR}/app)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/simpleswitch ${CMAKE_CURRENT_BINARY_DIR}/simpleswitch)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/gtpv1u ${CMAKE_CURRENT_BINARY_DIR}/gtpv1u)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/udp ${CMAKE_CURRENT_BINARY_DIR}/udp)
-ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/interfaces ${CMAKE_CURRENT_BINARY_DIR}/interfaces)
-ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/framed_routing ${CMAKE_CURRENT_BINARY_DIR}/framed_routing)
 
 ################################################################################
 # Specific part for oai_upf folder
@@ -281,11 +283,12 @@ include_directories(${SRC_TOP_DIR}/itti)
 include_directories(${SRC_TOP_DIR}/pfcp)
 include_directories(${SRC_TOP_DIR}/udp)
 include_directories(${SRC_TOP_DIR}/upf_app)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/pdr_and_far)
-include_directories(${SRC_TOP_DIR}/upf_app/bpf/rules/include)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel/pfcp)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel/xdp)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel/include)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
-include_directories(${SRC_TOP_DIR}/upf_app/interfaces)
+include_directories(${SRC_TOP_DIR}/upf_app/utils)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/upf_app/framed_routing)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
@@ -305,6 +308,7 @@ link_directories(${SRC_TOP_DIR}/../build/ext/libbpf/src)
 
 add_executable(upf
   ${SRC_TOP_DIR}/oai_upf/main.cpp
+  ${SRC_TOP_DIR}/upf_app/utils/startup_banner.cpp
   ${SRC_TOP_DIR}/oai_upf/options.cpp
   ${SRC_TOP_DIR}/itti/itti.cpp
   ${SRC_TOP_DIR}/itti/itti_msg.cpp
@@ -333,12 +337,10 @@ target_link_libraries (upf
   ${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so
   APP
   SIMPLE_SWITCH
-  interfaces
   UDP
   GTPV1U
   PFCP
-  #far_xdp
-  pfcp_session_lookup_xdp
+  upf_xdp
   qer_tc
   UPF_XDP
   UPF_TC

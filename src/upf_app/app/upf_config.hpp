@@ -83,8 +83,6 @@ class upf_config {
 
   std::string gateway;
 
-  uint32_t max_pfcp_sessions;
-
   typedef struct nf_addr_s {
     struct in_addr ipv4_addr;
     unsigned int port;
@@ -97,6 +95,10 @@ class upf_config {
 
   bool enable_snat;
   bool enable_fr;
+  bool enable_urr;      // Usage Reporting Rules (3GPP TS 29.244)
+  bool enable_bar;      // Buffering Action Rules (3GPP TS 29.244)
+  bool enable_mar;      // Modify Access Rules (3GPP TS 29.244)
+  bool enable_eth_pdu;  // Ethernet PDU Sessions (3GPP TS 29.244)
 
   std::vector<pdn_cfg_t> pdns;
   std::vector<pfcp::node_id_t> smfs;
@@ -104,15 +106,25 @@ class upf_config {
   bool enable_5g_features;
   bool enable_bpf_datapath;
   bool enable_qos;
+
+  // Datapath configuration will be set from upf_datapath_configuration class
+  uint32_t max_pdu_sessions;
   u_int16_t max_upf_interfaces;
   u_int16_t max_upf_redirect_interfaces;
-  u_int16_t max_pdu_session;
   u_int16_t max_pdrs_per_pdu_session;
+  u_int16_t max_fars_per_pdu_session;
+  u_int16_t max_qers_per_pdu_session;
   u_int16_t max_qos_flows_per_pdu_session;
+  u_int16_t max_urrs_per_pdu_session;
+  u_int16_t max_bars_per_pdu_session;
   u_int16_t max_sdf_filters_per_pdu_session;
+  u_int16_t max_sdf_filter_string_length;
   u_int16_t max_arp_entries;
-  bool enable_eth_pdu;
-  bool ignore_qfi_for_uplink;
+  u_int16_t max_application_ids_per_session;
+  u_int16_t max_traffic_endpoints_per_session;
+  u_int16_t max_ethernet_packet_filters_per_session;
+  u_int16_t max_redundant_transmission_params_per_session;
+
   bool register_nrf;
   struct in_addr remote_n6;
   upf_info_t upf_info;
@@ -136,10 +148,13 @@ class upf_config {
         itti(),
         pdns(),
         smfs(),
-        max_pfcp_sessions(100),
         nsf(),
         enable_snat(false),
         enable_fr(false),
+        enable_urr(false),      // Not implemented yet
+        enable_bar(false),      // Not implemented yet
+        enable_mar(false),      // Not implemented yet
+        enable_eth_pdu(false),  // Not implemented yet
         nrf_addr() {
     itti.itti_timer_sched_params.sched_priority = 85;
     itti.n3_sched_params.sched_priority         = 84;
@@ -155,25 +170,28 @@ class upf_config {
     n4.thread_rd_sched_params.sched_priority = 95;
     n4.port                                  = pfcp::default_port;
 
-    enable_5g_features              = true;
-    enable_bpf_datapath             = false;
-    enable_qos                      = false;
-    max_upf_interfaces              = 3;
-    max_upf_redirect_interfaces     = 2;
-    max_pdu_session                 = 10000;
-    max_pdrs_per_pdu_session        = 8;
-    max_qos_flows_per_pdu_session   = 8;
-    max_sdf_filters_per_pdu_session = 8;
-    max_arp_entries                 = 2;
-    ignore_qfi_for_uplink           = true;
-    register_nrf                    = false;
-    upf_info                        = {};
-    enable_5g_features              = true;
-    enable_bpf_datapath             = false;
-    enable_qos                      = false;
-    enable_eth_pdu                  = false;
-    register_nrf                    = false;
-    upf_info                        = {};
+    enable_5g_features  = true;
+    enable_bpf_datapath = false;
+    enable_qos          = false;
+    // Values from basic_nrf_config_ebpf.yaml (lines 373-564)
+    max_upf_interfaces                            = 4;
+    max_upf_redirect_interfaces                   = 2;
+    max_pdu_sessions                              = 1000;
+    max_pdrs_per_pdu_session                      = 8;
+    max_fars_per_pdu_session                      = 8;
+    max_qers_per_pdu_session                      = 8;
+    max_qos_flows_per_pdu_session                 = 8;
+    max_urrs_per_pdu_session                      = 4;
+    max_bars_per_pdu_session                      = 2;
+    max_sdf_filters_per_pdu_session               = 8;
+    max_sdf_filter_string_length                  = 512;
+    max_arp_entries                               = 256;
+    max_application_ids_per_session               = 8;
+    max_traffic_endpoints_per_session             = 2;
+    max_ethernet_packet_filters_per_session       = 4;
+    max_redundant_transmission_params_per_session = 0;
+    register_nrf                                  = false;
+    upf_info                                      = {};
 
     log_level            = spdlog::level::debug;
     http_version         = 2;

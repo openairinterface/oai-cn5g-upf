@@ -177,7 +177,7 @@ class pfcp_switch {
       itti_n4_session_modification_request* modification_request,
       itti_n4_session_deletion_request* deletion_req, pfcp::pfcp_session* s,
       std::shared_ptr<SessionManager> obj,
-      void (SessionManager::*crud_func)(
+      SessionOperationResult (SessionManager::*crud_func)(
           std::shared_ptr<pfcp::pfcp_session>,
           itti_n4_session_establishment_request* est_req,
           itti_n4_session_modification_request* mod_req,
