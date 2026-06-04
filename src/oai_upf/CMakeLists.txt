@@ -344,7 +344,7 @@ target_link_libraries (upf
   qer_tc
   UPF_XDP
   UPF_TC
-  gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group
+  gflags glog dl double-conversion folly fmt spdlog ssl crypto -Wl,--end-group
   pthread m rt config++
   event boost_system curl yaml-cpp cpr::cpr
 )

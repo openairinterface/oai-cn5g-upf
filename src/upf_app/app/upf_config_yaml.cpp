@@ -235,7 +235,7 @@ upf::upf(
           false, false, false, false, false, false, false, false),
       m_upf_datapath_configuration(),
       m_interfaces(interfaces) {
-  model::nrf::SnssaiUpfInfoItem item;
+  oai::_3gpp::model::SnssaiUpfInfoItem item;
   item.setSNssai(DEFAULT_SNSSAI);
   item.setDnnUpfInfoList(DEFAULT_DNN_LIST);
   m_upf_info.setSNssaiUpfInfoList(
