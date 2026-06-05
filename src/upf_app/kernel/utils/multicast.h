@@ -9,10 +9,10 @@
 #include <linux/if_ether.h>
 #include <linux/ip.h>
 #include <linux/in.h>
-#include "linux/custom_types.h"
+#include <types.h>
 #include <stdint.h>
-#include <bpf/bpf_helpers.h>
-#include <bpf/bpf_endian.h>
+#include <bpf_helpers.h>
+#include <bpf_endian.h>
 #include <utils/logger.h>
 
 // Helper function to check IEEE 802 group multicast addresses
