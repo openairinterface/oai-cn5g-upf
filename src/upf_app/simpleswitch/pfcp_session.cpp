@@ -542,7 +542,7 @@ bool pfcp_session::update(
 //------------------------------------------------------------------------------
 bool pfcp_session::update(
     const pfcp::update_qer& qer_update, uint8_t& cause_value) {
-  uint32_t qer_id = qer_update.qer_id.second.qer_id;
+  uint32_t qer_id = qer_update.qer_id.qer_id;
 
   Logger::upf_n4().info(
       "pfcp_session::update(qer) seid " SEID_FMT " QER=%u", seid, qer_id);
