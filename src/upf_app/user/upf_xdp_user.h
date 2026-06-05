@@ -31,6 +31,7 @@
 #include "far_apply_user.h"
 #include "qer_apply_user.h"
 #include "qer_tc_user.h"
+#include "eth_broadcast_tc_user.h"
 #include "urr_apply_user.h"
 #include "bar_apply_user.h"
 #include "mar_apply_user.h"
@@ -298,6 +299,9 @@ class UPF_XDPProgram : public BPFProgram {
   std::shared_ptr<QERProgram> qer_;  ///< null unless flags.enable_qer
   /** TC-BPF shaping program -- HTB + redirect, attached per-session. */
   std::shared_ptr<QERTCProgram> qer_tc_;  ///< null unless flags.enable_qer
+  /** TC-BPF ETH PDU broadcast / multicast fan-out (TS 23.501 §5.8.2.5.3). */
+  std::shared_ptr<EthBroadcastTCProgram>
+      eth_broadcast_tc_;  ///< null in IP mode
   std::shared_ptr<URRProgram> urr_;       ///< null unless flags.enable_urr
   std::shared_ptr<BARProgram> bar_;       ///< null unless flags.enable_bar
   std::shared_ptr<MARProgram> mar_;       ///< null unless flags.enable_mar

@@ -53,7 +53,7 @@ endif()
 #                         Top-level convenience target                            #
 #               Depends on both XDP and TC skeleton generation.                   #
 # =============================================================================== #
-add_custom_target(upf_xdp_all DEPENDS upf_xdp qer_tc)
+add_custom_target(upf_xdp_all DEPENDS upf_xdp qer_tc eth_broadcast_tc)
 
 
 
@@ -221,6 +221,15 @@ function(tc arg)
   set(tc_dir   "${CMAKE_CURRENT_SOURCE_DIR}/tc")
   set(skel_dir "${OPENAIRCN_DIR}/build/upf/build/skel")
 
+  # Optional second positional arg: helper-header filename (relative to
+  # ${tc_dir}).  Defaults to "${arg}_maps.h" to preserve the qer_tc
+  # convention; overridden by tc(eth_broadcast eth_broadcast.h).
+  if(ARGC GREATER 1)
+    set(helper_header "${ARGV1}")
+  else()
+    set(helper_header "${arg}_maps.h")
+  endif()
+
   add_library(${arg}_tc STATIC ${tc_dir}/${arg}_tc_kern.c)
 
   add_custom_command(
@@ -234,8 +243,9 @@ function(tc arg)
 
     DEPENDS
       ${tc_dir}/${arg}_tc_kern.c
-      ${tc_dir}/${arg}_maps.h
+      ${tc_dir}/${helper_header}
   )
 endfunction()
 
 tc(qer)
+tc(eth_broadcast eth_broadcast.h)

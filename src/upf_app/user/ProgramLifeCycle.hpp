@@ -414,7 +414,9 @@ class ProgramLifeCycle {
    *
    * @see tc(8) for Traffic Control documentation
    */
-  void tcAttachIngress(const char* section_name, const char* interface) {
+  void tcAttachIngress(
+      const char* section_name, const char* interface,
+      uint32_t priority = INGRESS_PRIORITY) {
     if (!skeleton_ || state_ < LOADED) {
       Logger::upf_app().error(
           "[%s] Cannot attach TC — skeleton not opened or program not loaded",
@@ -485,7 +487,7 @@ class ProgramLifeCycle {
     hook.attach_point       = BPF_TC_INGRESS;
     attach_ingress.flags    = BPF_TC_F_REPLACE;
     attach_ingress.handle   = INGRESS_HANDLE;
-    attach_ingress.priority = INGRESS_PRIORITY;
+    attach_ingress.priority = priority;
 
     err = bpf_tc_attach(&hook, &attach_ingress);
     if (err) {

@@ -63,6 +63,9 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   } else {
     n3_eth_ = std::make_shared<N3EthEntryProgram>(gtp_interface_);
     n6_eth_ = std::make_shared<N6EthEntryProgram>(non_gtp_interface_);
+    /* TC-BPF broadcast / multicast fan-out for ETH PDU sessions.
+     * Attached to TC ingress on N3 and N6 (TS 23.501 §5.8.2.5.3). */
+    eth_broadcast_tc_ = std::make_shared<EthBroadcastTCProgram>();
   }
 
   /* Step 2: Instantiate stage programs
@@ -109,6 +112,7 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   }
   if (sl_ip_) sl_ip_->GetLifeCycle()->open();
   if (sl_eth_) sl_eth_->GetLifeCycle()->open();
+  if (eth_broadcast_tc_) eth_broadcast_tc_->GetLifeCycle()->open();
   pdr_->GetLifeCycle()->open();
   if (qer_) qer_->GetLifeCycle()->open();
   if (urr_) urr_->GetLifeCycle()->open();
@@ -202,6 +206,41 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
         "feature_dispatch)");
   }
 
+  /* ── Step 4a' (ETH path mirror of Step 4a): Load sl_eth_ BEFORE the other
+   *   ETH-map-declaring programs (n6_eth_, eth_broadcast_tc_) so that sl_eth_
+   *   becomes the FD owner for every map declared by eth_pdu_maps.h. Then
+   *   redirect each peer's eth-map symbols at sl_eth_'s FDs via
+   *   bpf_map__reuse_fd() while those peers are still unloaded.
+   *
+   *   Without this, n6_eth_ would load first and create its own private
+   *   kernel maps, sl_eth_ would later create a SECOND set, and the
+   *   MapByName accessor (which routes via sl_eth_) would point at maps
+   *   that nothing on the kernel side ever reads -- the control plane
+   *   would write session state into a dead map.
+   *
+   *   n3_eth_ does NOT include eth_pdu_maps.h, so no share for it.
+   */
+  if (sl_eth_) {
+    sl_eth_->GetLifeCycle()->load();
+    Logger::upf_app().info(
+        "UPF_XDPProgram: sl_eth loaded (eth_pdu_maps owner)");
+
+    const std::initializer_list<const char*> eth_session_owned = {
+        "session_by_mac_map",     "eth_session_mapping_map",
+        "eth_session_pdrs_map",   "eth_rules_match_pdr_map",
+        "eth_egress_ifindex_map", "mac_pdu_session_map"};
+    struct bpf_object* sl_eth_obj = sl_eth_->GetBpfObject();
+    if (n6_eth_)
+      ShareMapsOwned(sl_eth_obj, n6_eth_->GetBpfObject(), eth_session_owned);
+    if (eth_broadcast_tc_)
+      ShareMapsOwned(
+          sl_eth_obj, eth_broadcast_tc_->GetBpfObject(), eth_session_owned);
+    Logger::upf_app().debug(
+        "ShareMaps: eth_pdu_maps shared from sl_eth_ "
+        "(session_by_mac / eth_session_mapping / eth_session_pdrs / "
+        "eth_rules_match_pdr / eth_egress_ifindex / mac_pdu_session)");
+  }
+
   /* ── Step 4: Load far_ now that its n3_-owned symbols point at n3_'s maps
    *   and its pipeline_maps.h-declared symbols (in IP mode) point at sl_ip_'s.
    *   far_ creates its own kernel maps for upf_interface_map, arp_table_map,
@@ -250,6 +289,12 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
     n6_->Setup();
   } else {
     n6_eth_->Setup();
+    /* Broadcast / multicast TC fan-out for ETH PDU sessions.
+     * Loads with the eth_pdu_maps symbols already redirected in Step 4a'
+     * (Setup() internally calls open() which is idempotent and reuses the
+     * skeleton that was opened in Step 1b -- so the reuse_fd redirection
+     * is preserved through load()). */
+    if (eth_broadcast_tc_) eth_broadcast_tc_->Setup();
   }
 
   if (sl_ip_) sl_ip_->Setup();

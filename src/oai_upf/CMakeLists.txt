@@ -342,6 +342,7 @@ target_link_libraries (upf
   PFCP
   upf_xdp
   qer_tc
+  eth_broadcast_tc
   UPF_XDP
   UPF_TC
   gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group

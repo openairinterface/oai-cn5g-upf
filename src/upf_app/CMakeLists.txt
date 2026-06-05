@@ -82,6 +82,7 @@ set(UPF_USER_SHARED_SOURCES
   user/far_apply_user.cpp
   user/mar_apply_user.cpp
   user/qer_tc_user.cpp
+  user/eth_broadcast_tc_user.cpp
    user/qer_apply_user.cpp
   user/urr_apply_user.cpp
   user/bar_apply_user.cpp
@@ -140,7 +141,7 @@ target_link_libraries(UPF_XDP
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.a
   ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.so
   PRIVATE elf
-  PRIVATE z qer_tc   # TC skeleton needed for QERProgram
+  PRIVATE z qer_tc eth_broadcast_tc   # TC skeletons for QERProgram + EthBroadcastTCProgram
 )
 
 add_dependencies(UPF_XDP upf_xdp_all)
