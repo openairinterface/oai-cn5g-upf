@@ -846,12 +846,12 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
       // SessionProgramManager::CreatePipeline can populate bar_config_map.
       if (isBpfAccelerationEnabled) {
         if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
-          for (auto it : req->pfcp_ies.create_bars) {
-            create_bar& cr_bar = it;
+          // common-src: req->pfcp_ies.create_bar is singular std::pair.
+          if (req->pfcp_ies.create_bar.first) {
+            const create_bar& cr_bar = req->pfcp_ies.create_bar.second;
             if (not session->create(cr_bar, cause, offending_ie.offending_ie)) {
               Logger::upf_app().error(
                   "Establish: create(bar) failed, cause=%u", cause.cause_value);
-              break;
             }
           }
         }
@@ -860,6 +860,11 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
       // ---- Create MARs (BPF only) — §7.5.2.8 Create MAR IE ----------------
       // pfcp_session::create(mar) populates session->mars so that
       // SessionProgramManager::CreatePipeline can populate mar_rules_map.
+      // TODO MAR: re-enable when common-src adds a `create_mars` vector to
+      // pfcp_session_establishment_request. The local pfcp::create_mar stub
+      // in simpleswitch/pfcp_mar.hpp keeps the loop body compiling once the
+      // field lands.
+#if 0
       if (isBpfAccelerationEnabled) {
         if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
           for (auto it : req->pfcp_ies.create_mars) {
@@ -872,6 +877,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
           }
         }
       }
+#endif
 
       if (isBpfAccelerationEnabled) {
         Logger::upf_app().info(
@@ -1047,15 +1053,15 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     // cleaned up on the next ModifyPipeline call via call_datapath().
     if (isBpfAccelerationEnabled) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
-        for (auto it : req->pfcp_ies.remove_bars) {
-          remove_bar& bar = it;
+        // common-src: pfcp_ies.remove_bar is singular std::pair.
+        if (req->pfcp_ies.remove_bar.first) {
+          const remove_bar& bar = req->pfcp_ies.remove_bar.second;
           if (not session->remove(bar, cause, offending_ie.offending_ie)) {
             if (cause.cause_value ==
                 CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
               failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_BAR;
               failed_rule.rule_id_value = bar.bar_id.second.bar_id;
               resp->pfcp_ies.set(failed_rule);
-              break;
             }
           }
         }
@@ -1063,8 +1069,9 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     }
 
     // ---- Remove MARs (BPF only) — §7.5.4.15 Remove MAR IE ------------------
-    // Removes MAR from session->mars so the BPF mar_rules_map entry is
-    // cleaned up on the next ModifyPipeline call via call_datapath().
+    // TODO MAR: re-enable when common-src adds a `remove_mars` field. The
+    // local pfcp::remove_mar stub keeps the loop body compilable.
+#if 0
     if (isBpfAccelerationEnabled) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.remove_mars) {
@@ -1081,6 +1088,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
     }
+#endif
 
     // ---- Create FARs --------------------------------------------------------
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
@@ -1162,18 +1170,20 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     // can write bar_config_map entries for the new BARs.
     if (isBpfAccelerationEnabled) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
-        for (auto it : req->pfcp_ies.create_bars) {
-          create_bar& cr_bar = it;
+        // common-src: pfcp_ies.create_bar is singular std::pair.
+        if (req->pfcp_ies.create_bar.first) {
+          const create_bar& cr_bar = req->pfcp_ies.create_bar.second;
           if (not session->create(cr_bar, cause, offending_ie.offending_ie)) {
-            break;
+            // create() failed; cause already set inside.
           }
         }
       }
     }
 
     // ---- Create MARs (BPF only) — §7.5.2.8 Create MAR IE -------------------
-    // Populates session->mars so that SessionProgramManager::ModifyPipeline
-    // can write mar_rules_map entries for the new MARs.
+    // TODO MAR: re-enable when common-src adds a `create_mars` field. The
+    // local pfcp::create_mar stub keeps the loop body compilable.
+#if 0
     if (isBpfAccelerationEnabled) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.create_mars) {
@@ -1184,6 +1194,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
     }
+#endif
 
     // ---- Update PDRs / FARs / QERs ------------------------------------------
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
@@ -1215,7 +1226,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           if (not session->update(qer, cause_value)) {
             failed_rule_id_t failed_rule = {};
             failed_rule.rule_id_type     = FAILED_RULE_ID_TYPE_QER;
-            failed_rule.rule_id_value    = qer.qer_id.qer_id;
+            // update_qer::qer_id is std::pair<bool, qer_id_t> in common-src.
+            failed_rule.rule_id_value    = qer.qer_id.second.qer_id;
             resp->pfcp_ies.set(failed_rule);
           }
         }
@@ -1243,8 +1255,10 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       // Updates DL notification delay and suggested buffering packet count.
       // bar_state_map (DDN tracking) is preserved by ModifyPipeline.
       if (isBpfAccelerationEnabled) {
-        for (auto it : req->pfcp_ies.update_bars) {
-          update_bar_within_pfcp_session_modification_request& bar = it;
+        // common-src: pfcp_ies.update_bar is singular std::pair.
+        if (req->pfcp_ies.update_bar.first) {
+          const update_bar_within_pfcp_session_modification_request& bar =
+              req->pfcp_ies.update_bar.second;
           uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
           if (not session->update(bar, cause_value)) {
             failed_rule_id_t failed_rule = {};
@@ -1256,8 +1270,9 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       }
 
       // ---- Update MARs (BPF only) — §7.5.4.16 Update MAR IE ----------------
-      // Updates steering mode and access forwarding action info in
-      // session->mars. mar_rules_map is repopulated by ModifyPipeline.
+      // TODO MAR: re-enable when common-src adds an `update_mars` field. The
+      // local pfcp::update_mar stub keeps the loop body compilable.
+#if 0
       if (isBpfAccelerationEnabled) {
         for (auto it : req->pfcp_ies.update_mars) {
           update_mar& mar     = it;
@@ -1270,6 +1285,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           }
         }
       }
+#endif
     }
 
     if (isBpfAccelerationEnabled) {

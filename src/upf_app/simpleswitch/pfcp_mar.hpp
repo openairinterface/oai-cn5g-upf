@@ -261,6 +261,139 @@ class pfcp_mar {
   }
 };
 
+// ===========================================================================
+// PFCP wire-IE shims for MAR (NOT YET IN common-src/pfcp/msg_pfcp.hpp)
+//
+// Until the OAI lib gains these types, we declare them locally so that the
+// upf_app session-handling code can compile against a consistent type
+// surface. When common-src adds equivalent definitions:
+//   1. Delete this section.
+//   2. Re-enable the MAR iteration blocks in SessionManager.cpp /
+//      pfcp_switch.cpp that are currently guarded by `#if 0`.
+// The class shapes below match 3GPP TS 29.244 §7.5.2.8 (Create MAR),
+// §7.5.4.16 (Update MAR), §7.5.4.15 (Remove MAR), and §8.2.129/130 for
+// Access Forwarding Action Information.
+// ===========================================================================
+
+/** @brief Access Forwarding Action Information IE (§8.2.129 / §8.2.130).
+ *
+ *  Wire form — distinct from mar_access_forwarding_action_t (internal).
+ *  pfcp_session.cpp converts this to the internal form via field copies.
+ */
+class access_forwarding_action_information {
+ public:
+  std::pair<bool, pfcp::far_id_t> far_id;      ///< M — §8.2.74
+  std::pair<bool, pfcp::urr_id_t> urr_id;      ///< C — §8.2.54
+  std::pair<bool, pfcp::weight_t> weight;      ///< C — §8.2.126
+  std::pair<bool, pfcp::priority_t> priority;  ///< C — §8.2.127
+
+  access_forwarding_action_information() = default;
+
+  bool get(pfcp::far_id_t& v) const {
+    if (far_id.first) {
+      v = far_id.second;
+      return true;
+    }
+    return false;
+  }
+
+  bool get(pfcp::urr_id_t& v) const {
+    if (urr_id.first) {
+      v = urr_id.second;
+      return true;
+    }
+    return false;
+  }
+};
+
+/** @brief Create MAR IE (3GPP TS 29.244 §7.5.2.8, Table 7.5.2.8-1). */
+class create_mar {
+ public:
+  std::pair<bool, pfcp::mar_id_t> mar_id;  ///< M — §8.2.123
+  std::pair<bool, pfcp::steering_functionality_t>
+      steering_functionality;  ///< M — §8.2.124
+  std::pair<bool, pfcp::steering_mode_t> steering_mode;  ///< M — §8.2.125
+  std::pair<bool, pfcp::access_forwarding_action_information>
+      access_forwarding_action_information_1;  ///< C — §8.2.129
+  std::pair<bool, pfcp::access_forwarding_action_information>
+      access_forwarding_action_information_2;  ///< C — §8.2.130
+
+  create_mar() = default;
+
+  bool get(pfcp::mar_id_t& v) const {
+    if (mar_id.first) {
+      v = mar_id.second;
+      return true;
+    }
+    return false;
+  }
+};
+
+/** @brief Update MAR IE (3GPP TS 29.244 §7.5.4.16, Table 7.5.4.16-1). */
+class update_mar {
+ public:
+  std::pair<bool, pfcp::mar_id_t> mar_id;  ///< M — §8.2.123
+  std::pair<bool, pfcp::steering_functionality_t>
+      steering_functionality;  ///< C — §8.2.124
+  std::pair<bool, pfcp::steering_mode_t> steering_mode;  ///< C — §8.2.125
+  std::pair<bool, pfcp::access_forwarding_action_information>
+      access_forwarding_action_information_1;  ///< C — §8.2.129
+  std::pair<bool, pfcp::access_forwarding_action_information>
+      access_forwarding_action_information_2;  ///< C — §8.2.130
+
+  update_mar() = default;
+
+  bool get(pfcp::mar_id_t& v) const {
+    if (mar_id.first) {
+      v = mar_id.second;
+      return true;
+    }
+    return false;
+  }
+
+  bool get(pfcp::steering_mode_t& v) const {
+    if (steering_mode.first) {
+      v = steering_mode.second;
+      return true;
+    }
+    return false;
+  }
+
+  bool get_access_forwarding_action_information_1(
+      pfcp::access_forwarding_action_information& v) const {
+    if (access_forwarding_action_information_1.first) {
+      v = access_forwarding_action_information_1.second;
+      return true;
+    }
+    return false;
+  }
+
+  bool get_access_forwarding_action_information_2(
+      pfcp::access_forwarding_action_information& v) const {
+    if (access_forwarding_action_information_2.first) {
+      v = access_forwarding_action_information_2.second;
+      return true;
+    }
+    return false;
+  }
+};
+
+/** @brief Remove MAR IE (3GPP TS 29.244 §7.5.4.15, Table 7.5.4.15-1). */
+class remove_mar {
+ public:
+  std::pair<bool, pfcp::mar_id_t> mar_id;  ///< M — §8.2.123
+
+  remove_mar() = default;
+
+  bool get(pfcp::mar_id_t& v) const {
+    if (mar_id.first) {
+      v = mar_id.second;
+      return true;
+    }
+    return false;
+  }
+};
+
 }  // namespace pfcp
 
 #endif  // FILE_PFCP_MAR_HPP_SEEN

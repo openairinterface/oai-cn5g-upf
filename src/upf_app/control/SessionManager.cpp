@@ -476,8 +476,13 @@ SessionOperationResult SessionManager::ModifySession(
     const size_t n_create_fars = mod_req->pfcp_ies.create_fars.size();
     const size_t n_create_qers = mod_req->pfcp_ies.create_qers.size();
     const size_t n_create_urrs = mod_req->pfcp_ies.create_urrs.size();
-    const size_t n_create_bars = mod_req->pfcp_ies.create_bars.size();
-    const size_t n_create_mars = mod_req->pfcp_ies.create_mars.size();
+    // create_bar is a std::pair<bool, T> in common-src (PFCP allows at
+    // most one BAR per session establishment/modification request).
+    const size_t n_create_bars =
+        mod_req->pfcp_ies.create_bar.first ? 1 : 0;
+    // TODO MAR: pfcp_ies has no create_mars field — see local stubs in
+    // simpleswitch/pfcp_mar.hpp. Reactivate when common-src adds the IE.
+    const size_t n_create_mars = 0;
 
     if (n_create_pdrs || n_create_fars || n_create_qers || n_create_urrs ||
         n_create_bars || n_create_mars) {
@@ -1338,7 +1343,10 @@ size_t SessionManager::HandlePdrUpdates(
       //        choos (UPF shall choose the UE IP address).
       pfcp::ue_ip_address_t ue_ip;
       if (pdi.get(ue_ip)) {
-        if (ue_ip.chv4 || ue_ip.chv6) {
+        // TODO Rel-16 §8.2.62 CHV4/CHV6: this common-src predates the
+        // CHV4/CHV6 flag bits in ue_ip_address_t. Condition is forced false
+        // until those fields land.
+        if (false /* ue_ip.chv4 || ue_ip.chv6 */) {
           // CHV4/CHV6=1: CP requests UPF to allocate a UE IP address and report
           // it back (3GPP TS 29.244 §8.2.62, Rel-16). UE IP pool assignment is
           // not yet implemented.
@@ -2001,7 +2009,11 @@ size_t SessionManager::HandleBarRemoval(
     itti_n4_session_modification_request* mod_req) {
   size_t removed_count = 0;
 
-  for (const auto& remove_bar : mod_req->pfcp_ies.remove_bars) {
+  // common-src: pfcp_session_modification_request::remove_bar is a singular
+  // std::pair<bool, pfcp::remove_bar> (PFCP allows at most one Remove BAR
+  // IE per modification request).
+  if (mod_req->pfcp_ies.remove_bar.first) {
+    const auto& remove_bar = mod_req->pfcp_ies.remove_bar.second;
     pfcp::bar_id_t bar_id;
     if (remove_bar.get(bar_id)) {
       if (RemoveBar(session->get_up_seid(), bar_id.bar_id)) {
@@ -2020,6 +2032,11 @@ size_t SessionManager::HandleMarRemoval(
     itti_n4_session_modification_request* mod_req) {
   size_t removed_count = 0;
 
+  // TODO MAR: re-enable when common-src adds a `remove_mars` field to
+  // pfcp_session_modification_request. The local pfcp::remove_mar stub in
+  // simpleswitch/pfcp_mar.hpp lets the loop body keep compiling once the
+  // field is added.
+#if 0
   for (const auto& remove_mar : mod_req->pfcp_ies.remove_mars) {
     pfcp::mar_id_t mar_id;
     if (remove_mar.get(mar_id)) {
@@ -2028,6 +2045,7 @@ size_t SessionManager::HandleMarRemoval(
       }
     }
   }
+#endif
 
   return removed_count;
 }
@@ -2123,12 +2141,17 @@ size_t SessionManager::HandleBarUpdates(
     itti_n4_session_modification_request* mod_req) {
   size_t updated_count = 0;
 
-  for (const auto& update_bar : mod_req->pfcp_ies.update_bars) {
+  // common-src: pfcp_session_modification_request::update_bar is a singular
+  // std::pair<bool, update_bar_within_pfcp_session_modification_request>
+  // (PFCP allows at most one Update BAR IE per modification request).
+  if (mod_req->pfcp_ies.update_bar.first) {
+    const auto& update_bar = mod_req->pfcp_ies.update_bar.second;
+
     // BAR ID — M, §8.2.57
     pfcp::bar_id_t bar_id_ie;
     if (!update_bar.get(bar_id_ie)) {
       Logger::upf_app().error("HandleBarUpdates: BAR ID missing");
-      continue;
+      return updated_count;
     }
     uint32_t bar_id = bar_id_ie.bar_id;
 
@@ -2145,23 +2168,23 @@ size_t SessionManager::HandleBarUpdates(
       Logger::upf_app().error(
           "HandleBarUpdates: BAR %u not found in session " SEID_FMT, bar_id,
           session->get_up_seid());
-      continue;
+    } else {
+      // -----------------------------------------------------------------------
+      // Delegate to pfcp_bar::update(modification_request) — Table 7.5.4.11-1.
+      // This is the single source of truth for the BAR Session Modification
+      // path:
+      //   §8.2.28  Downlink Data Notification Delay (Sxa + N4)
+      //   §8.2.100 Suggested Buffering Packets Count (Sxb+Sxc+N4, UDBC feature)
+      //   TODOs inside pfcp_bar::update(modification_request):
+      //     §8.2.29 DL Buffering Duration (Sxa+N4) — lib gap,
+      //             not in update_bar_within_pfcp_session_modification_request
+      //     §8.2.30 DL Buffering Suggested Packet Count (Sxa+N4) — same lib gap
+      // -----------------------------------------------------------------------
+      uint8_t cause_value = pfcp::CAUSE_VALUE_REQUEST_ACCEPTED;
+      existing->update(update_bar, cause_value);
+
+      updated_count++;
     }
-
-    // -------------------------------------------------------------------------
-    // Delegate to pfcp_bar::update(modification_request) — Table 7.5.4.11-1.
-    // This is the single source of truth for the BAR Session Modification path:
-    //   §8.2.28  Downlink Data Notification Delay (Sxa + N4)
-    //   §8.2.100 Suggested Buffering Packets Count (Sxb+Sxc+N4, UDBC feature)
-    //   TODOs inside pfcp_bar::update(modification_request):
-    //     §8.2.29 DL Buffering Duration (Sxa+N4) — lib gap,
-    //             not in update_bar_within_pfcp_session_modification_request
-    //     §8.2.30 DL Buffering Suggested Packet Count (Sxa+N4) — same lib gap
-    // -------------------------------------------------------------------------
-    uint8_t cause_value = pfcp::CAUSE_VALUE_REQUEST_ACCEPTED;
-    existing->update(update_bar, cause_value);
-
-    updated_count++;
   }
 
   // Update BPF bar_config_map (bar_state_map preserved via BPF_NOEXIST)
@@ -2182,6 +2205,13 @@ size_t SessionManager::HandleMarUpdates(
     itti_n4_session_modification_request* mod_req) {
   size_t updated_count = 0;
 
+  // TODO MAR: re-enable when common-src adds an `update_mars` field to
+  // pfcp_session_modification_request. The local pfcp::update_mar and
+  // pfcp::access_forwarding_action_information stubs in
+  // simpleswitch/pfcp_mar.hpp keep the loop body compiling once the field
+  // is added (also see the conversion lambda below, which targets the
+  // lib-shape AFAI type and therefore stays inside the #if 0 block).
+#if 0
   for (const auto& update_mar : mod_req->pfcp_ies.update_mars) {
     // MAR ID — M, §8.2.123
     pfcp::mar_id_t mar_id_ie;
@@ -2287,6 +2317,7 @@ size_t SessionManager::HandleMarUpdates(
 
     updated_count++;
   }
+#endif
 
   // Update BPF mar_rules_map
   if (updated_count > 0) {
