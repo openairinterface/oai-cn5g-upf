@@ -102,6 +102,14 @@ class EthBroadcastTCProgram : public BPFProgram {
   struct bpf_object* GetBpfObject() const;
 
   /**
+   * @brief Get the program lifecycle (used by UPF_XDPProgram::Setup() to
+   *        call open() early in Step 1b).
+   */
+  std::shared_ptr<EthBroadcastTCProgramLifeCycle> GetLifeCycle() const {
+    return lifecycle_;
+  }
+
+  /**
    * @brief Get the eth_egress_ifindex_map (slot -> kernel ifindex).
    */
   std::shared_ptr<BPFMap> GetEgressIfindexMap() const;
