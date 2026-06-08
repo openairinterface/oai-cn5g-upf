@@ -301,10 +301,10 @@ class UPF_XDPProgram : public BPFProgram {
   std::shared_ptr<QERTCProgram> qer_tc_;  ///< null unless flags.enable_qer
   /** TC-BPF ETH PDU broadcast / multicast fan-out (TS 23.501 §5.8.2.5.3). */
   std::shared_ptr<EthBroadcastTCProgram>
-      eth_broadcast_tc_;  ///< null in IP mode
-  std::shared_ptr<URRProgram> urr_;       ///< null unless flags.enable_urr
-  std::shared_ptr<BARProgram> bar_;       ///< null unless flags.enable_bar
-  std::shared_ptr<MARProgram> mar_;       ///< null unless flags.enable_mar
+      eth_broadcast_tc_;             ///< null in IP mode
+  std::shared_ptr<URRProgram> urr_;  ///< null unless flags.enable_urr
+  std::shared_ptr<BARProgram> bar_;  ///< null unless flags.enable_bar
+  std::shared_ptr<MARProgram> mar_;  ///< null unless flags.enable_mar
 
   // ==========================================================================
   // Interface names and feature flags

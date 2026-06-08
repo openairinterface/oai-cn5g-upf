@@ -188,9 +188,9 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
      *   so no share is needed for them.
      */
     const std::initializer_list<const char*> pipeline_owned = {
-        "session_by_ue_ip_map", "pdrs_per_session_map",
+        "session_by_ue_ip_map",    "pdrs_per_session_map",
         "session_qos_enabled_map", "rules_match_pdr_map",
-        "m_framed_route_mapping", "framed_routing_flag",
+        "m_framed_route_mapping",  "framed_routing_flag",
         "feature_dispatch_map"};
     struct bpf_object* sl_obj = sl_ip_->GetBpfObject();
     ShareMapsOwned(sl_obj, far_->GetBpfObject(), pipeline_owned);
@@ -386,8 +386,8 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
         Logger::upf_app().info(
             "redirect_interfaces_map populated: "
             "DOWNLINK[0]=ifindex(%s)=%u  UPLINK[1]=ifindex(%s)=%u",
-            gtp_interface_.c_str(), n3_ifindex,
-            non_gtp_interface_.c_str(), n6_ifindex);
+            gtp_interface_.c_str(), n3_ifindex, non_gtp_interface_.c_str(),
+            n6_ifindex);
       }
     } else {
       Logger::upf_app().error(

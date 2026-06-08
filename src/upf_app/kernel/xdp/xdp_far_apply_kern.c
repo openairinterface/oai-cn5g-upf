@@ -138,8 +138,7 @@ gtpu_encap_ipv4(struct xdp_md* ctx, struct pfcp_far* far, u8 qfi) {
       bpf_map_lookup_elem(&arp_table_map, &next_hop_n3_ip);
   if (!arp_n3) {
     bpf_debug(
-        "N3 next-hop MAC not found in ARP table for gNB %pI4",
-        &next_hop_n3_ip);
+        "N3 next-hop MAC not found in ARP table for gNB %pI4", &next_hop_n3_ip);
     return RET_FAILURE;
   }
 
@@ -352,13 +351,12 @@ gtpu_decap_ipv4(struct xdp_md* ctx, struct pfcp_far* far) {
    * routed setups (e.g. UE traffic to 8.8.8.8 via an upstream router),
    * the kernel should fall back to bpf_fib_lookup() -- see the helper
    * update_mac_address() in utils/mac_resolution.h. */
-  struct iphdr* inner_iph =
-      (void*) ((u8*) eth_inner + sizeof(struct ethhdr));
+  struct iphdr* inner_iph = (void*) ((u8*) eth_inner + sizeof(struct ethhdr));
   if ((void*) (inner_iph + 1) > data_end) {
     bpf_debug("Error: Invalid inner IP header for ARP key");
     return RET_DROP;
   }
-  u32 next_hop_n6_ip      = inner_iph->daddr;
+  u32 next_hop_n6_ip = inner_iph->daddr;
   struct arp_entry* arp_n6 =
       bpf_map_lookup_elem(&arp_table_map, &next_hop_n6_ip);
   if (!arp_n6) {

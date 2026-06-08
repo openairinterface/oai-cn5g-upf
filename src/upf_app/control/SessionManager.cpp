@@ -478,8 +478,7 @@ SessionOperationResult SessionManager::ModifySession(
     const size_t n_create_urrs = mod_req->pfcp_ies.create_urrs.size();
     // create_bar is a std::pair<bool, T> in common-src (PFCP allows at
     // most one BAR per session establishment/modification request).
-    const size_t n_create_bars =
-        mod_req->pfcp_ies.create_bar.first ? 1 : 0;
+    const size_t n_create_bars = mod_req->pfcp_ies.create_bar.first ? 1 : 0;
     // TODO MAR: pfcp_ies has no create_mars field — see local stubs in
     // simpleswitch/pfcp_mar.hpp. Reactivate when common-src adds the IE.
     const size_t n_create_mars = 0;

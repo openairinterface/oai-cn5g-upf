@@ -62,7 +62,6 @@ class N6EthEntryProgram : public BPFProgram {
    */
   void TearDown();
 
-
   /** @brief Returns the container of all maps in this skeleton. */
   std::shared_ptr<BPFMaps> GetMaps();
 

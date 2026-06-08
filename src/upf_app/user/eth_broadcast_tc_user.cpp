@@ -68,8 +68,7 @@ void EthBroadcastTCProgram::ConfigureMaps(
     Logger::upf_app().error(
         "One or more BPF map configurations failed for "
         "EthBroadcastTCProgram.");
-    throw std::runtime_error(
-        "EthBroadcastTCProgram map configuration failed");
+    throw std::runtime_error("EthBroadcastTCProgram map configuration failed");
   }
 }
 
@@ -91,8 +90,7 @@ EthBroadcastTCProgram::EthBroadcastTCProgram() : BPFProgram() {
       open_fn,
       /* load    */ eth_broadcast_tc_kern_c__load,
       /* attach  */ eth_broadcast_tc_kern_c__attach,
-      /* destroy */ eth_broadcast_tc_kern_c__destroy,
-      "EthBroadcastTCProgram");
+      /* destroy */ eth_broadcast_tc_kern_c__destroy, "EthBroadcastTCProgram");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -100,8 +98,8 @@ EthBroadcastTCProgram::~EthBroadcastTCProgram() {}
 
 /* -------------------------------------------------------------------------- */
 void EthBroadcastTCProgram::Setup() {
-  const std::string udp_iface = upf::GetN6Iface();  /* DN-facing */
-  const std::string gtp_iface = upf::GetN3Iface();  /* gNB-facing */
+  const std::string udp_iface = upf::GetN6Iface(); /* DN-facing */
+  const std::string gtp_iface = upf::GetN3Iface(); /* gNB-facing */
 
   skeleton_ = lifecycle_->open();
   InitializeMaps();

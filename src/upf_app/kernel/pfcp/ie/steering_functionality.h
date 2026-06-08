@@ -8,8 +8,8 @@
 #include <linux/types.h>
 #include "ie_base.h"
 
-#define STEERING_FUNC_ATSSS_LL  0  /* ATSSS Low Layer */
-#define STEERING_FUNC_MPTCP     1  /* MPTCP           */
+#define STEERING_FUNC_ATSSS_LL 0 /* ATSSS Low Layer */
+#define STEERING_FUNC_MPTCP 1    /* MPTCP           */
 
 /**
  * struct steering_functionality - Steering Functionality IE

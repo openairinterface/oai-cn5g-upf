@@ -8,10 +8,10 @@
 #include <linux/types.h>
 #include "ie_base.h"
 
-#define STEER_MODE_ACTIVE_STANDBY  0  /* Active-Standby */
-#define STEER_MODE_SMALLEST_DELAY  1  /* Smallest Delay */
-#define STEER_MODE_LOAD_BALANCE    2  /* Load Balancing */
-#define STEER_MODE_PRIORITY_BASED  3  /* Priority-Based */
+#define STEER_MODE_ACTIVE_STANDBY 0 /* Active-Standby */
+#define STEER_MODE_SMALLEST_DELAY 1 /* Smallest Delay */
+#define STEER_MODE_LOAD_BALANCE 2   /* Load Balancing */
+#define STEER_MODE_PRIORITY_BASED 3 /* Priority-Based */
 
 /**
  * struct steering_mode - Steering Mode IE

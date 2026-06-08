@@ -74,10 +74,10 @@ static __always_inline int update_mac_address(
       __builtin_memcpy(ethh->h_source, fib_params.smac, ETH_ALEN);
       break;
 
-    case BPF_FIB_LKUP_RET_BLACKHOLE:    /* dest is blackholed; can be dropped */
-    case BPF_FIB_LKUP_RET_UNREACHABLE:  /* dest is unreachable; can be dropped */
-    case BPF_FIB_LKUP_RET_PROHIBIT:     /* dest not allowed; can be dropped */
-    case BPF_FIB_LKUP_RET_NOT_FWDED:    /* packet is not forwarded */
+    case BPF_FIB_LKUP_RET_BLACKHOLE:   /* dest is blackholed; can be dropped */
+    case BPF_FIB_LKUP_RET_UNREACHABLE: /* dest is unreachable; can be dropped */
+    case BPF_FIB_LKUP_RET_PROHIBIT:    /* dest not allowed; can be dropped */
+    case BPF_FIB_LKUP_RET_NOT_FWDED:   /* packet is not forwarded */
     case BPF_FIB_LKUP_RET_FWD_DISABLED: /* fwding is not enabled on ingress */
     case BPF_FIB_LKUP_RET_UNSUPP_LWT:   /* fwd requires encapsulation */
     case BPF_FIB_LKUP_RET_NO_NEIGH:     /* no neighbor entry for nh */

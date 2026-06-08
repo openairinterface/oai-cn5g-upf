@@ -31,8 +31,7 @@ int CountAvailableInterfaces() {
         "Unable to enumerate network interfaces (getifaddrs failed)");
   }
 
-  Logger::upf_app().debug(
-      "Found %d active network interfaces", num_interfaces);
+  Logger::upf_app().debug("Found %d active network interfaces", num_interfaces);
   return num_interfaces;
 }
 
@@ -49,8 +48,7 @@ int GetInterfaceIndex(const std::string& interface_name) {
   unsigned int if_index = if_nametoindex(interface_name.c_str());
 
   if (if_index == 0) {
-    Logger::upf_app().warn(
-        "Interface '%s' not found", interface_name.c_str());
+    Logger::upf_app().warn("Interface '%s' not found", interface_name.c_str());
   }
 
   return static_cast<int>(if_index);

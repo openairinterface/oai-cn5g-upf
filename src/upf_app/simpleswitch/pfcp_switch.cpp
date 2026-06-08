@@ -1227,7 +1227,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
             failed_rule_id_t failed_rule = {};
             failed_rule.rule_id_type     = FAILED_RULE_ID_TYPE_QER;
             // update_qer::qer_id is std::pair<bool, qer_id_t> in common-src.
-            failed_rule.rule_id_value    = qer.qer_id.second.qer_id;
+            failed_rule.rule_id_value = qer.qer_id.second.qer_id;
             resp->pfcp_ies.set(failed_rule);
           }
         }

@@ -103,7 +103,7 @@ int handle_broadcast(struct __sk_buff* skb) {
   /* ---------------------------------------------------------- */
   /*  Resolve DL egress ifindex (N3)                            */
   /* ---------------------------------------------------------- */
-  int key = DIR_DOWNLINK;
+  int key      = DIR_DOWNLINK;
   int* ifindex = bpf_map_lookup_elem(&eth_egress_ifindex_map, &key);
   if (!ifindex) {
     bpf_debug("eth_broadcast_tc: DL ifindex not in eth_egress_ifindex_map");
@@ -122,8 +122,9 @@ int handle_broadcast(struct __sk_buff* skb) {
   /* ---------------------------------------------------------- */
   /*  Inner Ethernet (immediately after the GTP-U stack)        */
   /* ---------------------------------------------------------- */
-  eth = (struct ethhdr*) ((void*) data + sizeof(struct ethhdr) +
-                          GTP_ENCAPSULATED_SIZE);
+  eth =
+      (struct
+       ethhdr*) ((void*) data + sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE);
   if ((void*) (eth + 1) > data_end) {
     bpf_debug("eth_broadcast_tc: malformed inner Ethernet");
     goto out;
@@ -159,8 +160,7 @@ int handle_broadcast(struct __sk_buff* skb) {
   /* ---------------------------------------------------------- */
   /*  Fan-out via bpf_for_each_map_elem                         */
   /* ---------------------------------------------------------- */
-  struct callback_ctx cb_ctx = {
-      .skb = skb, .ifindex = ifindex, .size = 0};
+  struct callback_ctx cb_ctx = {.skb = skb, .ifindex = ifindex, .size = 0};
 
   /* UL detection: packet ingressed on the DL egress (== N3) */
   bool is_uplink = (*ifindex == skb->ingress_ifindex);
@@ -178,7 +178,7 @@ int handle_broadcast(struct __sk_buff* skb) {
   /*  UL: also forward the original up to N6 (DN-side)          */
   /* ---------------------------------------------------------- */
   if (is_uplink) {
-    key = DIR_UPLINK;
+    key     = DIR_UPLINK;
     ifindex = bpf_map_lookup_elem(&eth_egress_ifindex_map, &key);
     if (!ifindex) {
       bpf_debug("eth_broadcast_tc: UL ifindex not in eth_egress_ifindex_map");

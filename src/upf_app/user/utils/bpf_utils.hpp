@@ -33,11 +33,11 @@ namespace bpf {
  * Usage:
  * @code
  * struct my_bpf_skel* skel = my_bpf__open();
- * 
+ *
  * // Configure map sizes
  * ConfigureMapMaxEntries(skel->maps.session_map, "session_map", 10000);
  * ConfigureMapMaxEntries(skel->maps.arp_table, "arp_table", 1000);
- * 
+ *
  * // Now load the program
  * my_bpf__load(skel);
  * @endcode

@@ -28,7 +28,7 @@
 
 #include "pipeline_maps.h"
 #include "interfaces_types.h"
-#include "interfaces_maps.h"  /* redirect_interfaces_map (via EXECUTE_FINAL_ACTION) */
+#include "interfaces_maps.h" /* redirect_interfaces_map (via EXECUTE_FINAL_ACTION) */
 #include "tail_call_dispatcher.h"
 #include "stats_maps.h"
 #include "stats_types.h"

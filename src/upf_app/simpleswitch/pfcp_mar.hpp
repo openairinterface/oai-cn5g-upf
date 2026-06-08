@@ -311,7 +311,7 @@ class create_mar {
  public:
   std::pair<bool, pfcp::mar_id_t> mar_id;  ///< M — §8.2.123
   std::pair<bool, pfcp::steering_functionality_t>
-      steering_functionality;  ///< M — §8.2.124
+      steering_functionality;                            ///< M — §8.2.124
   std::pair<bool, pfcp::steering_mode_t> steering_mode;  ///< M — §8.2.125
   std::pair<bool, pfcp::access_forwarding_action_information>
       access_forwarding_action_information_1;  ///< C — §8.2.129
@@ -334,7 +334,7 @@ class update_mar {
  public:
   std::pair<bool, pfcp::mar_id_t> mar_id;  ///< M — §8.2.123
   std::pair<bool, pfcp::steering_functionality_t>
-      steering_functionality;  ///< C — §8.2.124
+      steering_functionality;                            ///< C — §8.2.124
   std::pair<bool, pfcp::steering_mode_t> steering_mode;  ///< C — §8.2.125
   std::pair<bool, pfcp::access_forwarding_action_information>
       access_forwarding_action_information_1;  ///< C — §8.2.129

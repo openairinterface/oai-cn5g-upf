@@ -9,7 +9,8 @@
 #include "ie_base.h"
 
 /**
- * struct suggested_buffering_packets_count - Suggested Buffering Packets Count IE
+ * struct suggested_buffering_packets_count - Suggested Buffering Packets Count
+ * IE
  * @packet_count: Suggested max DL packets to buffer (0 = no limit hint)
  *
  * SMF hint for how many downlink packets the UPF should buffer per UE.
