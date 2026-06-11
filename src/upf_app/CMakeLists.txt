@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/toolchain.cmake)
 
 add_subdirectory(kernel)

@@ -1,6 +1,6 @@
-# Modified by: Franck Messaoudi <franck.messaoudi@eurecom.fr>
-# Date:        2026-03
-# Changes:     Replaced the blunt clean/setup/install workflow with a
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
+
 #              layered build system:
 #                - setup       : one-time system dependency installation
 #                - build       : cmake configure + compile (no dep install)

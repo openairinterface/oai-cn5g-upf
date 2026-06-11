@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-CSSL-1.0
+
 include(${SRC_TOP_DIR}/upf_app/cmake/toolchain.cmake)
 
 # =============================================================================== #
