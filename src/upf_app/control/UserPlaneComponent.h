@@ -2,6 +2,21 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
+/**
+ * @file UserPlaneComponent.h
+ * @brief Main User Plane Function Component
+ *
+ * This module is the main entry point and orchestrator for the User Plane
+ * Function (UPF) control plane. It coordinates session management, BPF/XDP
+ * programs, and network interfaces.
+ *
+ * Key 3GPP References:
+ * - 3GPP TS 23.501: System architecture for the 5G System
+ * - 3GPP TS 29.244: Interface between Control Plane and User Plane nodes
+ * - 3GPP TS 23.501 Section 6.2.3: User Plane Function (UPF)
+ * - 3GPP TS 29.244 Section 4: PFCP Protocol
+ */
+
 #ifndef USER_PLANE_COMPONENT_H_
 #define USER_PLANE_COMPONENT_H_
 
