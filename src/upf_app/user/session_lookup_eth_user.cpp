@@ -134,8 +134,12 @@ void SessionLookupETHProgram::InitializeMaps() {
   eth_rules_match_pdr_map_ = get("eth_rules_match_pdr_map");
   eth_egress_ifindex_map_  = get("eth_egress_ifindex_map");
   mac_pdu_session_map_     = get("mac_pdu_session_map");
-  /* pipeline_maps.h -- shared from primary (n3_eth_) via reuse_fd */
-  feature_dispatch_map_ = get("feature_dispatch_map");
+  /* NOTE: feature_dispatch_map belongs to the IP pipeline (pipeline_maps.h),
+   * which the ETH datapath does not include or use. It is intentionally NOT
+   * fetched here: GetMapByName()/GetFeatureDispatchMap() route it to sl_ip_
+   * only, so the ETH copy was never read. Fetching it threw
+   * std::runtime_error("Map not found") and crashed the UPF (SIGSEGV) at
+   * startup whenever enable_eth_pdu was set. */
   /* tail_call_dispatcher.h -- shared from primary (n3_eth_) via reuse_fd */
   tail_call_progs_map_       = get("tail_call_progs_map");
   packet_ctx_map_            = get("packet_context_map");
