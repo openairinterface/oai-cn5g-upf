@@ -432,6 +432,18 @@ uint32_t SessionProgramManager::ComputeRulesEnabledFlags(
       break;
     }
   }
+
+  // Respect the UPF feature config: even if the SMF links a QER/URR/BAR/MAR to a
+  // PDR/FAR, do NOT enable that tail-call stage when the feature is disabled in
+  // config. The corresponding eBPF program is not loaded and the rule object is
+  // not created (see pfcp_switch gating), so leaving the bit set would dispatch
+  // into an absent stage and drop the packet. Clearing it lets the pipeline skip
+  // the stage and forward normally.
+  if (!upf::IsQosEnabled()) flags &= ~RULE_QER_ENABLED;
+  if (!upf::IsUrrEnabled()) flags &= ~RULE_URR_ENABLED;
+  if (!upf::IsBarEnabled()) flags &= ~RULE_BAR_ENABLED;
+  if (!upf::IsMarEnabled()) flags &= ~RULE_MAR_ENABLED;
+
   return flags;
 }
 

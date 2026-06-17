@@ -792,8 +792,9 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             break;
           }
 
-          // Create QER if BPF acceleration is enabled
-          if (isBpfAccelerationEnabled) {
+          // Create QER if BPF acceleration is enabled.
+          // enable_qos gate: skip QER handling when QoS enforcement is disabled.
+          if (isBpfAccelerationEnabled && upf_cfg.enable_qos) {
             pfcp::qer_id_t qer_id = {};
             if (cr_pdr.get(qer_id)) {
               pfcp::create_qer cr_qer = {};
@@ -828,7 +829,9 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
       // pfcp_session::create(urr) populates session->urrs so that
       // SessionProgramManager::CreatePipeline can populate urr_config_map and
       // urr_volume_counters_map in the BPF program.
-      if (isBpfAccelerationEnabled) {
+      // enable_urr gate: when URR is disabled, skip SMF-sent Create URR IEs
+      // (Open5GS/Free5GC SMFs send URRs regardless of the UPF's local setting).
+      if (isBpfAccelerationEnabled && upf_cfg.enable_urr) {
         if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
           for (auto it : req->pfcp_ies.create_urrs) {
             create_urr& cr_urr = it;
@@ -844,7 +847,8 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
       // ---- Create BARs (BPF only) — §7.5.2.6 Create BAR IE ----------------
       // pfcp_session::create(bar) populates session->bars so that
       // SessionProgramManager::CreatePipeline can populate bar_config_map.
-      if (isBpfAccelerationEnabled) {
+      // enable_bar gate: skip BAR handling when buffering is disabled.
+      if (isBpfAccelerationEnabled && upf_cfg.enable_bar) {
         if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
           // common-src: req->pfcp_ies.create_bar is singular std::pair.
           if (req->pfcp_ies.create_bar.first) {
@@ -865,7 +869,8 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
       // in simpleswitch/pfcp_mar.hpp keeps the loop body compiling once the
       // field lands.
 #if 0
-      if (isBpfAccelerationEnabled) {
+      // enable_mar gate: skip MAR handling when multi-access steering is disabled.
+      if (isBpfAccelerationEnabled && upf_cfg.enable_mar) {
         if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
           for (auto it : req->pfcp_ies.create_mars) {
             create_mar& cr_mar = it;
@@ -1006,7 +1011,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     }
 
     // ---- Remove QERs (BPF only) ---------------------------------------------
-    if (isBpfAccelerationEnabled) {
+    // enable_qos gate: skip QER handling when QoS enforcement is disabled.
+    if (isBpfAccelerationEnabled && upf_cfg.enable_qos) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.remove_qers) {
           Logger::upf_app().info("Modify datapath: remove(qer)");
@@ -1031,7 +1037,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     // ---- Remove URRs (BPF only) — §7.5.4.8 Remove URR IE -------------------
     // Removes URR from session->urrs so the BPF urr_config_map entry is
     // cleaned up on the next ModifyPipeline call via call_datapath().
-    if (isBpfAccelerationEnabled) {
+    // enable_urr gate (see establishment path).
+    if (isBpfAccelerationEnabled && upf_cfg.enable_urr) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.remove_urrs) {
           remove_urr& urr = it;
@@ -1051,7 +1058,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     // ---- Remove BARs (BPF only) — §7.5.4.10 Remove BAR IE ------------------
     // Removes BAR from session->bars so the BPF bar_config_map entry is
     // cleaned up on the next ModifyPipeline call via call_datapath().
-    if (isBpfAccelerationEnabled) {
+    // enable_bar gate: skip BAR handling when buffering is disabled.
+    if (isBpfAccelerationEnabled && upf_cfg.enable_bar) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         // common-src: pfcp_ies.remove_bar is singular std::pair.
         if (req->pfcp_ies.remove_bar.first) {
@@ -1072,7 +1080,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     // TODO MAR: re-enable when common-src adds a `remove_mars` field. The
     // local pfcp::remove_mar stub keeps the loop body compilable.
 #if 0
-    if (isBpfAccelerationEnabled) {
+    // enable_mar gate: skip MAR handling when multi-access steering is disabled.
+    if (isBpfAccelerationEnabled && upf_cfg.enable_mar) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.remove_mars) {
           remove_mar& mar = it;
@@ -1140,7 +1149,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     }
 
     // ---- Create QERs (BPF only) ---------------------------------------------
-    if (isBpfAccelerationEnabled) {
+    // enable_qos gate: skip QER handling when QoS enforcement is disabled.
+    if (isBpfAccelerationEnabled && upf_cfg.enable_qos) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.create_qers) {
           create_qer& cr_qer = it;
@@ -1154,7 +1164,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     // ---- Create URRs (BPF only) — §7.5.4.4 Create URR IE -------------------
     // Populates session->urrs so that SessionProgramManager::ModifyPipeline
     // can write urr_config_map entries for the new URRs.
-    if (isBpfAccelerationEnabled) {
+    // enable_urr gate (see establishment path).
+    if (isBpfAccelerationEnabled && upf_cfg.enable_urr) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.create_urrs) {
           create_urr& cr_urr = it;
@@ -1168,7 +1179,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     // ---- Create BARs (BPF only) — §7.5.4.6 Create BAR IE -------------------
     // Populates session->bars so that SessionProgramManager::ModifyPipeline
     // can write bar_config_map entries for the new BARs.
-    if (isBpfAccelerationEnabled) {
+    // enable_bar gate: skip BAR handling when buffering is disabled.
+    if (isBpfAccelerationEnabled && upf_cfg.enable_bar) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         // common-src: pfcp_ies.create_bar is singular std::pair.
         if (req->pfcp_ies.create_bar.first) {
@@ -1184,7 +1196,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     // TODO MAR: re-enable when common-src adds a `create_mars` field. The
     // local pfcp::create_mar stub keeps the loop body compilable.
 #if 0
-    if (isBpfAccelerationEnabled) {
+    // enable_mar gate: skip MAR handling when multi-access steering is disabled.
+    if (isBpfAccelerationEnabled && upf_cfg.enable_mar) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.create_mars) {
           create_mar& cr_mar = it;
@@ -1219,7 +1232,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           resp->pfcp_ies.set(failed_rule);
         }
       }
-      if (isBpfAccelerationEnabled) {
+      // enable_qos gate: skip QER handling when QoS enforcement is disabled.
+      if (isBpfAccelerationEnabled && upf_cfg.enable_qos) {
         for (auto it : req->pfcp_ies.update_qers) {
           update_qer& qer     = it;
           uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
@@ -1238,7 +1252,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       // urr_config_map is repopulated by ModifyPipeline;
       // urr_volume_counters_map counters are preserved (BPF_NOEXIST semantics
       // in PopulateUrrConfigMap).
-      if (isBpfAccelerationEnabled) {
+      // enable_urr gate (see establishment path).
+      if (isBpfAccelerationEnabled && upf_cfg.enable_urr) {
         for (auto it : req->pfcp_ies.update_urrs) {
           update_urr& urr     = it;
           uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
@@ -1254,7 +1269,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       // ---- Update BARs (BPF only) — §7.5.4.13 Update BAR IE ----------------
       // Updates DL notification delay and suggested buffering packet count.
       // bar_state_map (DDN tracking) is preserved by ModifyPipeline.
-      if (isBpfAccelerationEnabled) {
+      // enable_bar gate: skip BAR handling when buffering is disabled.
+      if (isBpfAccelerationEnabled && upf_cfg.enable_bar) {
         // common-src: pfcp_ies.update_bar is singular std::pair.
         if (req->pfcp_ies.update_bar.first) {
           const update_bar_within_pfcp_session_modification_request& bar =
@@ -1273,7 +1289,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       // TODO MAR: re-enable when common-src adds an `update_mars` field. The
       // local pfcp::update_mar stub keeps the loop body compilable.
 #if 0
-      if (isBpfAccelerationEnabled) {
+      // enable_mar gate: skip MAR handling when multi-access steering is disabled.
+      if (isBpfAccelerationEnabled && upf_cfg.enable_mar) {
         for (auto it : req->pfcp_ies.update_mars) {
           update_mar& mar     = it;
           uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
