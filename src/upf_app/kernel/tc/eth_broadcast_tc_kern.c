@@ -106,7 +106,8 @@ int handle_broadcast(struct __sk_buff* skb) {
   /* eth_egress_ifindex_map is populated by user-space keyed on FlowDirection
    * (custom_types.h: DOWNLINK=0 -> N3/gNB, UPLINK=1 -> N6/DN). Use those keys,
    * NOT types.h DIR_UPLINK(0)/DIR_DOWNLINK(1) whose numeric values are reversed
-   * (that mismatch made the DL egress resolve to N6 and broke UL forwarding). */
+   * (that mismatch made the DL egress resolve to N6 and broke UL forwarding).
+   */
   int key      = DOWNLINK; /* N3 (gNB-facing) egress */
   int* ifindex = bpf_map_lookup_elem(&eth_egress_ifindex_map, &key);
   if (!ifindex) {
@@ -167,11 +168,13 @@ int handle_broadcast(struct __sk_buff* skb) {
   struct callback_ctx cb_ctx = {.skb = skb, .ifindex = ifindex, .size = 0};
 
   /* UL detection: packet arrived on the DL egress device (== N3).
-   * Use skb->ifindex (the device this TC hook is attached to); skb->ingress_ifindex
-   * is unreliable for GTP-U frames here (often 0), which made UL broadcast frames
-   * fall into the DL-only path and never get redirected to N6. */
-  bpf_debug("eth_broadcast_tc: ifindex=%d ingress_ifindex=%d dl_egress=%d",
-            skb->ifindex, skb->ingress_ifindex, *ifindex);
+   * Use skb->ifindex (the device this TC hook is attached to);
+   * skb->ingress_ifindex is unreliable for GTP-U frames here (often 0), which
+   * made UL broadcast frames fall into the DL-only path and never get
+   * redirected to N6. */
+  bpf_debug(
+      "eth_broadcast_tc: ifindex=%d ingress_ifindex=%d dl_egress=%d",
+      skb->ifindex, skb->ingress_ifindex, *ifindex);
   bool is_uplink = (*ifindex == skb->ifindex);
   if (is_uplink) {
     /* Skip the source PDU session — record its TEID up front */
@@ -187,7 +190,7 @@ int handle_broadcast(struct __sk_buff* skb) {
   /*  UL: also forward the original up to N6 (DN-side)          */
   /* ---------------------------------------------------------- */
   if (is_uplink) {
-    key     = UPLINK; /* N6 (DN-facing) egress — redirect UL broadcast to the DN */
+    key = UPLINK; /* N6 (DN-facing) egress — redirect UL broadcast to the DN */
     ifindex = bpf_map_lookup_elem(&eth_egress_ifindex_map, &key);
     if (!ifindex) {
       bpf_debug("eth_broadcast_tc: UL ifindex not in eth_egress_ifindex_map");

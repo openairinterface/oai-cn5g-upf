@@ -793,7 +793,8 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
           }
 
           // Create QER if BPF acceleration is enabled.
-          // enable_qos gate: skip QER handling when QoS enforcement is disabled.
+          // enable_qos gate: skip QER handling when QoS enforcement is
+          // disabled.
           if (isBpfAccelerationEnabled && upf_cfg.enable_qos) {
             pfcp::qer_id_t qer_id = {};
             if (cr_pdr.get(qer_id)) {
