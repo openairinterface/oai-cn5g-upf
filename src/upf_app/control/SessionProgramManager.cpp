@@ -703,8 +703,8 @@ void SessionProgramManager::ModifyPipeline(
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = qer_programs_map_.find(seid);
         if (it != qer_programs_map_.end()) {
-          logger.debug("Tearing down previous QER program for seid " SEID_FMT,
-                       seid);
+          logger.debug(
+              "Tearing down previous QER program for seid " SEID_FMT, seid);
           it->second->TearDown();
           qer_programs_map_.erase(it);
         }

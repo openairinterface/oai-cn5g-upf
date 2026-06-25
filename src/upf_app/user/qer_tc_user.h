@@ -261,7 +261,8 @@ class QERProgram : public BPFProgram {
   uint32_t default_class_ceil_;    ///< Default ceil in kbps
   uint32_t r2q_root_;              ///< Root qdisc r2q parameter
 
-  uint64_t seid_ = 0;  ///< SEID this QoS class tree belongs to (scoped teardown)
+  uint64_t seid_ =
+      0;  ///< SEID this QoS class tree belongs to (scoped teardown)
 
   /// HTB class minor-ids created by Setup(), in creation order (parent before
   /// children). TearDown() deletes them in reverse so children are removed
