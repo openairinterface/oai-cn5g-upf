@@ -42,16 +42,18 @@
 /* ========================================================================== */
 
 /**
- * @brief N3 uplink entry point for Ethernet PDU sessions.
+ * @brief N3 uplink entry point for both IP and Ethernet PDU sessions.
  *
  * Processing sequence:
  *   1. Outer Ethernet  — validate L2, reject non-IPv4
  *   2. Outer IPv4      — validate outer L3
  *   3. Outer UDP       — validate L4, confirm GTP-U port (2152)
  *   4. GTP-U header    — confirm G-PDU, extract F-TEID
- *   5. PDU Session Ctr — extract QFI; returns pointer to inner ETH frame
- *   6. Inner Ethernet  — validate and extract src/dst MAC + EtherType
- *   7. Packet context  — populate and tail-call ETH session lookup
+ *   5. PDU Session Ctr — extract QFI; returns pointer to inner payload
+ *   6. PDU type detect — inspect version nibble of inner byte:
+ *        0x4/0x6 → IP PDU  → tail-call PROG_SESSION_LOOKUP_IP
+ *        else    → ETH PDU → validate inner ETH + tail-call
+ * PROG_SESSION_LOOKUP_ETH
  *
  * @param ctx XDP metadata context.
  * @return XDP verdict (via tail call, or fallback on error).
@@ -114,7 +116,54 @@ int xdp_n3_eth_entry(struct xdp_md* ctx) {
   if (!inner) return xdp_stats_record_action(ctx, XDP_DROP);
 
   /* ---------------------------------------------------------- */
-  /*  Parse inner Ethernet header                               */
+  /*  Detect inner PDU type: IP or Ethernet                     */
+  /*                                                            */
+  /*  Inspect the version nibble of the first byte after the   */
+  /*  GTP-U extension header:                                   */
+  /*    0x4x → IPv4 inner packet  (IP PDU session, TS 23.501)  */
+  /*    0x6x → IPv6 inner packet  (IP PDU session, TS 23.501)  */
+  /*    else  → Ethernet frame    (ETH PDU session, TS 23.501) */
+  /* ---------------------------------------------------------- */
+  const u8* inner_byte = (const u8*) inner;
+  if ((void*) (inner_byte + 1) > data_end)
+    return xdp_stats_record_action(ctx, XDP_DROP);
+
+  u8 inner_version = (*inner_byte) >> 4;
+
+  if (inner_version == 4 || inner_version == 6) {
+    /* -------------------------------------------------------- */
+    /*  IP PDU session — parse inner IPv4, dispatch to IP lookup*/
+    /* -------------------------------------------------------- */
+    struct iphdr* ip_inner;
+    u32 ue_ip;
+
+    if (!parse_inner_ipv4(inner, data_end, &ip_inner, &ue_ip))
+      return xdp_stats_record_action(ctx, XDP_DROP);
+
+    struct packet_context* pctx = GET_PACKET_CONTEXT();
+    if (!pctx) {
+      bpf_debug("N3 ETH: failed to get packet context (IP PDU)");
+      return xdp_stats_record_action(ctx, XDP_DROP);
+    }
+
+    pctx->session_type    = SESSION_TYPE_IP_UPLINK;
+    pctx->ue_ip           = ue_ip; /* host byte order */
+    pctx->qfi             = qfi;
+    pctx->pkt_teid        = pkt_teid; /* host byte order, matches n3_entry */
+    pctx->gnb_ipv4        = ip_outer->saddr;
+    pctx->inner_eth_proto = 0;
+    __builtin_memset(pctx->inner_eth_src, 0, ETH_ALEN);
+    __builtin_memset(pctx->inner_eth_dst, 0, ETH_ALEN);
+
+    bpf_debug("N3 ETH: IP PDU UL: UE-IP=%pI4  TEID=0x%x", &ue_ip, pkt_teid);
+
+    TAIL_CALL_NEXT(ctx, PROG_SESSION_LOOKUP_IP);
+    bpf_debug("N3 ETH: tail call to PROG_SESSION_LOOKUP_IP failed");
+    return xdp_stats_record_action(ctx, XDP_PASS);
+  }
+
+  /* ---------------------------------------------------------- */
+  /*  Ethernet PDU session — parse inner ETH frame              */
   /*                                                            */
   /*  The inner frame starts immediately after the PDU Session  */
   /*  Container. Validate bounds and extract src/dst MACs and   */
@@ -135,7 +184,7 @@ int xdp_n3_eth_entry(struct xdp_md* ctx) {
       eth_inner->h_dest[1], eth_inner->h_dest[2]);
 
   /* ---------------------------------------------------------- */
-  /*  Populate packet context                                   */
+  /*  Populate packet context (ETH PDU)                         */
   /* ---------------------------------------------------------- */
   struct packet_context* pctx = GET_PACKET_CONTEXT();
 

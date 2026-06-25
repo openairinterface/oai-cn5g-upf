@@ -55,6 +55,9 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
    * ETH PDU:
    *   n3_eth_ is primary (GTP interface). Same maps -- it also includes
    *   tail_call_dispatcher.h and stats_maps.h. n3_ is NOT instantiated.
+   *   n3_eth_ detects the inner PDU type at runtime (IP version nibble) and
+   *   tail-calls either PROG_SESSION_LOOKUP_IP or PROG_SESSION_LOOKUP_ETH.
+   *   n6_eth_ handles ETH PDU DL and IP PDU DL via the same runtime check.
    *   n6_eth_ shares those maps via bpf_map__reuse_fd.
    */
   if (!is_eth) {
@@ -69,15 +72,15 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   }
 
   /* Step 2: Instantiate stage programs
-   * Session lookup program matches the PDU type.
+   * sl_ip_ is always instantiated — IP PDU sessions must work regardless of
+   * enable_eth_pdu, and the unified n3_eth_entry dispatches to either lookup
+   * based on the inner PDU type detected at runtime (version nibble heuristic).
+   * sl_eth_ is additionally instantiated in ETH mode for ETH PDU sessions.
    * PDR and FAR are always present.
    * QER, URR, BAR, MAR are conditional on feature flags.
    */
-  if (!is_eth) {
-    sl_ip_ = std::make_shared<SessionLookupIPProgram>();
-  } else {
-    sl_eth_ = std::make_shared<SessionLookupETHProgram>();
-  }
+  sl_ip_ = std::make_shared<SessionLookupIPProgram>();
+  if (is_eth) sl_eth_ = std::make_shared<SessionLookupETHProgram>();
 
   pdr_ = std::make_shared<PdrMatchProgram>();
   far_ = std::make_shared<FARProgram>();
@@ -450,11 +453,11 @@ void UPF_XDPProgram::ShareMapsOwned(
 
 //------------------------------------------------------------------------------
 void UPF_XDPProgram::PopulateProgramArray(const PipelineFeatureFlags& flags) {
-  const bool is_eth = (flags.pdu_type == PduSessionType::Ethernet);
-
-  if (!is_eth && sl_ip_)
+  // Both slots populated when present: n3_eth_entry dispatches to IP or ETH
+  // lookup at runtime based on inner PDU type, so both must be in the array.
+  if (sl_ip_)
     InsertProgramSlot(PROG_SESSION_LOOKUP_IP, sl_ip_->GetXdpProgram());
-  if (is_eth && sl_eth_)
+  if (sl_eth_)
     InsertProgramSlot(PROG_SESSION_LOOKUP_ETH, sl_eth_->GetXdpProgram());
 
   InsertProgramSlot(PROG_PDR_MATCH, pdr_->GetXdpProgram());
@@ -497,6 +500,9 @@ std::vector<ProgramLoadInfo> UPF_XDPProgram::BuildPipelineLoadInfo(
     info.push_back({"SessionLookupIPProgram", 5, "", false, false});
   } else {
     info.push_back({"N3EthEntryProgram", 3, gtp_interface_, false, false});
+    // Both session lookup programs are loaded in ETH mode: n3_eth_entry
+    // dispatches to IP or ETH lookup based on inner PDU type at runtime.
+    info.push_back({"SessionLookupIPProgram", 5, "", false, false});
     info.push_back({"SessionLookupETHProgram", 6, "", false, false});
   }
   info.push_back({"PdrMatchProgram", 5, "", false, false});

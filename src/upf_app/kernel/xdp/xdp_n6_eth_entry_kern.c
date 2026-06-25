@@ -39,6 +39,10 @@
 #include "eth_pdu_types.h"
 #include "eth_pdu_maps.h"
 
+/* IP PDU DL coexistence: tail call dispatch and session metadata */
+#include "sdf_types.h"
+#include "tail_call_dispatcher.h"
+
 /* Statistics */
 #include "stats_maps.h"
 #include "stats_types.h"
@@ -173,13 +177,15 @@ static __always_inline __u32 create_outer_header_gtpu_ethernet(
 /* ========================================================================== */
 
 /**
- * @brief N6 downlink entry point for Ethernet PDU sessions.
+ * @brief N6 downlink entry point for Ethernet and IP PDU sessions.
  *
- * Three-way dispatch on the destination MAC:
+ * Four-way dispatch on destination MAC and EtherType:
  *
- *   Case 1 — known MAC:  unicast encap + XDP_REDIRECT to N3.
- *   Case 2 — N6-local:   XDP_PASS to kernel (UPF's own IP or ARP for it).
- *   Case 3 — unknown MAC: broadcast encap (TEID=0) + XDP_PASS to TC.
+ *   Case 1  — known MAC:     ETH PDU unicast encap + XDP_REDIRECT to N3.
+ *   Case 2  — N6-local:      XDP_PASS to kernel (UPF's own IP or ARP for it).
+ *   Case 2b — unknown MAC, IPv4: IP PDU DL; reserve TC metadata and tail-call
+ *             PROG_SESSION_LOOKUP_IP (same path as xdp_n6_entry).
+ *   Case 3  — unknown MAC, non-IP: ETH PDU broadcast encap (TEID=0) → TC.
  *
  * @param ctx XDP metadata context.
  * @return XDP verdict.
@@ -263,10 +269,67 @@ int xdp_n6_eth_entry(struct xdp_md* ctx) {
   }
 
   /* ---------------------------------------------------------- */
+  /*  Case 2b: IP PDU DL — unknown MAC, IPv4 non-local dest     */
+  /*                                                            */
+  /*  The destination MAC is not in the Ethernet session table  */
+  /*  and the packet is not addressed to the UPF's N6 IP.       */
+  /*  If it is an IPv4 frame, the destination IP is a UE address*/
+  /*  belonging to an IP PDU session — dispatch to IP session   */
+  /*  lookup via tail call (same path as xdp_n6_entry).         */
+  /* ---------------------------------------------------------- */
+  if (bpf_ntohs(eth->h_proto) == ETH_P_IP) {
+    /* Reserve XDP metadata for TC QoS shaping (same as n6_entry) */
+    if (bpf_xdp_adjust_meta(ctx, -(int) sizeof(struct session_qfi))) {
+      bpf_debug("N6 ETH: failed to reserve metadata (IP PDU DL)");
+      return xdp_stats_record_action(ctx, XDP_DROP);
+    }
+
+    /* Re-read data/data_end: BPF verifier requires this after adjust_meta */
+    data     = (void*) (long) ctx->data;
+    data_end = (void*) (long) ctx->data_end;
+
+    struct ethhdr* eth_dl = data;
+    if ((void*) (eth_dl + 1) > data_end)
+      return xdp_stats_record_action(ctx, XDP_DROP);
+
+    struct iphdr* iph_dl = (struct iphdr*) (eth_dl + 1);
+    if ((void*) (iph_dl + 1) > data_end) {
+      bpf_debug("N6 ETH: malformed IPv4 header (IP PDU DL)");
+      return xdp_stats_record_action(ctx, XDP_DROP);
+    }
+
+    struct packet_context* pctx = GET_PACKET_CONTEXT();
+    if (!pctx) {
+      bpf_debug("N6 ETH: failed to get packet context (IP PDU DL)");
+      return xdp_stats_record_action(ctx, XDP_DROP);
+    }
+
+    u32 ue_ip = bpf_ntohl(iph_dl->daddr);
+    bpf_debug("N6 ETH: IP PDU DL: UE-IP=%pI4", &ue_ip);
+
+    pctx->session_type = SESSION_TYPE_IP_DOWNLINK;
+    pctx->ue_ip        = ue_ip;
+    pctx->pkt_teid     = 0;
+
+    if (!extract_5tuple(
+            iph_dl, data_end, &pctx->pkt_filter_src_ip,
+            &pctx->pkt_filter_dst_ip, &pctx->pkt_filter_protocol,
+            &pctx->pkt_filter_src_port, &pctx->pkt_filter_dst_port)) {
+      bpf_debug("N6 ETH: failed to extract 5-tuple (IP PDU DL)");
+      return xdp_stats_record_action(ctx, XDP_DROP);
+    }
+
+    TAIL_CALL_NEXT(ctx, PROG_SESSION_LOOKUP_IP);
+    bpf_debug("N6 ETH: tail call to PROG_SESSION_LOOKUP_IP failed");
+    return xdp_stats_record_action(ctx, XDP_PASS);
+  }
+
+  /* ---------------------------------------------------------- */
   /*  Case 3: unknown destination MAC (broadcast / flood)       */
   /*                                                            */
   /*  Destination MAC is not in the learning table and not      */
-  /*  N6-local.  Encapsulate with TEID=0 and XDP_PASS to TC.   */
+  /*  N6-local and not an IP PDU session packet.                */
+  /*  Encapsulate with TEID=0 and XDP_PASS to TC.               */
   /*  The TC program broadcasts to all active ETH PDU sessions. */
   /* ---------------------------------------------------------- */
   bpf_debug("N6 ETH: unknown dest MAC — flooding via TC");
