@@ -353,6 +353,13 @@ SessionOperationResult SessionManager::DeleteSession(uint64_t seid) {
 std::shared_ptr<pfcp::pfcp_session> SessionManager::GetSession(
     uint64_t seid) const {
   std::lock_guard<std::mutex> lock(sessions_mutex_);
+  return GetSessionLocked(seid);
+}
+
+//------------------------------------------------------------------------------
+// Caller MUST already hold sessions_mutex_.
+std::shared_ptr<pfcp::pfcp_session> SessionManager::GetSessionLocked(
+    uint64_t seid) const {
   auto it = seid_to_session_.find(seid);
   return (it != seid_to_session_.end()) ? it->second : nullptr;
 }
@@ -438,43 +445,47 @@ SessionOperationResult SessionManager::ModifySession(
     //   }
     // }
 
-    // Handle Update operations (3GPP TS 29.244 Section 8.2.9, 8.2.10, 8.2.11)
-    size_t updated_pdrs = HandlePdrUpdates(session, mod_req);
-    size_t updated_fars = HandleFarUpdates(session, mod_req);
-    size_t updated_qers = HandleQerUpdates(session, mod_req);
-
-    // Handle Remove operations (3GPP TS 29.244 Section 8.2.16, 8.2.17, 8.2.18)
-    size_t removed_pdrs = HandlePdrRemoval(session, mod_req);
-    size_t removed_fars = HandleFarRemoval(session, mod_req);
-    size_t removed_qers = HandleQerRemoval(session, mod_req);
+    // NOTE: The create/update/remove deltas in mod_req have ALREADY been
+    // applied to this session by pfcp_switch (session->create/update/remove)
+    // before this datapath callback runs. Re-applying them here would be
+    // redundant and, worse, destructive: re-running the removal handlers
+    // against mod_req->remove_* would delete any freshly-created rule that
+    // reuses a removed rule ID. Therefore this callback is a pure resync of
+    // the BPF data plane to the session's current rule set.
 
     Logger::upf_app().info("[N4] Session Modification: seid 0x%lx", seid);
 
-    // Show created rules
-    if (mod_req->pfcp_ies.create_pdrs.size() > 0 ||
-        mod_req->pfcp_ies.create_fars.size() > 0 ||
-        mod_req->pfcp_ies.create_qers.size() > 0) {
+    // Show created/updated/removed counts (for visibility only — derived from
+    // the request, not re-applied to the session here).
+    if (!mod_req->pfcp_ies.create_pdrs.empty() ||
+        !mod_req->pfcp_ies.create_fars.empty() ||
+        !mod_req->pfcp_ies.create_qers.empty()) {
       Logger::upf_app().info(
           "  └─ Created: %zu PDRs, %zu FARs, %zu QERs",
           mod_req->pfcp_ies.create_pdrs.size(),
           mod_req->pfcp_ies.create_fars.size(),
           mod_req->pfcp_ies.create_qers.size());
     }
-
-    // Show updated rules
-    if (updated_pdrs > 0 || updated_fars > 0 || updated_qers > 0) {
+    if (!mod_req->pfcp_ies.update_pdrs.empty() ||
+        !mod_req->pfcp_ies.update_fars.empty() ||
+        !mod_req->pfcp_ies.update_qers.empty()) {
       Logger::upf_app().info(
-          "  └─ Updated: %zu PDRs, %zu FARs, %zu QERs", updated_pdrs,
-          updated_fars, updated_qers);
+          "  └─ Updated: %zu PDRs, %zu FARs, %zu QERs",
+          mod_req->pfcp_ies.update_pdrs.size(),
+          mod_req->pfcp_ies.update_fars.size(),
+          mod_req->pfcp_ies.update_qers.size());
+    }
+    if (!mod_req->pfcp_ies.remove_pdrs.empty() ||
+        !mod_req->pfcp_ies.remove_fars.empty() ||
+        !mod_req->pfcp_ies.remove_qers.empty()) {
+      Logger::upf_app().info(
+          "  └─ Removed: %zu PDRs, %zu FARs, %zu QERs",
+          mod_req->pfcp_ies.remove_pdrs.size(),
+          mod_req->pfcp_ies.remove_fars.size(),
+          mod_req->pfcp_ies.remove_qers.size());
     }
 
-    // Show removed rules
-    if (removed_pdrs > 0 || removed_fars > 0 || removed_qers > 0) {
-      Logger::upf_app().info(
-          "  └─ Removed: %zu PDRs, %zu FARs, %zu QERs", removed_pdrs,
-          removed_fars, removed_qers);
-    }
-    // Update the session
+    // Resync the BPF data plane to the session's current rule set.
     Logger::upf_app().debug(
         "[N4] Session Modification: seid 0x%lx - Applying pipeline updates",
         seid);
@@ -531,7 +542,7 @@ bool SessionManager::AddPdr(
   try {
     std::lock_guard<std::mutex> lock(sessions_mutex_);
 
-    auto session = GetSession(seid);
+    auto session = GetSessionLocked(seid);
     if (!session) {
       Logger::upf_app().error("AddPdr: session " SEID_FMT " not found", seid);
       return false;
@@ -570,7 +581,7 @@ bool SessionManager::UpdatePdr(
   try {
     std::lock_guard<std::mutex> lock(sessions_mutex_);
 
-    auto session = GetSession(seid);
+    auto session = GetSessionLocked(seid);
     if (!session) {
       Logger::upf_app().error(
           "UpdatePdr: session " SEID_FMT " not found", seid);
@@ -616,7 +627,7 @@ bool SessionManager::RemovePdr(uint64_t seid, uint16_t pdr_id) {
   try {
     std::lock_guard<std::mutex> lock(sessions_mutex_);
 
-    auto session = GetSession(seid);
+    auto session = GetSessionLocked(seid);
     if (!session) {
       Logger::upf_app().error(
           "RemovePdr: session " SEID_FMT " not found", seid);
@@ -667,7 +678,7 @@ bool SessionManager::AddFar(
   try {
     std::lock_guard<std::mutex> lock(sessions_mutex_);
 
-    auto session = GetSession(seid);
+    auto session = GetSessionLocked(seid);
     if (!session) {
       Logger::upf_app().error("AddFar: session " SEID_FMT " not found", seid);
       return false;
@@ -700,7 +711,7 @@ bool SessionManager::UpdateFar(
   try {
     std::lock_guard<std::mutex> lock(sessions_mutex_);
 
-    auto session = GetSession(seid);
+    auto session = GetSessionLocked(seid);
     if (!session) {
       Logger::upf_app().error(
           "UpdateFar: session " SEID_FMT " not found", seid);
@@ -743,7 +754,7 @@ bool SessionManager::RemoveFar(uint64_t seid, uint32_t far_id) {
   try {
     std::lock_guard<std::mutex> lock(sessions_mutex_);
 
-    auto session = GetSession(seid);
+    auto session = GetSessionLocked(seid);
     if (!session) {
       Logger::upf_app().error(
           "RemoveFar: session " SEID_FMT " not found", seid);
@@ -786,7 +797,7 @@ bool SessionManager::AddQer(
   try {
     std::lock_guard<std::mutex> lock(sessions_mutex_);
 
-    auto session = GetSession(seid);
+    auto session = GetSessionLocked(seid);
     if (!session) {
       Logger::upf_app().error("AddQer: session " SEID_FMT " not found", seid);
       return false;
@@ -822,7 +833,7 @@ bool SessionManager::UpdateQer(
   try {
     std::lock_guard<std::mutex> lock(sessions_mutex_);
 
-    auto session = GetSession(seid);
+    auto session = GetSessionLocked(seid);
     if (!session) {
       Logger::upf_app().error(
           "UpdateQer: session " SEID_FMT " not found", seid);
@@ -866,7 +877,7 @@ bool SessionManager::RemoveQer(uint64_t seid, uint32_t qer_id) {
   try {
     std::lock_guard<std::mutex> lock(sessions_mutex_);
 
-    auto session = GetSession(seid);
+    auto session = GetSessionLocked(seid);
     if (!session) {
       Logger::upf_app().error(
           "RemoveQer: session " SEID_FMT " not found", seid);
@@ -1043,6 +1054,14 @@ uint32_t SessionManager::GetDownlinkTeidFromFar(
 
 void SessionManager::CategorizePdrs(
     std::shared_ptr<pfcp::pfcp_session> session) {
+  // Rebuild the per-direction views from scratch. CategorizePdrs is invoked on
+  // every (re)categorization; without clearing first it would append duplicate
+  // and stale entries on each session modification.
+  session->pdrs_uplink.clear();
+  session->pdrs_downlink.clear();
+  session->qers_uplink.clear();
+  session->qers_downlink.clear();
+
   for (auto& pdr : session->pdrs) {
     pfcp::pdi pdi;
     pfcp::source_interface_t source_interface;

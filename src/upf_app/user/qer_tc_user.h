@@ -261,6 +261,15 @@ class QERProgram : public BPFProgram {
   uint32_t default_class_ceil_;    ///< Default ceil in kbps
   uint32_t r2q_root_;              ///< Root qdisc r2q parameter
 
+  uint64_t seid_ = 0;  ///< SEID this QoS class tree belongs to (scoped teardown)
+
+  /// HTB class minor-ids created by Setup(), in creation order (parent before
+  /// children). TearDown() deletes them in reverse so children are removed
+  /// before their parent (HTB refuses to delete a class that still has
+  /// children). Scoped per-session so the shared root qdisc and other
+  /// sessions' classes are left untouched.
+  std::vector<uint16_t> created_class_ids_;
+
   // PDR lookup map
   std::unordered_map<uint32_t, std::shared_ptr<pfcp::pfcp_pdr>> pdr_map_;
 

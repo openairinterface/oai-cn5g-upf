@@ -166,6 +166,11 @@ bool QERProgram::NoTcFilterBpf(const std::string& interface) {
 void QERProgram::Setup(
     uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> qers,
     std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs) {
+  // Remember the session so TearDown() can scope its HTB cleanup to this SEID,
+  // and reset the list of classes this Setup will create.
+  seid_ = seid;
+  created_class_ids_.clear();
+
   const std::string udp_iface =
       UserPlaneComponent::GetInstance().GetUDPInterface();
   const std::string gtp_iface =
@@ -269,6 +274,7 @@ void QERProgram::Setup(
           "  └─ ✗ Failed to create PDU session class 1:%x", casted_seid);
       has_errors = true;
     } else {
+      created_class_ids_.push_back(casted_seid);
       Logger::upf_app().info(
           "  └─ ✓ PDU session class  1:%x created successfully", casted_seid);
     }
@@ -309,6 +315,7 @@ void QERProgram::Setup(
               "  └─ ✗ Failed to create default class 1:%x", default_minor);
           has_errors = true;
         } else {
+          created_class_ids_.push_back(default_minor);
           Logger::upf_app().info(
               "  └─ ✓ Default class  1:%x created successfully", default_minor);
 
@@ -332,6 +339,7 @@ void QERProgram::Setup(
                 "  └─ ✗ Failed to create PFIFO for default class");
             has_errors = true;
           } else {
+            created_class_ids_.push_back(minor);
             Logger::upf_app().info(
                 "  └─ ✓ PFIFO default class  1:%d created successfully", minor);
           }
@@ -386,6 +394,8 @@ void QERProgram::Setup(
               "  └─ ✗ Failed to create QoS flow class for QER %u", qer_id);
           has_errors = true;
         } else {
+          created_class_ids_.push_back(minor);
+
           // Add flow to table
           QosFlowInfo flow;
           flow.qer_id    = qer_id;
@@ -453,6 +463,35 @@ std::shared_ptr<BPFMaps> QERProgram::GetMaps() {
 
 //------------------------------------------------------------------------------
 void QERProgram::TearDown() {
+  // Remove this session's HTB classes on the N3 (GTP) interface so that stale
+  // QoS-flow classes (QFIs that a modification removed, or old rate/ceil
+  // values) do not survive into the next Setup(). We delete the classes this
+  // program created in REVERSE creation order, so child classes are removed
+  // before their parent — HTB refuses to delete a class that still has
+  // children (EBUSY). This is scoped per-session: the shared root qdisc and
+  // other PDU sessions' classes are left untouched. Each delete is a harmless
+  // no-op if the class is already absent.
+  //
+  // CAVEAT: rebuilding the class tree on every modification means in-flight
+  // shaped traffic for this session sees a sub-millisecond gap during the
+  // del->add window, where packets pass unshaped. This is acceptable for a
+  // control-plane event (PFCP session modification).
+  const std::string gtp_iface =
+      UserPlaneComponent::GetInstance().GetGTPInterface();
+  if (!gtp_iface.empty()) {
+    for (auto it = created_class_ids_.rbegin(); it != created_class_ids_.rend();
+         ++it) {
+      std::string cmd = fmt::format(
+          "tc class del dev {} classid 1:{:x} 2>/dev/null", gtp_iface, *it);
+      if (system(cmd.c_str()) == 0) {
+        Logger::upf_app().debug(
+            "TearDown: removed HTB class 1:%x on %s (seid 0x%llx)", *it,
+            gtp_iface.c_str(), static_cast<unsigned long long>(seid_));
+      }
+    }
+  }
+  created_class_ids_.clear();
+
   lifecycle_->tearDown();
 }
 

@@ -167,6 +167,19 @@ class SessionManager {
   std::shared_ptr<pfcp::pfcp_session> GetSession(uint64_t seid) const;
 
   /**
+   * @brief Query session by SEID without taking sessions_mutex_.
+   *
+   * For callers that ALREADY hold sessions_mutex_ (e.g. the CRUD helpers).
+   * sessions_mutex_ is a non-recursive std::mutex, so calling the locking
+   * GetSession() while holding it self-deadlocks (this was the root cause of
+   * the BPF session-modification deadlock fixed in commit 683d783b).
+   *
+   * @param seid Session Endpoint Identifier
+   * @return Shared pointer to session, or nullptr if not found
+   */
+  std::shared_ptr<pfcp::pfcp_session> GetSessionLocked(uint64_t seid) const;
+
+  /**
    * @brief Get all active sessions
    * @return Vector of all active session pointers
    */
