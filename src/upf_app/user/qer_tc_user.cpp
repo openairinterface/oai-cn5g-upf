@@ -256,6 +256,20 @@ void QERProgram::Setup(
           gtp_iface.c_str());
     }
 
+    // NOTE: TC class handles are not globally allocated - they are derived from
+    // the SEID. The PDU-session parent class is the low 16 bits of the SEID
+    // (casted_seid below) and each QoS-flow class is generate_minor_id(seid,
+    // qfi) (see below). All of these share the single "1:" major namespace on
+    // the N3 interface, so the derived minor IDs must be globally unique, yet:
+    //   - casted_seid collides once two live SEIDs share their low 16 bits
+    //     (SEIDs grow monotonically and wrap), and
+    //   - generate_minor_id() is a clamped hash (<= 9999) and can collide for
+    //     distinct (seid, qfi) pairs.
+    // On collision the second `tc class add` fails ("handle exists") and, worse,
+    // tearing down one session deletes the shared class by ID and silently
+    // breaks the colliding session's QoS. A future fix should replace this with
+    // a real global class-ID allocator (e.g. a free-list keyed per interface)
+    // instead of hashing/truncating the SEID.
     // Create PDU Session Class
     uint16_t casted_seid = static_cast<uint16_t>(seid);
     uint64_t rate_bytes  = ((uint64_t) max_rate * 1000) / 8;

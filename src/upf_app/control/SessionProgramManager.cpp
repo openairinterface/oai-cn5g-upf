@@ -139,6 +139,32 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
         } catch (...) {
         }
       }
+
+      // Drop the UE-IP -> session mapping owned by this SEID. session_by_ue_ip_map
+      // is keyed by UE IP. The map has no reverse index, so scan it.
+      auto ue_ip_map = xdp->GetSessionMappingMap();
+      if (ue_ip_map) {
+        std::vector<uint32_t> stale_keys;
+        uint32_t key = 0, next = 0;
+        struct session_id val = {0};
+        while (ue_ip_map->GetNextKey(key, next) == 0) {
+          if (ue_ip_map->Lookup(next, &val) == 0 && val.seid == seid) {
+            stale_keys.push_back(next);
+          }
+          key = next;
+        }
+        for (auto& k : stale_keys) {
+          try {
+            ue_ip_map->Remove(k);
+          } catch (...) {
+          }
+        }
+        if (!stale_keys.empty()) {
+          Logger::upf_app().debug(
+              "Cleared %zu stale session_by_ue_ip_map entr%s for seid " SEID_FMT,
+              stale_keys.size(), stale_keys.size() == 1 ? "y" : "ies", seid);
+        }
+      }
     }
     RemoveETHPduSessionFromMaps(xdp, seid);
   } catch (const std::exception& e) {
@@ -229,17 +255,22 @@ void SessionProgramManager::StorePduSessionInMap(
     // Lookup session entry for UE IP
     const bool exists = (session_map->Lookup(ue_ip, &session) == 0);
     // If the session exists, update the relevant fields
-    if (exists) {
-      // Only fill missing TEIDs
-      if (session.teid_ul == 0) {
-        session.teid_ul = (teid_ul != 0 ? teid_ul : teid_dl);
+    if (exists && session.seid == seid) {
+      // Same session re-populating its own mapping. CreatePipeline calls this
+      // once per PDR (uplink then downlink) and ModifyPipeline may carry the
+      // real downlink TEID, so refresh on any newly-learned non-zero TEID but
+      // never clobber a known TEID back to zero.
+      if (teid_ul != 0) {
+        session.teid_ul = teid_ul;
       }
-      if (session.teid_dl == 0) {
-        session.teid_dl = (teid_dl != 0 ? teid_dl : teid_ul);
+      if (teid_dl != 0) {
+        session.teid_dl = teid_dl;
       }
-      // Keep existing SEID
     } else {
-      // Create new mapping entry
+      // Either no entry yet, or a *different* SEID currently owns this UE IP
+      // (e.g. the UE released and re-attached with the same static IP, leaving
+      // the previous session's stale entry behind). Take over the mapping
+      // completely so the data path resolves this UE IP to the live session.
       session.teid_ul = teid_ul;
       session.teid_dl = teid_dl;
       session.seid    = seid;
@@ -1599,7 +1630,17 @@ std::string SessionProgramManager::UpdateArpTableForN3(
      */
     uint32_t arp_key = ip_for_mac_lookup;  // = gNB IP in kernel byte order
 
-    // Update ARP table in BPF map
+    // NOTE: arp_table_map entries are written here (and on the N6 path) but are
+    // never removed anywhere - RemoveSession() does not clean them up. Entries
+    // therefore accumulate toward the map's capacity and are only ever
+    // refreshed when a later session re-resolves the same peer IP. Two
+    // consequences to fix in the future:
+    //   1. A peer MAC change within a long-lived session (e.g. gNB restart) is
+    //      never re-resolved, so GTP traffic to that peer is black-holed.
+    //   2. Entries for peers that never return persist until the map fills.
+    // A future fix should evict the per-peer ARP entry on session teardown
+    // (refcounted by peer IP, since several sessions may share a next hop) or
+    // add periodic re-validation of cached MACs.
     auto arp_table_map = xdp_program->GetMapByName("arp_table_map");
     if (arp_table_map) {
       arp_table_map->Update(arp_key, entry, BPF_ANY);
