@@ -25,9 +25,9 @@ UPF_XDPProgram::UPF_XDPProgram(
     : BPFProgram(),
       gtp_interface_(gtp_interface),
       non_gtp_interface_(non_gtp_interface) {
-  Logger::upf_app().debug(
-      "UPF_XDPProgram: created (N3 , N6) : (%s , %s)", gtp_interface_.c_str(),
-      non_gtp_interface_.c_str());
+  // Logger::upf_app().debug(
+  //     "UPF_XDPProgram: created (N3 , N6) : (%s , %s)",
+  //     gtp_interface_.c_str(), non_gtp_interface_.c_str());
 }
 
 //------------------------------------------------------------------------------
@@ -131,12 +131,8 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
    */
   if (!is_eth) {
     n3_->GetLifeCycle()->load();
-    Logger::upf_app().info(
-        "UPF_XDPProgram: n3_entry loaded (n3_owned creator)");
   } else {
     n3_eth_->GetLifeCycle()->load();
-    Logger::upf_app().info(
-        "UPF_XDPProgram: n3_eth_entry loaded (n3_owned creator)");
   }
 
   /* ── Step 3: Share n3_-owned maps to ALL other programs (far_ included)
@@ -163,9 +159,6 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   if (urr_) ShareMapsOwned(primary, urr_->GetBpfObject(), n3_owned);
   if (bar_) ShareMapsOwned(primary, bar_->GetBpfObject(), n3_owned);
   if (mar_) ShareMapsOwned(primary, mar_->GetBpfObject(), n3_owned);
-  Logger::upf_app().debug(
-      "ShareMaps: n3_-owned maps shared "
-      "(packet_context/tail_call_progs/session_rules_enabled/mc_stats)");
 
   /* ── Step 4a: Load the IP session-lookup primary (sl_ip_) BEFORE far_/pdr_/
    *   qer_/urr_ so that pipeline_maps.h-declared maps are created with the
@@ -183,8 +176,6 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
    */
   if (sl_ip_) {
     sl_ip_->GetLifeCycle()->load();
-    Logger::upf_app().info(
-        "UPF_XDPProgram: sl_ip loaded (pipeline_owned creator)");
 
     /* ── Step 4b: Share sl_ip_-owned pipeline maps to all peers BEFORE they
      *   load. n6_ / n3_ / n6_eth_ / n3_eth_ do not include pipeline_maps.h,
@@ -202,11 +193,6 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
     if (urr_) ShareMapsOwned(sl_obj, urr_->GetBpfObject(), pipeline_owned);
     if (bar_) ShareMapsOwned(sl_obj, bar_->GetBpfObject(), pipeline_owned);
     if (mar_) ShareMapsOwned(sl_obj, mar_->GetBpfObject(), pipeline_owned);
-    Logger::upf_app().debug(
-        "ShareMaps: pipeline_maps.h maps shared from sl_ip_ "
-        "(session_by_ue_ip / pdrs_per_session / rules_match_pdr / "
-        "session_qos_enabled / m_framed_route / framed_routing_flag / "
-        "feature_dispatch)");
   }
 
   /* ── Step 4a' (ETH path mirror of Step 4a): Load sl_eth_ BEFORE the other
@@ -225,8 +211,6 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
    */
   if (sl_eth_) {
     sl_eth_->GetLifeCycle()->load();
-    Logger::upf_app().info(
-        "UPF_XDPProgram: sl_eth loaded (eth_pdu_maps owner)");
 
     const std::initializer_list<const char*> eth_session_owned = {
         "session_by_mac_map",     "eth_session_mapping_map",
@@ -238,10 +222,6 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
     if (eth_broadcast_tc_)
       ShareMapsOwned(
           sl_eth_obj, eth_broadcast_tc_->GetBpfObject(), eth_session_owned);
-    Logger::upf_app().debug(
-        "ShareMaps: eth_pdu_maps shared from sl_eth_ "
-        "(session_by_mac / eth_session_mapping / eth_session_pdrs / "
-        "eth_rules_match_pdr / eth_egress_ifindex / mac_pdu_session)");
   }
 
   /* ── Step 4: Load far_ now that its n3_-owned symbols point at n3_'s maps
@@ -250,7 +230,6 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
    *   redirect_interfaces_map (sized by FARProgram::ConfigureMaps in open()).
    */
   far_->GetLifeCycle()->load();
-  Logger::upf_app().info("UPF_XDPProgram: far_ loaded (far_owned creator)");
 
   /* ── Step 5: Share far_-owned maps to ALL other programs BEFORE they load.
    *   far_ owns upf_interface_map, arp_table_map, redirect_interfaces_map.
@@ -274,7 +253,6 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
    * interfaces_maps.h or arp_maps.h and therefore declares none of
    * upf_interface_map / arp_table_map / redirect_interfaces_map -- so it
    * does not need them shared. */
-  Logger::upf_app().info("UPF_XDPProgram: map sharing complete");
 
   /* ── Step 6: Each remaining program manages its own lifecycle.
    * The secondary entry program calls Setup() -- its full lifecycle:
@@ -333,9 +311,7 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
         bpf_object__find_map_by_name(far_->GetBpfObject(), "upf_interface_map");
     if (m) {
       upf_iface_map_ = std::make_shared<BPFMap>(m, "upf_interface_map");
-      Logger::upf_app().info(
-          "TRACE upf_iface_map_ set from far_: fd=%d  max=%u", bpf_map__fd(m),
-          bpf_map__max_entries(m));
+
     } else {
       Logger::upf_app().warn(
           "Setup: upf_interface_map not found in FAR object");
@@ -446,8 +422,6 @@ void UPF_XDPProgram::ShareMapsOwned(
     if (!dst_map) continue;
     if (bpf_map__reuse_fd(dst_map, fd) != 0)
       Logger::upf_app().warn("ShareMapsOwned: reuse_fd failed for '%s'", name);
-    else
-      Logger::upf_app().debug("ShareMapsOwned: '%s' shared", name);
   }
 }
 
@@ -468,8 +442,6 @@ void UPF_XDPProgram::PopulateProgramArray(const PipelineFeatureFlags& flags) {
   if (urr_) InsertProgramSlot(PROG_URR_APPLY, urr_->GetXdpProgram());
   if (bar_) InsertProgramSlot(PROG_BAR_APPLY, bar_->GetXdpProgram());
   if (mar_) InsertProgramSlot(PROG_MAR_APPLY, mar_->GetXdpProgram());
-
-  Logger::upf_app().info("UPF_XDPProgram: PopulateProgramArray complete");
 }
 
 //------------------------------------------------------------------------------
@@ -561,7 +533,7 @@ void UPF_XDPProgram::InitializeMaps(struct bpf_object_skeleton* primary_skel) {
   session_rules_map_   = get("session_rules_enabled_map");
   mc_stats_map_        = get("mc_stats_map");
 
-  Logger::upf_app().info("UPF_XDPProgram: Map initialization completed");
+  Logger::upf_app().info("UPF_XDPProgram: Maps initialization completed");
 }
 
 /* Section: Interface configuration */
@@ -579,9 +551,9 @@ void UPF_XDPProgram::CreateUpfInterfaceMapEntry(reference_point_t s) {
     struct bpf_map* raw_map =
         bpf_object__find_map_by_name(far_->GetBpfObject(), "upf_interface_map");
     if (raw_map) {
-      Logger::upf_app().debug(
-          "CreateUpfInterfaceMapEntry: key=%u  map_fd=%d  max_entries=%u", s,
-          bpf_map__fd(raw_map), bpf_map__max_entries(raw_map));
+      // Logger::upf_app().debug(
+      //     "CreateUpfInterfaceMapEntry: key=%u  map_fd=%d  max_entries=%u", s,
+      //     bpf_map__fd(raw_map), bpf_map__max_entries(raw_map));
     }
   }
 

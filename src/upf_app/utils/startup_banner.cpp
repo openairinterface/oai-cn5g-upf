@@ -356,37 +356,47 @@ void DisplayPipelineCreationTree(const PipelineFeatureFlags& flags) {
   Logger::upf_app().info(
       "  ├─ PdrMatchProgram:           created  (rule-match,  XDP, slot=%d)",
       PROG_PDR_MATCH);
+  // ── Optional stages decide where the tree closes. A top-level node is the
+  //    last branch (└─) when no enabled stage follows it; QERTCProgram is
+  //    QER's child, so its vertical bar is drawn only when a sibling follows
+  //    QER (URR/BAR/MAR). Stage order is fixed: QER → URR → BAR → MAR.
+  const bool has_qer  = flags.enable_qer;
+  const bool has_urr  = flags.enable_urr;
+  const bool has_bar  = flags.enable_bar;
+  const bool has_mar  = flags.enable_mar;
+  const bool far_last = !(has_qer || has_urr || has_bar || has_mar);
+  const bool qer_last = has_qer && !(has_urr || has_bar || has_mar);
+  const bool urr_last = has_urr && !(has_bar || has_mar);
+  const bool bar_last = has_bar && !has_mar;
+
   Logger::upf_app().info(
-      "  ├─ FARProgram:                created  (rule-apply,  XDP, slot=%d)",
-      PROG_FAR_APPLY);
+      "  %s FARProgram:                created  (rule-apply,  XDP, slot=%d)",
+      far_last ? "└─" : "├─", PROG_FAR_APPLY);
 
   // ── Optional pipeline stages
-  if (flags.enable_qer) {
+  if (has_qer) {
     Logger::upf_app().info(
-        "  ├─ QERProgram:                created  (rule-apply,  XDP, slot=%d)",
-        PROG_QER_APPLY);
+        "  %s QERProgram:                created  (rule-apply,  XDP, slot=%d)",
+        qer_last ? "└─" : "├─", PROG_QER_APPLY);
     Logger::upf_app().info(
-        "  │   └─ QERTCProgram:          created  (qos-enforce, TC,  "
-        "per-session)");
+        "%s QERTCProgram:          created  (qos-enforce, TC,  per-session)",
+        qer_last ? "      └─" : "  │   └─");
   }
-  if (flags.enable_urr) {
+  if (has_urr) {
     Logger::upf_app().info(
-        "  ├─ URRProgram:                created  (rule-apply,  XDP, slot=%d)",
-        PROG_URR_APPLY);
+        "  %s URRProgram:                created  (rule-apply,  XDP, slot=%d)",
+        urr_last ? "└─" : "├─", PROG_URR_APPLY);
   }
-  if (flags.enable_bar) {
+  if (has_bar) {
     Logger::upf_app().info(
-        "  ├─ BARProgram:                created  (rule-apply,  XDP, slot=%d)",
-        PROG_BAR_APPLY);
+        "  %s BARProgram:                created  (rule-apply,  XDP, slot=%d)",
+        bar_last ? "└─" : "├─", PROG_BAR_APPLY);
   }
-
-  // MAR is always last — use └─
-  if (flags.enable_mar) {
+  // MAR is always the last optional stage when present.
+  if (has_mar) {
     Logger::upf_app().info(
         "  └─ MARProgram:                created  (rule-apply,  XDP, slot=%d)",
         PROG_MAR_APPLY);
-  } else if (!flags.enable_bar && !flags.enable_urr) {
-    // FAR was the last printed — already used ├─, nothing to close
   }
 
   Logger::upf_app().info("");
@@ -421,10 +431,19 @@ void DisplayPipelineLoadTree(const std::vector<ProgramLoadInfo>& programs) {
     const auto& p = *stages[i];
 
     if (p.is_child) {
-      // QERTCProgram -- child of QERProgram
+      // QERTCProgram -- child of the previous (parent) stage. Draw a vertical
+      // bar only if a non-child stage still follows the parent; otherwise the
+      // parent is the last node and the subtree must close with spaces.
+      bool parent_is_last = true;
+      for (size_t j = i + 1; j < stages.size(); j++) {
+        if (!stages[j]->is_child) {
+          parent_is_last = false;
+          break;
+        }
+      }
       Logger::upf_app().info(
-          "  │   └─ %-24s loaded ✓  (TC-BPF, per-session)",
-          (p.name + ":").c_str());
+          "%s %-24s loaded ✓  (TC-BPF, per-session)",
+          parent_is_last ? "      └─" : "  │   └─", (p.name + ":").c_str());
       continue;
     }
 
@@ -550,145 +569,134 @@ void DisplayPipelineConfig(const PipelineFeatureFlags& flags) {
       "──────┘");
   Logger::upf_app().startup("");
 
-  // ── TABLE 2: BPF Map × Program matrix
-  const char* y  = " ✓";
-  const char* nu = "  ";
+  // ── TABLE 2: BPF Map × Program matrix.
+  //    Dynamic: only columns for enabled programs, and only rows for maps that
+  //    at least one enabled program actually uses. Cell mark = ✓.
+  {
+    // Program columns in pipeline order. The enum value is the bit index used
+    // by the per-map usage masks below.
+    enum {
+      C_N3,
+      C_N6,
+      C_SLK,
+      C_PDR,
+      C_FAR,
+      C_QER,
+      C_QTC,
+      C_URR,
+      C_BAR,
+      C_MAR,
+      C_COUNT
+    };
+    const char* col_label[C_COUNT] = {"N3",  "N6",  "SLk", "PDR", "FAR",
+                                      "QER", "QTC", "URR", "BAR", "MAR"};
+    const bool col_on[C_COUNT]     = {
+        true,
+        true,
+        true,
+        true,
+        true,
+        flags.enable_qer,
+        flags.enable_qer,
+        flags.enable_urr,
+        flags.enable_bar,
+        flags.enable_mar};
 
-  // Program column abbreviations:
-  // N3=N3Entry  N6=N6Entry  SLk=SessionLookupIP  PDR=PdrMatch
-  // FAR=FARProgram  QER=QERProgram  QTC=QERTCProgram
-  // URR=URRProgram  BAR=BARProgram  MAR=MARProgram
+    std::vector<int> cols;     // active column ids, in order
+    unsigned active_mask = 0;  // bitmask of active columns
+    for (int i = 0; i < C_COUNT; i++)
+      if (col_on[i]) {
+        cols.push_back(i);
+        active_mask |= (1u << i);
+      }
 
-  Logger::upf_app().startup(
-      "┌───────────────────────────┬────┬────┬────┬────┬────┬────┬────┬────┬───"
-      "─┬────┐");
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "BPF Map", "N3", "N6", "SLk", "PDR", "FAR", "QER", "QTC", "URR", "BAR",
-      "MAR");
-  Logger::upf_app().startup(
-      "├───────────────────────────┴────┴────┴────┴────┴────┴────┴────┴────┴───"
-      "─┴────┤");
-  Logger::upf_app().startup("│%-77s│", "  shared infrastructure");
-  Logger::upf_app().startup(
-      "├───────────────────────────┬────┬────┬────┬────┬────┬────┬────┬────┬───"
-      "─┬────┤");
+    struct Row {
+      const char* section;
+      const char* name;
+      unsigned use;  // bitmask of programs that use this map
+    };
+    const Row rows[] = {
+        {"shared infrastructure", "tail_call_progs_map",
+         (1u << C_N3) | (1u << C_N6) | (1u << C_SLK)},
+        {"shared infrastructure", "packet_context_map",
+         (1u << C_N3) | (1u << C_N6) | (1u << C_SLK) | (1u << C_PDR) |
+             (1u << C_FAR) | (1u << C_QER) | (1u << C_URR) | (1u << C_BAR) |
+             (1u << C_MAR)},
+        {"shared infrastructure", "mc_stats_map",
+         (1u << C_N3) | (1u << C_N6) | (1u << C_SLK) | (1u << C_PDR) |
+             (1u << C_FAR) | (1u << C_QER) | (1u << C_URR) | (1u << C_BAR) |
+             (1u << C_MAR)},
+        {"session / pipeline", "session_by_ue_ip_map", (1u << C_SLK)},
+        {"session / pipeline", "session_rules_enabled_map", (1u << C_SLK)},
+        {"session / pipeline", "pdrs_per_session_map", (1u << C_PDR)},
+        {"session / pipeline", "sdf_filters_map", (1u << C_PDR)},
+        {"session / pipeline", "rules_match_pdr_map",
+         (1u << C_FAR) | (1u << C_QER)},
+        {"interface / ARP", "upf_interface_map", (1u << C_FAR) | (1u << C_MAR)},
+        {"interface / ARP", "redirect_interfaces_map",
+         (1u << C_FAR) | (1u << C_MAR)},
+        {"interface / ARP", "arp_table_map", (1u << C_FAR)},
+        {"interface / ARP", "egress_ifindex", (1u << C_QTC)},
+        {"URR / BAR / MAR", "urr_config_map", (1u << C_URR)},
+        {"URR / BAR / MAR", "urr_volume_counters_map", (1u << C_URR)},
+        {"URR / BAR / MAR", "urr_report_ringbuf_map", (1u << C_URR)},
+        {"URR / BAR / MAR", "bar_config_map", (1u << C_BAR)},
+        {"URR / BAR / MAR", "bar_state_map", (1u << C_BAR)},
+        {"URR / BAR / MAR", "bar_ddn_ringbuf_map", (1u << C_BAR)},
+        {"URR / BAR / MAR", "mar_config_map", (1u << C_MAR)},
+        {"URR / BAR / MAR", "mar_access_state_map", (1u << C_MAR)},
+    };
 
-  //                                     N3    N6    SeLk  PDRm  FAR   QER QRTC
-  //                                     URR   BAR   MAR
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "tail_call_progs_map", y, y, y, nu, nu, nu, nu, nu, nu, nu);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "packet_context_map", y, y, y, y, y, y, nu, y, y, y);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "mc_stats_map", y, y, y, y, y, y, nu, y, y, y);
+    const int NAMEW      = 25;         // map-name field width
+    const int name_inner = NAMEW + 2;  // " %-25s " => 27 display columns
+    const int span       = name_inner + 5 * (int) cols.size();
 
-  Logger::upf_app().startup(
-      "├───────────────────────────┴────┴────┴────┴────┴────┴────┴────┴────┴───"
-      "─┴────┤");
-  Logger::upf_app().startup("│%-77s│", "  session / pipeline");
-  Logger::upf_app().startup(
-      "├───────────────────────────┬────┬────┬────┬────┬────┬────┬────┬────┬───"
-      "─┬────┤");
+    auto reps = [](const char* s, int n) {
+      std::string o;
+      for (int i = 0; i < n; i++) o += s;
+      return o;
+    };
+    auto padr = [](std::string s, int w) {
+      while ((int) s.size() < w) s += ' ';
+      return s;
+    };
+    auto cell4 = [](const std::string& s) {  // center an ASCII label in 4 cols
+      int t = 4 - (int) s.size();
+      if (t < 0) t = 0;
+      int l = t / 2;
+      return std::string(l, ' ') + s + std::string(t - l, ' ');
+    };
+    auto border = [&](const char* L, const char* J, const char* R) {
+      std::string o = std::string(L) + reps("─", name_inner);
+      for (size_t k = 0; k < cols.size(); k++)
+        o += std::string(J) + reps("─", 4);
+      return o + R;
+    };
 
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "session_by_ue_ip_map", nu, nu, y, nu, nu, nu, nu, nu, nu, nu);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "session_rules_enabled_map", nu, nu, y, nu, nu, nu, nu, nu, nu, nu);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "pdrs_per_session_map", nu, nu, nu, y, nu, nu, nu, nu, nu, nu);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "sdf_filters_map", nu, nu, nu, y, nu, nu, nu, nu, nu, nu);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "rules_match_pdr_map", nu, nu, nu, nu, y, y, nu, nu, nu, nu);
+    Logger::upf_app().startup("%s", border("┌", "┬", "┐").c_str());
+    std::string hdr = "│ " + padr("BPF Map", NAMEW) + " │";
+    for (int i : cols) hdr += cell4(col_label[i]) + "│";
+    Logger::upf_app().startup("%s", hdr.c_str());
 
-  Logger::upf_app().startup(
-      "├───────────────────────────┴────┴────┴────┴────┴────┴────┴────┴────┴───"
-      "─┴────┤");
-  Logger::upf_app().startup("│%-77s│", "  interface / ARP");
-  Logger::upf_app().startup(
-      "├───────────────────────────┬────┬────┬────┬────┬────┬────┬────┬────┬───"
-      "─┬────┤");
-
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "upf_interface_map", nu, nu, nu, nu, y, nu, nu, nu, nu, y);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "redirect_interfaces_map", nu, nu, nu, nu, y, nu, nu, nu, nu, y);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "arp_table_map", nu, nu, nu, nu, y, nu, nu, nu, nu, nu);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "egress_ifindex", nu, nu, nu, nu, nu, nu, y, nu, nu, nu);
-
-  Logger::upf_app().startup(
-      "├───────────────────────────┴────┴────┴────┴────┴────┴────┴────┴────┴───"
-      "─┴────┤");
-  Logger::upf_app().startup("│%-77s│", "  URR / BAR / MAR");
-  Logger::upf_app().startup(
-      "├───────────────────────────┬────┬────┬────┬────┬────┬────┬────┬────┬───"
-      "─┬────┤");
-
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "urr_config_map", nu, nu, nu, nu, nu, nu, nu, y, nu, nu);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "urr_volume_counters_map", nu, nu, nu, nu, nu, nu, nu, y, nu, nu);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "urr_report_ringbuf_map", nu, nu, nu, nu, nu, nu, nu, y, nu, nu);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "bar_config_map", nu, nu, nu, nu, nu, nu, nu, nu, y, nu);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "bar_state_map", nu, nu, nu, nu, nu, nu, nu, nu, y, nu);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "bar_ddn_ringbuf_map", nu, nu, nu, nu, nu, nu, nu, nu, y, nu);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "mar_config_map", nu, nu, nu, nu, nu, nu, nu, nu, nu, y);
-  Logger::upf_app().startup(
-      "│ %-25s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s │ %-2s "
-      "│ %-2s │",
-      "mar_access_state_map", nu, nu, nu, nu, nu, nu, nu, nu, nu, y);
-
-  Logger::upf_app().startup(
-      "└───────────────────────────┴────┴────┴────┴────┴────┴────┴────┴────┴───"
-      "─┴────┘");
-  Logger::upf_app().startup("");
+    const char* sec = nullptr;
+    for (const auto& r : rows) {
+      if (!(r.use & active_mask)) continue;  // no enabled program uses this map
+      if (!sec || std::string(sec) != r.section) {
+        Logger::upf_app().startup("%s", border("├", "┴", "┤").c_str());
+        Logger::upf_app().startup(
+            "%s",
+            ("│" + padr(std::string("  ") + r.section, span) + "│").c_str());
+        Logger::upf_app().startup("%s", border("├", "┬", "┤").c_str());
+        sec = r.section;
+      }
+      std::string row = "│ " + padr(r.name, NAMEW) + " │";
+      for (int i : cols)
+        row += (((r.use >> i) & 1u) ? " ✓  " : "    "), row += "│";
+      Logger::upf_app().startup("%s", row.c_str());
+    }
+    Logger::upf_app().startup("%s", border("└", "┴", "┘").c_str());
+    Logger::upf_app().startup("");
+  }
 }
 
 //------------------------------------------------------------------------------

@@ -78,25 +78,25 @@ int qer_apply(struct xdp_md* ctx) {
   if (IS_DOWNLINK(pctx->session_type)) {
     if (qer->gate_status.dl_gate != 0) {
       bpf_debug(
-          "Gate Status: DL-Gate = CLOSED "
+          "Gate Status: DL-Gate = CLOSED, "
           "SEID = %llu, QFI = %u - DROP",
           seid, qer->qos_flow_identifier.qfi);
       return xdp_stats_record_action(ctx, XDP_DROP);
     }
     bpf_debug(
-        "Gate Status: DL-Gate = OPEN "
+        "Gate Status: DL-Gate = OPEN, "
         "SEID = %llu, QFI = %u",
         seid, qer->qos_flow_identifier.qfi);
   } else {
     if (qer->gate_status.ul_gate != 0) {
       bpf_debug(
-          "Gate Status: UL-Gate = CLOSED "
+          "Gate Status: UL-Gate = CLOSED, "
           "SEID = %llu, QFI = %u - DROP",
           seid, qer->qos_flow_identifier.qfi);
       return xdp_stats_record_action(ctx, XDP_DROP);
     }
     bpf_debug(
-        "Gate Status: UL-Gate = OPEN "
+        "Gate Status: UL-Gate = OPEN, "
         "SEID = %llu, QFI = %u",
         seid, qer->qos_flow_identifier.qfi);
   }

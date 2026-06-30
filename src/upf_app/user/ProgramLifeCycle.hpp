@@ -183,8 +183,8 @@ class ProgramLifeCycle {
         throw std::runtime_error("BPF skeleton open failed");
       }
       state_ = OPENED;
-      Logger::upf_app().debug(
-          "[%s] BPF skeleton opened successfully", name_.c_str());
+      // Logger::upf_app().debug(
+      //     "[%s] BPF skeleton opened successfully", name_.c_str());
     }
     return skeleton_;
   }
@@ -211,8 +211,8 @@ class ProgramLifeCycle {
     }
 
     if (state_ >= LOADED) {
-      Logger::upf_app().debug(
-          "[%s] BPF program already loaded, skipping", name_.c_str());
+      // Logger::upf_app().debug(
+      //     "[%s] BPF program already loaded, skipping", name_.c_str());
       return;
     }
 
@@ -225,7 +225,7 @@ class ProgramLifeCycle {
 
     state_ = LOADED;
     Logger::upf_app().debug(
-        "[%s] BPF program  loaded successfully", name_.c_str());
+        "[%s] BPF program loaded successfully", name_.c_str());
   }
 
   /**
@@ -317,8 +317,9 @@ class ProgramLifeCycle {
       const char* prog_name = bpf_program__name(prog);
       if (prog_name && strcmp(prog_name, section_name) == 0) {
         target_prog = prog;
-        Logger::upf_app().debug(
-            "[%s] Found BPF program section '%s'", name_.c_str(), section_name);
+        // Logger::upf_app().debug(
+        //     "[%s] Found BPF program section '%s'", name_.c_str(),
+        //     section_name);
         break;
       }
     }
