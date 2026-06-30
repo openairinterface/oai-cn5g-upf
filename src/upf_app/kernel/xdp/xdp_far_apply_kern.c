@@ -49,6 +49,13 @@
 
 #define IP_DF 0x4000 /* Don't Fragment; Fragment offset = 0 */
 
+/* AF_INET defined directly to avoid pulling in <sys/socket.h>, a userspace
+ * header not available in BPF compilation (same convention as
+ * utils/mac_resolution.h). Used for the N6 next-hop bpf_fib_lookup(). */
+#ifndef AF_INET
+#define AF_INET 2
+#endif
+
 /* ========================================================================== */
 /*                          GLOBAL CACHE VARIABLES                            */
 /* ========================================================================== */
@@ -336,38 +343,68 @@ gtpu_decap_ipv4(struct xdp_md* ctx, struct pfcp_far* far) {
   /* Copy outer ethernet to inner position */
   __builtin_memcpy(eth_inner, eth_outer, sizeof(*eth_inner));
 
-  /* Resolve N6 next-hop MAC PER PACKET, keyed by the inner packet's
-   * destination IP. This matches the harmonised arp_table_map convention:
+  /* Resolve the N6 next-hop MAC dynamically.
    *
-   *   key   = peer / next-hop IP (network byte order)
-   *   value = { peer MAC, peer IP }
+   * The UPF is deliberately NOT a router: off-subnet uplink (e.g. a UE
+   * reaching the internet, dst 8.8.8.8) is handed to the N6 gateway
+   * (oai-ext-dn), which owns SNAT + MTU/fragmentation. Since there may be an
+   * L2 network between the UPF and oai-ext-dn, the next-hop is NOT fixed and
+   * must be resolved from the routing table -- never assumed to be the inner
+   * destination IP.
    *
-   * Userspace (SessionProgramManager::UpdateArpTableForN6) writes
-   * arp_table_map[remote_ip] -- where remote_ip is the resolved next-hop
-   * for the N6 interface (the DN gateway in directly-connected setups).
-   *
-   * Limitation: this assumes the inner packet's destination is reachable
-   * via a directly-connected next-hop (inner_dst_ip == next_hop_ip). For
-   * routed setups (e.g. UE traffic to 8.8.8.8 via an upstream router),
-   * the kernel should fall back to bpf_fib_lookup() -- see the helper
-   * update_mac_address() in utils/mac_resolution.h. */
+   *   1. Primary  -- kernel FIB (bpf_fib_lookup): returns the true next-hop
+   *      MAC for the destination (the gateway towards oai-ext-dn for routed
+   *      dst, or the peer itself when directly connected, e.g. the DN during
+   *      iperf). Rewrites both source and destination MAC on a hit.
+   *   2. Fallback -- FIB miss (no route / neighbour not yet resolved): resolve
+   *      the next-hop MAC from arp_table_map -- the same "arping" path the
+   *      monolithic gtpu_decap_ipv4() relied on. On a FIB miss the kernel
+   *      still rewrites fib.ipv4_dst to the next-hop gateway IP, which is the
+   *      exact key userspace installs (UpdateArpTableForN6); fall back to the
+   *      inner destination IP for directly-connected peers. */
   struct iphdr* inner_iph = (void*) ((u8*) eth_inner + sizeof(struct ethhdr));
   if ((void*) (inner_iph + 1) > data_end) {
-    bpf_debug("Error: Invalid inner IP header for ARP key");
+    bpf_debug("Error: Invalid inner IP header for next-hop resolution");
     return RET_DROP;
   }
-  u32 next_hop_n6_ip = inner_iph->daddr;
-  struct arp_entry* arp_n6 =
-      bpf_map_lookup_elem(&arp_table_map, &next_hop_n6_ip);
-  if (!arp_n6) {
-    bpf_debug(
-        "N6 next-hop MAC not found in ARP table for %pI4", &next_hop_n6_ip);
-    return RET_FAILURE;
-  }
 
-  /* Update destination MAC */
-  __builtin_memcpy(eth_inner->h_dest, arp_n6->mac_address, ETH_ALEN);
-  bpf_debug("Dst MAC: %pM", eth_inner->h_dest);
+  struct bpf_fib_lookup fib = {};
+  fib.family                = AF_INET;
+  fib.tos                   = inner_iph->tos;
+  fib.l4_protocol           = inner_iph->protocol;
+  fib.tot_len               = bpf_ntohs(inner_iph->tot_len);
+  fib.ipv4_src              = inner_iph->saddr;
+  fib.ipv4_dst              = inner_iph->daddr;
+  fib.ifindex               = ctx->ingress_ifindex;
+
+  int fib_rc = bpf_fib_lookup(ctx, &fib, sizeof(fib), 0);
+
+  if (fib_rc == BPF_FIB_LKUP_RET_SUCCESS) {
+    /* Routing resolved the next-hop (handles routed dst across an L2 network
+     * between the UPF and the N6 gateway). */
+    __builtin_memcpy(eth_inner->h_dest, fib.dmac, ETH_ALEN);
+    __builtin_memcpy(eth_inner->h_source, fib.smac, ETH_ALEN);
+    bpf_debug("N6 next-hop: FIB hit, dst MAC %pM", eth_inner->h_dest);
+  } else {
+    /* FIB miss -> arp_table_map fallback ("arping"), keyed by the resolved
+     * next-hop gateway IP, then the inner destination as a last resort. */
+    u32 nh_ip                = fib.ipv4_dst ? fib.ipv4_dst : inner_iph->daddr;
+    struct arp_entry* arp_n6 = bpf_map_lookup_elem(&arp_table_map, &nh_ip);
+    if (!arp_n6) {
+      u32 dst_ip = inner_iph->daddr;
+      arp_n6     = bpf_map_lookup_elem(&arp_table_map, &dst_ip);
+    }
+    if (!arp_n6) {
+      bpf_debug(
+          "N6 next-hop: FIB miss (rc=%d) and no ARP entry for %pI4 -- dropping",
+          fib_rc, &nh_ip);
+      return RET_FAILURE;
+    }
+    __builtin_memcpy(eth_inner->h_dest, arp_n6->mac_address, ETH_ALEN);
+    bpf_debug(
+        "N6 next-hop: FIB miss (rc=%d), ARP fallback dst MAC %pM", fib_rc,
+        eth_inner->h_dest);
+  }
 
   /* Strip outer headers */
   if (bpf_xdp_adjust_head(ctx, GTP_ENCAPSULATED_SIZE)) {
