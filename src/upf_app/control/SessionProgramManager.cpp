@@ -118,13 +118,63 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
           [seid](const PfcpProgramInfo& info) { return info.seid == seid; }),
       pfcp_programs->end());
 
-  // Clean ETH PDU BPF maps so stale entries don't survive across restarts
+  // Clean BPF maps so stale entries don't survive across restarts:
+  //  - IPv4 per-rule maps (rules_match_pdr_map / sdf_filters_map)
+  //  - ETH PDU maps
   try {
     auto xdp = UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
+    ClearSessionRuleEntries(xdp, seid);
+    if (xdp) {
+      auto pdrs_map = xdp->GetSessionPdrsMap();
+      if (pdrs_map) {
+        try {
+          pdrs_map->Remove(seid);
+        } catch (...) {
+        }
+      }
+      auto qos_map = xdp->GetQosEnablingMap();
+      if (qos_map) {
+        uint32_t qos_flag;
+        if (qos_map->Lookup(seid, &qos_flag) == 0) {
+          try {
+            qos_map->Remove(seid);
+          } catch (...) {
+          }
+        }
+      }
+
+      // Drop the UE-IP -> session mapping owned by this SEID.
+      // session_by_ue_ip_map is keyed by UE IP. The map has no reverse index,
+      // so scan it.
+      auto ue_ip_map = xdp->GetSessionMappingMap();
+      if (ue_ip_map) {
+        std::vector<uint32_t> stale_keys;
+        uint32_t key = 0, next = 0;
+        struct session_id val = {0};
+        while (ue_ip_map->GetNextKey(key, next) == 0) {
+          if (ue_ip_map->Lookup(next, &val) == 0 && val.seid == seid) {
+            stale_keys.push_back(next);
+          }
+          key = next;
+        }
+        for (auto& k : stale_keys) {
+          try {
+            ue_ip_map->Remove(k);
+          } catch (...) {
+          }
+        }
+        if (!stale_keys.empty()) {
+          Logger::upf_app().debug(
+              "Cleared %zu stale session_by_ue_ip_map entr%s for "
+              "seid " SEID_FMT,
+              stale_keys.size(), stale_keys.size() == 1 ? "y" : "ies", seid);
+        }
+      }
+    }
     RemoveETHPduSessionFromMaps(xdp, seid);
   } catch (const std::exception& e) {
     Logger::upf_app().warn(
-        "ETH-PDU: map cleanup failed for seid %" PRIu64 ": %s", seid, e.what());
+        "map cleanup failed for seid %" PRIu64 ": %s", seid, e.what());
   }
 }
 
@@ -210,17 +260,22 @@ void SessionProgramManager::StorePduSessionInMap(
     // Lookup session entry for UE IP
     const bool exists = (session_map->Lookup(ue_ip, &session) == 0);
     // If the session exists, update the relevant fields
-    if (exists) {
-      // Only fill missing TEIDs
-      if (session.teid_ul == 0) {
-        session.teid_ul = (teid_ul != 0 ? teid_ul : teid_dl);
+    if (exists && session.seid == seid) {
+      // Same session re-populating its own mapping. CreatePipeline calls this
+      // once per PDR (uplink then downlink) and ModifyPipeline may carry the
+      // real downlink TEID, so refresh on any newly-learned non-zero TEID but
+      // never clobber a known TEID back to zero.
+      if (teid_ul != 0) {
+        session.teid_ul = teid_ul;
       }
-      if (session.teid_dl == 0) {
-        session.teid_dl = (teid_dl != 0 ? teid_dl : teid_ul);
+      if (teid_dl != 0) {
+        session.teid_dl = teid_dl;
       }
-      // Keep existing SEID
     } else {
-      // Create new mapping entry
+      // Either no entry yet, or a *different* SEID currently owns this UE IP
+      // (e.g. the UE released and re-attached with the same static IP, leaving
+      // the previous session's stale entry behind). Take over the mapping
+      // completely so the data path resolves this UE IP to the live session.
       session.teid_ul = teid_ul;
       session.teid_dl = teid_dl;
       session.seid    = seid;
@@ -616,6 +671,40 @@ void SessionProgramManager::ModifyPipeline(
       return;
     }
 
+    // A modification may legitimately leave the session with no PDRs (every
+    // rule removed and none re-created). That is a clean teardown of the data
+    // plane for this session, not an error: clear its map entries and return
+    // instead of throwing "Missing UE IP" below.
+    if (session->pdrs.empty()) {
+      logger.info(
+          "Session " SEID_FMT
+          " has no PDRs after modification - clearing data plane",
+          seid);
+      ClearSessionRuleEntries(upf_xdp_program, seid);
+      struct pfcp_pdr empty_pdrs[MAX_PDRS_PER_PDU_SESSION_LIMIT] = {0};
+      auto session_pdrs_map = upf_xdp_program->GetSessionPdrsMap();
+      if (session_pdrs_map) {
+        session_pdrs_map->Update(seid, empty_pdrs, BPF_ANY);
+      }
+      auto enabled_qos_map = upf_xdp_program->GetQosEnablingMap();
+      if (enabled_qos_map) {
+        uint32_t qos_flag;
+        if (enabled_qos_map->Lookup(seid, &qos_flag) == 0) {
+          try {
+            enabled_qos_map->Remove(seid);
+          } catch (...) {
+          }
+        }
+      }
+      std::lock_guard<std::mutex> lock(mutex_);
+      auto it = qer_programs_map_.find(seid);
+      if (it != qer_programs_map_.end()) {
+        it->second->TearDown();
+        qer_programs_map_.erase(it);
+      }
+      return;
+    }
+
     // Retrieve UE and gNB IPs (mandatory for non-ETH modification)
     uint32_t ue_ip = RetrieveUeIp(session);
     if (!ue_ip) {
@@ -638,11 +727,26 @@ void SessionProgramManager::ModifyPipeline(
     const bool qos_enforcement_enabled =
         ebpf_acceleration_enabled && upf_cfg.enable_qos;
 
+    auto enabled_qos_map = upf_xdp_program->GetQosEnablingMap();
     if (qos_enforcement_enabled && has_downlink_qer) {
-      uint32_t value       = 1;
-      auto enabled_qos_map = upf_xdp_program->GetQosEnablingMap();
+      uint32_t value = 1;
       if (enabled_qos_map) {
         enabled_qos_map->Update(seid, value, BPF_ANY);
+      }
+
+      // Tear down any pre-existing QER program for this session before
+      // building a new one. Otherwise the old program's BPF skeleton and TC
+      // attachments leak on every modification (the destructor does NOT call
+      // TearDown), and the kernel accumulates stale TC filters.
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = qer_programs_map_.find(seid);
+        if (it != qer_programs_map_.end()) {
+          logger.debug(
+              "Tearing down previous QER program for seid " SEID_FMT, seid);
+          it->second->TearDown();
+          qer_programs_map_.erase(it);
+        }
       }
 
       logger.debug("Instantiate a new QER Program on Downlink");
@@ -653,6 +757,28 @@ void SessionProgramManager::ModifyPipeline(
       {
         std::lock_guard<std::mutex> lock(mutex_);
         qer_programs_map_[seid] = qer_program;
+      }
+    } else {
+      // QoS no longer applies to this session (e.g. all downlink QERs were
+      // removed by a modification). Clear the enable flag so the data plane
+      // stops diverting downlink packets into a TC/QoS path that is no longer
+      // configured, and tear down any lingering QER program.
+      if (enabled_qos_map) {
+        uint32_t qos_flag;
+        if (enabled_qos_map->Lookup(seid, &qos_flag) == 0) {
+          try {
+            enabled_qos_map->Remove(seid);
+          } catch (...) {
+          }
+        }
+      }
+      std::lock_guard<std::mutex> lock(mutex_);
+      auto it = qer_programs_map_.find(seid);
+      if (it != qer_programs_map_.end()) {
+        logger.debug(
+            "Removing QER program for seid " SEID_FMT " (QoS disabled)", seid);
+        it->second->TearDown();
+        qer_programs_map_.erase(it);
       }
     }
 
@@ -709,6 +835,13 @@ void SessionProgramManager::ModifyPipeline(
           "Session " SEID_FMT " has no TEIDs - PDU session mapping not updated",
           seid);
     }
+
+    // Drop stale per-rule map entries (PDRs/QFIs that a previous version of
+    // this session had but that are no longer present) before re-populating.
+    // rules_match_pdr_map and sdf_filters_map are keyed by rule/QFI, so unlike
+    // pdrs_per_session_map (a per-seid array that is fully overwritten) they
+    // would otherwise accumulate dead entries across modifications.
+    ClearSessionRuleEntries(upf_xdp_program, seid);
 
     // Process each PDR in the session
     pfcp::pdi pdi;
@@ -1106,6 +1239,56 @@ void SessionProgramManager::ClearAllETHPduMaps(
 }
 
 //------------------------------------------------------------------------------
+void SessionProgramManager::ClearSessionRuleEntries(
+    std::shared_ptr<UPF_XDPProgram> xdp_program, uint64_t seid) {
+  if (!xdp_program) return;
+
+  // --- rules_match_pdr_map (key: struct pdrs_per_session {pdr_id, seid}) ---
+  auto rules_map = xdp_program->GetRulesMatchPdrMap();
+  if (rules_map) {
+    std::vector<struct pdrs_per_session> keys;
+    struct pdrs_per_session key = {0, 0}, next;
+    while (rules_map->GetNextKey(key, next) == 0) {
+      if (next.seid == seid) keys.push_back(next);
+      key = next;
+    }
+    for (auto& k : keys) {
+      try {
+        rules_map->Remove(k);
+      } catch (...) {
+      }
+    }
+    if (!keys.empty()) {
+      Logger::upf_app().debug(
+          "Cleared %zu stale rules_match_pdr entries for seid " SEID_FMT,
+          keys.size(), seid);
+    }
+  }
+
+  // --- sdf_filters_map (key: struct session_qfi {seid, qfi}) ---
+  auto sdf_map = xdp_program->GetSdfFilterMap();
+  if (sdf_map) {
+    std::vector<struct session_qfi> keys;
+    struct session_qfi key = {0}, next;
+    while (sdf_map->GetNextKey(key, next) == 0) {
+      if (next.seid == seid) keys.push_back(next);
+      key = next;
+    }
+    for (auto& k : keys) {
+      try {
+        sdf_map->Remove(k);
+      } catch (...) {
+      }
+    }
+    if (!keys.empty()) {
+      Logger::upf_app().debug(
+          "Cleared %zu stale sdf_filters entries for seid " SEID_FMT,
+          keys.size(), seid);
+    }
+  }
+}
+
+//------------------------------------------------------------------------------
 void SessionProgramManager::RemovePipeline(uint64_t seid) {
   Logger::upf_app().info("Removing pipeline for session " SEID_FMT, seid);
 
@@ -1458,7 +1641,17 @@ std::string SessionProgramManager::UpdateArpTableForN3(
      */
     uint32_t arp_key = ip_for_mac_lookup;  // = gNB IP in kernel byte order
 
-    // Update ARP table in BPF map
+    // NOTE: arp_table_map entries are written here (and on the N6 path) but are
+    // never removed anywhere - RemoveSession() does not clean them up. Entries
+    // therefore accumulate toward the map's capacity and are only ever
+    // refreshed when a later session re-resolves the same peer IP. Two
+    // consequences to fix in the future:
+    //   1. A peer MAC change within a long-lived session (e.g. gNB restart) is
+    //      never re-resolved, so GTP traffic to that peer is black-holed.
+    //   2. Entries for peers that never return persist until the map fills.
+    // A future fix should evict the per-peer ARP entry on session teardown
+    // (refcounted by peer IP, since several sessions may share a next hop) or
+    // add periodic re-validation of cached MACs.
     auto arp_table_map = xdp_program->GetMapByName("arp_table_map");
     if (arp_table_map) {
       arp_table_map->Update(arp_key, entry, BPF_ANY);

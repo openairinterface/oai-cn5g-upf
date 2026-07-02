@@ -925,14 +925,10 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     resp->seid = session->cp_fseid.seid;
 
     for (auto it : req->pfcp_ies.remove_pdrs) {
-      if (isBpfAccelerationEnabled) {
-        Logger::upf_app().info("Modify datapath:remove(pdr)");
-        call_datapath(
-            NULL, req, NULL, session, session_manager,
-            &SessionManager::SessionManager::
-                ModifySession /*&SessionManager::updateBpfSession*/);
-      }
-
+      // Datapath is resynced ONCE at the end of this handler (see final
+      // call_datapath below), after every remove/create/update has been
+      // applied to the session. Rebuilding per-rule here used to tear the
+      // pipeline down to an empty state mid-modification.
       remove_pdr& pdr = it;
 
       if (not session->remove(pdr, cause, offending_ie.offending_ie)) {
@@ -948,14 +944,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.remove_fars) {
-        if (isBpfAccelerationEnabled) {
-          Logger::upf_app().info("Modify datapath: remove(far)");
-          call_datapath(
-              NULL, req, NULL, session, session_manager,
-              &SessionManager::
-                  ModifySession /*&SessionManager::updateBpfSession*/);
-        }
-
+        // Datapath resynced once at the end of this handler.
         remove_far& far = it;
 
         if (not session->remove(far, cause, offending_ie.offending_ie)) {
@@ -976,12 +965,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     if (isBpfAccelerationEnabled) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.remove_qers) {
-          Logger::upf_app().info("Modify datapath: remove(qer)");
-          call_datapath(
-              NULL, req, NULL, session, session_manager,
-              &SessionManager::
-                  ModifySession /*&SessionManager::updateBpfSession*/);
-
+          // Datapath resynced once at the end of this handler.
           remove_qer& qer = it;
 
           if (not session->remove(qer, cause, offending_ie.offending_ie)) {

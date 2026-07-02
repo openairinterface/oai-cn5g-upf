@@ -327,7 +327,10 @@ int BPFMap::GetNextKey(KeyType& key, KeyType& next_key) {
   int map_fd = bpf_map__fd(bpf_map_);
   int ret    = bpf_map_get_next_key(map_fd, &key, &next_key);
 
-  if (ret != 0 && ret != -1) {
+  // bpf_map_get_next_key() reports "no more keys" with ENOENT. Depending on the
+  // libbpf version this surfaces as ret == -1 (errno=ENOENT) or ret == -ENOENT.
+  // That is the normal loop-termination case for map iteration, not an error.
+  if (ret != 0 && ret != -1 && ret != -ENOENT && errno != ENOENT) {
     Logger::upf_app().warn(
         "GetNextKey failed for map '%s': errno=%d", name_.c_str(), errno);
   }

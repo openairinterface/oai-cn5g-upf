@@ -456,6 +456,21 @@ class SessionProgramManager {
    */
   void ClearAllETHPduMaps(std::shared_ptr<UPF_XDPProgram> xdp_program);
 
+  /**
+   * @brief Delete all rules_match_pdr_map and sdf_filters_map entries for a
+   *        session.
+   *
+   * These maps are keyed by (pdr_id, seid) and (qfi, seid) respectively and
+   * are only ever written with BPF_ANY, so entries for PDRs/QFIs that a
+   * modification removed would otherwise survive forever. Call this before
+   * re-populating the maps during a pipeline rebuild, and on session removal.
+   *
+   * @param xdp_program XDP program providing map access
+   * @param seid Session whose per-rule entries should be cleared
+   */
+  void ClearSessionRuleEntries(
+      std::shared_ptr<UPF_XDPProgram> xdp_program, uint64_t seid);
+
   // ==========================================================================
   // Member Variables
   // ==========================================================================
