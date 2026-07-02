@@ -134,9 +134,12 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
       }
       auto qos_map = xdp->GetQosEnablingMap();
       if (qos_map) {
-        try {
-          qos_map->Remove(seid);
-        } catch (...) {
+        uint32_t qos_flag;
+        if (qos_map->Lookup(seid, &qos_flag) == 0) {
+          try {
+            qos_map->Remove(seid);
+          } catch (...) {
+          }
         }
       }
 
@@ -683,9 +686,12 @@ void SessionProgramManager::ModifyPipeline(
       }
       auto enabled_qos_map = upf_xdp_program->GetQosEnablingMap();
       if (enabled_qos_map) {
-        try {
-          enabled_qos_map->Remove(seid);
-        } catch (...) {
+        uint32_t qos_flag;
+        if (enabled_qos_map->Lookup(seid, &qos_flag) == 0) {
+          try {
+            enabled_qos_map->Remove(seid);
+          } catch (...) {
+          }
         }
       }
       std::lock_guard<std::mutex> lock(mutex_);
@@ -756,9 +762,12 @@ void SessionProgramManager::ModifyPipeline(
       // stops diverting downlink packets into a TC/QoS path that is no longer
       // configured, and tear down any lingering QER program.
       if (enabled_qos_map) {
-        try {
-          enabled_qos_map->Remove(seid);
-        } catch (...) {
+        uint32_t qos_flag;
+        if (enabled_qos_map->Lookup(seid, &qos_flag) == 0) {
+          try {
+            enabled_qos_map->Remove(seid);
+          } catch (...) {
+          }
         }
       }
       std::lock_guard<std::mutex> lock(mutex_);
