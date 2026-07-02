@@ -143,8 +143,9 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
         }
       }
 
-      // Drop the UE-IP -> session mapping owned by this SEID. session_by_ue_ip_map
-      // is keyed by UE IP. The map has no reverse index, so scan it.
+      // Drop the UE-IP -> session mapping owned by this SEID.
+      // session_by_ue_ip_map is keyed by UE IP. The map has no reverse index,
+      // so scan it.
       auto ue_ip_map = xdp->GetSessionMappingMap();
       if (ue_ip_map) {
         std::vector<uint32_t> stale_keys;
@@ -164,7 +165,8 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
         }
         if (!stale_keys.empty()) {
           Logger::upf_app().debug(
-              "Cleared %zu stale session_by_ue_ip_map entr%s for seid " SEID_FMT,
+              "Cleared %zu stale session_by_ue_ip_map entr%s for "
+              "seid " SEID_FMT,
               stale_keys.size(), stale_keys.size() == 1 ? "y" : "ies", seid);
         }
       }
