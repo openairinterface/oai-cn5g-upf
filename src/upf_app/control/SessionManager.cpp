@@ -648,9 +648,16 @@ bool SessionManager::UpdatePdr(
 //------------------------------------------------------------------------------
 // §7.5.4.6 Remove PDR — Table 7.5.4.6-1
 bool SessionManager::RemovePdr(uint64_t seid, uint16_t pdr_id) {
-  try {
-    std::lock_guard<std::mutex> lock(sessions_mutex_);
+  std::lock_guard<std::mutex> lock(sessions_mutex_);
+  return RemovePdrUnlocked(seid, pdr_id);
+}
 
+//------------------------------------------------------------------------------
+// Non-locking variant: caller must hold sessions_mutex_ (e.g. ModifySession(),
+// which already locks it — calling RemovePdr() from there would self-deadlock
+// on the non-recursive mutex).
+bool SessionManager::RemovePdrUnlocked(uint64_t seid, uint16_t pdr_id) {
+  try {
     auto session = GetSessionUnlocked(seid);
     if (!session) {
       Logger::upf_app().error(
@@ -776,9 +783,15 @@ bool SessionManager::UpdateFar(
 //------------------------------------------------------------------------------
 // §7.5.4.7 Remove FAR — Table 7.5.4.7-1
 bool SessionManager::RemoveFar(uint64_t seid, uint32_t far_id) {
-  try {
-    std::lock_guard<std::mutex> lock(sessions_mutex_);
+  std::lock_guard<std::mutex> lock(sessions_mutex_);
+  return RemoveFarUnlocked(seid, far_id);
+}
 
+//------------------------------------------------------------------------------
+// Non-locking variant: caller must hold sessions_mutex_ (see
+// RemovePdrUnlocked).
+bool SessionManager::RemoveFarUnlocked(uint64_t seid, uint32_t far_id) {
+  try {
     auto session = GetSessionUnlocked(seid);
     if (!session) {
       Logger::upf_app().error(
@@ -900,9 +913,15 @@ bool SessionManager::UpdateQer(
 //------------------------------------------------------------------------------
 // §7.5.4.9 Remove QER — Table 7.5.4.9-1
 bool SessionManager::RemoveQer(uint64_t seid, uint32_t qer_id) {
-  try {
-    std::lock_guard<std::mutex> lock(sessions_mutex_);
+  std::lock_guard<std::mutex> lock(sessions_mutex_);
+  return RemoveQerUnlocked(seid, qer_id);
+}
 
+//------------------------------------------------------------------------------
+// Non-locking variant: caller must hold sessions_mutex_ (see
+// RemovePdrUnlocked).
+bool SessionManager::RemoveQerUnlocked(uint64_t seid, uint32_t qer_id) {
+  try {
     auto session = GetSessionUnlocked(seid);
     if (!session) {
       Logger::upf_app().error(
@@ -1162,7 +1181,7 @@ size_t SessionManager::HandlePdrRemoval(
   for (const auto& remove_pdr : mod_req->pfcp_ies.remove_pdrs) {
     pfcp::pdr_id_t pdr_id;
     if (remove_pdr.get(pdr_id)) {
-      if (RemovePdr(session->get_up_seid(), pdr_id.rule_id)) {
+      if (RemovePdrUnlocked(session->get_up_seid(), pdr_id.rule_id)) {
         removed_count++;
       }
     }
@@ -1180,7 +1199,7 @@ size_t SessionManager::HandleFarRemoval(
   for (const auto& remove_far : mod_req->pfcp_ies.remove_fars) {
     pfcp::far_id_t far_id;
     if (remove_far.get(far_id)) {
-      if (RemoveFar(session->get_up_seid(), far_id.far_id)) {
+      if (RemoveFarUnlocked(session->get_up_seid(), far_id.far_id)) {
         removed_count++;
       }
     }
@@ -1198,7 +1217,7 @@ size_t SessionManager::HandleQerRemoval(
   for (const auto& remove_qer : mod_req->pfcp_ies.remove_qers) {
     pfcp::qer_id_t qer_id;
     if (remove_qer.get(qer_id)) {
-      if (RemoveQer(session->get_up_seid(), qer_id.qer_id)) {
+      if (RemoveQerUnlocked(session->get_up_seid(), qer_id.qer_id)) {
         removed_count++;
       }
     }
@@ -1720,8 +1739,15 @@ bool SessionManager::UpdateUrr(
 //------------------------------------------------------------------------------
 // §7.5.4.8 Remove URR — Table 7.5.4.8-1
 bool SessionManager::RemoveUrr(uint64_t seid, uint32_t urr_id) {
+  std::lock_guard<std::mutex> lock(sessions_mutex_);
+  return RemoveUrrUnlocked(seid, urr_id);
+}
+
+//------------------------------------------------------------------------------
+// Non-locking variant: caller must hold sessions_mutex_ (see
+// RemovePdrUnlocked).
+bool SessionManager::RemoveUrrUnlocked(uint64_t seid, uint32_t urr_id) {
   try {
-    std::lock_guard<std::mutex> lock(sessions_mutex_);
     auto session = GetSessionUnlocked(seid);
     if (!session) {
       Logger::upf_app().error(
@@ -1834,8 +1860,15 @@ bool SessionManager::UpdateBar(
 //------------------------------------------------------------------------------
 // §7.5.4.10 Remove BAR — Table 7.5.4.10-1
 bool SessionManager::RemoveBar(uint64_t seid, uint32_t bar_id) {
+  std::lock_guard<std::mutex> lock(sessions_mutex_);
+  return RemoveBarUnlocked(seid, bar_id);
+}
+
+//------------------------------------------------------------------------------
+// Non-locking variant: caller must hold sessions_mutex_ (see
+// RemovePdrUnlocked).
+bool SessionManager::RemoveBarUnlocked(uint64_t seid, uint32_t bar_id) {
   try {
-    std::lock_guard<std::mutex> lock(sessions_mutex_);
     auto session = GetSessionUnlocked(seid);
     if (!session) {
       Logger::upf_app().error(
@@ -1992,7 +2025,7 @@ size_t SessionManager::HandleUrrRemoval(
   for (const auto& remove_urr : mod_req->pfcp_ies.remove_urrs) {
     pfcp::urr_id_t urr_id;
     if (remove_urr.get(urr_id)) {
-      if (RemoveUrr(session->get_up_seid(), urr_id.urr_id)) {
+      if (RemoveUrrUnlocked(session->get_up_seid(), urr_id.urr_id)) {
         removed_count++;
       }
     }
@@ -2015,7 +2048,7 @@ size_t SessionManager::HandleBarRemoval(
     const auto& remove_bar = mod_req->pfcp_ies.remove_bar.second;
     pfcp::bar_id_t bar_id;
     if (remove_bar.get(bar_id)) {
-      if (RemoveBar(session->get_up_seid(), bar_id.bar_id)) {
+      if (RemoveBarUnlocked(session->get_up_seid(), bar_id.bar_id)) {
         removed_count++;
       }
     }

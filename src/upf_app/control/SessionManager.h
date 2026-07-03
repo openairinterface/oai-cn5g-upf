@@ -604,6 +604,22 @@ class SessionManager {
   std::shared_ptr<pfcp::pfcp_session> GetSessionUnlocked(uint64_t seid) const;
 
   /**
+   * @brief Non-locking variants of the Remove* CRUD methods (caller must
+   * hold sessions_mutex_).
+   *
+   * ModifySession() holds sessions_mutex_ for its whole body and calls
+   * HandlePdrRemoval()/HandleFarRemoval()/HandleQerRemoval()/
+   * HandleUrrRemoval()/HandleBarRemoval(), which must call these instead of
+   * the public, self-locking Remove* methods to avoid a self-deadlock on the
+   * (non-recursive) sessions_mutex_.
+   */
+  bool RemovePdrUnlocked(uint64_t seid, uint16_t pdr_id);
+  bool RemoveFarUnlocked(uint64_t seid, uint32_t far_id);
+  bool RemoveQerUnlocked(uint64_t seid, uint32_t qer_id);
+  bool RemoveUrrUnlocked(uint64_t seid, uint32_t urr_id);
+  bool RemoveBarUnlocked(uint64_t seid, uint32_t bar_id);
+
+  /**
    * @brief Categorize PDRs into uplink and downlink based on source interface
    *
    * Separates PDRs by Source Interface IE (§8.2.2 — Source Interface):
