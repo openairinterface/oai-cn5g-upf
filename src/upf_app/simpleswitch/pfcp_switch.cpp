@@ -2,28 +2,28 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-#include "common_defs.h"
-#include "itti.hpp"
-#include "logger.hpp"
 #include "pfcp_switch.hpp"
-#include "upf_config.hpp"
-#include "upf_pfcp_association.hpp"
-#include "simple_switch.hpp"
 
 #include <algorithm>
-#include <fstream>  // std::ifstream
-#include <sched.h>
-#include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <linux/ip.h>
+#include <fstream>
+#include <iomanip>
+#include <stdexcept>
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
 #include <linux/if_tun.h>
-#include <stdexcept>
+#include <linux/ip.h>
+#include <sched.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
-#include <iomanip>
+#include "common_defs.h"
+#include "itti.hpp"
+#include "logger.hpp"
+#include "simple_switch.hpp"
+#include "upf_config.hpp"
+#include "upf_pfcp_association.hpp"
 
 std::shared_ptr<SessionManager> session_manager;
 
@@ -37,6 +37,15 @@ extern itti_mw* itti_inst;
 extern upf_config upf_cfg;
 extern upf_n3* upf_n3_inst;
 extern pfcp_switch* pfcp_switch_inst;
+
+// =============================================================================
+// PDN I/O threads
+// =============================================================================
+
+//------------------------------------------------------------------------------
+// pdn_worker — DL packet processing thread.
+// Reads filled I/O buffers from work_pool_, dispatches to
+// pfcp_session_look_up_pack_in_core(), then returns buffer to free_pool_.
 
 //------------------------------------------------------------------------------
 void pfcp_switch::pdn_worker(
@@ -72,6 +81,11 @@ void pfcp_switch::pdn_worker(
     iov = nullptr;
   }
 }
+
+//------------------------------------------------------------------------------
+// pdn_read_loop — DL reader thread.
+// Reads IP packets from tun0 into pre-allocated I/O buffers, pushes into
+// work_pool_ for processing by pdn_worker.
 
 //------------------------------------------------------------------------------
 void pfcp_switch::pdn_read_loop(
@@ -134,6 +148,10 @@ void pfcp_switch::send_to_core(char* const ip_packet, const ssize_t len) {
         "write fd %d failed rc=%d:%s", sock_w, bytes_sent, strerror(errno));
   }
 }
+
+// =============================================================================
+// PDN socket / tun helpers
+// =============================================================================
 
 //------------------------------------------------------------------------------
 int pfcp_switch::create_pdn_socket(
@@ -378,6 +396,12 @@ void pfcp_switch::setup_pdn_interfaces() {
   // rc = system("/sbin/sysctl -w net.ipv4.conf.default.accept_redirects=0");
 }
 
+// =============================================================================
+// Constructor / destructor
+// =============================================================================
+
+//------------------------------------------------------------------------------
+// generate_fteid_n3 — allocate a new local N3 F-TEID (§8.2.3, V17.10.0).
 //------------------------------------------------------------------------------
 pfcp::fteid_t pfcp_switch::generate_fteid_n3() {
   pfcp::fteid_t fteid = {};
@@ -461,6 +485,10 @@ pfcp_switch::~pfcp_switch() {
   delete[] socks_r_ptr;
 }
 
+// =============================================================================
+// Session / PDR hash-table helpers
+// =============================================================================
+
 //------------------------------------------------------------------------------
 bool pfcp_switch::get_pfcp_session_by_cp_fseid(
     const pfcp::fseid_t& fseid,
@@ -468,12 +496,9 @@ bool pfcp_switch::get_pfcp_session_by_cp_fseid(
   std::unordered_map<
       fseid_t, std::shared_ptr<pfcp::pfcp_session>>::const_iterator sit =
       cp_fseid2pfcp_sessions.find(fseid);
-  if (sit == cp_fseid2pfcp_sessions.end()) {
-    return false;
-  } else {
-    session = sit->second;
-    return true;
-  }
+  if (sit == cp_fseid2pfcp_sessions.end()) return false;
+  session = sit->second;
+  return true;
 }
 
 //------------------------------------------------------------------------------
@@ -483,12 +508,9 @@ bool pfcp_switch::get_pfcp_session_by_up_seid(
   folly::AtomicHashMap<
       uint64_t, std::shared_ptr<pfcp::pfcp_session>>::const_iterator sit =
       up_seid2pfcp_sessions.find(cp_seid);
-  if (sit == up_seid2pfcp_sessions.end()) {
-    return false;
-  } else {
-    session = sit->second;
-    return true;
-  }
+  if (sit == up_seid2pfcp_sessions.end()) return false;
+  session = sit->second;
+  return true;
 }
 
 //------------------------------------------------------------------------------
@@ -498,12 +520,9 @@ bool pfcp_switch::get_pfcp_ul_pdrs_by_up_teid(
   folly::AtomicHashMap<
       teid_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>::
       const_iterator pit = ul_n3_teid2pfcp_pdr.find(teid);
-  if (pit == ul_n3_teid2pfcp_pdr.end())
-    return false;
-  else {
-    pdrs = pit->second;
-    return true;
-  }
+  if (pit == ul_n3_teid2pfcp_pdr.end()) return false;
+  pdrs = pit->second;
+  return true;
 }
 
 //------------------------------------------------------------------------------
@@ -513,12 +532,9 @@ bool pfcp_switch::get_pfcp_dl_pdrs_by_ue_ip(
   folly::AtomicHashMap<
       uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>::
       const_iterator pit = ue_ipv4_hbo2pfcp_pdr.find(ue_ip);
-  if (pit == ue_ipv4_hbo2pfcp_pdr.end())
-    return false;
-  else {
-    pdrs = pit->second;
-    return true;
-  }
+  if (pit == ue_ipv4_hbo2pfcp_pdr.end()) return false;
+  pdrs = pit->second;
+  return true;
 }
 
 //------------------------------------------------------------------------------
@@ -550,6 +566,11 @@ void pfcp_switch::remove_pfcp_session(const pfcp::fseid_t& cp_fseid) {
     remove_pfcp_session(session);
   }
 }
+
+//------------------------------------------------------------------------------
+// add_pfcp_ul_pdr_by_up_teid — insert PDR into sorted-by-precedence vector.
+// Creates the entry if the TEID is new; inserts in-order if TEID already
+// exists.
 
 //------------------------------------------------------------------------------
 void pfcp_switch::add_pfcp_ul_pdr_by_up_teid(
@@ -615,7 +636,7 @@ void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
     }
     // Logger::pfcp_switch().info( "add_pfcp_dl_pdr_by_ue_ip UE IP %8x", ue_ip);
   } else {
-    // TODO: Dirty fix
+    // TODO: Dirty fix — replace existing entry for same UE IP
     ue_ipv4_hbo2pfcp_pdr.erase(ue_ip);
     std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs =
         std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>(
@@ -670,6 +691,15 @@ bool pfcp_switch::create_packet_in_access(
   return true;
 }
 
+// =============================================================================
+// BPF datapath bridge
+// =============================================================================
+
+//------------------------------------------------------------------------------
+// call_datapath — invoke a SessionManager CRUD function asynchronously.
+// Creates a snapshot copy of the pfcp_session so the datapath is not racing
+// against N4 modification events on the live session object.
+
 //------------------------------------------------------------------------------
 void pfcp_switch::call_datapath(
     itti_n4_session_establishment_request* establishment_request,
@@ -678,33 +708,12 @@ void pfcp_switch::call_datapath(
     std::shared_ptr<SessionManager> obj,
     SessionOperationResult (SessionManager::*crud_func)(
         std::shared_ptr<pfcp::pfcp_session>,
-        itti_n4_session_establishment_request* est_req,
-        itti_n4_session_modification_request* mod_req,
-        itti_n4_session_deletion_request* del_req)) {
+        itti_n4_session_establishment_request*,
+        itti_n4_session_modification_request*,
+        itti_n4_session_deletion_request*)) {
   std::shared_ptr<pfcp::pfcp_session> pSession =
       std::make_shared<pfcp::pfcp_session>(*s);
-  // // obj = UserPlaneComponent::GetInstance().GetSessionManager();
 
-  // itti_n4_session_establishment_request* est_req = establishment_request;
-  // itti_n4_session_modification_request* mod_req  = modification_request;
-  // itti_n4_session_deletion_request* del_req      = deletion_request;
-
-  // if (!del_req) {
-  //   obj->sessions_.push_back(pSession);
-  //   (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
-  // } else {
-  //   uint64_t seid  = pSession->get_up_seid();
-  //   auto& sessions = obj->sessions_;
-
-  //   // for (auto it = sessions.begin(); it != sessions.end(); ++it) {
-  //   //   if ((it->get())->get_up_seid() == seid){
-  //   //     sessions.erase(it);
-  //   //   }
-  //   // }
-  //   (obj.get()->*crud_func)(pSession, est_req, mod_req, del_req);
-  // }
-
-  // Just call the CRUD method - it handles EVERYTHING internally!
   SessionOperationResult result = (obj.get()->*crud_func)(
       pSession, establishment_request, modification_request, deletion_request);
 
@@ -716,24 +725,35 @@ void pfcp_switch::call_datapath(
   }
 }
 
+// =============================================================================
+// N4 session event handlers (3GPP TS 29.244 V17.10.0 §7.5)
+// =============================================================================
+
+//------------------------------------------------------------------------------
+// handle_pfcp_session_establishment_request — 3GPP TS 29.244 V17.10.0 §7.5.2
+// Creates a new pfcp_session, processes Create FAR/PDR/QER IEs, allocates
+// an N3 F-TEID (§8.2.3) for uplink PDRs, then registers the session in both
+// hash maps (keyed by CP F-SEID §8.2.37 and locally-generated UP SEID).
+
 //------------------------------------------------------------------------------
 void pfcp_switch::handle_pfcp_session_establishment_request(
     std::shared_ptr<itti_n4_session_establishment_request> sreq,
     itti_n4_session_establishment_response* resp) {
   bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
-  // bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
 
   itti_n4_session_establishment_request* req = sreq.get();
   pfcp::fseid_t fseid                        = {};
   pfcp::cause_t cause = {.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED};
   pfcp::offending_ie_t offending_ie = {};
 
-  if (req->pfcp_ies.get(fseid)) {
+  if (req->pfcp_ies.get(fseid)) {  // CP F-SEID §8.2.37 — mandatory IE
     std::shared_ptr<pfcp::pfcp_session> s = {};
     bool exist            = get_pfcp_session_by_cp_fseid(fseid, s);
     pfcp_session* session = nullptr;
     if (not exist) {
       session = new pfcp_session(fseid, generate_seid());
+
+      // ---- Create FARs first (PDR create_far look-up requires them) --------
       for (auto it : req->pfcp_ies.create_fars) {
         create_far& cr_far = it;
         if (not session->create(cr_far, cause, offending_ie.offending_ie)) {
@@ -743,6 +763,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         }
       }
 
+      // ---- Create PDRs (allocates N3 F-TEID for ACCESS PDRs) ---------------
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         //--------------------------------
         // Process PDR to be created
@@ -771,10 +792,10 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             break;
           }
 
-          /*
-           *  Add create_qers
-           */
-          if (isBpfAccelerationEnabled) {
+          // Create QER if BPF acceleration is enabled.
+          // enable_qos gate: skip QER handling when QoS enforcement is
+          // disabled.
+          if (isBpfAccelerationEnabled && upf_cfg.enable_qos) {
             pfcp::qer_id_t qer_id = {};
             if (cr_pdr.get(qer_id)) {
               pfcp::create_qer cr_qer = {};
@@ -782,14 +803,6 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
                 cause.cause_value         = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
                 offending_ie.offending_ie = PFCP_IE_CREATE_QER;
               }
-
-              // if (not session->create(cr_qer, cause,
-              // offending_ie.offending_ie)) {
-              //   session->cleanup();
-              //   delete session;
-              //   break;
-              // }
-
               session->create(cr_qer, cause, offending_ie.offending_ie);
             }
           }
@@ -813,10 +826,71 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         }
       }
 
+      // ---- Create URRs (BPF only) — §7.5.2.4 Create URR IE ----------------
+      // pfcp_session::create(urr) populates session->urrs so that
+      // SessionProgramManager::CreatePipeline can populate urr_config_map and
+      // urr_volume_counters_map in the BPF program.
+      // enable_urr gate: when URR is disabled, skip SMF-sent Create URR IEs
+      // (Open5GS/Free5GC SMFs send URRs regardless of the UPF's local setting).
+      if (isBpfAccelerationEnabled && upf_cfg.enable_urr) {
+        if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+          for (auto it : req->pfcp_ies.create_urrs) {
+            create_urr& cr_urr = it;
+            if (not session->create(cr_urr, cause, offending_ie.offending_ie)) {
+              Logger::upf_app().error(
+                  "Establish: create(urr) failed, cause=%u", cause.cause_value);
+              break;
+            }
+          }
+        }
+      }
+
+      // ---- Create BARs (BPF only) — §7.5.2.6 Create BAR IE ----------------
+      // pfcp_session::create(bar) populates session->bars so that
+      // SessionProgramManager::CreatePipeline can populate bar_config_map.
+      // enable_bar gate: skip BAR handling when buffering is disabled.
+      if (isBpfAccelerationEnabled && upf_cfg.enable_bar) {
+        if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+          // common-src: req->pfcp_ies.create_bar is singular std::pair.
+          if (req->pfcp_ies.create_bar.first) {
+            const create_bar& cr_bar = req->pfcp_ies.create_bar.second;
+            if (not session->create(cr_bar, cause, offending_ie.offending_ie)) {
+              Logger::upf_app().error(
+                  "Establish: create(bar) failed, cause=%u", cause.cause_value);
+            }
+          }
+        }
+      }
+
+      // ---- Create MARs (BPF only) — §7.5.2.8 Create MAR IE ----------------
+      // pfcp_session::create(mar) populates session->mars so that
+      // SessionProgramManager::CreatePipeline can populate mar_rules_map.
+      // TODO MAR: re-enable when common-src adds a `create_mars` vector to
+      // pfcp_session_establishment_request. The local pfcp::create_mar stub
+      // in simpleswitch/pfcp_mar.hpp keeps the loop body compiling once the
+      // field lands.
+#if 0
+      // enable_mar gate: skip MAR handling when multi-access steering is disabled.
+      if (isBpfAccelerationEnabled && upf_cfg.enable_mar) {
+        if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+          for (auto it : req->pfcp_ies.create_mars) {
+            create_mar& cr_mar = it;
+            if (not session->create(cr_mar, cause, offending_ie.offending_ie)) {
+              Logger::upf_app().error(
+                  "Establish: create(mar) failed, cause=%u", cause.cause_value);
+              break;
+            }
+          }
+        }
+      }
+#endif
+
       if (isBpfAccelerationEnabled) {
-        Logger::upf_app().info("Establish datapath: create(pdr(s) & far(s))");
+        Logger::upf_app().info(
+            "Establish datapath: create(pdr(s), far(s), qer(s), urr(s), "
+            "bar(s), mar(s))");
         call_datapath(
-            req, NULL, NULL, session, session_manager,
+            req, nullptr, nullptr, session, session_manager,
             &SessionManager::EstablishSession);
       }
 
@@ -834,7 +908,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
 
         // Register session
         pfcp::node_id_t node_id = {};
-        req->pfcp_ies.get(node_id);
+        req->pfcp_ies.get(node_id);  // Node ID §8.2.38 — optional in response
         pfcp_associations::get_instance().notify_add_session(node_id, fseid);
       }
     } else {
@@ -845,49 +919,13 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
     cause.cause_value         = CAUSE_VALUE_MANDATORY_IE_MISSING;
     offending_ie.offending_ie = PFCP_IE_F_SEID;
   }
+
   resp->pfcp_ies.set(cause);
   if ((cause.cause_value == CAUSE_VALUE_MANDATORY_IE_MISSING) ||
       (cause.cause_value == CAUSE_VALUE_CONDITIONAL_IE_MISSING)) {
     resp->pfcp_ies.set(offending_ie);
   }
 
-  //   if (Logger::should_log(spdlog::level::debug)) {
-  //     std::cout <<
-  //     "\n+----------------------------------------------------------"
-  //                  "--------"
-  //                  "-------------------------------------------------------------"
-  //                  "--------"
-  //                  "-----------------------------------------------------------+"
-  //               << std::endl;
-  //     std::cout
-  //         << "| PFCP switch Packet Detection Rule list ordered by established
-  //         "
-  //            "sessions: " "  " " |"
-  //         << std::endl;
-  //     std::cout <<
-  //     "+----------------+----+--------+--------+------------+-------"
-  //                  "--------"
-  //                  "------------------------+----------------------+-------------"
-  //                  "---+----"
-  //                  "---------------------------------------------------------+"
-  //               << std::endl;
-  //     std::cout << "|  SEID          |pdr |  far   |predence|   action   | "
-  //                  " create "
-  //                  "outer hdr         tun id| rmv outer hdr  tun id|    UE
-  //                  IPv4  " "   |    " " |"
-  //               << std::endl;
-  //     std::cout <<
-  //     "+----------------+----+--------+--------+------------+-------"
-  //                  "--------"
-  //                  "------------------------+----------------------+-------------"
-  //                  "---+----"
-  //                  "---------------------------------------------------------+"
-  //               << std::endl;
-  //     for (const auto& it : up_seid2pfcp_sessions) {
-  //       std::cout << it.second->to_string() << std::endl;
-  //     }
-  //   }
-  // }
   if (Logger::should_log(spdlog::level::debug)) {
     // Print PDU session rules table
     for (const auto& it : up_seid2pfcp_sessions) {
@@ -897,11 +935,14 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
 }
 
 //------------------------------------------------------------------------------
+// handle_pfcp_session_modification_request — 3GPP TS 29.244 V17.10.0 §7.5.4
+// Processes Remove/Create/Update PDR, FAR, QER, URR, BAR IEs in order.
+
+//------------------------------------------------------------------------------
 void pfcp_switch::handle_pfcp_session_modification_request(
     std::shared_ptr<itti_n4_session_modification_request> sreq,
     itti_n4_session_modification_response* resp) {
   bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
-  // bool isQosEnabled = isBpfAccelerationEnabled && upf_cfg.enable_qos;
 
   itti_n4_session_modification_request* req = sreq.get();
 
@@ -918,19 +959,19 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     pfcp::fseid_t fseid         = {};
     if (req->pfcp_ies.get(fseid)) {
       Logger::pfcp_switch().warn(
-          "TODO check carrefully update fseid in "
+          "TODO check carefully update fseid in "
           "PFCP_SESSION_MODIFICATION_REQUEST");
       session->cp_fseid = fseid;
     }
     resp->seid = session->cp_fseid.seid;
 
+    // ---- Remove PDRs --------------------------------------------------------
     for (auto it : req->pfcp_ies.remove_pdrs) {
       if (isBpfAccelerationEnabled) {
-        Logger::upf_app().info("Modify datapath:remove(pdr)");
+        Logger::upf_app().info("Modify datapath: remove(pdr)");
         call_datapath(
-            NULL, req, NULL, session, session_manager,
-            &SessionManager::SessionManager::
-                ModifySession /*&SessionManager::updateBpfSession*/);
+            nullptr, req, nullptr, session, session_manager,
+            &SessionManager::ModifySession);
       }
 
       remove_pdr& pdr = it;
@@ -946,14 +987,14 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       }
     }
 
+    // ---- Remove FARs --------------------------------------------------------
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.remove_fars) {
         if (isBpfAccelerationEnabled) {
           Logger::upf_app().info("Modify datapath: remove(far)");
           call_datapath(
-              NULL, req, NULL, session, session_manager,
-              &SessionManager::
-                  ModifySession /*&SessionManager::updateBpfSession*/);
+              nullptr, req, nullptr, session, session_manager,
+              &SessionManager::ModifySession);
         }
 
         remove_far& far = it;
@@ -970,18 +1011,15 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       }
     }
 
-    /*
-     *  Add remove_qers
-     */
-    if (isBpfAccelerationEnabled) {
+    // ---- Remove QERs (BPF only) ---------------------------------------------
+    // enable_qos gate: skip QER handling when QoS enforcement is disabled.
+    if (isBpfAccelerationEnabled && upf_cfg.enable_qos) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.remove_qers) {
           Logger::upf_app().info("Modify datapath: remove(qer)");
           call_datapath(
-              NULL, req, NULL, session, session_manager,
-              &SessionManager::
-                  ModifySession /*&SessionManager::updateBpfSession*/);
-
+              nullptr, req, nullptr, session, session_manager,
+              &SessionManager::ModifySession);
           remove_qer& qer = it;
 
           if (not session->remove(qer, cause, offending_ie.offending_ie)) {
@@ -997,6 +1035,72 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       }
     }
 
+    // ---- Remove URRs (BPF only) — §7.5.4.8 Remove URR IE -------------------
+    // Removes URR from session->urrs so the BPF urr_config_map entry is
+    // cleaned up on the next ModifyPipeline call via call_datapath().
+    // enable_urr gate (see establishment path).
+    if (isBpfAccelerationEnabled && upf_cfg.enable_urr) {
+      if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+        for (auto it : req->pfcp_ies.remove_urrs) {
+          remove_urr& urr = it;
+          if (not session->remove(urr, cause, offending_ie.offending_ie)) {
+            if (cause.cause_value ==
+                CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
+              failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_URR;
+              failed_rule.rule_id_value = urr.urr_id.second.urr_id;
+              resp->pfcp_ies.set(failed_rule);
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // ---- Remove BARs (BPF only) — §7.5.4.10 Remove BAR IE ------------------
+    // Removes BAR from session->bars so the BPF bar_config_map entry is
+    // cleaned up on the next ModifyPipeline call via call_datapath().
+    // enable_bar gate: skip BAR handling when buffering is disabled.
+    if (isBpfAccelerationEnabled && upf_cfg.enable_bar) {
+      if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+        // common-src: pfcp_ies.remove_bar is singular std::pair.
+        if (req->pfcp_ies.remove_bar.first) {
+          const remove_bar& bar = req->pfcp_ies.remove_bar.second;
+          if (not session->remove(bar, cause, offending_ie.offending_ie)) {
+            if (cause.cause_value ==
+                CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
+              failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_BAR;
+              failed_rule.rule_id_value = bar.bar_id.second.bar_id;
+              resp->pfcp_ies.set(failed_rule);
+            }
+          }
+        }
+      }
+    }
+
+    // ---- Remove MARs (BPF only) — §7.5.4.15 Remove MAR IE ------------------
+    // TODO MAR: re-enable when common-src adds a `remove_mars` field. The
+    // local pfcp::remove_mar stub keeps the loop body compilable.
+#if 0
+    // enable_mar gate: skip MAR handling when multi-access steering is disabled.
+    if (isBpfAccelerationEnabled && upf_cfg.enable_mar) {
+      if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+        for (auto it : req->pfcp_ies.remove_mars) {
+          remove_mar& mar = it;
+          if (not session->remove(mar, cause, offending_ie.offending_ie)) {
+            if (cause.cause_value ==
+                CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
+              failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_MAR;
+              failed_rule.rule_id_value = mar.mar_id.second.mar_id;
+              resp->pfcp_ies.set(failed_rule);
+              break;
+            }
+          }
+        }
+      }
+    }
+#endif
+
+    // ---- Create FARs --------------------------------------------------------
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.create_fars) {
         create_far& cr_far = it;
@@ -1004,16 +1108,9 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           break;
         }
       }
-
-      if (isBpfAccelerationEnabled) {
-        // Logger::upf_app().info("Modify datapath: add(far)");
-        // call_datapath(
-        //     NULL, req, NULL, session, session_manager,
-        //     &SessionManager::
-        //         ModifySession /*&SessionManager::updateBpfSession*/);
-      }
     }
 
+    // ---- Create PDRs --------------------------------------------------------
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.create_pdrs) {
         create_pdr& cr_pdr = it;
@@ -1050,20 +1147,11 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
         resp->pfcp_ies.set(created_pdr);
       }
-
-      if (isBpfAccelerationEnabled) {
-        // Logger::upf_app().info("Modify datapath: add(pdr)");
-        // call_datapath(
-        //     NULL, req, NULL, session, session_manager,
-        //     &SessionManager::
-        //         ModifySession /*&SessionManager::updateBpfSession*/);
-      }
     }
 
-    /*
-     *  Add create_qers
-     */
-    if (isBpfAccelerationEnabled) {
+    // ---- Create QERs (BPF only) ---------------------------------------------
+    // enable_qos gate: skip QER handling when QoS enforcement is disabled.
+    if (isBpfAccelerationEnabled && upf_cfg.enable_qos) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.create_qers) {
           create_qer& cr_qer = it;
@@ -1071,15 +1159,58 @@ void pfcp_switch::handle_pfcp_session_modification_request(
             break;
           }
         }
-
-        // Logger::upf_app().info("Modify datapath: add(qer)");
-        // call_datapath(
-        //     NULL, req, NULL, session, session_manager,
-        //     &SessionManager::
-        //         ModifySession /*&SessionManager::updateBpfSession*/);
       }
     }
 
+    // ---- Create URRs (BPF only) — §7.5.4.4 Create URR IE -------------------
+    // Populates session->urrs so that SessionProgramManager::ModifyPipeline
+    // can write urr_config_map entries for the new URRs.
+    // enable_urr gate (see establishment path).
+    if (isBpfAccelerationEnabled && upf_cfg.enable_urr) {
+      if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+        for (auto it : req->pfcp_ies.create_urrs) {
+          create_urr& cr_urr = it;
+          if (not session->create(cr_urr, cause, offending_ie.offending_ie)) {
+            break;
+          }
+        }
+      }
+    }
+
+    // ---- Create BARs (BPF only) — §7.5.4.6 Create BAR IE -------------------
+    // Populates session->bars so that SessionProgramManager::ModifyPipeline
+    // can write bar_config_map entries for the new BARs.
+    // enable_bar gate: skip BAR handling when buffering is disabled.
+    if (isBpfAccelerationEnabled && upf_cfg.enable_bar) {
+      if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+        // common-src: pfcp_ies.create_bar is singular std::pair.
+        if (req->pfcp_ies.create_bar.first) {
+          const create_bar& cr_bar = req->pfcp_ies.create_bar.second;
+          if (not session->create(cr_bar, cause, offending_ie.offending_ie)) {
+            // create() failed; cause already set inside.
+          }
+        }
+      }
+    }
+
+    // ---- Create MARs (BPF only) — §7.5.2.8 Create MAR IE -------------------
+    // TODO MAR: re-enable when common-src adds a `create_mars` field. The
+    // local pfcp::create_mar stub keeps the loop body compilable.
+#if 0
+    // enable_mar gate: skip MAR handling when multi-access steering is disabled.
+    if (isBpfAccelerationEnabled && upf_cfg.enable_mar) {
+      if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+        for (auto it : req->pfcp_ies.create_mars) {
+          create_mar& cr_mar = it;
+          if (not session->create(cr_mar, cause, offending_ie.offending_ie)) {
+            break;
+          }
+        }
+      }
+    }
+#endif
+
+    // ---- Update PDRs / FARs / QERs ------------------------------------------
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.update_pdrs) {
         update_pdr& pdr     = it;
@@ -1091,15 +1222,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           resp->pfcp_ies.set(failed_rule);
         }
       }
-
-      if (isBpfAccelerationEnabled) {
-        // Logger::upf_app().info("Modify datapath: update(pdr)");
-        // call_datapath(
-        //     NULL, req, NULL, session, session_manager,
-        //     &SessionManager::
-        //         ModifySession /*&SessionManager::updateBpfSession*/);
-      }
-
       for (auto it : req->pfcp_ies.update_fars) {
         update_far& far     = it;
         uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
@@ -1111,87 +1233,93 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           resp->pfcp_ies.set(failed_rule);
         }
       }
-
-      if (isBpfAccelerationEnabled) {
-        // Logger::upf_app().info("Modify datapath: update(far)");
-        // call_datapath(
-        //     NULL, req, NULL, session, session_manager,
-        //     &SessionManager::
-        //         ModifySession /*&SessionManager::updateBpfSession*/);
-      }
-
-      /*
-       *  Add update_qers
-       */
-      if (isBpfAccelerationEnabled) {
+      // enable_qos gate: skip QER handling when QoS enforcement is disabled.
+      if (isBpfAccelerationEnabled && upf_cfg.enable_qos) {
         for (auto it : req->pfcp_ies.update_qers) {
           update_qer& qer     = it;
           uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
           if (not session->update(qer, cause_value)) {
             failed_rule_id_t failed_rule = {};
             failed_rule.rule_id_type     = FAILED_RULE_ID_TYPE_QER;
-            failed_rule.rule_id_value    = qer.qer_id.second.qer_id;
+            // update_qer::qer_id is std::pair<bool, qer_id_t> in common-src.
+            failed_rule.rule_id_value = qer.qer_id.second.qer_id;
             resp->pfcp_ies.set(failed_rule);
           }
         }
-        // Logger::upf_app().info("Modify datapath: update(qer)");
-        // call_datapath(
-        //     NULL, req, NULL, session, session_manager,
-        //     &SessionManager::
-        //         ModifySession /*&SessionManager::updateBpfSession*/);
       }
+
+      // ---- Update URRs (BPF only) — §7.5.4.11 Update URR IE ----------------
+      // Updates reporting triggers, thresholds, and quotas in session->urrs.
+      // urr_config_map is repopulated by ModifyPipeline;
+      // urr_volume_counters_map counters are preserved (BPF_NOEXIST semantics
+      // in PopulateUrrConfigMap).
+      // enable_urr gate (see establishment path).
+      if (isBpfAccelerationEnabled && upf_cfg.enable_urr) {
+        for (auto it : req->pfcp_ies.update_urrs) {
+          update_urr& urr     = it;
+          uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+          if (not session->update(urr, cause_value)) {
+            failed_rule_id_t failed_rule = {};
+            failed_rule.rule_id_type     = FAILED_RULE_ID_TYPE_URR;
+            failed_rule.rule_id_value    = urr.urr_id.second.urr_id;
+            resp->pfcp_ies.set(failed_rule);
+          }
+        }
+      }
+
+      // ---- Update BARs (BPF only) — §7.5.4.13 Update BAR IE ----------------
+      // Updates DL notification delay and suggested buffering packet count.
+      // bar_state_map (DDN tracking) is preserved by ModifyPipeline.
+      // enable_bar gate: skip BAR handling when buffering is disabled.
+      if (isBpfAccelerationEnabled && upf_cfg.enable_bar) {
+        // common-src: pfcp_ies.update_bar is singular std::pair.
+        if (req->pfcp_ies.update_bar.first) {
+          const update_bar_within_pfcp_session_modification_request& bar =
+              req->pfcp_ies.update_bar.second;
+          uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+          if (not session->update(bar, cause_value)) {
+            failed_rule_id_t failed_rule = {};
+            failed_rule.rule_id_type     = FAILED_RULE_ID_TYPE_BAR;
+            failed_rule.rule_id_value    = bar.bar_id.second.bar_id;
+            resp->pfcp_ies.set(failed_rule);
+          }
+        }
+      }
+
+      // ---- Update MARs (BPF only) — §7.5.4.16 Update MAR IE ----------------
+      // TODO MAR: re-enable when common-src adds an `update_mars` field. The
+      // local pfcp::update_mar stub keeps the loop body compilable.
+#if 0
+      // enable_mar gate: skip MAR handling when multi-access steering is disabled.
+      if (isBpfAccelerationEnabled && upf_cfg.enable_mar) {
+        for (auto it : req->pfcp_ies.update_mars) {
+          update_mar& mar     = it;
+          uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+          if (not session->update(mar, cause_value)) {
+            failed_rule_id_t failed_rule = {};
+            failed_rule.rule_id_type     = FAILED_RULE_ID_TYPE_MAR;
+            failed_rule.rule_id_value    = mar.mar_id.second.mar_id;
+            resp->pfcp_ies.set(failed_rule);
+          }
+        }
+      }
+#endif
     }
 
     if (isBpfAccelerationEnabled) {
       Logger::upf_app().info("Modify datapath");
       call_datapath(
-          NULL, req, NULL, session, session_manager,
-          &SessionManager::ModifySession /*&SessionManager::updateBpfSession*/);
+          nullptr, req, nullptr, session, session_manager,
+          &SessionManager::ModifySession);
     }
   }
+
   resp->pfcp_ies.set(cause);
   if ((cause.cause_value == CAUSE_VALUE_MANDATORY_IE_MISSING) ||
       (cause.cause_value == CAUSE_VALUE_CONDITIONAL_IE_MISSING)) {
     resp->pfcp_ies.set(offending_ie);
   }
 
-  //   if (Logger::should_log(spdlog::level::debug)) {
-  //     std::cout <<
-  //     "\n+----------------------------------------------------------"
-  //                  "--------"
-  //                  "-------------------------------------------------------------"
-  //                  "--------"
-  //                  "-----------------------------------------------------------+"
-  //               << std::endl;
-  //     std::cout
-  //         << "| PFCP switch Packet Detection Rule list ordered by established
-  //         "
-  //            "sessions: " "  " " |"
-  //         << std::endl;
-  //     std::cout <<
-  //     "+----------------+----+--------+--------+------------+-------"
-  //                  "--------"
-  //                  "------------------------+----------------------+-------------"
-  //                  "---+----"
-  //                  "---------------------------------------------------------+"
-  //               << std::endl;
-  //     std::cout << "|  SEID          |pdr |  far   |predence|   action   | "
-  //                  " create "
-  //                  "outer hdr         tun id| rmv outer hdr  tun id|    UE
-  //                  IPv4  " "   |    " " |"
-  //               << std::endl;
-  //     std::cout <<
-  //     "+----------------+----+--------+--------+------------+-------"
-  //                  "--------"
-  //                  "------------------------+----------------------+-------------"
-  //                  "---+----"
-  //                  "---------------------------------------------------------+"
-  //               << std::endl;
-  //     for (const auto& it : up_seid2pfcp_sessions) {
-  //       std::cout << it.second->to_string() << std::endl;
-  //     }
-  //   }
-  // }
   if (Logger::should_log(spdlog::level::debug)) {
     // Print PDU session rules table
     for (const auto& it : up_seid2pfcp_sessions) {
@@ -1201,18 +1329,20 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 }
 
 //------------------------------------------------------------------------------
+// handle_pfcp_session_deletion_request — 3GPP TS 29.244 V17.10.0 §7.5.6
+// Invokes the BPF datapath removal if enabled, then removes the session from
+// both hash maps and clears all tun/teid registrations via cleanup().
+
+//------------------------------------------------------------------------------
 void pfcp_switch::handle_pfcp_session_deletion_request(
     std::shared_ptr<itti_n4_session_deletion_request> sreq,
     itti_n4_session_deletion_response* resp) {
-  bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
-
+  bool isBpfAccelerationEnabled         = upf_cfg.enable_bpf_datapath;
   itti_n4_session_deletion_request* req = sreq.get();
 
   std::shared_ptr<pfcp::pfcp_session> s = {};
   pfcp::fseid_t fseid                   = {};
   pfcp::cause_t cause = {.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED};
-  pfcp::offending_ie_t offending_ie = {};
-  failed_rule_id_t failed_rule      = {};
 
   if (not get_pfcp_session_by_up_seid(req->seid, s)) {
     cause.cause_value = CAUSE_VALUE_SESSION_CONTEXT_NOT_FOUND;
@@ -1223,52 +1353,15 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
     if (isBpfAccelerationEnabled) {
       Logger::upf_app().info("Delete datapath");
       call_datapath(
-          NULL, NULL, req, session, session_manager,
+          nullptr, nullptr, req, session, session_manager,
           &SessionManager::RemoveSession);
     }
 
     remove_pfcp_session(s);
   }
+
   pfcp_associations::get_instance().notify_del_session(fseid);
   resp->pfcp_ies.set(cause);
-
-  //   if (Logger::should_log(spdlog::level::debug)) {
-  //     std::cout <<
-  //     "\n+----------------------------------------------------------"
-  //                  "--------"
-  //                  "-------------------------------------------------------------"
-  //                  "--------"
-  //                  "-----------------------------------------------------------+"
-  //               << std::endl;
-  //     std::cout
-  //         << "| PFCP switch Packet Detection Rule list ordered by established
-  //         "
-  //            "sessions: " "  " " |"
-  //         << std::endl;
-  //     std::cout <<
-  //     "+----------------+----+--------+--------+------------+-------"
-  //                  "--------"
-  //                  "------------------------+----------------------+-------------"
-  //                  "---+----"
-  //                  "---------------------------------------------------------+"
-  //               << std::endl;
-  //     std::cout << "|  SEID          |pdr |  far   |predence|   action   | "
-  //                  " create "
-  //                  "outer hdr         tun id| rmv outer hdr  tun id|    UE
-  //                  IPv4  " "   |    " " |"
-  //               << std::endl;
-  //     std::cout <<
-  //     "+----------------+----+--------+--------+------------+-------"
-  //                  "--------"
-  //                  "------------------------+----------------------+-------------"
-  //                  "---+----"
-  //                  "---------------------------------------------------------+"
-  //               << std::endl;
-  //     for (const auto& it : up_seid2pfcp_sessions) {
-  //       std::cout << it.second->to_string() << std::endl;
-  //     }
-  //   }
-  // }
 
   if (Logger::should_log(spdlog::level::debug)) {
     // Print PDU session rules table
@@ -1277,6 +1370,15 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
     }
   }
 }
+
+// =============================================================================
+// Per-packet data-plane look-up (hot path)
+// =============================================================================
+
+//------------------------------------------------------------------------------
+// pfcp_session_look_up_pack_in_access (IPv4) — N3 uplink path.
+// Looks up the TEID in ul_n3_teid2pfcp_pdr, iterates PDRs in precedence order,
+// runs PDI matching, then calls pfcp_far::apply_forwarding_rules().
 
 //------------------------------------------------------------------------------
 void pfcp_switch::pfcp_session_look_up_pack_in_access(
@@ -1334,7 +1436,7 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
       upf_n3_inst->report_error_indication(r_endpoint, tunnel_id);
     }
   } else {
-    // Do not check PFCP rules for all UL data packet
+    // bypass_ul_pfcp_rules: skip PDR look-up, forward directly to core
     if (no_internal_loop(iph, num_bytes)) {
       pfcp_switch_inst->send_to_core(
           reinterpret_cast<char* const>(iph), num_bytes);
@@ -1355,17 +1457,26 @@ bool pfcp_switch::no_internal_loop(
 }
 
 //------------------------------------------------------------------------------
+// pfcp_session_look_up_pack_in_access (IPv6) — TODO
+
+//------------------------------------------------------------------------------
 void pfcp_switch::pfcp_session_look_up_pack_in_access(
     struct ipv6hdr* const ip6h, const std::size_t num_bytes,
     const endpoint& r_endpoint, const uint32_t tunnel_id) {
-  // TODO
+  // TODO: IPv6 uplink look-up
 }
+
+//------------------------------------------------------------------------------
+// pfcp_session_look_up_pack_in_core — N6 downlink path.
+// Looks up the destination UE IP in ue_ipv4_hbo2pfcp_pdr, iterates PDRs in
+// precedence order, then calls pfcp_far::apply_forwarding_rules().
 
 //------------------------------------------------------------------------------
 void pfcp_switch::pfcp_session_look_up_pack_in_core(
     const char* buffer, const std::size_t num_bytes) {
   struct iphdr* iph = (struct iphdr*) buffer;
   std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs;
+
   if (iph->version == 4) {
     uint32_t ue_ip    = be32toh(iph->daddr);
     bool is_pdr_ue_ip = get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs);
@@ -1377,9 +1488,7 @@ void pfcp_switch::pfcp_session_look_up_pack_in_core(
     if (is_pdr_ue_ip) {
       bool nocp = false;
       bool buff = false;
-      for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it =
-               pdrs->begin();
-           it < pdrs->end(); ++it) {
+      for (auto it = pdrs->begin(); it < pdrs->end(); ++it) {
         if ((*it)->look_up_pack_in_core(iph, num_bytes)) {
           std::shared_ptr<pfcp::pfcp_session> ssession = {};
           uint64_t lseid                               = 0;
@@ -1412,7 +1521,7 @@ void pfcp_switch::pfcp_session_look_up_pack_in_core(
           "pfcp_session_look_up_pack_in_core UE IP %8x not found", ue_ip);
     }
   } else if (iph->version == 6) {
-    // TODO;
+    // TODO: IPv6 downlink look-up
   } else {
     Logger::pfcp_switch().info("Unknown IP version %d packet", iph->version);
   }

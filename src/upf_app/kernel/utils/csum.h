@@ -191,60 +191,6 @@ static int pcn_l4_csum_replace(
   return 0;
 }
 
-// __attribute__((__always_inline__))
-// static inline void ipv4_l4_csum(void *data_start, __u32 data_size, __u64
-// *csum, struct iphdr *iph) {
-//   unsigned short tcpLen = bpf_ntohs(iph->tot_len) - (iph->ihl<<2);
-//   __u32 tmp = 0;
-//   *csum = bpf_csum_diff(0, 0, &iph->saddr, sizeof(__be32), *csum);
-//   *csum = bpf_csum_diff(0, 0, &iph->daddr, sizeof(__be32), *csum);
-//   // __builtin_bswap32 equals to htonl()
-//   tmp = __builtin_bswap32((__u32)(iph->protocol));
-//   *csum = bpf_csum_diff(0, 0, &tmp, sizeof(__u32), *csum);
-//   // tmp = __builtin_bswap32((__u32)(data_size));
-//   tmp = __builtin_bswap32((__u32)(tcpLen));
-//   *csum = bpf_csum_diff(0, 0, &tmp, sizeof(__u32), *csum);
-//   *csum = bpf_csum_diff(0, 0, data_start, tmp, *csum);
-//   *csum = csum_fold_helper(*csum);
-// }
-
-// /* set tcp checksum: given IP header and tcp segment */
-// void compute_tcp_checksum(struct iphdr *pIph, unsigned short *ipPayload) {
-//     register unsigned long sum = 0;
-//     unsigned short tcpLen = ntohs(pIph->tot_len) - (pIph->ihl<<2);
-//     struct tcphdr *tcphdrp = (struct tcphdr*)(ipPayload);
-
-//     //add the pseudo header
-//     //the source ip
-//     sum += (pIph->saddr>>16)&0xFFFF;
-//     sum += (pIph->saddr)&0xFFFF;
-//     //the dest ip
-//     sum += (pIph->daddr>>16)&0xFFFF;
-//     sum += (pIph->daddr)&0xFFFF;
-//     //protocol and reserved: 6
-//     sum += htons(IPPROTO_TCP);
-//     //the length
-//     sum += htons(tcpLen);
-//     //add the IP payload
-//     //initialize checksum to 0
-//     tcphdrp->check = 0;
-//     while (tcpLen > 1) {
-//         sum += * ipPayload++;
-//         tcpLen -= 2;
-//     }
-//     //if any bytes left, pad the bytes and add
-//     if(tcpLen > 0) {
-//         //printf("+++++++++++padding, %dn", tcpLen);
-//         sum += ((*ipPayload)&htons(0xFF00));
-//     }
-//       //Fold 32-bit sum to 16 bits: add carrier to result
-//       while (sum>>16) {
-//           sum = (sum & 0xffff) + (sum >> 16);
-//       }
-//       sum = ~sum;
-//     //set computation result
-//     tcphdrp->check = (unsigned short)sum;
-// }
-
 /* end checksum related stuff */
+
 #endif  // __CSUM_H__

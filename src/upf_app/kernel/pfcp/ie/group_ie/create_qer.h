@@ -2,12 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Create QER (QoS Enforcement Rule)
- * Reference: 3GPP TS 29.244 Section 7.5.2.5
- * Table 7.5.2.5-1: Create QER IE within PFCP Session Establishment Request
- */
-
 #ifndef _PFCP_CREATE_QER_H
 #define _PFCP_CREATE_QER_H
 

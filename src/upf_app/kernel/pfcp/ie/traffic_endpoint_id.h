@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Traffic Endpoint ID
- * Reference: 3GPP TS 29.244 Section 8.2.92
- */
-
 #ifndef _PFCP_TRAFFIC_ENDPOINT_ID_H
 #define _PFCP_TRAFFIC_ENDPOINT_ID_H
 

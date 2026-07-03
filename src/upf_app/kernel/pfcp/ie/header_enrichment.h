@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Header Enrichment
- * Reference: 3GPP TS 29.244 Section 8.2.67
- */
-
 #ifndef _PFCP_HEADER_ENRICHMENT_H
 #define _PFCP_HEADER_ENRICHMENT_H
 

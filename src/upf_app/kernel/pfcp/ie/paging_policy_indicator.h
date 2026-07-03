@@ -2,10 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Paging Policy Indicator (PPI)
- * Reference: 3GPP TS 29.244 Section 8.2.116
- */
 #ifndef _PFCP_PAGING_POLICY_INDICATOR_H
 #define _PFCP_PAGING_POLICY_INDICATOR_H
 

@@ -2,32 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file bpf_utils.hpp
- * @brief Utility functions for BPF/eBPF operations
- *
- * This header provides utility functions for working with BPF/eBPF programs
- * and maps. Includes helpers for:
- * - Map configuration and sizing
- * - Program loading and verification
- * - Error handling and logging
- *
- * All functions are in the oai::utils::bpf namespace to avoid conflicts
- * with system libraries.
- *
- * Usage:
- * @code
- * using namespace oai::utils::bpf;
- *
- * // Configure map size before loading
- * if (!ConfigureMapMaxEntries(skel->maps.session_map, "session_map", 10000)) {
- *   throw std::runtime_error("Failed to configure map");
- * }
- * @endcode
- *
- * @note This implementation follows Google C++ Style Guide
- */
-
 #ifndef BPF_UTILS_HPP_
 #define BPF_UTILS_HPP_
 

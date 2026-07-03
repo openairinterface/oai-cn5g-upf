@@ -24,10 +24,10 @@ ARG BPF_DEBUG=false
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade --yes && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes \
-      cmake \
-      psmisc \
-      git \
-  && rm -rf /var/lib/apt/lists/*
+    cmake \
+    psmisc \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
 # Some GIT configuration commands quite useful
 RUN git config --global https.postBuffer 123289600 && \
@@ -54,15 +54,15 @@ COPY . /openair-upf
 WORKDIR /openair-upf/build/scripts
 ARG BUILD_ARGS=""
 RUN  if [ "$ENABLE_LTTNG" = "true" ]; then apt-get update && \
-        DEBIAN_FRONTEND=noninteractive apt-get install --yes \
-        libstdc++-12-dev \
-        lttng-modules-dkms \
-        liblttng-ust-dev \
-        lttng-tools && \
-        ldconfig && \
-        BUILD_ARGS="--lttng"; \
+    DEBIAN_FRONTEND=noninteractive apt-get install --yes \
+    libstdc++-12-dev \
+    lttng-modules-dkms \
+    liblttng-ust-dev \
+    lttng-tools && \
+    ldconfig && \
+    BUILD_ARGS="--lttng"; \
     else \
-        ldconfig; \
+    ldconfig; \
     fi && \
     if [ "$BPF_DEBUG" = "true" ]; then BUILD_ARGS="$BUILD_ARGS --bpf-debug"; fi && \
     ./build_upf --clean --Verbose --build-type Release --jobs ${BUILD_ARGS}; \
@@ -81,38 +81,38 @@ ARG ENABLE_LTTNG=false
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade --yes && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes \
-      tzdata \
-      psmisc \
-      net-tools \
-      iproute2 \
-      ethtool \
-      arping \
-      libllvm14 \
-      libnl-3-200 \
-      libnl-route-3-200 \
-      sudo \
-      iptables \
-      netbase \
-# Ubuntu 20 --> libasan5
-# Ubuntu 22 --> libasan6
-#      libasan? \
-      libgssapi-krb5-2 \
-# Ubuntu 20 --> libldap-2.4-2
-# Ubuntu 22 --> libldap-2.5-0
-      libldap-2.?-? \
-      libgoogle-glog0v5 \
-      libdouble-conversion3 \
-      libconfig++9v5 \
-      librtmp1 \
-      libpsl5 \
-      libnghttp2-14 \
-      libcurl?-gnutls \
-# Ubuntu 20 --> boost71
-# Ubuntu 22 --> boost74
-      libboost-thread1.7?.0 \
-# lttng
-  && if [ "$ENABLE_LTTNG" = "true" ]; then DEBIAN_FRONTEND=noninteractive apt-get install --yes liblttng-ust-dev; fi \
-  && rm -rf /var/lib/apt/lists/*
+    tzdata \
+    psmisc \
+    net-tools \
+    iproute2 \
+    ethtool \
+    arping \
+    libllvm14 \
+    libnl-3-200 \
+    libnl-route-3-200 \
+    sudo \
+    iptables \
+    netbase \
+    # Ubuntu 20 --> libasan5
+    # Ubuntu 22 --> libasan6
+    #      libasan? \
+    libgssapi-krb5-2 \
+    # Ubuntu 20 --> libldap-2.4-2
+    # Ubuntu 22 --> libldap-2.5-0
+    libldap-2.?-? \
+    libgoogle-glog0v5 \
+    libdouble-conversion3 \
+    libconfig++9v5 \
+    librtmp1 \
+    libpsl5 \
+    libnghttp2-14 \
+    libcurl?-gnutls \
+    # Ubuntu 20 --> boost71
+    # Ubuntu 22 --> boost74
+    libboost-thread1.7?.0 \
+    # lttng
+    && if [ "$ENABLE_LTTNG" = "true" ]; then DEBIAN_FRONTEND=noninteractive apt-get install --yes liblttng-ust-dev; fi \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copying executable and generated libraries
 WORKDIR /openair-upf/bin
@@ -129,8 +129,8 @@ COPY --from=oai-upf-builder \
     /usr/local/lib/libfmt.so \
     /usr/local/lib/libyaml-cpp.so.0.? \
     /usr/local/lib/libcpr.so.1 \    
-# Ubuntu 20 --> libbfd-2.34
-# Ubuntu 22 --> libbfd-2.38
+    # Ubuntu 20 --> libbfd-2.34
+    # Ubuntu 22 --> libbfd-2.38
     /usr/lib/?-linux-gnu/libbfd-2.3?-system.so \
     /usr/lib/?-linux-gnu/libopcodes-2.3?-system.so \
     /openair-upf/build/ext/libbpf/src/libbpf.so.1 \
@@ -157,18 +157,18 @@ LABEL support-nrf-fdqn="true"
 ARG GIT_COMMIT
 
 LABEL org.opencontainers.image.authors="OpenAirInterface <contact@openairinterface.org>" \
-      org.opencontainers.image.vendor="OpenAirInterface Software Alliance" \
-      org.opencontainers.image.licenses="Collaborative Standards Software License v1.0" \
-      org.opencontainers.image.title="OAI UPF" \
-      org.opencontainers.image.description="OpenAirInterface User Plane Function" \
-      org.opencontainers.image.revision="commit:${GIT_COMMIT}"
+    org.opencontainers.image.vendor="OpenAirInterface Software Alliance" \
+    org.opencontainers.image.licenses="Collaborative Standards Software License v1.0" \
+    org.opencontainers.image.title="OAI UPF" \
+    org.opencontainers.image.description="OpenAirInterface User Plane Function" \
+    org.opencontainers.image.revision="commit:${GIT_COMMIT}"
 
 # expose ports
 EXPOSE 2152/udp 8805/udp 5342 5343 5344
 # healthcheck
 HEALTHCHECK --interval=10s \
-            --timeout=15s \
-            --retries=6 \
+    --timeout=15s \
+    --retries=6 \
     CMD /openair-upf/bin/healthcheck.sh
 
 CMD ["/openair-upf/bin/oai_upf", "-c", "/openair-upf/etc/config.yaml", "-o"]

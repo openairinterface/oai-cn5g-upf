@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file BPFMaps.cpp
- * @brief Implementation of BPF maps container
- */
-
 #include "BPFMaps.h"
 #include <bpf/libbpf.h>
 #include <cassert>
@@ -24,8 +19,8 @@ BPFMaps::BPFMaps(bpf_object_skeleton* bpf_object_skeleton)
 
   // Check if there are any maps
   if (bpf_object_skeleton_->map_cnt > 0) {
-    Logger::upf_app().info(
-        "Initializing BPFMaps with %u maps", bpf_object_skeleton_->map_cnt);
+    // Logger::upf_app().info(
+    //     "Initializing BPFMaps with %u maps", bpf_object_skeleton_->map_cnt);
 
     // Create a BPFMap wrapper for each map in the skeleton
     for (unsigned int i = 0; i < bpf_object_skeleton_->map_cnt; i++) {

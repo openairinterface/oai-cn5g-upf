@@ -2,10 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Outer Header Removal
- * Reference: 3GPP TS 29.244 Section 8.2.64
- */
 #ifndef _PFCP_OUTER_HEADER_REMOVAL_H
 #define _PFCP_OUTER_HEADER_REMOVAL_H
 

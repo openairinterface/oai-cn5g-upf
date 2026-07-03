@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef COMPILER_HINTS_H
 #define COMPILER_HINTS_H
 

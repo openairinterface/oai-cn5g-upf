@@ -2,24 +2,20 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file qer_tc_user.cpp
- * @brief Implementation of QER TC-BPF program
- */
-
 #include "qer_tc_user.h"
 #include <bpf/bpf.h>
 #include <stdexcept>
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
-#include "interfaces.h"
+#include "interfaces_types.h"
 #include "logger.hpp"
 #include "helpers/GetNicInformation.hpp"
 #include "helpers/CmdRunner.hpp"
 #include "utils/net_utils.hpp"
 #include "utils/bpf_utils.hpp"
 #include "UserPlaneComponent.h"
-#include "sdf_filter.h"
+//#include "sdf_filter.h"
+#include "sdf_types.h"
 #include "startup_banner.hpp"
 #include "number_utils.hpp"
 
@@ -28,59 +24,58 @@ using namespace oai::utils::net;
 using namespace oai::utils;
 
 //------------------------------------------------------------------------------
-void QERProgram::ConfigureQerMaps(
-    struct qer_tc_kern_c* skel, const upf_config& upf_cfg) {
+void QERTCProgram::ConfigureQerMaps(struct qer_tc_kern_c* skel) {
   if (!skel) {
     Logger::upf_app().error("Null skeleton in ConfigureQerMaps");
     return;
   }
 
+  const uint32_t max_ifaces   = upf::GetMaxUpfInterfaces();
+  const uint32_t max_redirect = upf::GetMaxUpfRedirectInterfaces();
+
   int num_ifaces = CountAvailableInterfaces();
-  if (upf_cfg.max_upf_interfaces > static_cast<uint32_t>(num_ifaces)) {
+  if (max_ifaces > static_cast<uint32_t>(num_ifaces)) {
     Logger::upf_app().warn(
         "Configured max_upf_interfaces (%u) exceeds available system "
         "interfaces (%d). Clamping to %d.",
-        upf_cfg.max_upf_interfaces, num_ifaces, num_ifaces);
+        max_ifaces, num_ifaces, num_ifaces);
   }
 
-  if (upf_cfg.max_upf_redirect_interfaces > upf_cfg.max_upf_interfaces) {
+  if (max_redirect > max_ifaces) {
     Logger::upf_app().error(
         "Invalid config: max_upf_redirect_interfaces (%u) cannot exceed "
         "max_upf_interfaces (%u).",
-        upf_cfg.max_upf_redirect_interfaces, upf_cfg.max_upf_interfaces);
+        max_redirect, max_ifaces);
     throw std::runtime_error(
         "Invalid UPF configuration (redirect > interfaces)");
   }
 
-  // Compute derived limits
-  uint32_t max_egress_interfaces = upf_cfg.max_upf_redirect_interfaces;
-
   bool ok = ConfigureMapMaxEntries(
-      skel->maps.egress_ifindex, "egress_ifindex", max_egress_interfaces);
+      skel->maps.egress_ifindex, "egress_ifindex", max_redirect);
 
   if (!ok) {
-    Logger::upf_app().error(
-        "egress_ifindex BPF map configuration failed for QER Program");
+    Logger::upf_app().error("egress_ifindex BPF map configuration failed");
     throw std::runtime_error("QER Program map configuration failed");
   }
 
-  // Configure .rodata constants (if available)
-  if (skel->rodata) {
-    skel->rodata->MAX_EGRESS_INTERFACES = max_egress_interfaces;
-  }
+  /* qer_tc_kern.c does not declare MAX_UPF_INTERFACES /
+   * MAX_UPF_REDIRECT_INTERFACES in its .rodata (those came from
+   * interfaces_maps.h, which qer_tc_kern.c no longer includes -- it does not
+   * use any of upf_interface_map / arp_table_map / redirect_interfaces_map).
+   * The egress_ifindex map is sized above via ConfigureMapMaxEntries. */
 }
 
 //------------------------------------------------------------------------------
-QERProgram::QERProgram(const upf_config& upf_cfg)
+QERTCProgram::QERTCProgram()
     : BPFProgram(),
       default_class_handle_(65535),
       default_class_rate_(1024),
       default_class_ceil_(2048),
       r2q_root_(1000) {
-  Logger::upf_app().info("Initializing QER TC BPF program...");
+  Logger::upf_app().debug("Initializing QER TC BPF program ...");
 
-  // Define the 'open' lambda for the QER skeleton
-  auto open_fn = [&upf_cfg, this]() -> qer_tc_kern_c* {
+  // open lambda: configuration sourced from upf::g_net_cfg
+  auto open_fn = [this]() -> qer_tc_kern_c* {
     struct qer_tc_kern_c* skel = qer_tc_kern_c__open();
     if (!skel) {
       Logger::upf_app().error("Failed to open QER TC BPF skeleton");
@@ -88,23 +83,23 @@ QERProgram::QERProgram(const upf_config& upf_cfg)
     }
 
     // Configure map sizes and .rodata constants
-    this->ConfigureQerMaps(skel, upf_cfg);
+    this->ConfigureQerMaps(skel);
     return skel;
   };
 
   // Initialize lifecycle management
-  lifecycle_ = std::make_shared<QERProgramLifeCycle>(
+  lifecycle_ = std::make_shared<QerTCProgramLifeCycle>(
       open_fn,
       /* load */ qer_tc_kern_c__load,
       /* attach */ qer_tc_kern_c__attach,
-      /* destroy */ qer_tc_kern_c__destroy);
+      /* destroy */ qer_tc_kern_c__destroy, "QERTCProgram");
 }
 
 //------------------------------------------------------------------------------
-QERProgram::~QERProgram() {}
+QERTCProgram::~QERTCProgram() {}
 
 //------------------------------------------------------------------------------
-bool QERProgram::NoHtbRootQdisc(const std::string& interface) {
+bool QERTCProgram::NoHtbRootQdisc(const std::string& interface) {
   std::string cmd = fmt::format(
       "tc qdisc show dev {} | awk '/htb/ {{found=1; print 1}} END {{if "
       "(!found) print 0}}'",
@@ -114,7 +109,7 @@ bool QERProgram::NoHtbRootQdisc(const std::string& interface) {
 }
 
 //------------------------------------------------------------------------------
-bool QERProgram::NoHtbDefaultClass(const std::string& interface) {
+bool QERTCProgram::NoHtbDefaultClass(const std::string& interface) {
   std::string cmd = fmt::format(
       "tc qdisc show dev {} | awk '/htb/ && /default/ {{found=1; print 1}} "
       "END {{if (!found) print 0}}'",
@@ -124,7 +119,7 @@ bool QERProgram::NoHtbDefaultClass(const std::string& interface) {
 }
 
 //------------------------------------------------------------------------------
-std::shared_ptr<pfcp::pfcp_qer> QERProgram::RetrieveDefaultQerWithDefaultQfi(
+std::shared_ptr<pfcp::pfcp_qer> QERTCProgram::RetrieveDefaultQerWithDefaultQfi(
     std::vector<std::shared_ptr<pfcp::pfcp_qer>> qers) {
   for (const auto& qer : qers) {
     if (!qer->guaranteed_bitrate.first && !qer->maximum_bitrate.first) {
@@ -135,7 +130,7 @@ std::shared_ptr<pfcp::pfcp_qer> QERProgram::RetrieveDefaultQerWithDefaultQfi(
 }
 
 //------------------------------------------------------------------------------
-void QERProgram::BuildPdrMap(
+void QERTCProgram::BuildPdrMap(
     const std::vector<std::shared_ptr<pfcp::pfcp_pdr>>& pdrs) {
   pdr_map_.clear();
   for (const auto& pdr : pdrs) {
@@ -146,14 +141,14 @@ void QERProgram::BuildPdrMap(
 }
 
 //------------------------------------------------------------------------------
-std::shared_ptr<pfcp::pfcp_pdr> QERProgram::GetPdrByQerId(
+std::shared_ptr<pfcp::pfcp_pdr> QERTCProgram::GetPdrByQerId(
     uint32_t qer_id) const {
   auto it = pdr_map_.find(qer_id);
   return (it != pdr_map_.end()) ? it->second : nullptr;
 }
 
 //------------------------------------------------------------------------------
-bool QERProgram::NoTcFilterBpf(const std::string& interface) {
+bool QERTCProgram::NoTcFilterBpf(const std::string& interface) {
   std::string cmd = fmt::format(
       "tc filter show dev {} | awk '/bpf/ {{found=1; print 1}} END {{if "
       "(!found) print 0}}'",
@@ -163,13 +158,11 @@ bool QERProgram::NoTcFilterBpf(const std::string& interface) {
 }
 
 //------------------------------------------------------------------------------
-void QERProgram::Setup(
+void QERTCProgram::Setup(
     uint64_t seid, std::vector<std::shared_ptr<pfcp::pfcp_qer>> qers,
     std::vector<std::shared_ptr<pfcp::pfcp_pdr>> pdrs) {
-  const std::string udp_iface =
-      UserPlaneComponent::GetInstance().GetUDPInterface();
-  const std::string gtp_iface =
-      UserPlaneComponent::GetInstance().GetGTPInterface();
+  const std::string udp_iface = upf::GetN6Iface();
+  const std::string gtp_iface = upf::GetN3Iface();
 
   const uint32_t default_rate = NicInformationGetter::retrieveRate(gtp_iface);
   const uint32_t max_rate     = default_rate;
@@ -447,27 +440,27 @@ void QERProgram::Setup(
 }
 
 //------------------------------------------------------------------------------
-std::shared_ptr<BPFMaps> QERProgram::GetMaps() {
+std::shared_ptr<BPFMaps> QERTCProgram::GetMaps() {
   return maps_;
 }
 
 //------------------------------------------------------------------------------
-void QERProgram::TearDown() {
+void QERTCProgram::TearDown() {
   lifecycle_->tearDown();
 }
 
 //------------------------------------------------------------------------------
-std::shared_ptr<BPFMap> QERProgram::Get5GQoSFlowParamsMap() const {
+std::shared_ptr<BPFMap> QERTCProgram::Get5GQoSFlowParamsMap() const {
   return qos_flow_params_map_;
 }
 
 //------------------------------------------------------------------------------
-std::shared_ptr<BPFMap> QERProgram::GetEgressIfindexMap() const {
+std::shared_ptr<BPFMap> QERTCProgram::GetEgressIfindexMap() const {
   return egress_ifindex_map_;
 }
 
 //------------------------------------------------------------------------------
-void QERProgram::InitializeMaps() {
+void QERTCProgram::InitializeMaps() {
   // Store all maps available in the program
   maps_ = std::make_shared<BPFMaps>(lifecycle_->getBPFSkeleton()->skeleton);
 

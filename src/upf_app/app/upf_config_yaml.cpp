@@ -25,24 +25,14 @@ upf_support_features::upf_support_features(
   // Performance
   m_enable_bpf_datapath =
       option_config_value(UPF_ENABLE_BPF_LABEL, enable_bpf_datapath);
-
-  // PFCP Rules - QoS (QER)
-  m_enable_qos = option_config_value(UPF_ENABLE_QOS_LABEL, enable_qos);
-
-  // PFCP Rules - URR, BAR, MAR (Forced to false - no implementation yet)
-  m_enable_urr = option_config_value(UPF_ENABLE_URR_LABEL, false);
-
-  m_enable_bar = option_config_value(UPF_ENABLE_BAR_LABEL, false);
-
-  m_enable_mar = option_config_value(UPF_ENABLE_MAR_LABEL, false);
-
-  // Network Features
-  m_enable_snat = option_config_value(UPF_ENABLE_SNAT_LABEL, enable_snat);
-
-  m_enable_fr = option_config_value(UPF_ENABLE_FR_LABEL, enable_fr);
-
   m_enable_eth_pdu =
       option_config_value(UPF_ENABLE_ETH_PDU_LABEL, enable_eth_pdu);
+  m_enable_fr   = option_config_value(UPF_ENABLE_FR_LABEL, enable_fr);
+  m_enable_qos  = option_config_value(UPF_ENABLE_QOS_LABEL, enable_qos);
+  m_enable_urr  = option_config_value(UPF_ENABLE_URR_LABEL, enable_urr);
+  m_enable_bar  = option_config_value(UPF_ENABLE_BAR_LABEL, enable_bar);
+  m_enable_mar  = option_config_value(UPF_ENABLE_MAR_LABEL, enable_mar);
+  m_enable_snat = option_config_value(UPF_ENABLE_SNAT_LABEL, false);
 }
 
 //------------------------------------------------------------------------------
@@ -52,59 +42,48 @@ void upf_support_features::from_yaml(const YAML::Node& node) {
     m_enable_bpf_datapath.from_yaml(node[UPF_ENABLE_BPF]);
   }
 
+  // Ethernet PDU Sessions
+  if (node[UPF_ENABLE_ETH_PDU]) {
+    m_enable_eth_pdu.from_yaml(node[UPF_ENABLE_ETH_PDU]);
+  }
+
+  // PFCP Rules - Framed Routing (FR)
+  if (node[UPF_ENABLE_FR]) {
+    m_enable_fr.from_yaml(node[UPF_ENABLE_FR]);
+  }
+
   // PFCP Rules - QoS (QER)
   if (node[UPF_ENABLE_QOS]) {
     m_enable_qos.from_yaml(node[UPF_ENABLE_QOS]);
   }
 
-  // PFCP Rules - URR, BAR, MAR (Parse from YAML but force to false)
+  // PFCP Rules - Usage Reporting (URR)
   if (node[UPF_ENABLE_URR]) {
     m_enable_urr.from_yaml(node[UPF_ENABLE_URR]);
-    // Force to false - no implementation yet
-    if (m_enable_urr.get_value()) {
-      logger::logger_registry::get_logger(LOGGER_NAME)
-          .warn(
-              "URR (Usage Reporting Rules) requested but not implemented - "
-              "forcing to disabled");
-      m_enable_urr = option_config_value(UPF_ENABLE_URR_LABEL, false);
-    }
   }
 
+  // PFCP Rules - Packet Buffering (BAR)
   if (node[UPF_ENABLE_BAR]) {
     m_enable_bar.from_yaml(node[UPF_ENABLE_BAR]);
-    // Force to false - no implementation yet
-    if (m_enable_bar.get_value()) {
-      logger::logger_registry::get_logger(LOGGER_NAME)
-          .warn(
-              "BAR (Buffering Action Rules) requested but not implemented - "
-              "forcing to disabled");
-      m_enable_bar = option_config_value(UPF_ENABLE_BAR_LABEL, false);
-    }
   }
 
+  // PFCP Rules - Multi-Steering (MAR)
   if (node[UPF_ENABLE_MAR]) {
     m_enable_mar.from_yaml(node[UPF_ENABLE_MAR]);
-    // Force to false - no implementation yet
-    if (m_enable_mar.get_value()) {
-      logger::logger_registry::get_logger(LOGGER_NAME)
-          .warn(
-              "MAR (Modify Access Rules) requested but not implemented - "
-              "forcing to disabled");
-      m_enable_mar = option_config_value(UPF_ENABLE_MAR_LABEL, false);
-    }
   }
 
-  // Network Features
+  // Network Features Source Nat (SNAT)
   if (node[UPF_ENABLE_SNAT]) {
     m_enable_snat.from_yaml(node[UPF_ENABLE_SNAT]);
-  }
-
-  if (node[UPF_ENABLE_FR]) {
-    m_enable_fr.from_yaml(node[UPF_ENABLE_FR]);
-  }
-
-  if (node[UPF_ENABLE_ETH_PDU]) {
-    m_enable_eth_pdu.from_yaml(node[UPF_ENABLE_ETH_PDU]);
+    // Force to false - no implementation yet
+    if (m_enable_snat.get_value()) {
+      logger::logger_registry::get_logger(LOGGER_NAME)
+          .warn(
+              "SNAT (Source Network Address Translation) requested but not "
+              "implemented within UPF - "
+              "forcing to disabled. Check the Ext-DN for SNAT configuration");
+      m_enable_mar = option_config_value(UPF_ENABLE_MAR_LABEL, false);
+    }
   }
 }
 
@@ -191,22 +170,22 @@ bool upf_support_features::get_option_enable_qos() const {
 
 //------------------------------------------------------------------------------
 bool upf_support_features::get_option_enable_urr() const {
-  return m_enable_urr.get_value();  // Always returns false for now
+  return m_enable_urr.get_value();
 }
 
 //------------------------------------------------------------------------------
 bool upf_support_features::get_option_enable_bar() const {
-  return m_enable_bar.get_value();  // Always returns false for now
+  return m_enable_bar.get_value();
 }
 
 //------------------------------------------------------------------------------
 bool upf_support_features::get_option_enable_mar() const {
-  return m_enable_mar.get_value();  // Always returns false for now
+  return m_enable_mar.get_value();
 }
 
 //------------------------------------------------------------------------------
 bool upf_support_features::get_option_enable_snat() const {
-  return m_enable_snat.get_value();
+  return m_enable_snat.get_value();  // Always returns false for now
 }
 
 //------------------------------------------------------------------------------
@@ -1182,14 +1161,14 @@ void upf_datapath_configuration::validate() {
 
   logger::logger_registry::get_logger(LOGGER_NAME)
       .info(
-          "Estimated BPF map memory usage: ~{} MB",
+          "Estimated BPF map memory usage: %d MB",
           static_cast<int>(total_memory_mb));
 
   // Rule 4.1: Warn if > 1GB
   if (total_memory_mb > 1024) {
     logger::logger_registry::get_logger(LOGGER_NAME)
         .warn(
-            "Estimated BPF map memory usage (~{} MB) exceeds 1GB. "
+            "Estimated BPF map memory usage (%d MB) exceeds 1GB. "
             "This is a large deployment. Ensure sufficient system resources.",
             static_cast<int>(total_memory_mb));
   }
@@ -1197,7 +1176,7 @@ void upf_datapath_configuration::validate() {
   // Rule 4.2: Error if > 8GB
   if (total_memory_mb > 8192) {
     throw std::runtime_error(fmt::format(
-        "Estimated BPF map memory usage (~{} MB) exceeds 8GB. "
+        "Estimated BPF map memory usage (%d MB) exceeds 8GB. "
         "This configuration is unsafe. Reduce session count or per-session "
         "limits.",
         static_cast<int>(total_memory_mb)));

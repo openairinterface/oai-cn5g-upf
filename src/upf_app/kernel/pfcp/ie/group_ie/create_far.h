@@ -2,12 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Create FAR (Forwarding Action Rule)
- * Reference: 3GPP TS 29.244 Section 7.5.2.3
- * Table 7.5.2.3-1: Create FAR IE within PFCP Session Establishment Request
- */
-
 #ifndef _PFCP_CREATE_FAR_H
 #define _PFCP_CREATE_FAR_H
 

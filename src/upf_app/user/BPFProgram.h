@@ -2,21 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file BPFProgram.h
- * @brief Base class for BPF/eBPF programs in UPF
- *
- * This is the abstract base class for all BPF/eBPF programs used in the
- * User Plane Function. It provides common functionality like program ID
- * management and serves as the foundation for specialized BPF programs
- * (XDP programs, TC programs, etc.).
- *
- * Design Pattern: Template Method Pattern - derived classes implement
- * specific BPF program types while inheriting common functionality.
- *
- * @note This implementation follows Google C++ Style Guide
- */
-
 #ifndef BPFPROGRAM_H_
 #define BPFPROGRAM_H_
 
@@ -37,8 +22,6 @@
  *
  * Thread Safety: ID counter is NOT thread-safe. Create programs sequentially
  * during initialization.
- *
- * @note This implementation follows Google C++ Style Guide
  */
 class BPFProgram {
  public:

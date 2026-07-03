@@ -2,22 +2,16 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Create PDR (Packet Detection Rule)
- * Reference: 3GPP TS 29.244 Section 7.5.2.2
- * Table 7.5.2.2-1: Create PDR IE within PFCP Session Establishment Request
- */
-
 #ifndef _PFCP_CREATE_PDR_H
 #define _PFCP_CREATE_PDR_H
 
+#include <linux/types.h>
 #include "ie/ie_base.h"
 #include "ie/pdr_id.h"
 #include "ie/precedence.h"
 #include "pdi.h"
 #include "ie/outer_header_removal.h"
 #include "ie/far_id.h"
-#include "ie/urr_id.h"
 #include "ie/qer_id.h"
 #include "ie/activate_predefined_rules.h"
 
@@ -42,7 +36,7 @@ struct create_pdr {
   struct pdi pdi;
   struct outer_header_removal outer_header_removal;
   struct far_id far_id;
-  struct urr_id urr_id;
+  __u32 urr_id;
   struct qer_id qer_id;
   struct activate_predefined_rules activate_predefined_rules;
 } __attribute__((packed));

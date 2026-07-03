@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP QER ID
- * Reference: 3GPP TS 29.244 Section 8.2.75
- */
-
 #ifndef _PFCP_QER_ID_H
 #define _PFCP_QER_ID_H
 

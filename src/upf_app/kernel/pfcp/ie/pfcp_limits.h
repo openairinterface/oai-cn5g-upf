@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef __PFCP_LIMITS_H__
 #define __PFCP_LIMITS_H__
 

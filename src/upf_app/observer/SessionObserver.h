@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef __SESSION_OBSERVER_H__
 #define __SESSION_OBSERVER_H__
 

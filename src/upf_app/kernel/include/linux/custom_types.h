@@ -1,6 +1,7 @@
 /*
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
+
 #if !defined(CUSTOM_TYPES_H)
 #define CUSTOM_TYPES_H
 
@@ -29,14 +30,15 @@ enum FlowDirection {
   UPLINK   = 1 /**< N6 to N3 direction (Data Network to RAN) */
 };
 
-/*
- * Configuration structure for PDR lookup behavior.
- * This is read-only data (.rodata) that can be configured from userspace before
- * loading.
- */
-struct pdr_lookup_config {
-  bool ignore_qfi_for_uplink;
-};
+// /*
+//  * Configuration structure for PDR lookup behavior.
+//  * This is read-only data (.rodata) that can be configured from userspace
+//  before
+//  * loading.
+//  */
+// struct pdr_lookup_config {
+//   bool ignore_qfi_for_uplink;
+// };
 
 #define BPF_ANNOTATE_KV_PAIR(name, type_key, type_val)                         \
   struct ____btf_map_##name {                                                  \

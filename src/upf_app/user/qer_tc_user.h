@@ -2,69 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file qer_tc_user.h
- * @brief TC-BPF program for QoS Enforcement Rules (QER)
- *
- * This class manages Traffic Control (TC) BPF programs for QoS enforcement
- * in the User Plane Function. It implements QoS Enforcement Rules (QER) as
- * defined in 3GPP TS 29.244.
- *
- * QoS Enforcement Overview:
- * - Uses Linux TC (Traffic Control) with HTB (Hierarchical Token Bucket) qdisc
- * - Enforces MBR (Maximum Bit Rate) and GBR (Guaranteed Bit Rate)
- * - Implements per-QFI (QoS Flow Identifier) traffic shaping
- * - Supports 5G QoS model with default and dedicated flows
- *
- * Architecture:
- * 1. Root HTB qdisc: Overall rate limiting
- * 2. PDU Session class: Per-session bandwidth allocation
- * 3. QoS Flow classes: Per-QFI traffic shaping
- * 4. TC-BPF filter: Packet classification to classes
- *
- * TC Hierarchy:
- * ```
- * Root qdisc (1:0)
- * ├─ PDU Session class (1:SEID)
- * │  ├─ Default QoS Flow (1:default_id)
- * │  ├─ QoS Flow 1 (1:qfi_1) - GBR/MBR
- * │  └─ QoS Flow 2 (1:qfi_2) - GBR/MBR
- * └─ ...
- * ```
- *
- * QER Parameters (3GPP TS 29.244):
- * - QER ID: Unique identifier
- * - QFI: QoS Flow Identifier (3GPP TS 38.415)
- * - MBR: Maximum Bit Rate (uplink/downlink)
- * - GBR: Guaranteed Bit Rate (uplink/downlink)
- * - Gate Status: OPEN/CLOSED per direction
- *
- * TC Commands Generated:
- * ```bash
- * # Root qdisc
- * tc qdisc add dev <if> root handle 1:0 htb default <id> r2q <value>
- *
- * # PDU session class
- * tc class add dev <if> parent 1: classid 1:<seid> htb rate <rate>kbit
- *
- * # QoS flow class
- * tc class add dev <if> parent 1:<seid> classid 1:<minor> \
- *    htb rate <gbr>kbit ceil <mbr>kbit
- *
- * # BPF classifier
- * tc filter add dev <if> parent 1:0 protocol ip bpf \
- *    obj qer_tc_kern.c.o classid 1: direct-action
- * ```
- *
- * Reference Standards:
- * - 3GPP TS 29.244: PFCP QER definition
- * - 3GPP TS 38.415: 5G QoS model and QFI
- * - 3GPP TS 23.501: 5G System Architecture
- * - Linux TC documentation: man tc-htb(8), man tc-bpf(8)
- *
- * @note This implementation follows Google C++ Style Guide
- */
-
 #ifndef QER_TC_USER_H_
 #define QER_TC_USER_H_
 
@@ -77,22 +14,25 @@
 #include <wrappers/BPFMap.hpp>
 #include <BPFProgram.h>
 #include <pfcp_session.hpp>
-#include "upf_config.hpp"
-
-using namespace oai::config;
-extern upf_config upf_cfg;
+#include "upf_network_config.h"  // upf::g_net_cfg — no upf_config.hpp
 
 // Forward declarations
 class BPFMaps;
 class BPFMap;
 
+/* ==========================================================================
+ * Type alias
+ * ========================================================================== */
 /**
  * @brief Type alias for QER TC-BPF program lifecycle
  */
-using QERProgramLifeCycle = ProgramLifeCycle<qer_tc_kern_c>;
+using QerTCProgramLifeCycle = ProgramLifeCycle<qer_tc_kern_c>;
 
+/* ==========================================================================
+ * QERTCProgram
+ * ========================================================================== */
 /**
- * @class QERProgram
+ * @class QERTCProgram
  * @brief Manages TC-BPF programs for QoS Enforcement Rules
  *
  * This class implements 5G QoS enforcement using Linux Traffic Control (TC)
@@ -121,7 +61,7 @@ using QERProgramLifeCycle = ProgramLifeCycle<qer_tc_kern_c>;
  * @note This implementation follows Google C++ Style Guide
  * @note Inherits from BPFProgram base class
  */
-class QERProgram : public BPFProgram {
+class QERTCProgram : public BPFProgram {
  public:
   /**
    * @brief Constructor - initializes QER TC-BPF program
@@ -131,12 +71,21 @@ class QERProgram : public BPFProgram {
    * @throws std::runtime_error if skeleton creation fails
    * @throws std::runtime_error if map configuration fails
    */
-  explicit QERProgram(const upf_config& upf_cfg);
+  /**
+   * @brief Constructor
+   *
+   * Network configuration (interface names, map sizing limits) is read
+   * from upf::g_net_cfg which must be populated by
+   * control/Configuration.cpp before the first QERTCProgram is created.
+   *
+   * @throws std::runtime_error if skeleton creation fails
+   */
+  explicit QERTCProgram();
 
   /**
    * @brief Destructor - cleans up TC-BPF program
    */
-  virtual ~QERProgram();
+  virtual ~QERTCProgram();
 
   /**
    * @brief Setup TC-BPF program for a PDU session
@@ -225,6 +174,9 @@ class QERProgram : public BPFProgram {
   uint32_t GetR2qRoot() const { return r2q_root_; }
 
  private:
+  // ==========================================================================
+  // Private helpers
+  // ==========================================================================
   /**
    * @brief Initialize BPF map wrappers
    */
@@ -236,7 +188,7 @@ class QERProgram : public BPFProgram {
    * @param skel Opened BPF skeleton
    * @param upf_cfg Configuration
    */
-  void ConfigureQerMaps(struct qer_tc_kern_c* skel, const upf_config& upf_cfg);
+  void ConfigureQerMaps(struct qer_tc_kern_c* skel);
 
   /**
    * @brief Build QER ID to PDR mapping
@@ -261,15 +213,20 @@ class QERProgram : public BPFProgram {
   uint32_t default_class_ceil_;    ///< Default ceil in kbps
   uint32_t r2q_root_;              ///< Root qdisc r2q parameter
 
-  // PDR lookup map
-  std::unordered_map<uint32_t, std::shared_ptr<pfcp::pfcp_pdr>> pdr_map_;
+  // ==========================================================================
+  // Skeleton and lifecycle
+  // ==========================================================================
+  qer_tc_kern_c* skeleton_;                           ///< BPF skeleton
+  std::shared_ptr<QerTCProgramLifeCycle> lifecycle_;  ///< Lifecycle manager
 
-  // BPF program components
-  std::shared_ptr<BPFMaps> maps_;                   ///< All BPF maps
-  qer_tc_kern_c* skeleton_;                         ///< BPF skeleton
-  std::shared_ptr<BPFMap> egress_ifindex_map_;      ///< Egress interfaces
-  std::shared_ptr<QERProgramLifeCycle> lifecycle_;  ///< Lifecycle manager
-  std::shared_ptr<BPFMap> qos_flow_params_map_;     ///< QoS flow parameters
+  // ==========================================================================
+  // Maps
+  // ==========================================================================
+  std::shared_ptr<BPFMaps> maps_;  ///< All BPF maps
+  std::unordered_map<uint32_t, std::shared_ptr<pfcp::pfcp_pdr>>
+      pdr_map_;                                  /// PDR lookup map
+  std::shared_ptr<BPFMap> egress_ifindex_map_;   ///< Egress interfaces
+  std::shared_ptr<BPFMap> qos_flow_params_map_;  ///< QoS flow parameters
 };
 
 #endif  // QER_TC_USER_H_

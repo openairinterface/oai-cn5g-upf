@@ -33,10 +33,10 @@ constexpr auto UPF_ENABLE_FR      = "enable_fr";
 constexpr auto UPF_ENABLE_ETH_PDU = "enable_eth_pdu";
 
 constexpr auto UPF_ENABLE_BPF_LABEL     = "Enable BPF Datapath";
-constexpr auto UPF_ENABLE_QOS_LABEL     = "Enable QoS Enforcement (QER)";
-constexpr auto UPF_ENABLE_URR_LABEL     = "Enable Usage Reporting (URR)";
-constexpr auto UPF_ENABLE_BAR_LABEL     = "Enable Buffering (BAR)";
-constexpr auto UPF_ENABLE_MAR_LABEL     = "Enable Multi Access (MAR)";
+constexpr auto UPF_ENABLE_QOS_LABEL     = "Enable QoS Enforcement  (QER)";
+constexpr auto UPF_ENABLE_URR_LABEL     = "Enable Usage Reporting  (URR)";
+constexpr auto UPF_ENABLE_BAR_LABEL     = "Enable Buffering Action (BAR)";
+constexpr auto UPF_ENABLE_MAR_LABEL     = "Enable Multi Access     (MAR)";
 constexpr auto UPF_ENABLE_SNAT_LABEL    = "Enable SNAT";
 constexpr auto UPF_ENABLE_FR_LABEL      = "Enable Framed Routing";
 constexpr auto UPF_ENABLE_ETH_PDU_LABEL = "Enable Ethernet PDU Sessions";
@@ -277,8 +277,21 @@ class upf_support_features : public config_type {
    * @note Used in specific enterprise/campus network scenarios
    */
   option_config_value m_enable_fr{};
+
+  // option_config_value m_ignore_qfi_for_uplink{};
+
+  /**
+   * @brief Enable Ethernet PDU sessions
+   *
+   * When enabled, the UPF supports Ethernet PDU Session Type for non-IP
+   * traffic (Layer 2 connectivity).
+   *
+   * Default: false
+   *
+   * @note Requires Ethernet packet filter support (max_ethernet_packet_filters)
+   * @see 3GPP TS 29.244 Section 8.2.66 (Ethernet Packet Filter)
+   */
   option_config_value m_enable_eth_pdu{};
-  option_config_value m_ignore_qfi_for_uplink{};
 
  public:
   /**

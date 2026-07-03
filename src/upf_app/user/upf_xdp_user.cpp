@@ -2,317 +2,725 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file upf_xdp_user.cpp
- * @brief Implementation of XDP program management
- */
-
 #include "upf_xdp_user.h"
+#include "startup_banner.hpp"
+#include "tail_call_types.h"
+#include "xdp_hook_section.h"
 #include <bpf/bpf.h>
 #include <bpf/libbpf.h>
+#include <net/if.h>
 #include <stdexcept>
+#include <cstring>
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
-#include "interfaces.h"
 #include "logger.hpp"
-#include "upf_config.hpp"
-#include "utils/net_utils.hpp"
-#include "utils/bpf_utils.hpp"
 #include "upf_xdp_limits.h"
-#include "UserPlaneComponent.h"
-#include "sdf_filter.h"
+#include "interfaces_types.h"
 
-using namespace oai::config;
-using namespace oai::utils::net;
-using namespace oai::utils::bpf;
-
-extern upf_config upf_cfg;
-
-/**
- * @brief XDP section names for different packet paths
- */
-class XDPSection {
- public:
-  static constexpr const char* Uplink = "xdp_uplink";  ///< GTP-U uplink
-  static constexpr const char* Downlink =
-      "xdp_downlink";                                ///< Standard downlink
-  static constexpr const char* Shaping = "xdp_qos";  ///< QoS enforcement
-};
-
-//------------------------------------------------------------------------------
-void UPF_XDPProgram::ConfigurePfcpSessionLookupMaps(
-    struct upf_xdp_kern_c* skel, const upf_config& upf_cfg) {
-  if (!skel) {
-    Logger::upf_app().error("Null skeleton in ConfigurePfcpSessionLookupMaps");
-    return;
-  }
-
-  // Validate configuration against system limits
-  int num_ifaces = CountAvailableInterfaces();
-  if (upf_cfg.max_upf_interfaces > static_cast<uint32_t>(num_ifaces)) {
-    Logger::upf_app().warn(
-        "Configured max_upf_interfaces (%u) exceeds available system "
-        "interfaces (%d). Clamping to %d.",
-        upf_cfg.max_upf_interfaces, num_ifaces, num_ifaces);
-  }
-
-  if (upf_cfg.max_upf_redirect_interfaces > upf_cfg.max_upf_interfaces) {
-    Logger::upf_app().error(
-        "Invalid config: max_upf_redirect_interfaces (%u) cannot exceed "
-        "max_upf_interfaces (%u).",
-        upf_cfg.max_upf_redirect_interfaces, upf_cfg.max_upf_interfaces);
-    throw std::runtime_error(
-        "Invalid UPF configuration (redirect > interfaces)");
-  }
-
-  if (upf_cfg.max_upf_redirect_interfaces > upf_cfg.max_arp_entries) {
-    Logger::upf_app().warn(
-        "max_upf_redirect_interfaces (%u) > max_arp_entries (%u): "
-        "redirects may not all resolve via ARP.",
-        upf_cfg.max_upf_redirect_interfaces, upf_cfg.max_arp_entries);
-  }
-
-  if (upf_cfg.max_pdrs_per_pdu_session > MAX_PDRS_PER_PDU_SESSION_LIMIT) {
-    Logger::upf_app().error(
-        "Configuration error: max_pdrs_per_pdu_session (%u) exceeds "
-        "compile-time limit (%u). Please recompile with a larger "
-        "MAX_PDRS_PER_PDU_SESSION_LIMIT or reduce your configuration.",
-        upf_cfg.max_pdrs_per_pdu_session, MAX_PDRS_PER_PDU_SESSION_LIMIT);
-    throw std::runtime_error(
-        "max_pdrs_per_pdu_session exceeds compile-time limit");
-  }
-
-  /* Compute Map Sizes:
-   * Two types of maps:
-   *	1. SESSION-SCOPED: size = max_pdu_sessions
-   *	2. GLOBAL/RULE:    size = max_pdu_sessions × per_session_limit
-   */
-
-  // Session-scoped maps: one entry per session
-  uint32_t max_sessions = upf_cfg.max_pdu_sessions;
-
-  // Global maps: entries across ALL sessions
-  // Total PDR-FAR-QER associations = sessions × PDRs_per_session
-  uint32_t total_pdr_rules = max_sessions * upf_cfg.max_pdrs_per_pdu_session;
-
-  // Total SDF filters = sessions × SDF_filters_per_session
-  uint32_t total_sdf_filters =
-      max_sessions * upf_cfg.max_sdf_filters_per_pdu_session;
-
-  // // Compute derived limits
-  // uint32_t max_rules_match_pdr =
-  //     upf_cfg.max_pdrs_per_pdu_session * upf_cfg.max_pdu_sessions;
-
-  // uint32_t max_qos_enabling = upf_cfg.max_pdu_sessions;
-
-  /**
-   * Configure All Map Sizes:
-   */
-
-  bool ok = true;
-
-  // --- INTERFACE MAPS (fixed size) ---
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.upf_interface_map, "upf_interface_map",
-      upf_cfg.max_upf_interfaces);
-
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.redirect_interfaces_map, "redirect_interfaces_map",
-      upf_cfg.max_upf_redirect_interfaces);
-
-  // --- SESSION-SCOPED MAPS (size = max_sessions) ---
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.session_by_ue_ip_map, "session_by_ue_ip_map", max_sessions);
-
-  // pdrs_per_session_map: ONE entry per session (value is array of PDRs)
-  // Size = max_sessions, NOT max_pdrs_per_pdu_session!
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.pdrs_per_session_map, "pdrs_per_session_map",
-      max_sessions); /*max_pdrs_per_pdu_session*/
-
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.session_qos_enabled_map, "session_qos_enabled_map",
-      max_sessions);
-
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.m_framed_route_mapping, "m_framed_route_mapping",
-      max_sessions);
-
-  // --- GLOBAL RULE MAPS (size = sessions × per_session_limit) ---
-
-  // rules_match_pdr_map: PDR rule associations across ALL sessions
-  // Size = max_sessions × max_pdrs_per_session
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.rules_match_pdr_map, "rules_match_pdr_map", total_pdr_rules);
-
-  // sdf_filters_map: SDF filters across ALL sessions
-  // Size = max_sessions × max_sdf_filters_per_session
-  // CRITICAL: Do NOT use max_sdf_filters_per_pdu_session (that's per-session!)
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.sdf_filters_map, "sdf_filters_map", total_sdf_filters);
-
-  // --- NETWORK MAPS ---
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.arp_table_map, "arp_table_map", upf_cfg.max_arp_entries);
-
-  if (!ok) {
-    Logger::upf_app().error(
-        "One or more BPF map configurations failed for PFCP Session Lookup "
-        "program.");
-    throw std::runtime_error("PFCP Session Lookup map configuration failed");
-  }
-
-  // Configure .rodata constants (if available)
-  if (skel->rodata) {
-    skel->rodata->MAX_UPF_INTERFACES = upf_cfg.max_upf_interfaces;
-    skel->rodata->MAX_UPF_REDIRECT_INTERFACES =
-        upf_cfg.max_upf_redirect_interfaces;
-    skel->rodata->MAX_PDU_SESSIONS         = upf_cfg.max_pdu_sessions;
-    skel->rodata->MAX_PDRS_PER_PDU_SESSION = upf_cfg.max_pdrs_per_pdu_session;
-    skel->rodata->MAX_SDF_FILTERS_PER_PDU_SESSION =
-        upf_cfg.max_sdf_filters_per_pdu_session;
-    skel->rodata->MAX_ARP_ENTRIES  = upf_cfg.max_arp_entries;
-    skel->rodata->MAX_QOS_ENABLING = upf_cfg.max_pdu_sessions;
-  }
-}
+/* Section: Constructor / Destructor */
 
 //------------------------------------------------------------------------------
 UPF_XDPProgram::UPF_XDPProgram(
-    const std::string& gtp_interface, const std::string& udp_interface,
-    const upf_config& upf_cfg)
+    const std::string& gtp_interface, const std::string& non_gtp_interface)
     : BPFProgram(),
       gtp_interface_(gtp_interface),
-      udp_interface_(udp_interface) {
-  Logger::upf_app().info("Initializing UPF XDP Program...");
-
-  // Define the 'open' lambda for the XDP skeleton
-  auto open_fn = [&upf_cfg, this]() -> upf_xdp_kern_c* {
-    struct upf_xdp_kern_c* skel = upf_xdp_kern_c__open();
-    if (!skel) {
-      Logger::upf_app().error("Failed to open BPF skeleton");
-      return nullptr;
-    }
-
-    // Configure maps and rodata
-    this->ConfigurePfcpSessionLookupMaps(skel, upf_cfg);
-    return skel;
-  };
-
-  // Initialize lifecycle management
-  lifecycle_ = std::make_shared<UPF_XDPProgramLifeCycle>(
-      open_fn,
-      /* load */ upf_xdp_kern_c__load,
-      /* attach */ upf_xdp_kern_c__attach,
-      /* destroy */ upf_xdp_kern_c__destroy);
+      non_gtp_interface_(non_gtp_interface) {
+  // Logger::upf_app().debug(
+  //     "UPF_XDPProgram: created (N3 , N6) : (%s , %s)",
+  //     gtp_interface_.c_str(), non_gtp_interface_.c_str());
 }
+
+//------------------------------------------------------------------------------
+UPF_XDPProgram::~UPF_XDPProgram() {
+  TearDown();
+}
+
+//------------------------------------------------------------------------------
+void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
+  features_         = flags;
+  const bool is_eth = (flags.pdu_type == PduSessionType::Ethernet);
+
+  Logger::upf_app().info("PDU Session type: %s", is_eth ? "Ethernet" : "IP");
+
+  /*  Step 1: Instantiate entry programs
+   * Exactly one pair is created based on pdu_type.
+   * The first program in each pair becomes "primary" -- it is loaded first
+   * so its map FDs are created before ShareMaps() is called.
+   *
+   * IP PDU:
+   *   n3_ is primary (GTP interface). Owns tail_call_progs_map,
+   *   packet_context_map, session_rules_enabled_map, mc_stats_map.
+   *   n6_ shares those maps via bpf_map__reuse_fd.
+   *
+   * ETH PDU:
+   *   n3_eth_ is primary (GTP interface). Same maps -- it also includes
+   *   tail_call_dispatcher.h and stats_maps.h. n3_ is NOT instantiated.
+   *   n3_eth_ detects the inner PDU type at runtime (IP version nibble) and
+   *   tail-calls either PROG_SESSION_LOOKUP_IP or PROG_SESSION_LOOKUP_ETH.
+   *   n6_eth_ handles ETH PDU DL and IP PDU DL via the same runtime check.
+   *   n6_eth_ shares those maps via bpf_map__reuse_fd.
+   */
+  if (!is_eth) {
+    n3_ = std::make_shared<N3EntryProgram>(gtp_interface_);
+    n6_ = std::make_shared<N6EntryProgram>(non_gtp_interface_);
+  } else {
+    n3_eth_ = std::make_shared<N3EthEntryProgram>(gtp_interface_);
+    n6_eth_ = std::make_shared<N6EthEntryProgram>(non_gtp_interface_);
+    /* TC-BPF broadcast / multicast fan-out for ETH PDU sessions.
+     * Attached to TC ingress on N3 and N6 (TS 23.501 §5.8.2.5.3). */
+    eth_broadcast_tc_ = std::make_shared<EthBroadcastTCProgram>();
+  }
+
+  /* Step 2: Instantiate stage programs
+   * sl_ip_ is always instantiated — IP PDU sessions must work regardless of
+   * enable_eth_pdu, and the unified n3_eth_entry dispatches to either lookup
+   * based on the inner PDU type detected at runtime (version nibble heuristic).
+   * sl_eth_ is additionally instantiated in ETH mode for ETH PDU sessions.
+   * PDR and FAR are always present.
+   * QER, URR, BAR, MAR are conditional on feature flags.
+   */
+  sl_ip_ = std::make_shared<SessionLookupIPProgram>();
+  if (is_eth) sl_eth_ = std::make_shared<SessionLookupETHProgram>();
+
+  pdr_ = std::make_shared<PdrMatchProgram>();
+  far_ = std::make_shared<FARProgram>();
+
+  if (flags.enable_qer) {
+    qer_    = std::make_shared<QERProgram>();
+    qer_tc_ = std::make_shared<QERTCProgram>();
+  }
+
+  if (flags.enable_urr) urr_ = std::make_shared<URRProgram>();
+  if (flags.enable_bar) bar_ = std::make_shared<BARProgram>();
+  if (flags.enable_mar) mar_ = std::make_shared<MARProgram>();
+
+  DisplayPipelineCreationTree(flags);
+
+  /* ── Step 1b: Open ALL programs (constructors only store open_fn, never
+   *             call it). ConfigureMaps() runs inside each open_fn and sets
+   *             bpf_map__set_max_entries() ONLY for maps owned by that program.
+   *               far_  owns: upf_interface_map, arp_table_map,
+   *                           redirect_interfaces_map
+   *               n3_   owns: packet_context_map, tail_call_progs_map,
+   *                           session_rules_enabled_map, mc_stats_map
+   *             No program sizes a map it does not own.
+   */
+  far_->GetLifeCycle()->open();
+  if (!is_eth) {
+    n3_->GetLifeCycle()->open();
+    n6_->GetLifeCycle()->open();
+  } else {
+    n3_eth_->GetLifeCycle()->open();
+    n6_eth_->GetLifeCycle()->open();
+  }
+  if (sl_ip_) sl_ip_->GetLifeCycle()->open();
+  if (sl_eth_) sl_eth_->GetLifeCycle()->open();
+  if (eth_broadcast_tc_) eth_broadcast_tc_->GetLifeCycle()->open();
+  pdr_->GetLifeCycle()->open();
+  if (qer_) qer_->GetLifeCycle()->open();
+  if (urr_) urr_->GetLifeCycle()->open();
+  if (bar_) bar_->GetLifeCycle()->open();
+  if (mar_) mar_->GetLifeCycle()->open();
+
+  /* ── Step 2: Load the n3 primary FIRST so it materialises its owned maps.
+   *   n3_ owns: packet_context_map, tail_call_progs_map,
+   *             session_rules_enabled_map, mc_stats_map.
+   *   These must be created before we redirect any peer's symbols at them,
+   *   because bpf_map__reuse_fd() only works while the target object is
+   *   still unloaded.
+   */
+  if (!is_eth) {
+    n3_->GetLifeCycle()->load();
+  } else {
+    n3_eth_->GetLifeCycle()->load();
+  }
+
+  /* ── Step 3: Share n3_-owned maps to ALL other programs (far_ included)
+   *   BEFORE they load. far_ MUST receive these here -- once it is loaded
+   *   in Step 5, bpf_map__reuse_fd() against its bpf_object becomes a
+   *   silent no-op and far_apply ends up with private dead copies of
+   *   tail_call_progs_map / packet_context_map / mc_stats_map /
+   *   session_rules_enabled_map.
+   */
+  const std::initializer_list<const char*> n3_owned = {
+      "packet_context_map", "tail_call_progs_map", "session_rules_enabled_map",
+      "mc_stats_map"};
+  struct bpf_object* primary =
+      !is_eth ? n3_->GetBpfObject() : n3_eth_->GetBpfObject();
+  ShareMapsOwned(primary, far_->GetBpfObject(), n3_owned);
+  if (!is_eth)
+    ShareMapsOwned(primary, n6_->GetBpfObject(), n3_owned);
+  else
+    ShareMapsOwned(primary, n6_eth_->GetBpfObject(), n3_owned);
+  if (sl_ip_) ShareMapsOwned(primary, sl_ip_->GetBpfObject(), n3_owned);
+  if (sl_eth_) ShareMapsOwned(primary, sl_eth_->GetBpfObject(), n3_owned);
+  ShareMapsOwned(primary, pdr_->GetBpfObject(), n3_owned);
+  if (qer_) ShareMapsOwned(primary, qer_->GetBpfObject(), n3_owned);
+  if (urr_) ShareMapsOwned(primary, urr_->GetBpfObject(), n3_owned);
+  if (bar_) ShareMapsOwned(primary, bar_->GetBpfObject(), n3_owned);
+  if (mar_) ShareMapsOwned(primary, mar_->GetBpfObject(), n3_owned);
+
+  /* ── Step 4a: Load the IP session-lookup primary (sl_ip_) BEFORE far_/pdr_/
+   *   qer_/urr_ so that pipeline_maps.h-declared maps are created with the
+   *   correct sizes (set by SessionLookupIPProgram::ConfigureMaps in open())
+   *   and can then be shared into the other programs' bpf_objects via
+   *   bpf_map__reuse_fd while they are still unloaded.
+   *
+   *   Owned by sl_ip_:
+   *     session_by_ue_ip_map, pdrs_per_session_map, session_qos_enabled_map,
+   *     rules_match_pdr_map, m_framed_route_mapping (sized in ConfigureMaps),
+   *     framed_routing_flag, feature_dispatch_map (placeholder size 1).
+   *
+   *   ETH path: xdp_session_lookup_eth_kern.c does not include pipeline_maps.h,
+   *   so there is nothing to share. Skip Step 4a/4b in that case.
+   */
+  if (sl_ip_) {
+    sl_ip_->GetLifeCycle()->load();
+
+    /* ── Step 4b: Share sl_ip_-owned pipeline maps to all peers BEFORE they
+     *   load. n6_ / n3_ / n6_eth_ / n3_eth_ do not include pipeline_maps.h,
+     *   so no share is needed for them.
+     */
+    const std::initializer_list<const char*> pipeline_owned = {
+        "session_by_ue_ip_map",    "pdrs_per_session_map",
+        "session_qos_enabled_map", "rules_match_pdr_map",
+        "m_framed_route_mapping",  "framed_routing_flag",
+        "feature_dispatch_map"};
+    struct bpf_object* sl_obj = sl_ip_->GetBpfObject();
+    ShareMapsOwned(sl_obj, far_->GetBpfObject(), pipeline_owned);
+    ShareMapsOwned(sl_obj, pdr_->GetBpfObject(), pipeline_owned);
+    if (qer_) ShareMapsOwned(sl_obj, qer_->GetBpfObject(), pipeline_owned);
+    if (urr_) ShareMapsOwned(sl_obj, urr_->GetBpfObject(), pipeline_owned);
+    if (bar_) ShareMapsOwned(sl_obj, bar_->GetBpfObject(), pipeline_owned);
+    if (mar_) ShareMapsOwned(sl_obj, mar_->GetBpfObject(), pipeline_owned);
+  }
+
+  /* ── Step 4a' (ETH path mirror of Step 4a): Load sl_eth_ BEFORE the other
+   *   ETH-map-declaring programs (n6_eth_, eth_broadcast_tc_) so that sl_eth_
+   *   becomes the FD owner for every map declared by eth_pdu_maps.h. Then
+   *   redirect each peer's eth-map symbols at sl_eth_'s FDs via
+   *   bpf_map__reuse_fd() while those peers are still unloaded.
+   *
+   *   Without this, n6_eth_ would load first and create its own private
+   *   kernel maps, sl_eth_ would later create a SECOND set, and the
+   *   MapByName accessor (which routes via sl_eth_) would point at maps
+   *   that nothing on the kernel side ever reads -- the control plane
+   *   would write session state into a dead map.
+   *
+   *   n3_eth_ does NOT include eth_pdu_maps.h, so no share for it.
+   */
+  if (sl_eth_) {
+    sl_eth_->GetLifeCycle()->load();
+
+    const std::initializer_list<const char*> eth_session_owned = {
+        "session_by_mac_map",     "eth_session_mapping_map",
+        "eth_session_pdrs_map",   "eth_rules_match_pdr_map",
+        "eth_egress_ifindex_map", "mac_pdu_session_map"};
+    struct bpf_object* sl_eth_obj = sl_eth_->GetBpfObject();
+    if (n6_eth_)
+      ShareMapsOwned(sl_eth_obj, n6_eth_->GetBpfObject(), eth_session_owned);
+    if (eth_broadcast_tc_)
+      ShareMapsOwned(
+          sl_eth_obj, eth_broadcast_tc_->GetBpfObject(), eth_session_owned);
+  }
+
+  /* ── Step 4: Load far_ now that its n3_-owned symbols point at n3_'s maps
+   *   and its pipeline_maps.h-declared symbols (in IP mode) point at sl_ip_'s.
+   *   far_ creates its own kernel maps for upf_interface_map, arp_table_map,
+   *   redirect_interfaces_map (sized by FARProgram::ConfigureMaps in open()).
+   */
+  far_->GetLifeCycle()->load();
+
+  /* ── Step 5: Share far_-owned maps to ALL other programs BEFORE they load.
+   *   far_ owns upf_interface_map, arp_table_map, redirect_interfaces_map.
+   */
+  const std::initializer_list<const char*> far_owned = {
+      "upf_interface_map", "arp_table_map", "redirect_interfaces_map"};
+  struct bpf_object* far_obj = far_->GetBpfObject();
+  if (!is_eth)
+    ShareMapsOwned(far_obj, n6_->GetBpfObject(), far_owned);
+  else
+    ShareMapsOwned(far_obj, n6_eth_->GetBpfObject(), far_owned);
+  if (sl_ip_) ShareMapsOwned(far_obj, sl_ip_->GetBpfObject(), far_owned);
+  if (sl_eth_) ShareMapsOwned(far_obj, sl_eth_->GetBpfObject(), far_owned);
+  ShareMapsOwned(far_obj, pdr_->GetBpfObject(), far_owned);
+  if (qer_) ShareMapsOwned(far_obj, qer_->GetBpfObject(), far_owned);
+  if (urr_) ShareMapsOwned(far_obj, urr_->GetBpfObject(), far_owned);
+  if (bar_) ShareMapsOwned(far_obj, bar_->GetBpfObject(), far_owned);
+  if (mar_) ShareMapsOwned(far_obj, mar_->GetBpfObject(), far_owned);
+  /* n3_ is already loaded by Step 2, so reuse_fd against it is no longer
+   * possible. That is harmless here: xdp_n3_entry_kern.c does not include
+   * interfaces_maps.h or arp_maps.h and therefore declares none of
+   * upf_interface_map / arp_table_map / redirect_interfaces_map -- so it
+   * does not need them shared. */
+
+  /* ── Step 6: Each remaining program manages its own lifecycle.
+   * The secondary entry program calls Setup() -- its full lifecycle:
+   *   open(idempotent) + InitializeMaps + load + attach + link.
+   * Stage programs call Setup() -- their public program-level lifecycle:
+   *   open(idempotent) + InitializeMaps + load.
+   *   (Their session-level Setup(seid, ...) is called by SessionProgramManager
+   *    later, not here.)
+   * qer_: XDP gate-check -- normal stage program Setup().
+   * qer_tc_: TC-BPF -- no program-level Setup() here.
+   *   QERTCProgram::Setup(seid, qers, pdrs) is called per-session
+   *   by SessionProgramManager when a session has QER rules.
+   */
+  if (!is_eth) {
+    n6_->Setup();
+  } else {
+    n6_eth_->Setup();
+    /* Broadcast / multicast TC fan-out for ETH PDU sessions.
+     * Loads with the eth_pdu_maps symbols already redirected in Step 4a'
+     * (Setup() internally calls open() which is idempotent and reuses the
+     * skeleton that was opened in Step 1b -- so the reuse_fd redirection
+     * is preserved through load()). */
+    if (eth_broadcast_tc_) eth_broadcast_tc_->Setup();
+  }
+
+  if (sl_ip_) sl_ip_->Setup();
+  if (sl_eth_) sl_eth_->Setup();
+
+  pdr_->Setup();
+  far_->Setup();
+
+  if (qer_) qer_->Setup();
+  if (urr_) urr_->Setup();
+  if (bar_) bar_->Setup();
+  if (mar_) mar_->Setup();
+
+  DisplayPipelineLoadTree(BuildPipelineLoadInfo(flags));
+  Logger::upf_app().info("UPF_XDPProgram: all programs loaded");
+
+  /* ── Step 7: Wrap the primary skeleton's 4 infrastructure maps.
+   * tail_call_progs_map, packet_context_map, session_rules_enabled_map,
+   * mc_stats_map -- present in both n3_entry and n3_eth_entry skeletons.
+   */
+  struct bpf_object_skeleton* primary_skel =
+      !is_eth ? n3_->GetSkeleton() : n3_eth_->GetSkeleton();
+  InitializeMaps(primary_skel);
+
+  /* Grab upf_interface_map from the program that owns interfaces_maps.h.
+   * IP PDU path: owned by FARProgram (xdp_far_apply_kern includes it).
+   * ETH PDU path: owned by N6EthEntryProgram (already exposed via getter).
+   */
+  /* far_ owns upf_interface_map for BOTH IP and ETH paths.
+   * Always retrieve it from far_->GetBpfObject(). */
+  {
+    struct bpf_map* m =
+        bpf_object__find_map_by_name(far_->GetBpfObject(), "upf_interface_map");
+    if (m) {
+      upf_iface_map_ = std::make_shared<BPFMap>(m, "upf_interface_map");
+
+    } else {
+      Logger::upf_app().warn(
+          "Setup: upf_interface_map not found in FAR object");
+    }
+  }
+
+  /* ── Step 8: Complete the PRIMARY entry program's lifecycle.
+   * The primary was opened in Step 1b and loaded manually in Step 2. Now
+   * attach and link it to complete its lifecycle. The secondary already did
+   * its full lifecycle via Setup() in Step 6 (open+InitMaps+load+attach+link).
+   * upf_interface_map is populated by CreateUpfInterfaceMapEntry below
+   * for both IP and ETH paths. far_ is the owner for both paths.
+   */
+  if (!is_eth) {
+    Logger::upf_app().info(
+        "UPF_XDPProgram: attaching IP PDU primary (n3_entry)");
+    n3_->GetLifeCycle()->attach();
+    n3_->GetLifeCycle()->link(
+        XDPSection::Uplink_IP_PDU_SESSION, gtp_interface_.c_str());
+    CreateUpfInterfaceMapEntry(N3_INTERFACE);
+    CreateUpfInterfaceMapEntry(N6_INTERFACE);
+    CreateUpfInterfaceMapEntry(N4_INTERFACE);
+
+    /* Populate redirect_interfaces_map (DEVMAP) for the IP-PDU path.
+     * far_apply.c terminates each direction with
+     *   bpf_redirect_map(&redirect_interfaces_map, UPLINK, 0)   // UL → N6
+     *   bpf_redirect_map(&redirect_interfaces_map, DOWNLINK, 0) // DL → N3
+     * which fails silently (packet drop) if the slot is empty. The ETH-PDU
+     * path already does this in n6_eth_entry_user.cpp; the IP path was
+     * missing it.
+     *
+     * FlowDirection enum (kernel/include/linux/custom_types.h):
+     *   DOWNLINK = 0  -- redirect to N3 (gtp_interface_)
+     *   UPLINK   = 1  -- redirect to N6 (non_gtp_interface_)
+     */
+    auto redir = far_ ? far_->GetRedirectInterfacesMap() : nullptr;
+    if (redir) {
+      uint32_t n3_ifindex = if_nametoindex(gtp_interface_.c_str());
+      uint32_t n6_ifindex = if_nametoindex(non_gtp_interface_.c_str());
+      if (n3_ifindex == 0 || n6_ifindex == 0) {
+        Logger::upf_app().error(
+            "redirect_interfaces_map: if_nametoindex failed (N3=%s -> %u, "
+            "N6=%s -> %u)",
+            gtp_interface_.c_str(), n3_ifindex, non_gtp_interface_.c_str(),
+            n6_ifindex);
+      } else {
+        uint32_t downlink_key = 0; /* FlowDirection::DOWNLINK */
+        uint32_t uplink_key   = 1; /* FlowDirection::UPLINK   */
+        redir->Update(downlink_key, n3_ifindex, BPF_ANY);
+        redir->Update(uplink_key, n6_ifindex, BPF_ANY);
+        Logger::upf_app().info(
+            "redirect_interfaces_map populated: "
+            "DOWNLINK[0]=ifindex(%s)=%u  UPLINK[1]=ifindex(%s)=%u",
+            gtp_interface_.c_str(), n3_ifindex, non_gtp_interface_.c_str(),
+            n6_ifindex);
+      }
+    } else {
+      Logger::upf_app().error(
+          "redirect_interfaces_map wrapper unavailable (FAR not loaded?)");
+    }
+  } else {
+    Logger::upf_app().info(
+        "UPF_XDPProgram: attaching ETH PDU primary (n3_eth_entry)");
+    n3_eth_->GetLifeCycle()->attach();
+    n3_eth_->GetLifeCycle()->link(
+        XDPSection::Uplink_ETH_PDU_SESSION, gtp_interface_.c_str());
+    CreateUpfInterfaceMapEntry(N3_INTERFACE);
+    CreateUpfInterfaceMapEntry(N6_INTERFACE);
+    CreateUpfInterfaceMapEntry(N4_INTERFACE);
+    /* n6_eth_ interface maps already populated inside n6_eth_->Setup() */
+  }
+
+  /* ── Step 9: Populate tail_call_progs_map. */
+  PopulateProgramArray(flags);
+
+  Logger::upf_app().info("UPF_XDPProgram::Setup complete");
+}
+
+/* Section: Map sharing */
+
+//------------------------------------------------------------------------------
+void UPF_XDPProgram::ShareMaps(
+    struct bpf_object* src_obj, struct bpf_object* dst_obj) {
+  if (!src_obj || !dst_obj) return;
+  struct bpf_map* dst_map;
+  bpf_object__for_each_map(dst_map, dst_obj) {
+    const char* name    = bpf_map__name(dst_map);
+    struct bpf_map* src = bpf_object__find_map_by_name(src_obj, name);
+    if (!src) continue;
+    int fd = bpf_map__fd(src);
+    if (fd < 0) continue;
+    if (bpf_map__reuse_fd(dst_map, fd) != 0)
+      Logger::upf_app().warn("ShareMaps: reuse_fd failed for '%s'", name);
+  }
+}
+
+//------------------------------------------------------------------------------
+void UPF_XDPProgram::ShareMapsOwned(
+    struct bpf_object* src, struct bpf_object* dst,
+    const std::initializer_list<const char*>& owned_maps) {
+  if (!src || !dst) return;
+  for (const char* name : owned_maps) {
+    struct bpf_map* src_map = bpf_object__find_map_by_name(src, name);
+    if (!src_map) continue;
+    int fd = bpf_map__fd(src_map);
+    if (fd < 0) continue;
+    struct bpf_map* dst_map = bpf_object__find_map_by_name(dst, name);
+    if (!dst_map) continue;
+    if (bpf_map__reuse_fd(dst_map, fd) != 0)
+      Logger::upf_app().warn("ShareMapsOwned: reuse_fd failed for '%s'", name);
+  }
+}
+
+//------------------------------------------------------------------------------
+void UPF_XDPProgram::PopulateProgramArray(const PipelineFeatureFlags& flags) {
+  // Both slots populated when present: n3_eth_entry dispatches to IP or ETH
+  // lookup at runtime based on inner PDU type, so both must be in the array.
+  if (sl_ip_)
+    InsertProgramSlot(PROG_SESSION_LOOKUP_IP, sl_ip_->GetXdpProgram());
+  if (sl_eth_)
+    InsertProgramSlot(PROG_SESSION_LOOKUP_ETH, sl_eth_->GetXdpProgram());
+
+  InsertProgramSlot(PROG_PDR_MATCH, pdr_->GetXdpProgram());
+  InsertProgramSlot(PROG_FAR_APPLY, far_->GetXdpProgram());
+
+  if (qer_) InsertProgramSlot(PROG_QER_APPLY, qer_->GetXdpProgram());
+  /* qer_tc_: TC-BPF -- not inserted into XDP tail-call array. */
+  if (urr_) InsertProgramSlot(PROG_URR_APPLY, urr_->GetXdpProgram());
+  if (bar_) InsertProgramSlot(PROG_BAR_APPLY, bar_->GetXdpProgram());
+  if (mar_) InsertProgramSlot(PROG_MAR_APPLY, mar_->GetXdpProgram());
+}
+
+//------------------------------------------------------------------------------
+bool UPF_XDPProgram::InsertProgramSlot(
+    uint32_t index, struct bpf_program* prog) {
+  if (!prog || !tail_call_progs_map_) return false;
+  int fd = bpf_program__fd(prog);
+  if (fd < 0) return false;
+  if (tail_call_progs_map_->Update(index, fd, BPF_ANY) != 0) {
+    Logger::upf_app().error("InsertProgramSlot: failed for slot %u", index);
+    return false;
+  }
+  return true;
+}
+
+//------------------------------------------------------------------------------
+std::vector<ProgramLoadInfo> UPF_XDPProgram::BuildPipelineLoadInfo(
+    const PipelineFeatureFlags& flags) const {
+  const bool is_eth = (flags.pdu_type == PduSessionType::Ethernet);
+  std::vector<ProgramLoadInfo> info;
+
+  // Map counts: ground truth from kernel .c source analysis.
+  // Each count reflects only the maps actually referenced via BPF helpers
+  // (bpf_map_lookup_elem, bpf_map_update_elem, bpf_redirect_map, etc.)
+  // in the corresponding xdp_*_kern.c file.
+  if (!is_eth) {
+    info.push_back({"N3EntryProgram", 3, gtp_interface_, false, false});
+    info.push_back({"SessionLookupIPProgram", 5, "", false, false});
+  } else {
+    info.push_back({"N3EthEntryProgram", 3, gtp_interface_, false, false});
+    // Both session lookup programs are loaded in ETH mode: n3_eth_entry
+    // dispatches to IP or ETH lookup based on inner PDU type at runtime.
+    info.push_back({"SessionLookupIPProgram", 5, "", false, false});
+    info.push_back({"SessionLookupETHProgram", 6, "", false, false});
+  }
+  info.push_back({"PdrMatchProgram", 5, "", false, false});
+  info.push_back({"FARProgram", 8, "", false, false});
+  if (qer_) {
+    info.push_back({"QERProgram", 3, "", false, false});
+    info.push_back({"QERTCProgram", 1, "", true, true});
+  }
+  if (urr_) info.push_back({"URRProgram", 5, "", false, false});
+  if (bar_) info.push_back({"BARProgram", 5, "", false, false});
+  if (mar_) info.push_back({"MARProgram", 5, "", false, false});
+  if (!is_eth)
+    info.push_back({"N6EntryProgram", 3, non_gtp_interface_, false, false});
+  else
+    info.push_back({"N6EthEntryProgram", 4, non_gtp_interface_, false, false});
+
+  return info;
+}
+//------------------------------------------------------------------------------
+void UPF_XDPProgram::TearDown() {
+  /* Tear down stage programs first -- no interface attachments */
+  mar_    = nullptr;
+  bar_    = nullptr;
+  urr_    = nullptr;
+  qer_    = nullptr;
+  qer_tc_ = nullptr;
+  far_    = nullptr;
+  pdr_    = nullptr;
+  sl_eth_ = nullptr;
+  sl_ip_  = nullptr;
+
+  /* Tear down entry programs -- lifecycle_ destructor calls tearDown() */
+  n6_eth_ = nullptr;
+  n3_eth_ = nullptr; /* ETH primary -- destroy after secondary */
+  n6_     = nullptr;
+  n3_     = nullptr; /* IP primary  -- destroy after secondary */
+
+  Logger::upf_app().info("UPF_XDPProgram: TearDown complete");
+}
+
+//------------------------------------------------------------------------------
+void UPF_XDPProgram::InitializeMaps(struct bpf_object_skeleton* primary_skel) {
+  /*
+   * Wrap the 4 maps that every primary entry program owns.
+   * Both xdp_n3_entry_kern.c and xdp_n3_eth_entry_kern.c include:
+   *   tail_call_dispatcher.h -> tail_call_progs_map, packet_context_map,
+   *                             session_rules_enabled_map
+   *   stats_maps.h           -> mc_stats_map
+   */
+  maps_    = std::make_shared<BPFMaps>(primary_skel);
+  auto get = [&](const char* name) {
+    return std::make_shared<BPFMap>(maps_->GetMap(name));
+  };
+  tail_call_progs_map_ = get("tail_call_progs_map");
+  packet_ctx_map_      = get("packet_context_map");
+  session_rules_map_   = get("session_rules_enabled_map");
+  mc_stats_map_        = get("mc_stats_map");
+
+  Logger::upf_app().info("UPF_XDPProgram: Maps initialization completed");
+}
+
+/* Section: Interface configuration */
 
 //------------------------------------------------------------------------------
 void UPF_XDPProgram::CreateUpfInterfaceMapEntry(reference_point_t s) {
+  if (!upf_iface_map_) {
+    Logger::upf_app().error(
+        "CreateUpfInterfaceMapEntry: upf_iface_map_ not initialized");
+    return;
+  }
+
+  /* Log map capacity so we can catch E2BIG before it happens */
+  {
+    struct bpf_map* raw_map =
+        bpf_object__find_map_by_name(far_->GetBpfObject(), "upf_interface_map");
+    if (raw_map) {
+      // Logger::upf_app().debug(
+      //     "CreateUpfInterfaceMapEntry: key=%u  map_fd=%d  max_entries=%u", s,
+      //     bpf_map__fd(raw_map), bpf_map__max_entries(raw_map));
+    }
+  }
+
+  auto m = upf_iface_map_;
   struct interface_config iface;
-  __builtin_memset(&iface, 0, sizeof(interface_config));
+  __builtin_memset(&iface, 0, sizeof(iface));
+
+  /* Helper: convert network-order uint32_t to dotted-decimal string */
+  auto ip_str = [](uint32_t addr) -> std::string {
+    struct in_addr a;
+    a.s_addr = addr;
+    char buf[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &a, buf, sizeof(buf));
+    return std::string(buf);
+  };
 
   switch (s) {
     case N3_INTERFACE:
-      iface.ipv4_address = upf_cfg.n3.addr4.s_addr;
-      iface.port         = upf_cfg.n3.port;
-      iface.if_name      = upf_cfg.n3.if_name.c_str();
-      GetIfaceMap()->Update(s, iface, BPF_ANY);
+      iface.ipv4_address = upf::GetN3Ip();
+      iface.port         = upf::GetN3Port();
+      strncpy(iface.if_name, upf::GetN3Iface().c_str(), IF_NAME_MAX_LEN - 1);
+      Logger::upf_app().debug(
+          "  N3: ip=%s  port=%u  iface=%s", ip_str(iface.ipv4_address).c_str(),
+          iface.port, iface.if_name);
+      m->Update(s, iface, BPF_ANY);
+      Logger::upf_app().debug("  N3: upf_interface_map updated OK");
       break;
-
-    case N6_INTERFACE:
-      iface.ipv4_address = upf_cfg.n6.addr4.s_addr;
-      iface.port         = upf_cfg.n6.port;
-      iface.if_name      = upf_cfg.n6.if_name.c_str();
-      GetIfaceMap()->Update(s, iface, BPF_ANY);
-      break;
-
     case N4_INTERFACE:
-      iface.ipv4_address = upf_cfg.n4.addr4.s_addr;
-      iface.port         = upf_cfg.n4.port;
-      iface.if_name      = upf_cfg.n4.if_name.c_str();
-      GetIfaceMap()->Update(s, iface, BPF_ANY);
+      iface.ipv4_address = upf::GetN4Ip();
+      iface.port         = upf::GetN4Port();
+      strncpy(iface.if_name, upf::GetN4Iface().c_str(), IF_NAME_MAX_LEN - 1);
+      Logger::upf_app().debug(
+          "  N4: ip=%s  port=%u  iface=%s", ip_str(iface.ipv4_address).c_str(),
+          iface.port, iface.if_name);
+      m->Update(s, iface, BPF_ANY);
+      Logger::upf_app().debug("  N4: upf_interface_map updated OK");
       break;
+    case N6_INTERFACE:
+      iface.ipv4_address = upf::GetN6Ip();
+      iface.port         = 0;
+      strncpy(iface.if_name, upf::GetN6Iface().c_str(), IF_NAME_MAX_LEN - 1);
+      Logger::upf_app().debug(
+          "  N6: ip=%s  port=%u  iface=%s", ip_str(iface.ipv4_address).c_str(),
+          iface.port, iface.if_name);
+      m->Update(s, iface, BPF_ANY);
 
-    case N9_INTERFACE:
-      Logger::upf_app().error("Reference Point N9 not defined");
+      Logger::upf_app().debug("  N6: upf_interface_map updated OK");
       break;
-
-    case N19_INTERFACE:
-      Logger::upf_app().error("Reference Point N19 not defined");
-      break;
-
     default:
-      Logger::upf_app().error("The Reference Point is not defined");
+      Logger::upf_app().error(
+          "CreateUpfInterfaceMapEntry: unknown reference point %d", s);
+  }
+}
+
+/* Section: GetMapByName */
+
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> UPF_XDPProgram::GetMapByName(const std::string& n) {
+  /* Primary entry skeleton infrastructure maps */
+  if (n == "tail_call_progs_map") return tail_call_progs_map_;
+  if (n == "packet_context_map") return packet_ctx_map_;
+  if (n == "session_rules_enabled_map") return session_rules_map_;
+  if (n == "mc_stats_map") return mc_stats_map_;
+
+  /* IP session maps -- SessionLookupIPProgram */
+  if (n == "session_by_ue_ip_map")
+    return sl_ip_ ? sl_ip_->GetSessionByUeIpMap() : nullptr;
+  if (n == "pdrs_per_session_map")
+    return sl_ip_ ? sl_ip_->GetSessionPdrsMap() : nullptr;
+  if (n == "rules_match_pdr_map")
+    return sl_ip_ ? sl_ip_->GetRulesMatchMap() : nullptr;
+  if (n == "session_qos_enabled_map")
+    return sl_ip_ ? sl_ip_->GetSessionQosEnabledMap() : nullptr;
+  if (n == "m_framed_route_mapping")
+    return sl_ip_ ? sl_ip_->GetFramedRouteMappingMap() : nullptr;
+  if (n == "framed_routing_flag")
+    return sl_ip_ ? sl_ip_->GetFramedRoutingFlagMap() : nullptr;
+  if (n == "feature_dispatch_map")
+    return sl_ip_ ? sl_ip_->GetFeatureDispatchMap() : nullptr;
+
+  /* ETH session maps -- SessionLookupETHProgram */
+  if (n == "session_by_mac_map")
+    return sl_eth_ ? sl_eth_->GetSessionByMacMap() : nullptr;
+  if (n == "mac_pdu_session_map")
+    return sl_eth_ ? sl_eth_->GetMacPduSessionMap() : nullptr;
+  if (n == "eth_session_mapping_map")
+    return sl_eth_ ? sl_eth_->GetEthSessionMappingMap() : nullptr;
+  if (n == "eth_session_pdrs_map")
+    return sl_eth_ ? sl_eth_->GetEthSessionPdrsMap() : nullptr;
+  if (n == "eth_rules_match_pdr_map")
+    return sl_eth_ ? sl_eth_->GetEthRulesMatchPdrMap() : nullptr;
+  if (n == "eth_egress_ifindex_map")
+    return sl_eth_ ? sl_eth_->GetEthEgressIfindexMap() : nullptr;
+
+  /* Interface maps -- upf_iface_map_ set in Setup() from FAR (IP) or
+   * n6_eth_ (ETH) */
+  if (n == "upf_interface_map") return upf_iface_map_;
+  if (n == "redirect_interfaces_map")
+    return far_ ? far_->GetRedirectInterfacesMap() : nullptr;
+  if (n == "arp_table_map") return far_ ? far_->GetArpTableMap() : nullptr;
+
+  /* PDR maps */
+  if (n == "sdf_filters_map") return pdr_ ? pdr_->GetSdfFilterMap() : nullptr;
+
+  /* URR maps */
+  if (n == "urr_config_map") return urr_ ? urr_->GetUrrConfigMap() : nullptr;
+  if (n == "urr_volume_counters_map")
+    return urr_ ? urr_->GetUrrVolumeMap() : nullptr;
+
+  /* BAR maps */
+  if (n == "bar_config_map") return bar_ ? bar_->GetBarConfigMap() : nullptr;
+  if (n == "bar_state_map") return bar_ ? bar_->GetBarStateMap() : nullptr;
+
+  /* MAR maps */
+  if (n == "mar_config_map") return mar_ ? mar_->GetMarConfigMap() : nullptr;
+  if (n == "mar_access_state_map")
+    return mar_ ? mar_->GetMarAccessStateMap() : nullptr;
+
+  Logger::upf_app().warn("GetMapByName: '%s' not found", n.c_str());
+  return nullptr;
+}
+
+/* Section: Framed routing */
+
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> UPF_XDPProgram::GetFramedRouteMappingMap() {
+  return sl_ip_ ? sl_ip_->GetFramedRouteMappingMap() : nullptr;
+}
+
+//------------------------------------------------------------------------------
+void UPF_XDPProgram::UpdateFramedRouteMappingMap(
+    uint32_t ue_ip, FramedRoutingKeyBPF key) {
+  auto m = GetFramedRouteMappingMap();
+  if (m) {
+    uint32_t k = hash_framed_routing_key(&key);
+    m->Update(k, ue_ip, BPF_ANY);
   }
 }
 
 //------------------------------------------------------------------------------
-UPF_XDPProgram::~UPF_XDPProgram() {}
-
-//------------------------------------------------------------------------------
-void UPF_XDPProgram::Setup(bool is_qos_enabled) {
-  skeleton_ = lifecycle_->open();
-  InitializeMaps();
-  lifecycle_->load();
-  lifecycle_->attach();
-
-  const std::string udp_iface =
-      UserPlaneComponent::GetInstance().GetUDPInterface();
-  const std::string gtp_iface =
-      UserPlaneComponent::GetInstance().GetGTPInterface();
-
-  uint32_t udp_interface_index = if_nametoindex(udp_iface.c_str());
-  uint32_t gtp_interface_index = if_nametoindex(gtp_iface.c_str());
-
-  uint32_t uplink_id   = static_cast<uint32_t>(FlowDirection::UPLINK);
-  uint32_t downlink_id = static_cast<uint32_t>(FlowDirection::DOWNLINK);
-
-  egress_interface_map_->Update(uplink_id, udp_interface_index, BPF_ANY);
-  egress_interface_map_->Update(downlink_id, gtp_interface_index, BPF_ANY);
-
-  Logger::upf_app().info(
-      "Reference points configured: N3 (%s), N4 (%s), N6 (%s)",
-      upf_cfg.n3.if_name.c_str(), upf_cfg.n4.if_name.c_str(),
-      upf_cfg.n6.if_name.c_str());
-  CreateUpfInterfaceMapEntry(N3_INTERFACE);
-  CreateUpfInterfaceMapEntry(N6_INTERFACE);
-  CreateUpfInterfaceMapEntry(N4_INTERFACE);
-
-  // Validate interface names
-  if (udp_interface_.empty() || gtp_interface_.empty()) {
-    Logger::upf_app().error("GTP or UDP interface not defined!");
-    throw std::runtime_error("GTP or UDP interface not defined!");
-  }
-
-  Logger::upf_app().debug(
-      "Link GTP XDP Section to interface %s", gtp_interface_.c_str());
-  lifecycle_->link(XDPSection::Uplink, gtp_interface_.c_str());
-
-  Logger::upf_app().debug(
-      "Link Non-GTP XDP Section to interface %s", udp_interface_.c_str());
-  if (is_qos_enabled) {
-    Logger::upf_app().debug(
-        "QoS enforcement is enabled - attaching TC BPF section");
-    lifecycle_->link(XDPSection::Shaping, udp_interface_.c_str());
-  } else {
-    Logger::upf_app().debug("QoS enforcement: disabled");
-    lifecycle_->link(XDPSection::Downlink, udp_interface_.c_str());
+void UPF_XDPProgram::RemoveFramedRoute(FramedRoutingKeyBPF key) {
+  auto m = GetFramedRouteMappingMap();
+  if (m) {
+    uint32_t k = hash_framed_routing_key(&key);
+    uint32_t v;
+    if (m->Lookup(k, &v) == 0) m->Remove(k);
   }
 }
 
 //------------------------------------------------------------------------------
-void UPF_XDPProgram::TearDown() {
-  lifecycle_->tearDown();
+void UPF_XDPProgram::SetFramedRouting(bool enable) {
+  auto m = sl_ip_ ? sl_ip_->GetFramedRoutingFlagMap() : nullptr;
+  if (m) {
+    uint8_t v = enable ? 1 : 0;
+    uint8_t k = 0;
+    m->Update(k, v, BPF_ANY);
+  }
 }
+
+/* Section: RemoveProgramMap */
 
 //------------------------------------------------------------------------------
 void UPF_XDPProgram::RemoveProgramMap(uint32_t key) {
-  int32_t fd;
-  // Remove only if exists
-  if (teid_session_map_->Lookup(key, &fd) == 0) {
-    teid_session_map_->Remove(key);
-  }
+  if (tail_call_progs_map_) tail_call_progs_map_->Remove(key);
 }
+
+/* Section: Delegated map getters */
 
 //------------------------------------------------------------------------------
 std::shared_ptr<BPFMaps> UPF_XDPProgram::GetMaps() {
@@ -320,204 +728,73 @@ std::shared_ptr<BPFMaps> UPF_XDPProgram::GetMaps() {
 }
 
 //------------------------------------------------------------------------------
-std::shared_ptr<BPFMap> UPF_XDPProgram::GetMapByName(
-    const std::string& map_name) {
-  // Map name aliases to actual map members
-  // Support both new names and legacy names for compatibility
-
-  if (map_name == "session_map" || map_name == "session_by_ue_ip_map") {
-    return session_mapping_map_;
-  }
-
-  if (map_name == "arp_table" || map_name == "arp_table_map") {
-    return arp_table_map_;
-  }
-
-  if (map_name == "redirect_interfaces_map") {
-    return egress_interface_map_;
-  }
-
-  if (map_name == "upf_interface_map") {
-    return upf_iface_map_;
-  }
-
-  if (map_name == "pdrs_per_session_map") {
-    return session_pdrs_map_;
-  }
-
-  if (map_name == "rules_match_pdr_map") {
-    return rules_match_pdr_map_;
-  }
-
-  if (map_name == "sdf_filters_map") {
-    return sdf_filter_map_;
-  }
-
-  if (map_name == "session_qos_enabled_map") {
-    return qos_enabling_map_;
-  }
-
-  if (map_name == "m_framed_route_mapping") {
-    return framed_route_mapping_map_;
-  }
-
-  if (map_name == "framed_routing_flag") {
-    return framed_route_flag_map_;
-  }
-
-  if (map_name == "m_eth__session_mapping") {
-    return eth_session_mapping_map_;
-  }
-
-  if (map_name == "m_eth__rules_match_pdr") {
-    return eth_rules_match_pdr_map_;
-  }
-
-  if (map_name == "m_eth__session_pdrs") {
-    return eth_session_pdrs_map_;
-  }
-
-  if (map_name == "m_mac_pdu_session") {
-    return mac_pdu_session_map_;
-  }
-
-  // Map not found
-  Logger::upf_app().warn("Map '%s' not found in XDP program", map_name.c_str());
-  return nullptr;
-}
-
-//------------------------------------------------------------------------------
 std::shared_ptr<BPFMap> UPF_XDPProgram::GetSessionMappingMap() const {
-  return session_mapping_map_;
+  return sl_ip_ ? sl_ip_->GetSessionByUeIpMap() : nullptr;
 }
-
-//------------------------------------------------------------------------------
-std::shared_ptr<BPFMap> UPF_XDPProgram::GetEgressInterfaceMap() const {
-  return egress_interface_map_;
+std::shared_ptr<BPFMap> UPF_XDPProgram::GetSessionMacMap() const {
+  return sl_eth_ ? sl_eth_->GetSessionByMacMap() : nullptr;
 }
-
-//------------------------------------------------------------------------------
-std::shared_ptr<BPFMap> UPF_XDPProgram::GetArpTableMap() const {
-  return arp_table_map_;
-}
-
-//------------------------------------------------------------------------------
-std::shared_ptr<BPFMap> UPF_XDPProgram::GetIfaceMap() const {
-  return upf_iface_map_;
-}
-
-//------------------------------------------------------------------------------
 std::shared_ptr<BPFMap> UPF_XDPProgram::GetRulesMatchPdrMap() const {
-  return rules_match_pdr_map_;
+  return sl_ip_ ? sl_ip_->GetRulesMatchMap() : nullptr;
 }
-
-//------------------------------------------------------------------------------
 std::shared_ptr<BPFMap> UPF_XDPProgram::GetSessionPdrsMap() const {
-  return session_pdrs_map_;
+  return sl_ip_ ? sl_ip_->GetSessionPdrsMap() : nullptr;
 }
-
-//------------------------------------------------------------------------------
 std::shared_ptr<BPFMap> UPF_XDPProgram::GetSdfFilterMap() const {
-  return sdf_filter_map_;
+  return pdr_ ? pdr_->GetSdfFilterMap() : nullptr;
 }
-
-//------------------------------------------------------------------------------
 std::shared_ptr<BPFMap> UPF_XDPProgram::GetQosEnablingMap() const {
-  return qos_enabling_map_;
+  return sl_ip_ ? sl_ip_->GetSessionQosEnabledMap() : nullptr;
+}
+std::shared_ptr<BPFMap> UPF_XDPProgram::GetFeatureDispatchMap() const {
+  return sl_ip_ ? sl_ip_->GetFeatureDispatchMap() : nullptr;
 }
 
 //------------------------------------------------------------------------------
-std::shared_ptr<BPFMap> UPF_XDPProgram::GetFramedRouteMappingMap() {
-  return framed_route_mapping_map_;
+size_t UPF_XDPProgram::GetTotalMapCount() const {
+  size_t total = 0;
+  /* Only non-null programs contribute -- exactly one entry pair is alive */
+  if (n3_) total += n3_->GetMapCount();
+  if (n6_) total += n6_->GetMapCount();
+  if (n3_eth_) total += n3_eth_->GetMapCount();
+  if (n6_eth_) total += n6_eth_->GetMapCount();
+  if (sl_ip_) total += sl_ip_->GetMapCount();
+  if (sl_eth_) total += sl_eth_->GetMapCount();
+  if (pdr_) total += pdr_->GetMapCount();
+  if (far_) total += far_->GetMapCount();
+  if (qer_) total += qer_->GetMapCount();
+  /* qer_tc_: TC-BPF -- no GetMapCount(). TC maps are per-session. */
+  if (urr_) total += urr_->GetMapCount();
+  if (bar_) total += bar_->GetMapCount();
+  if (mar_) total += mar_->GetMapCount();
+  return total;
 }
 
 //------------------------------------------------------------------------------
-void UPF_XDPProgram::UpdateFramedRouteMappingMap(
-    uint32_t ue_ip, FramedRoutingKeyBPF key) {
-  uint32_t hash_key = hash_framed_routing_key(&key);
-  Logger::upf_app().debug(
-      "Update framed routing map with key: %u, value: %pI4", hash_key, ue_ip);
-  framed_route_mapping_map_->Update(hash_key, ue_ip, BPF_ANY);
-}
-
-//------------------------------------------------------------------------------
-void UPF_XDPProgram::RemoveFramedRoute(FramedRoutingKeyBPF key) {
-  uint32_t hash_key = hash_framed_routing_key(&key);
-  uint32_t ue_ip;
-  if (framed_route_mapping_map_->Lookup(hash_key, &ue_ip) == 0) {
-    framed_route_mapping_map_->Remove(hash_key);
+bool UPF_XDPProgram::IsNativeXdp(const std::string& iface) const {
+  if (iface == gtp_interface_) {
+    if (n3_) return n3_->GetLifeCycle()->IsNativeXdp(iface);
+    if (n3_eth_) return n3_eth_->GetLifeCycle()->IsNativeXdp(iface);
   }
-}
-
-//------------------------------------------------------------------------------
-void UPF_XDPProgram::SetFramedRouting(bool enable) {
-  uint8_t value = enable ? 1 : 0;
-  uint8_t key   = 0;
-  framed_route_flag_map_->Update(key, value, BPF_ANY);
-}
-
-//------------------------------------------------------------------------------
-void UPF_XDPProgram::InitializeMaps() {
-  // Store all maps available in the program
-  maps_ = std::make_shared<BPFMaps>(lifecycle_->getBPFSkeleton()->skeleton);
-
-  session_mapping_map_ =
-      std::make_shared<BPFMap>(maps_->GetMap("session_by_ue_ip_map"));
-  arp_table_map_ = std::make_shared<BPFMap>(maps_->GetMap("arp_table_map"));
-  egress_interface_map_ =
-      std::make_shared<BPFMap>(maps_->GetMap("redirect_interfaces_map"));
-  upf_iface_map_ = std::make_shared<BPFMap>(maps_->GetMap("upf_interface_map"));
-  session_pdrs_map_ =
-      std::make_shared<BPFMap>(maps_->GetMap("pdrs_per_session_map"));
-  rules_match_pdr_map_ =
-      std::make_shared<BPFMap>(maps_->GetMap("rules_match_pdr_map"));
-  sdf_filter_map_ = std::make_shared<BPFMap>(maps_->GetMap("sdf_filters_map"));
-  qos_enabling_map_ =
-      std::make_shared<BPFMap>(maps_->GetMap("session_qos_enabled_map"));
-  framed_route_mapping_map_ =
-      std::make_shared<BPFMap>(maps_->GetMap("m_framed_route_mapping"));
-  framed_route_flag_map_ =
-      std::make_shared<BPFMap>(maps_->GetMap("framed_routing_flag"));
-
-  // Ethernet PDU session maps — optional; absent if ETH support not compiled in
-  try {
-    eth_session_mapping_map_ =
-        std::make_shared<BPFMap>(maps_->GetMap("m_eth__session_mapping"));
-    eth_rules_match_pdr_map_ =
-        std::make_shared<BPFMap>(maps_->GetMap("m_eth__rules_match_pdr"));
-    eth_session_pdrs_map_ =
-        std::make_shared<BPFMap>(maps_->GetMap("m_eth__session_pdrs"));
-    mac_pdu_session_map_ =
-        std::make_shared<BPFMap>(maps_->GetMap("m_mac_pdu_session"));
-    Logger::upf_app().debug("ETH-PDU BPF maps initialized");
-  } catch (const std::exception& e) {
-    Logger::upf_app().warn(
-        "ETH-PDU BPF maps not found — Ethernet PDU sessions disabled: %s",
-        e.what());
+  if (iface == non_gtp_interface_) {
+    if (n6_) return n6_->GetLifeCycle()->IsNativeXdp(iface);
+    if (n6_eth_) return n6_eth_->GetLifeCycle()->IsNativeXdp(iface);
   }
+  Logger::upf_app().warn("IsNativeXdp: unknown interface '%s'", iface.c_str());
+  return false;
 }
 
 //------------------------------------------------------------------------------
-size_t UPF_XDPProgram::GetMapCount() const {
-  if (!maps_) {
-    return 0;
+std::string UPF_XDPProgram::GetXdpModeString(const std::string& iface) const {
+  if (iface == gtp_interface_) {
+    if (n3_) return n3_->GetLifeCycle()->GetXdpModeString(iface);
+    if (n3_eth_) return n3_eth_->GetLifeCycle()->GetXdpModeString(iface);
   }
-  return maps_->GetMapCount();
-}
-
-//------------------------------------------------------------------------------
-bool UPF_XDPProgram::IsNativeXdp(const std::string& interface) const {
-  if (!lifecycle_) {
-    return false;
+  if (iface == non_gtp_interface_) {
+    if (n6_) return n6_->GetLifeCycle()->GetXdpModeString(iface);
+    if (n6_eth_) return n6_eth_->GetLifeCycle()->GetXdpModeString(iface);
   }
-  return lifecycle_->IsNativeXdp(interface);
-}
-
-//------------------------------------------------------------------------------
-std::string UPF_XDPProgram::GetXdpModeString(
-    const std::string& interface) const {
-  if (!lifecycle_) {
-    return "Unknown";
-  }
-  return lifecycle_->GetXdpModeString(interface);
+  Logger::upf_app().warn(
+      "GetXdpModeString: unknown interface '%s'", iface.c_str());
+  return "Unknown";
 }

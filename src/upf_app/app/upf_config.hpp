@@ -93,19 +93,18 @@ class upf_config {
 
   } nf_addr;
 
-  bool enable_snat;
-  bool enable_fr;
-  bool enable_urr;      // Usage Reporting Rules (3GPP TS 29.244)
-  bool enable_bar;      // Buffering Action Rules (3GPP TS 29.244)
-  bool enable_mar;      // Modify Access Rules (3GPP TS 29.244)
+  bool enable_5g_features;
+  bool enable_bpf_datapath;
   bool enable_eth_pdu;  // Ethernet PDU Sessions (3GPP TS 29.244)
+  bool enable_fr;
+  bool enable_qos;
+  bool enable_urr;  // Usage Reporting Rules (3GPP TS 29.244)
+  bool enable_bar;  // Buffering Action Rules (3GPP TS 29.244)
+  bool enable_mar;  // Modify Access Rules (3GPP TS 29.244)
+  bool enable_snat;
 
   std::vector<pdn_cfg_t> pdns;
   std::vector<pfcp::node_id_t> smfs;
-
-  bool enable_5g_features;
-  bool enable_bpf_datapath;
-  bool enable_qos;
 
   // Datapath configuration will be set from upf_datapath_configuration class
   uint32_t max_pdu_sessions;
@@ -149,12 +148,6 @@ class upf_config {
         pdns(),
         smfs(),
         nsf(),
-        enable_snat(false),
-        enable_fr(false),
-        enable_urr(false),      // Not implemented yet
-        enable_bar(false),      // Not implemented yet
-        enable_mar(false),      // Not implemented yet
-        enable_eth_pdu(false),  // Not implemented yet
         nrf_addr() {
     itti.itti_timer_sched_params.sched_priority = 85;
     itti.n3_sched_params.sched_priority         = 84;
@@ -172,7 +165,14 @@ class upf_config {
 
     enable_5g_features  = true;
     enable_bpf_datapath = false;
+    enable_fr           = false;
+    enable_eth_pdu      = false;
     enable_qos          = false;
+    enable_urr          = false;
+    enable_bar          = false;
+    enable_mar          = false;
+    enable_snat         = false;
+
     // Values from basic_nrf_config_ebpf.yaml (lines 373-564)
     max_upf_interfaces                            = 4;
     max_upf_redirect_interfaces                   = 2;

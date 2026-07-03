@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #pragma once
 
 #include "BPFMapFormatters.hpp"

@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP FAR ID (Forwarding Action Rule ID)
- * Reference: 3GPP TS 29.244 Section 8.2.74
- */
-
 #ifndef _PFCP_FAR_ID_H
 #define _PFCP_FAR_ID_H
 

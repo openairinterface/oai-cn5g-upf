@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP SDF Filter
- * Reference: 3GPP TS 29.244 Section 8.2.5
- */
-
 #ifndef _PFCP_SDF_FILTER_H
 #define _PFCP_SDF_FILTER_H
 

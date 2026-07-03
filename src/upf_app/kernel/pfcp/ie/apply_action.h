@@ -1,7 +1,7 @@
 /*
- * PFCP Apply Action
- * Reference: 3GPP TS 29.244 Section 8.2.26
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
+
 #ifndef _PFCP_APPLY_ACTION_H
 #define _PFCP_APPLY_ACTION_H
 #include <linux/types.h>
