@@ -5,35 +5,47 @@
 #ifndef FILE_PFCP_QER_HPP_SEEN
 #define FILE_PFCP_QER_HPP_SEEN
 
-#include <linux/ip.h>
-#include <linux/ipv6.h>
 #include "msg_pfcp.hpp"
 
 namespace pfcp {
 
+/** @brief Control-plane representation of a QoS Enforcement Rule (QER).
+ *
+ *  Stores all IEs from 3GPP TS 29.244 V17.10.0 Table 7.5.2.5-1 (Create QER)
+ *  and Table 7.5.4.5-1 (Update QER). SessionProgramManager::ConvertQer()
+ *  translates this to the BPF struct written into qer_config_map.
+ */
 class pfcp_qer {
  public:
-  std::pair<bool, pfcp::qer_id_t> qer_id;
-  std::pair<bool, pfcp::qer_correlation_id_t> qer_correlation_id;
-  std::pair<bool, pfcp::gate_status_t> gate_status;
-  std::pair<bool, pfcp::mbr_t> maximum_bitrate;
-  std::pair<bool, pfcp::gbr_t> guaranteed_bitrate;
-  std::pair<bool, pfcp::qfi_t> qos_flow_id;
-  std::pair<bool, pfcp::rqi_t> reflective_qos;
-  std::pair<bool, pfcp::paging_policy_indicator_t> paging_policy_indicator;
-  std::pair<bool, pfcp::averaging_window_t> averaging_window;
+  // ---- Mandatory -----------------------------------------------------------
+  std::pair<bool, pfcp::qer_id_t> qer_id;  ///< §8.2.75 — Sxb+Sxc+N4+N4mb
+  std::pair<bool, pfcp::gate_status_t>
+      gate_status;  ///< §8.2.7  — Sxb+Sxc+N4+N4mb
 
-  /*
-   * Not considered for N4 interface:
-   *    std::pair<bool, pfcp::packet_rate_t> packet_rate;
-   *    pfcp::dl_flow_level_marking_t dl_flow_level_marking;
-   *
-   */
+  // ---- Conditional / Optional ----------------------------------------------
+  std::pair<bool, pfcp::qer_correlation_id_t>
+      qer_correlation_id;                        ///< §8.2.10  — Sxb+N4
+  std::pair<bool, pfcp::mbr_t> maximum_bitrate;  ///< §8.2.8   — Sxb+Sxc+N4+N4mb
+  std::pair<bool, pfcp::gbr_t>
+      guaranteed_bitrate;                    ///< §8.2.9   — Sxb+Sxc+N4+N4mb
+  std::pair<bool, pfcp::qfi_t> qos_flow_id;  ///< §8.2.89  — N4+N4mb
+  std::pair<bool, pfcp::rqi_t> reflective_qos;  ///< §8.2.88  — N4 only
+  std::pair<bool, pfcp::paging_policy_indicator_t>
+      paging_policy_indicator;  ///< §8.2.116 — N4 only
+  std::pair<bool, pfcp::averaging_window_t>
+      averaging_window;  ///< §8.2.115 — N4 only
+
+  // TODO §8.2.174: QER Control Indications — absent from pfcp::create_qer in
+  //   lib. Present in pfcp::update_qer; add to pfcp_qer and update() when lib
+  //   is updated.
+  // TODO §8.2.216: QER Indications — N4mb only; not in lib at all.
+
   //------------------------------------------------------------------------------
+  /** @brief Default constructor — all optional IEs absent. */
   pfcp_qer()
       : qer_id(),
-        qer_correlation_id(),
         gate_status(),
+        qer_correlation_id(),
         maximum_bitrate(),
         guaranteed_bitrate(),
         qos_flow_id(),
@@ -42,20 +54,26 @@ class pfcp_qer {
         averaging_window() {}
 
   //------------------------------------------------------------------------------
+  /** @brief Construct from Create QER IE (3GPP TS 29.244 V17.10.0
+   *  Table 7.5.2.5-1).
+   */
   explicit pfcp_qer(const pfcp::create_qer& c)
       : qer_id(c.qer_id),
-        qer_correlation_id(c.qer_correlation_id),
         gate_status(c.gate_status),
+        qer_correlation_id(c.qer_correlation_id),
         maximum_bitrate(c.maximum_bitrate),
         guaranteed_bitrate(c.guaranteed_bitrate),
         qos_flow_id(c.qos_flow_identifier),
-        reflective_qos(c.reflective_qos) {}
+        reflective_qos(c.reflective_qos),
+        paging_policy_indicator(c.paging_policy_indicator),
+        averaging_window(c.averaging_window) {}
 
   //------------------------------------------------------------------------------
+  /** @brief Copy constructor. */
   pfcp_qer(const pfcp_qer& c)
       : qer_id(c.qer_id),
-        qer_correlation_id(c.qer_correlation_id),
         gate_status(c.gate_status),
+        qer_correlation_id(c.qer_correlation_id),
         maximum_bitrate(c.maximum_bitrate),
         guaranteed_bitrate(c.guaranteed_bitrate),
         qos_flow_id(c.qos_flow_id),
@@ -63,8 +81,7 @@ class pfcp_qer {
         paging_policy_indicator(c.paging_policy_indicator),
         averaging_window(c.averaging_window) {}
 
-  //------------------------------------------------------------------------------
-  // virtual ~pfcp_qer() {};
+  // ---- Setters -------------------------------------------------------------
 
   //------------------------------------------------------------------------------
   void set(const pfcp::qer_id_t& v) {
@@ -109,18 +126,18 @@ class pfcp_qer {
   }
 
   //------------------------------------------------------------------------------
-
   void set(const pfcp::paging_policy_indicator_t& v) {
     paging_policy_indicator.first  = true;
     paging_policy_indicator.second = v;
   }
 
   //------------------------------------------------------------------------------
-
   void set(const pfcp::averaging_window_t& v) {
     averaging_window.first  = true;
     averaging_window.second = v;
   }
+
+  // ---- Getters -------------------------------------------------------------
 
   //------------------------------------------------------------------------------
   bool get(pfcp::qer_id_t& v) const {
@@ -195,7 +212,6 @@ class pfcp_qer {
   }
 
   //------------------------------------------------------------------------------
-
   bool get(pfcp::averaging_window_t& v) const {
     if (averaging_window.first) {
       v = averaging_window.second;
@@ -205,8 +221,14 @@ class pfcp_qer {
   }
 
   //------------------------------------------------------------------------------
-  bool update(const pfcp::update_qer& update, uint8_t& cause_value);
+  /** @brief Apply Update QER IE fields (3GPP TS 29.244 V17.10.0
+   *  Table 7.5.4.5-1).
+   *  @param updated_qer Update QER message IE.
+   *  @param cause_value Populated with CAUSE_VALUE_* on return.
+   *  @return true on success.
+   */
+  bool update(const pfcp::update_qer& updated_qer, uint8_t& cause_value);
 };
 }  // namespace pfcp
 
-#endif
+#endif  // FILE_PFCP_QER_HPP_SEEN

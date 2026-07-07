@@ -5,20 +5,42 @@
 #ifndef FILE_PFCP_FAR_HPP_SEEN
 #define FILE_PFCP_FAR_HPP_SEEN
 
-#include <linux/ip.h>
-#include <linux/ipv6.h>
 #include "msg_pfcp.hpp"
+struct iphdr;
 
 namespace pfcp {
 
+/** @brief Control-plane representation of a Forwarding Action Rule (FAR).
+ *
+ *  Stores all IEs from 3GPP TS 29.244 V17.10.0 Table 7.5.2.3-1 (Create FAR)
+ *  and Table 7.5.4.3-1 (Update FAR).  apply_forwarding_rules() executes the
+ *  data-plane action on each matched packet.
+ */
 class pfcp_far {
  public:
-  pfcp::far_id_t far_id;
-  pfcp::apply_action_t apply_action;
-  std::pair<bool, pfcp::forwarding_parameters> forwarding_parameters;
-  std::pair<bool, pfcp::duplicating_parameters> duplicating_parameters;
-  std::pair<bool, pfcp::bar_id_t> bar_id;
+  // ---- Mandatory -----------------------------------------------------------
+  pfcp::far_id_t far_id;              ///< §8.2.74  — Sxa+Sxb+Sxc+N4+N4mb
+  pfcp::apply_action_t apply_action;  ///< §8.2.26  — Sxa+Sxb+Sxc+N4+N4mb
 
+  // ---- Conditional / Optional ----------------------------------------------
+  std::pair<bool, pfcp::forwarding_parameters>
+      forwarding_parameters;  ///< grouped IE type=4, Table 7.5.2.3-2 —
+                              ///< Sxa+Sxb+Sxc+N4
+  std::pair<bool, pfcp::duplicating_parameters>
+      duplicating_parameters;  ///< grouped IE type=5, Table 7.5.2.3-3 — Sxa+Sxb
+  std::pair<bool, pfcp::bar_id_t> bar_id;  ///< §8.2.57  — Sxa+N4
+
+  // TODO grouped=270 — Redundant Transmission Forwarding Parameters
+  //   (C, N4 only, Tables 7.5.2.3-4, 7.5.4.3-1). Not in lib.
+  // TODO grouped=301 — MBS Multicast Parameters
+  //   (C, N4mb only, Table 7.5.2.3-1). Not in lib.
+  // TODO grouped=302 — Add MBS Unicast Parameters
+  //   (C, N4mb only, Tables 7.5.2.3-1, 7.5.4.3-1). Not in lib.
+  // TODO grouped=303 — Remove MBS Unicast Parameters
+  //   (C, N4mb only, Table 7.5.4.3-1, Update FAR only). Not in lib.
+
+  //------------------------------------------------------------------------------
+  /** @brief Default constructor — all optional IEs absent. */
   pfcp_far()
       : far_id(),
         apply_action(),
@@ -26,6 +48,10 @@ class pfcp_far {
         duplicating_parameters(),
         bar_id() {}
 
+  //------------------------------------------------------------------------------
+  /** @brief Construct from Create FAR IE (3GPP TS 29.244 V17.10.0
+   *  Table 7.5.2.3-1).
+   */
   explicit pfcp_far(const pfcp::create_far& c)
       : forwarding_parameters(c.forwarding_parameters),
         duplicating_parameters(c.duplicating_parameters),
@@ -34,6 +60,8 @@ class pfcp_far {
     apply_action = c.apply_action.second;
   }
 
+  //------------------------------------------------------------------------------
+  /** @brief Copy constructor. */
   pfcp_far(const pfcp_far& c)
       : far_id(c.far_id),
         apply_action(c.apply_action),
@@ -41,30 +69,47 @@ class pfcp_far {
         duplicating_parameters(c.duplicating_parameters),
         bar_id(c.bar_id) {}
 
-  // virtual ~pfcp_far() {};
+  // ---- Setters -------------------------------------------------------------
+
+  //------------------------------------------------------------------------------
   void set(const pfcp::far_id_t& v) { far_id = v; }
+
+  //------------------------------------------------------------------------------
   void set(const pfcp::apply_action_t& v) { apply_action = v; }
+
+  //------------------------------------------------------------------------------
   void set(const pfcp::forwarding_parameters& v) {
     forwarding_parameters.first  = true;
     forwarding_parameters.second = v;
   }
+
+  //------------------------------------------------------------------------------
   void set(const pfcp::duplicating_parameters& v) {
     duplicating_parameters.first  = true;
     duplicating_parameters.second = v;
   }
+
+  //------------------------------------------------------------------------------
   void set(const pfcp::bar_id_t& v) {
     bar_id.first  = true;
     bar_id.second = v;
   }
 
+  // ---- Getters -------------------------------------------------------------
+
+  //------------------------------------------------------------------------------
   bool get(pfcp::far_id_t& v) const {
     v = far_id;
     return true;
   }
+
+  //------------------------------------------------------------------------------
   bool get(pfcp::apply_action_t& v) const {
     v = apply_action;
     return true;
   }
+
+  //------------------------------------------------------------------------------
   bool get(pfcp::forwarding_parameters& v) const {
     if (forwarding_parameters.first) {
       v = forwarding_parameters.second;
@@ -72,6 +117,8 @@ class pfcp_far {
     }
     return false;
   }
+
+  //------------------------------------------------------------------------------
   bool get(pfcp::duplicating_parameters& v) const {
     if (duplicating_parameters.first) {
       v = duplicating_parameters.second;
@@ -79,6 +126,8 @@ class pfcp_far {
     }
     return false;
   }
+
+  //------------------------------------------------------------------------------
   bool get(pfcp::bar_id_t& v) const {
     if (bar_id.first) {
       v = bar_id.second;
@@ -87,12 +136,33 @@ class pfcp_far {
     return false;
   }
 
-  bool update(const pfcp::update_far& update, uint8_t& cause_value);
+  //------------------------------------------------------------------------------
+  /** @brief Apply Update FAR IE fields (3GPP TS 29.244 V17.10.0
+   *  Table 7.5.4.3-1).
+   *  @param updated_far Update FAR message IE.
+   *  @param cause_value Populated with CAUSE_VALUE_* on return.
+   *  @return true on success.
+   */
+  bool update(const pfcp::update_far& updated_far, uint8_t& cause_value);
 
+  //------------------------------------------------------------------------------
+  /** @brief Execute the forwarding action on a matched packet.
+   *
+   *  Handles FORW (encapsulate + send), DROP (silently discard), BUFF
+   *  (set buff flag for caller), and NOCP (set nocp flag for caller).
+   *  Duplication (DUPL) is not yet implemented.
+   *
+   *  @param iph        IPv4 header pointer (points into recv buffer).
+   *  @param num_bytes  Payload length in bytes.
+   *  @param nocp       Set to true if apply_action.nocp is set.
+   *  @param buff       Set to true if apply_action.buff is set.
+   *  @param qfi        QoS Flow Identifier for GTP-U extension header
+   * (§8.2.75).
+   */
   void apply_forwarding_rules(
       struct iphdr* const iph, const std::size_t num_bytes, bool& nocp,
       bool& buff, uint8_t qfi);
 };
 }  // namespace pfcp
 
-#endif
+#endif  // FILE_PFCP_FAR_HPP_SEEN

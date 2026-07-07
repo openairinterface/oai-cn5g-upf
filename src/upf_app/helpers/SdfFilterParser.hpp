@@ -1,6 +1,7 @@
 /*
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
+
 #ifndef SDF_FILTER_PARSER_HPP
 #define SDF_FILTER_PARSER_HPP
 
@@ -10,6 +11,9 @@
 #include <iostream>
 #include <optional>
 #include <cstdlib>
+
+#include "linux/custom_types.h"
+#include "sdf_types.h"
 
 #include "logger.hpp"
 

@@ -2,59 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file upf_xdp_user.h
- * @brief XDP program management for UPF packet processing
- *
- * This class manages XDP (eXpress Data Path) programs for fast-path packet
- * processing in the User Plane Function. XDP provides kernel-bypass packet
- * processing with hardware offload capabilities.
- *
- * Key Features:
- * - Dual XDP programs: Uplink (GTP-U/N3) and Downlink (UDP/N6)
- * - Session-based packet forwarding with BPF maps
- * - ARP resolution for next-hop forwarding
- * - PDR (Packet Detection Rules) matching
- * - SDF (Service Data Flow) filtering
- * - QoS enablement per session
- * - Framed routing support for advanced routing scenarios
- *
- * Architecture:
- * - Uplink: GTP-U packets from N3 interface → decapsulation → routing
- * - Downlink: IP packets from N6 interface → encapsulation → forwarding
- *
- * XDP Hook Points:
- * - N3 (GTP) interface: xdp_uplink section
- * - N6 (UDP) interface: xdp_downlink or xdp_qos section
- *
- * BPF Maps Managed:
- * - session_by_ue_ip_map: UE IP → Session ID mapping
- * - arp_table_map: ARP resolution table
- * - redirect_interfaces_map: Interface redirection
- * - upf_interface_map: UPF reference points (N3, N4, N6)
- * - pdrs_per_session_map: PDRs for each session
- * - rules_match_pdr_map: Rule matching state
- * - sdf_filters_map: SDF filter definitions
- * - session_qos_enabled_map: QoS enablement per session
- * - framed_route_mapping: Framed routing mappings
- * - eth_session_mapping_map : ETH TEID to session
- * - eth_rules_match_pdr_map : ETH rule matching
- * - eth_session_pdrs_map : ETH PDRs per session
- *
- * XDP Performance:
- * - Native/Driver mode: Best performance, hardware offload
- * - SKB mode: Fallback, compatibility
- * - Typical throughput: 10-40 Gbps depending on hardware
- *
- * Reference Standards:
- * - Linux XDP: https://www.kernel.org/doc/html/latest/networking/af_xdp.html
- * - 3GPP TS 29.281: GTP-U protocol
- * - 3GPP TS 29.244: PFCP protocol for session management
- * - 3GPP TS 23.501: 5G System Architecture (N3, N6 interfaces)
- *
- * @note This implementation follows Google C++ Style Guide
- */
-
 #ifndef UPF_XDP_USER_H_
 #define UPF_XDP_USER_H_
 
@@ -62,281 +9,326 @@
 #include <linux/bpf.h>
 #include <memory>
 #include <string>
-#include <upf_xdp_kern_skel.h>
+#include <initializer_list>
 #include <wrappers/BPFMap.hpp>
-#include "interfaces.h"
-#include <framed_routing_bpf.h>
-#include "upf_config.hpp"
-#include "BPFProgram.h"
+#include <wrappers/BPFMaps.h>
+#include <BPFProgram.h>
+#include "upf_pipeline_config.h"
+#include "upf_network_config.h"
+#include "interfaces_types.h"
+#include "framed_routing_bpf.h"
 
-using namespace oai::config;
-extern upf_config upf_cfg;
+/* Entry program class headers */
+#include "n3_entry_user.h"
+#include "n6_entry_user.h"
+#include "n3_eth_entry_user.h"
+#include "n6_eth_entry_user.h"
 
-// Forward declarations
+/* Pipeline stage program headers */
+#include "session_lookup_ip_user.h"
+#include "session_lookup_eth_user.h"
+#include "pdr_match_user.h"
+#include "far_apply_user.h"
+#include "qer_apply_user.h"
+#include "qer_tc_user.h"
+#include "eth_broadcast_tc_user.h"
+#include "urr_apply_user.h"
+#include "bar_apply_user.h"
+#include "mar_apply_user.h"
+#include "startup_banner.hpp"
+
 class BPFMaps;
 class BPFMap;
 
-/**
- * @brief Type alias for XDP program lifecycle management
- *
- * Manages the complete lifecycle of the XDP kernel program:
- * open → load → attach → link → teardown
- */
-using UPF_XDPProgramLifeCycle = ProgramLifeCycle<upf_xdp_kern_c>;
+// ==========================================================================
+// UPF_XDPProgram
+// ==========================================================================
 
-/**
- * @class UPF_XDPProgram
- * @brief Manages XDP programs for User Plane Function packet processing
- *
- * This class provides high-performance packet processing using XDP (eXpress
- * Data Path), a Linux kernel feature for fast packet processing at the driver
- * level.
- *
- * Key Responsibilities:
- * - Initialize and configure XDP programs for uplink/downlink
- * - Manage BPF maps for session state and routing
- * - Configure interface-specific packet processing
- * - Handle ARP resolution for packet forwarding
- * - Support framed routing for advanced scenarios
- * - Provide QoS enforcement hooks
- *
- * Lifecycle:
- * 1. Construction: Initialize with interfaces
- * 2. Setup: Load and attach XDP programs
- * 3. Runtime: Maps managed by SessionManager
- * 4. Teardown: Detach programs and cleanup
- *
- * Thread Safety: Not thread-safe. Use from single thread (typically main).
- *
- * XDP Modes:
- * - XDP_FLAGS_DRV_MODE: Driver mode (best performance, hardware offload)
- * - XDP_FLAGS_SKB_MODE: SKB mode (fallback, compatibility)
- *
- * @note This implementation follows Google C++ Style Guide
- * @note Inherits from BPFProgram base class
- */
 class UPF_XDPProgram : public BPFProgram {
  public:
+  // ==========================================================================
+  // Constructor / Destructor
+  // ==========================================================================
+
   /**
-   * @brief Constructor - initializes XDP program for specified interfaces
+   * @brief Constructor -- stores interface names only.
    *
-   * Creates the XDP program manager for the given network interfaces.
-   * Configures BPF maps based on system capabilities and UPF configuration.
+   * No programs are instantiated here. All instantiation happens in Setup()
+   * once PipelineFeatureFlags are available.
    *
-   * @param gtp_interface GTP-U interface name (N3, e.g., "n3", "eth0")
-   * @param udp_interface UDP interface name (N6, e.g., "n6", "eth1")
-   * @param upf_cfg UPF configuration with map sizes and limits
-   *
-   * @throws std::runtime_error if skeleton creation fails
-   * @throws std::runtime_error if map configuration fails
-   *
-   * Configuration Validation:
-   * - Checks interface count against system limits
-   * - Validates redirect interface count
-   * - Ensures PDR limits don't exceed compile-time constants
-   *
-   * Usage:
-   * @code
-   * upf_config cfg = load_config();
-   * auto xdp_program = std::make_shared<UPF_XDPProgram>("n3", "n6", cfg);
-   * xdp_program->Setup(true);  // Enable QoS
-   * @endcode
+   * @param gtp_interface     Name of the N3 (GTP-U) network interface.
+   * @param non_gtp_interface Name of the N6 network interface.
    */
   explicit UPF_XDPProgram(
-      const std::string& gtp_interface, const std::string& udp_interface,
-      const upf_config& upf_cfg);
+      const std::string& gtp_interface, const std::string& non_gtp_interface);
 
-  /**
-   * @brief Destructor - cleans up XDP program resources
-   *
-   * Detaches XDP programs from interfaces and frees BPF resources.
-   * Maps are automatically cleaned up by the kernel.
-   */
+  /** @brief Destructor -- calls TearDown(). */
   virtual ~UPF_XDPProgram();
 
-  /**
-   * @brief Setup and attach XDP programs to interfaces
-   *
-   * Performs the complete XDP program initialization:
-   * 1. Opens BPF skeleton
-   * 2. Initializes all BPF maps
-   * 3. Loads programs into kernel
-   * 4. Attaches to kernel hooks
-   * 5. Links XDP programs to network interfaces
-   * 6. Configures reference points (N3, N4, N6)
-   * 7. Sets up egress interface mappings
-   *
-   * @param is_qos_enabled If true, attach QoS enforcement (xdp_qos section)
-   *                       If false, attach standard downlink (xdp_downlink)
-   *
-   * @throws std::runtime_error if interface not found
-   * @throws std::runtime_error if XDP attach fails
-   *
-   * XDP Sections:
-   * - xdp_uplink: Attached to GTP interface (N3)
-   * - xdp_downlink: Attached to UDP interface (N6) when QoS disabled
-   * - xdp_qos: Attached to UDP interface (N6) when QoS enabled
-   *
-   * Usage:
-   * @code
-   * xdp_program->Setup(upf_cfg.enable_qos);
-   * @endcode
-   */
-  void Setup(bool is_qos_enabled);
+  // ==========================================================================
+  // Lifecycle
+  // ==========================================================================
 
   /**
-   * @brief Get all BPF maps from the program
+   * @brief Instantiate, load, share maps, attach, and link all programs.
    *
-   * Returns the BPFMaps container which provides access to all maps
-   * in the XDP program by name.
+   * PDU type controls which entry programs are instantiated and linked:
+   *   IP  -> n3_ (primary) + n6_.
+   *   ETH -> n3_eth_ (primary) + n6_eth_.
    *
-   * @return std::shared_ptr<BPFMaps> Container of all BPF maps
+   * Feature flags control which optional stage programs are instantiated:
+   *     enable_qer -> qer_
+   *     enable_urr -> urr_
+   *     enable_bar -> bar_
+   *     enable_mar -> mar_
+   *
+   * Load order:
+   *   1. Instantiate entry programs based on pdu_type.
+   *   2. Instantiate stage programs based on pdu_type and feature flags.
+   *   3. Open all programs (ConfigureMaps runs, no kernel load yet).
+   *   4. Load the primary entry program -- creates shared map FDs.
+   *   5. ShareMaps(primary, all_others) via bpf_map__reuse_fd.
+   *   6. Load all remaining programs.
+   *   7. Wrap primary's 4 infrastructure maps in BPFMap objects.
+   *   8. Attach and link the pdu_type-matched entry programs to interfaces.
+   *   9. Populate tail_call_progs_map based on feature flags.
+   *
+   * @param flags  Pipeline feature configuration (PDU type, enabled rules).
    */
+  void Setup(const PipelineFeatureFlags& flags);
+
+  /** @brief Detach all programs and release all resources. */
+  void TearDown();
+
+  /** @brief Remove a slot from the tail_call_progs_map. */
+  void RemoveProgramMap(uint32_t key);
+
+  // ==========================================================================
+  // Map access
+  // ==========================================================================
+
+  /** @brief Returns the container of the primary entry skeleton's maps. */
   std::shared_ptr<BPFMaps> GetMaps();
 
   /**
-   * @brief Teardown XDP programs and cleanup resources
+   * @brief Get any pipeline map by name.
    *
-   * Detaches XDP programs from interfaces, unloads from kernel,
-   * and frees all resources. Maps are cleaned up by kernel.
-   *
-   * @note Safe to call multiple times
-   */
-  void TearDown();
-
-  /**
-   * @brief Create entry in UPF interface map for a reference point
-   *
-   * Stores interface configuration (IP, port, name) for UPF reference
-   * points in the BPF map for kernel access.
-   *
-   * @param reference_point Type of reference point (N3, N4, N6, N9, N19)
-   *
-   * Reference Points (3GPP TS 23.501):
-   * - N3: Interface between RAN and UPF (GTP-U)
-   * - N4: Interface between SMF and UPF (PFCP)
-   * - N6: Interface between UPF and Data Network
-   * - N9: Interface between UPFs (for uplink classifier)
-   * - N19: Interface between SMF and UPF (policy control)
-   */
-  void CreateUpfInterfaceMapEntry(reference_point_t reference_point);
-
-  /**
-   * @brief Remove a program from the program map
-   *
-   * Removes the BPF program file descriptor for a given key.
-   * Used during session deletion.
-   *
-   * @param key Program map key (typically session ID)
-   */
-  void RemoveProgramMap(uint32_t key);
-
-  /**
-   * @brief Get BPF map by name for dynamic access (CRITICAL METHOD)
-   *
-   * Provides access to BPF maps by their string name. This method is
-   * used by SessionProgramManager for dynamic map access.
-   *
-   * Supported Map Names (with aliases):
-   * - "session_map", "session_by_ue_ip_map" → Session mapping
-   * - "arp_table", "arp_table_map" → ARP resolution
-   * - "redirect_interfaces_map" → Interface redirection
-   * - "upf_interface_map" → UPF reference points
-   * - "pdrs_per_session_map" → PDRs per session
-   * - "rules_match_pdr_map" → Rule matching
-   * - "sdf_filters_map" → SDF filters
-   * - "session_qos_enabled_map" → QoS enablement
-   * - "m_framed_route_mapping" → Framed routing
-   *
-   * @param map_name Name of the map (supports aliases)
-   * @return std::shared_ptr<BPFMap> Pointer to map, or nullptr if not found
-   *
-   * @note Prefer using specific getter methods for better performance
-   * @note This method enables SessionProgramManager to work generically
-   *
-   * Usage:
-   * @code
-   * // In SessionProgramManager:
-   * auto session_map = xdp_program->GetMapByName("session_map");
-   * if (session_map) {
-   *   session_map->Update(ue_ip, session_id, BPF_ANY);
-   * }
-   * @endcode
+   * Searches infrastructure maps first, then delegates to stage programs.
+   * Preserved for SessionProgramManager compatibility.
    */
   std::shared_ptr<BPFMap> GetMapByName(const std::string& map_name);
 
-  // Framed Routing Methods
+  // ==========================================================================
+  // Interface configuration
+  // ==========================================================================
+
+  /** @brief Populate one entry in upf_interface_map (IP PDU path only). */
+  void CreateUpfInterfaceMapEntry(reference_point_t reference_point);
+
+  // ==========================================================================
+  // Framed routing
+  // ==========================================================================
+
   std::shared_ptr<BPFMap> GetFramedRouteMappingMap();
   void UpdateFramedRouteMappingMap(uint32_t ue_ip, FramedRoutingKeyBPF key);
   void RemoveFramedRoute(FramedRoutingKeyBPF key);
   void SetFramedRouting(bool enable);
 
-  // Map Getters - Direct access for performance
-  std::shared_ptr<BPFMap> GetEgressInterfaceMap() const;
-  std::shared_ptr<BPFMap> GetArpTableMap() const;
-  std::shared_ptr<BPFMap> GetIfaceMap() const;
+  // ==========================================================================
+  // Direct map getters -- primary entry skeleton infrastructure maps
+  // ==========================================================================
+
+  /** @brief tail_call_progs_map from the primary entry skeleton. */
+  std::shared_ptr<BPFMap> GetTailCallProgsMap() const {
+    return tail_call_progs_map_;
+  }
+
+  /** @brief packet_context_map from the primary entry skeleton. */
+  std::shared_ptr<BPFMap> GetPacketContextMap() const {
+    return packet_ctx_map_;
+  }
+
+  /** @brief session_rules_enabled_map from the primary entry skeleton. */
+  std::shared_ptr<BPFMap> GetSessionRulesMap() const {
+    return session_rules_map_;
+  }
+
+  /** @brief mc_stats_map from the primary entry skeleton. */
+  std::shared_ptr<BPFMap> GetMcStatsMap() const { return mc_stats_map_; }
+
+  // ==========================================================================
+  // Direct map getters -- delegated to stage programs
+  // ==========================================================================
+
   std::shared_ptr<BPFMap> GetSessionMappingMap() const;
+  std::shared_ptr<BPFMap> GetSessionMacMap() const;
   std::shared_ptr<BPFMap> GetRulesMatchPdrMap() const;
   std::shared_ptr<BPFMap> GetSessionPdrsMap() const;
   std::shared_ptr<BPFMap> GetSdfFilterMap() const;
   std::shared_ptr<BPFMap> GetQosEnablingMap() const;
+  std::shared_ptr<BPFMap> GetFeatureDispatchMap() const;
 
-  // XDP Mode and Statistics Methods
-  size_t GetMapCount() const;
-  bool IsNativeXdp(const std::string& interface) const;
-  std::string GetXdpModeString(const std::string& interface) const;
+  // ==========================================================================
+  // Pipeline program accessors
+  // ==========================================================================
+
+  /**
+   * @note Exactly one of (n3_, n3_eth_) and one of (n6_, n6_eth_) is
+   *       non-null after Setup(). The null ones were never instantiated.
+   */
+  std::shared_ptr<N3EntryProgram> GetN3EntryProgram() const { return n3_; }
+  std::shared_ptr<N6EntryProgram> GetN6EntryProgram() const { return n6_; }
+  std::shared_ptr<N3EthEntryProgram> GetN3EthEntryProgram() const {
+    return n3_eth_;
+  }
+  std::shared_ptr<N6EthEntryProgram> GetN6EthEntryProgram() const {
+    return n6_eth_;
+  }
+  std::shared_ptr<SessionLookupIPProgram> GetSessionLookupIPProgram() const {
+    return sl_ip_;
+  }
+  std::shared_ptr<SessionLookupETHProgram> GetSessionLookupETHProgram() const {
+    return sl_eth_;
+  }
+  std::shared_ptr<PdrMatchProgram> GetPdrMatchProgram() const { return pdr_; }
+  std::shared_ptr<FARProgram> GetFarProgram() const { return far_; }
+  /** @brief Returns the XDP gate-check QER program (PROG_QER_APPLY slot). */
+  std::shared_ptr<QERProgram> GetQerProgram() const { return qer_; }
+
+  /** @brief Returns the TC-BPF QER shaping program (per-session). */
+  std::shared_ptr<QERTCProgram> GetQerTcProgram() const { return qer_tc_; }
+  std::shared_ptr<URRProgram> GetUrrProgram() const { return urr_; }
+  std::shared_ptr<BARProgram> GetBarProgram() const { return bar_; }
+  std::shared_ptr<MARProgram> GetMarProgram() const { return mar_; }
+
+  // ==========================================================================
+  // Status
+  // ==========================================================================
+
+  /**
+   * @brief Sum of GetMapCount() over all instantiated program instances.
+   *
+   * Resolves TODO 1 from n3_entry_user.cpp. Only non-null programs
+   * contribute -- the uninstantiated pair (IP vs ETH) is excluded.
+   */
+  size_t GetTotalMapCount() const;
+
+  /**
+   * @brief Compatibility alias for GetTotalMapCount().
+   *
+   * Preserved for callers (e.g. UserPlaneComponent) that predate the
+   * per-program split and still call GetMapCount() on UPF_XDPProgram.
+   */
+  size_t GetMapCount() const { return GetTotalMapCount(); }
+
+  /**
+   * @brief Returns true if @p iface runs in native XDP mode.
+   *
+   * Resolves TODO 2 from n3_entry_user.cpp.
+   * Delegates to GetLifeCycle() on the entry program attached to @p iface.
+   *
+   * @param iface  Interface name (gtp_interface_ or non_gtp_interface_).
+   */
+  bool IsNativeXdp(const std::string& iface) const;
+
+  /**
+   * @brief Returns "Native (Hardware)" or "SKB (Software)" for @p iface.
+   *
+   * Resolves TODO 2 from n3_entry_user.cpp.
+   * Delegates to GetLifeCycle() on the entry program attached to @p iface.
+   */
+  std::string GetXdpModeString(const std::string& iface) const;
+
+  /** @brief Build ordered program load info for DisplayPipelineLoadTree(). */
+  std::vector<ProgramLoadInfo> BuildPipelineLoadInfo(
+      const PipelineFeatureFlags& flags) const;
 
  private:
-  /**
-   * @brief Initialize all BPF map wrappers
-   *
-   * Creates BPFMap wrappers for all maps in the skeleton.
-   * Called during Setup() after skeleton is opened.
-   */
-  void InitializeMaps();
+  // ==========================================================================
+  // Internal helpers
+  // ==========================================================================
 
   /**
-   * @brief Configure PFCP session lookup maps
+   * @brief Share all map FDs from @p src_obj to @p dst_obj by name.
    *
-   * Sets max_entries for all maps based on configuration.
-   * Must be called after open, before load.
-   *
-   * @param skel Pointer to opened BPF skeleton
-   * @param upf_cfg UPF configuration with map sizes
-   *
-   * @throws std::runtime_error if configuration fails
+   * For each map in @p dst_obj whose name also exists in @p src_obj,
+   * calls bpf_map__reuse_fd so both objects use the same kernel map.
+   * Must be called after the primary program is loaded and before others.
    */
-  void ConfigurePfcpSessionLookupMaps(
-      struct upf_xdp_kern_c* skel, const upf_config& upf_cfg);
+  void ShareMapsOwned(
+      struct bpf_object* src, struct bpf_object* dst,
+      const std::initializer_list<const char*>& owned_maps);
+  void ShareMaps(struct bpf_object* src_obj, struct bpf_object* dst_obj);
 
-  // Skeleton and lifecycle
-  upf_xdp_kern_c* skeleton_;  ///< BPF skeleton (libbpf)
-  std::shared_ptr<UPF_XDPProgramLifeCycle> lifecycle_;  ///< Lifecycle manager
+  /**
+   * @brief Wrap the primary skeleton's 4 tail_call maps in BPFMap objects.
+   *
+   * @param primary_skeleton  bpf_object_skeleton* from the primary entry
+   * program.
+   */
+  void InitializeMaps(struct bpf_object_skeleton* primary_skeleton);
 
-  // Interface configuration
-  std::string gtp_interface_;  ///< GTP-U interface name (N3)
-  std::string udp_interface_;  ///< UDP interface name (N6)
+  /** @brief Insert a BPF program FD into tail_call_progs_map at @p index. */
+  bool InsertProgramSlot(uint32_t index, struct bpf_program* prog);
 
-  // Map containers
-  std::shared_ptr<BPFMaps> maps_;  ///< All BPF maps container
+  /** @brief Populate tail_call_progs_map based on feature flags. */
+  void PopulateProgramArray(const PipelineFeatureFlags& flags);
 
-  // Individual map pointers (for fast access)
-  std::shared_ptr<BPFMap> teid_session_map_;      ///< TEID to session mapping
-  std::shared_ptr<BPFMap> session_mapping_map_;   ///< UE IP to session
-  std::shared_ptr<BPFMap> egress_interface_map_;  ///< Egress interface IDs
-  std::shared_ptr<BPFMap> arp_table_map_;         ///< ARP resolution table
-  std::shared_ptr<BPFMap> upf_iface_map_;         ///< UPF interface config
-  std::shared_ptr<BPFMap> rules_match_pdr_map_;   ///< Rule matching state
-  std::shared_ptr<BPFMap> session_pdrs_map_;      ///< PDRs per session
-  std::shared_ptr<BPFMap> sdf_filter_map_;        ///< SDF filter definitions
-  std::shared_ptr<BPFMap> qos_enabling_map_;      ///< QoS per session
-  std::shared_ptr<BPFMap> framed_route_mapping_map_;  ///< Framed route mapping
-  std::shared_ptr<BPFMap> framed_route_flag_map_;  ///< Framed route enable flag
-  // Ethernet PDU session maps (3GPP TS 29.244)
-  std::shared_ptr<BPFMap> eth_session_mapping_map_;  ///< ETH TEID to session
-  std::shared_ptr<BPFMap> eth_rules_match_pdr_map_;  ///< ETH rule matching
-  std::shared_ptr<BPFMap> eth_session_pdrs_map_;     ///< ETH PDRs per session
-  std::shared_ptr<BPFMap> mac_pdu_session_map_;      ///< UE MAC to DL session
+  // ==========================================================================
+  // Entry program instances -- exactly ONE pair non-null after Setup()
+  // ==========================================================================
+
+  std::shared_ptr<N3EntryProgram> n3_;  ///< IP PDU primary  (null in ETH mode)
+  std::shared_ptr<N6EntryProgram> n6_;  ///< IP PDU          (null in ETH mode)
+  std::shared_ptr<N3EthEntryProgram>
+      n3_eth_;  ///< ETH PDU primary (null in IP  mode)
+  std::shared_ptr<N6EthEntryProgram>
+      n6_eth_;  ///< ETH PDU         (null in IP  mode)
+
+  // ==========================================================================
+  // Stage program instances
+  // ==========================================================================
+
+  std::shared_ptr<SessionLookupIPProgram>
+      sl_ip_;  ///< IP PDU path  (null in ETH mode)
+  std::shared_ptr<SessionLookupETHProgram>
+      sl_eth_;                            ///< ETH PDU path (null in IP  mode)
+  std::shared_ptr<PdrMatchProgram> pdr_;  ///< always
+  std::shared_ptr<FARProgram> far_;       ///< always
+  /** XDP gate-check program -- tail-called at PROG_QER_APPLY slot. */
+  std::shared_ptr<QERProgram> qer_;  ///< null unless flags.enable_qer
+  /** TC-BPF shaping program -- HTB + redirect, attached per-session. */
+  std::shared_ptr<QERTCProgram> qer_tc_;  ///< null unless flags.enable_qer
+  /** TC-BPF ETH PDU broadcast / multicast fan-out (TS 23.501 §5.8.2.5.3). */
+  std::shared_ptr<EthBroadcastTCProgram>
+      eth_broadcast_tc_;             ///< null in IP mode
+  std::shared_ptr<URRProgram> urr_;  ///< null unless flags.enable_urr
+  std::shared_ptr<BARProgram> bar_;  ///< null unless flags.enable_bar
+  std::shared_ptr<MARProgram> mar_;  ///< null unless flags.enable_mar
+
+  // ==========================================================================
+  // Interface names and feature flags
+  // ==========================================================================
+
+  std::string gtp_interface_;
+  std::string non_gtp_interface_;
+  PipelineFeatureFlags features_;
+
+  // ==========================================================================
+  // Infrastructure maps -- from the primary entry skeleton.
+  // Both xdp_n3_entry_kern.c and xdp_n3_eth_entry_kern.c include
+  // tail_call_dispatcher.h + stats_maps.h, so the same 4 maps exist
+  // regardless of which program is primary.
+  // ==========================================================================
+
+  std::shared_ptr<BPFMaps> maps_;
+
+  std::shared_ptr<BPFMap> tail_call_progs_map_;  ///< tail_call_progs_map
+  std::shared_ptr<BPFMap> packet_ctx_map_;       ///< packet_context_map
+  std::shared_ptr<BPFMap> session_rules_map_;    ///< session_rules_enabled_map
+  std::shared_ptr<BPFMap> mc_stats_map_;         ///< mc_stats_map
+  /** upf_interface_map: from FAR (IP PDU) or n6_eth_ (ETH PDU). */
+  std::shared_ptr<BPFMap> upf_iface_map_;
 };
 
-#endif  // UPF_XDP_USER_H_
+#endif /* UPF_XDP_USER_H_ */

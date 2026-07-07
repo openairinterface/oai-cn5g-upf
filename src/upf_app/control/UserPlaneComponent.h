@@ -25,24 +25,33 @@
 #include <string>
 #include "observer/SessionObserver.h"  // For ISessionObserver interface
 
+// Pipeline config types (PduSessionType, PipelineFeatureFlags, ProgIndex)
+// Included directly so control/ builds without needing the XDP skeleton.
+#include "upf_pipeline_config.h"
+
 // Forward declarations
 class SessionManager;
 class UPF_XDPProgram;
-class FARTCProgram;
 
 /**
  * @class UserPlaneComponent
  * @brief Main orchestrator for UPF user plane data path
  *
  * The UserPlaneComponent manages the complete user plane stack:
- * - BPF/XDP program lifecycle for packet processing
- * - PFCP session management (3GPP TS 29.244)
- * - Network interface configuration (N3, N6)
- * - Signal handling for graceful shutdown
+ *   - BPF tail-call pipeline lifecycle for modular packet processing
+ *   - PFCP session management (3GPP TS 29.244)
+ *   - Network interface configuration (N3, N6)
+ *   - Feature flag management (QER, URR, BAR, MAR, ETH PDU)
+ *   - Signal handling for graceful shutdown
  *
- * Architecture:
- * - N3 Interface: Connection to gNodeB (3GPP TS 23.501 Section 5.8.2.2)
- * - N6 Interface: Connection to Data Network (3GPP TS 23.501 Section 5.8.2.3)
+ * Configuration (from YAML):
+ *   - enable_bpf_datapath: Master switch for BPF acceleration
+ *   - enable_qer: QER enforcement (XDP gate + TC rate shaping)
+ *   - enable_urr: Usage reporting (volume/time measurement)
+ *   - enable_bar: Buffering action (DL data notification)
+ *   - enable_mar: Multi-access steering (ATSSS)
+ *   - enable_framed_routing: Framed route support
+ *   - pdu_session_type: "ip" or "ethernet" (entry program selection)
  *
  * Thread Safety: This class is thread-safe for observer callbacks.
  *
@@ -69,11 +78,15 @@ class UserPlaneComponent : public ISessionObserver {
   /**
    * @brief Setup user plane component with network interfaces
    *
-   * Initializes:
-   * - N3 interface for GTP-U traffic (3GPP TS 29.281)
-   * - N6 interface for data network traffic
-   * - BPF/XDP programs for packet processing
-   * - Session manager for PFCP sessions
+   * Initializes the complete pipeline:
+   *   1. N3 interface for GTP-U traffic (3GPP TS 29.281)
+   *   2. N6 interface for data network traffic
+   *   3. Reads feature flags from upf::g_net_cfg
+   *   4. Creates UPF_XDPProgram with tail-call pipeline
+   *   5. Loads and attaches BPF programs based on config
+   *   6. Populates PROG_ARRAY for enabled features
+   *   7. Creates SessionManager for PFCP sessions
+   *   8. Logs pipeline configuration summary
    *
    * @param gtp_interface N3 interface name (e.g., "eth0")
    * @param udp_interface N6 interface name (e.g., "eth1")
@@ -92,18 +105,18 @@ class UserPlaneComponent : public ISessionObserver {
    * Called internally by Setup().
    *
    * @param gtp_interface N3 interface name
-   * @param udp_interface N6 interface name
+   * @param non_gtp_interface N6 interface name
    */
   void SetMembers(
-      const std::string& gtp_interface, const std::string& udp_interface);
+      const std::string& gtp_interface, const std::string& non_gtp_interface);
 
   /**
    * @brief Tear down user plane component and cleanup resources
    *
    * Performs graceful shutdown:
-   * - Removes all active sessions
-   * - Unloads BPF/XDP programs
-   * - Releases network interfaces
+   *   - Removes all active sessions
+   *   - Unloads BPF tail-call pipeline
+   *   - Releases network interfaces
    */
   void TearDown();
 
@@ -117,11 +130,9 @@ class UserPlaneComponent : public ISessionObserver {
   std::shared_ptr<SessionManager> GetSessionManager() const;
 
   /**
-   * @brief Get UPF XDP program instance
+   * @brief Get BPF data plane manager instance
    *
-   * @return Shared pointer to XDP program
-   *
-   * @note XDP program is the entry point for packet processing
+   * @return Shared pointer to UPF_XDPProgram
    */
   std::shared_ptr<UPF_XDPProgram> GetUPF_XDPProgram() const;
 
@@ -141,7 +152,7 @@ class UserPlaneComponent : public ISessionObserver {
    *
    * @see 3GPP TS 23.501 Section 5.8.2.3 - N6 Interface
    */
-  std::string GetUDPInterface() const;
+  std::string GetNonGTPInterface() const;
 
   void PrintStartupSummary();
 
@@ -190,6 +201,31 @@ class UserPlaneComponent : public ISessionObserver {
   UserPlaneComponent();
 
   /**
+   * @brief Build PipelineFeatureFlags from upf::g_net_cfg
+   *
+   * Reads all enable_* and pdu_session_type fields from config
+   * and constructs the feature flags structure.
+   *
+   * @return PipelineFeatureFlags populated from config
+   */
+  /**
+   * @brief Build PipelineFeatureFlags from upf::g_net_cfg
+   *
+   * Must be called after Configuration::BuildNetworkConfig().
+   */
+  PipelineFeatureFlags BuildFeatureFlags() const;
+
+  //   /**
+  //    * @brief Log pipeline feature configuration summary
+  //    *
+  //    * Prints which features are enabled/disabled and which
+  //    * entry programs are selected (IP vs ETH).
+  //    *
+  //    * @param flags Current feature flags
+  //    */
+  //   void LogPipelineConfig(const PipelineFeatureFlags& flags) const;
+
+  /**
    * @brief Log callback for libbpf
    *
    * @param lvl Log level
@@ -207,17 +243,14 @@ class UserPlaneComponent : public ISessionObserver {
   /// Session manager for PFCP session lifecycle
   std::shared_ptr<SessionManager> session_manager_;
 
-  /// UPF XDP program (BPF program entry point)
+  /// BPF data plane manager (entry programs + shared map ownership)
   std::shared_ptr<UPF_XDPProgram> upf_xdp_program_;
-
-  /// FAR TC program for Ethernet PDU broadcast/multicast forwarding
-  std::shared_ptr<FARTCProgram> far_tc_program_;
 
   /// N3 GTP-U interface name
   std::string gtp_interface_;
 
   /// N6 Data Network interface name
-  std::string udp_interface_;
+  std::string non_gtp_interface_;
 };
 
 #endif  // USER_PLANE_COMPONENT_H_

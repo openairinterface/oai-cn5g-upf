@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Framed-IPv6-Route
- * Reference: 3GPP TS 29.244 Section 8.2.111
- */
-
 #ifndef _PFCP_FRAMED_IPV6_ROUTE_H
 #define _PFCP_FRAMED_IPV6_ROUTE_H
 

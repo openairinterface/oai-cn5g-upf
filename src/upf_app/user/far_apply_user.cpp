@@ -1,0 +1,164 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
+#include "far_apply_user.h"
+#include <bpf/libbpf.h>
+#include <stdexcept>
+#include <wrappers/BPFMap.hpp>
+#include <wrappers/BPFMaps.h>
+#include "logger.hpp"
+#include "upf_xdp_limits.h"
+#include "utils/bpf_utils.hpp"
+
+using namespace oai::utils::bpf;
+
+//------------------------------------------------------------------------------
+void FARProgram::ConfigureMaps(struct xdp_far_apply_kern_c* skel) {
+  if (!skel) {
+    Logger::upf_app().error("Null skeleton in FARProgram::ConfigureMaps");
+    return;
+  }
+
+  bool ok = true;
+
+  /* interfaces_maps.h -- owned by FARProgram, runtime-sized */
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.upf_interface_map, "upf_interface_map",
+      upf::GetMaxUpfInterfaces());
+
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.redirect_interfaces_map, "redirect_interfaces_map",
+      upf::GetMaxUpfRedirectInterfaces());
+
+  /* arp_maps.h -- owned by FARProgram, runtime-sized */
+  ok &= ConfigureMapMaxEntries(
+      skel->maps.arp_table_map, "arp_table_map", upf::GetMaxArpEntries());
+
+  /*
+   * pipeline_maps.h and eth_pdu_maps.h maps are shared from the primary
+   * entry program via bpf_map__reuse_fd before Setup() is called.
+   * They must NOT be sized here -- they are already sized by their owner.
+   */
+
+  if (!ok) {
+    Logger::upf_app().error(
+        "One or more map configurations failed for FARProgram.");
+    throw std::runtime_error("FARProgram map configuration failed");
+  }
+
+  /* rodata: 7 fields */
+  if (skel->rodata) {
+    skel->rodata->MAX_UPF_INTERFACES = upf::GetMaxUpfInterfaces();
+    skel->rodata->MAX_UPF_REDIRECT_INTERFACES =
+        upf::GetMaxUpfRedirectInterfaces();
+    skel->rodata->MAX_PDU_SESSIONS         = upf::GetMaxPduSessions();
+    skel->rodata->MAX_PDRS_PER_PDU_SESSION = upf::GetMaxPdrsPerSession();
+    skel->rodata->MAX_SDF_FILTERS_PER_PDU_SESSION =
+        upf::GetMaxSdfFiltersPerSession();
+    skel->rodata->MAX_ARP_ENTRIES  = upf::GetMaxArpEntries();
+    skel->rodata->MAX_QOS_ENABLING = upf::GetMaxPduSessions();
+  }
+}
+
+//------------------------------------------------------------------------------
+FARProgram::FARProgram() : BPFProgram() {
+  Logger::upf_app().debug("Initializing FAR XDP Program ...");
+
+  auto open_fn = [this]() -> xdp_far_apply_kern_c* {
+    struct xdp_far_apply_kern_c* skel = xdp_far_apply_kern_c__open();
+    if (!skel) {
+      Logger::upf_app().error("Failed to open xdp_far_apply skeleton");
+      return nullptr;
+    }
+
+    // Configure maps and rodata before skeleton is loaded
+    this->ConfigureMaps(skel);
+    // Store skeleton pointer -- available from this point onwards
+    skeleton_ = skel;
+    return skel;
+  };
+
+  lifecycle_ = std::make_shared<FarProgramLifeCycle>(
+      open_fn,
+      /* load    */ xdp_far_apply_kern_c__load,
+      /* attach  */ xdp_far_apply_kern_c__attach,
+      /* destroy */ xdp_far_apply_kern_c__destroy, "FARProgram");
+}
+
+//------------------------------------------------------------------------------
+FARProgram::~FARProgram() {}
+
+//------------------------------------------------------------------------------
+void FARProgram::Setup() {
+  skeleton_ = lifecycle_->open();
+  InitializeMaps();
+  lifecycle_->load();
+}
+
+//------------------------------------------------------------------------------
+void FARProgram::TearDown() {
+  lifecycle_->tearDown();
+}
+
+//------------------------------------------------------------------------------
+void FARProgram::InitializeMaps() {
+  maps_    = std::make_shared<BPFMaps>(lifecycle_->getBPFSkeleton()->skeleton);
+  auto get = [&](const char* name) {
+    return std::make_shared<BPFMap>(maps_->GetMap(name));
+  };
+  /* interfaces_maps.h -- owned */
+  upf_interface_map_ = get("upf_interface_map");
+  { struct bpf_map* _m = skeleton_->maps.upf_interface_map; }
+  redirect_interfaces_map_ = get("redirect_interfaces_map");
+  /* arp_maps.h -- owned */
+  arp_table_map_ = get("arp_table_map");
+  /*
+   * pipeline_maps.h and eth_pdu_maps.h maps are present in this skeleton
+   * (shared via reuse_fd) but are accessed via UPF_XDPProgram::GetMapByName()
+   * delegation -- not wrapped here to avoid redundant BPFMap instances.
+   */
+}
+
+//------------------------------------------------------------------------------
+struct bpf_object* FARProgram::GetBpfObject() const {
+  return skeleton_ ? skeleton_->obj : nullptr;
+}
+
+//------------------------------------------------------------------------------
+struct bpf_object_skeleton* FARProgram::GetSkeleton() const {
+  return skeleton_ ? skeleton_->skeleton : nullptr;
+}
+
+//------------------------------------------------------------------------------
+struct bpf_program* FARProgram::GetXdpProgram() const {
+  return skeleton_ ? skeleton_->progs.far_apply : nullptr;
+}
+
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMaps> FARProgram::GetMaps() const {
+  return maps_;
+}
+
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> FARProgram::GetUpfInterfaceMap() const {
+  return upf_interface_map_;
+}
+
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> FARProgram::GetRedirectInterfacesMap() const {
+  return redirect_interfaces_map_;
+}
+
+//------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> FARProgram::GetArpTableMap() const {
+  return arp_table_map_;
+}
+
+//------------------------------------------------------------------------------
+/*
+ * TODO(fmessaoudi): See TODO in n3_entry_user.cpp -- GetMapCount() ownership.
+ */
+size_t FARProgram::GetMapCount() const {
+  return maps_ ? maps_->GetMapCount() : 0;
+}

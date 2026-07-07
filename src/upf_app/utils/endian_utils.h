@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
+
 #ifndef ENDIAN_UTILS_H
 #define ENDIAN_UTILS_H
 

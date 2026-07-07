@@ -2,12 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Packet Detection Information (PDI)
- * Reference: 3GPP TS 29.244 Section 7.5.2.2
- * Table 7.5.2.2-2: PDI IE within PFCP Session Establishment Request
- */
-
 #ifndef _PFCP_PDI_H
 #define _PFCP_PDI_H
 
@@ -59,7 +53,5 @@ struct pdi {
   struct framed_routing framed_routing;
   struct framed_ipv6_route framed_ipv6_route;
 } __attribute__((packed));
-
-typedef struct pdi pdi_t;
 
 #endif /* _PFCP_PDI_H */

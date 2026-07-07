@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file SignalHandler.cpp
- * @brief Signal Handler Implementation
- */
-
 #include "SignalHandler.h"
 #include "UserPlaneComponent.h"
 

@@ -1,6 +1,7 @@
 /*
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
+
 #ifndef __GET_NIC_INFORMATION_HPP__
 #define __GET_NIC_INFORMATION_HPP__
 

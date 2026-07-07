@@ -3,10 +3,13 @@
  */
 
 #include "pfcp_session.hpp"
-#include "pfcp_switch.hpp"
-#include "logger.hpp"
-#include <sstream>
+
 #include <arpa/inet.h>
+
+#include <sstream>
+
+#include "logger.hpp"
+#include "pfcp_switch.hpp"
 
 using namespace pfcp;
 using namespace oai::upf::app;
@@ -14,6 +17,46 @@ using namespace oai::upf::app;
 extern pfcp_switch* pfcp_switch_inst;
 
 enum pfcp_gate_status_value { PFCP_GATE_OPEN = 0, PFCP_GATE_CLOSED = 1 };
+
+// =============================================================================
+// TEID / PDN-type accessors
+// =============================================================================
+
+//------------------------------------------------------------------------------
+void pfcp_session::set(const pfcp::fteid_t& fteid) {
+  Logger::upf_n4().info("pfcp_session::set(fteid) seid " SEID_FMT " ", seid);
+  std::lock_guard<std::mutex> lock(teid_mutex);
+  teid_uplink = fteid;
+}
+
+//------------------------------------------------------------------------------
+bool pfcp_session::get(pfcp::fteid_t& fteid) {
+  std::lock_guard<std::mutex> lock(teid_mutex);
+  Logger::upf_n4().info("pfcp_session::get(fteid) seid " SEID_FMT " ", seid);
+  fteid = teid_uplink;
+  return true;
+}
+
+//------------------------------------------------------------------------------
+// PDN Type (3GPP TS 29.244 V17.10.0 §8.2.79)
+
+//------------------------------------------------------------------------------
+void pfcp_session::set(pfcp::pdn_type_value_e type) {
+  std::lock_guard<std::mutex> lock(pdn_type_mutex);
+  pdn_type = type;
+}
+
+//------------------------------------------------------------------------------
+pfcp::pdn_type_value_e pfcp_session::get_pdn_type() {
+  return pdn_type;
+}
+
+// =============================================================================
+// Lookup by ID
+// =============================================================================
+
+//------------------------------------------------------------------------------
+// FAR lookup — O(n) linear scan; n is small (≤8 per session in practice)
 
 //------------------------------------------------------------------------------
 bool pfcp_session::get(
@@ -26,6 +69,7 @@ bool pfcp_session::get(
   }
   return false;
 }
+
 //------------------------------------------------------------------------------
 bool pfcp_session::get(
     const uint16_t pdr_id, std::shared_ptr<pfcp::pfcp_pdr>& pdr) const {
@@ -42,7 +86,7 @@ bool pfcp_session::get(
 bool pfcp_session::get(
     const uint32_t qer_id, std::shared_ptr<pfcp::pfcp_qer>& qer) const {
   for (auto it : qers) {
-    if (it->qer_id.second.qer_id == qer_id) {
+    if (it->qer_id.first && it->qer_id.second.qer_id == qer_id) {
       qer = it;
       return true;
     }
@@ -51,15 +95,48 @@ bool pfcp_session::get(
 }
 
 //------------------------------------------------------------------------------
-bool pfcp_session::get(pfcp::fteid_t& fteid) {
-  fteid = teid_uplink;
-  return true;
+bool pfcp_session::get(
+    const uint32_t urr_id, std::shared_ptr<pfcp::pfcp_urr>& urr) const {
+  for (const auto& it : urrs) {
+    if (it->urr_id.first && it->urr_id.second.urr_id == urr_id) {
+      urr = it;
+      return true;
+    }
+  }
+  return false;
 }
 
 //------------------------------------------------------------------------------
-pfcp::pdn_type_value_e pfcp_session::get_pdn_type() {
-  return pdn_type;
+bool pfcp_session::get(
+    const uint8_t bar_id, std::shared_ptr<pfcp::pfcp_bar>& bar) const {
+  for (const auto& it : bars) {
+    if (it->bar_id.first && it->bar_id.second.bar_id == bar_id) {
+      bar = it;
+      return true;
+    }
+  }
+  return false;
 }
+
+//------------------------------------------------------------------------------
+bool pfcp_session::get(
+    const uint8_t mar_id, std::shared_ptr<pfcp::pfcp_mar>& mar) const {
+  for (const auto& it : mars) {
+    if (it->mar_id.first && it->mar_id.second.mar_id == mar_id) {
+      mar = it;
+      return true;
+    }
+  }
+  return false;
+}
+
+// =============================================================================
+// add() — internal upsert helpers
+// =============================================================================
+
+//------------------------------------------------------------------------------
+// add(far) — if a FAR with the same ID already exists, patch the TEID only;
+// otherwise append. Keeps the vector compact (no duplicates).
 
 //------------------------------------------------------------------------------
 void pfcp_session::add(std::shared_ptr<pfcp::pfcp_far> far) {
@@ -127,6 +204,8 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_far> far) {
         case INTERFACE_VALUE_CP_FUNCTION:
           dest_str = "CP_FUNCTION";
           break;
+        default:
+          break;
       }
       Logger::upf_n4().debug("     • Destination Interface: %s", dest_str);
 
@@ -192,6 +271,8 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_pdr> pdr) {
         case INTERFACE_VALUE_CP_FUNCTION:
           dir_str = "CP_FUNCTION";
           break;
+        default:
+          break;
       }
       Logger::upf_n4().debug("     • Source Interface: %s", dir_str);
     }
@@ -239,8 +320,17 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_pdr> pdr) {
 
 //------------------------------------------------------------------------------
 void pfcp_session::add(std::shared_ptr<pfcp::pfcp_qer> qer) {
+  // Guard .first before accessing .second — qer_id is M per Table 7.5.2.5-1
+  // but defensive coding costs nothing.
+  if (!qer->qer_id.first) {
+    Logger::upf_n4().warn(
+        "pfcp_session::add(qer) seid " SEID_FMT " — QER ID absent, skipping",
+        seid);
+    return;
+  }
+
   uint32_t qer_id = qer->qer_id.second.qer_id;
-  uint8_t qfi     = qer->qos_flow_id.second.qfi;
+  uint8_t qfi     = qer->qos_flow_id.first ? qer->qos_flow_id.second.qfi : 0;
 
   Logger::upf_n4().info(
       "pfcp_session::add(qer) seid " SEID_FMT " QER=%u", seid, qer_id);
@@ -321,6 +411,632 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_qer> qer) {
   qers.push_back(qer);
   Logger::upf_n4().debug("     • Total QERs in session: %zu", qers.size());
 }
+
+// =============================================================================
+// URR — add / create / update / remove
+// =============================================================================
+
+//------------------------------------------------------------------------------
+void pfcp_session::add(std::shared_ptr<pfcp::pfcp_urr> urr) {
+  uint32_t urr_id = urr->urr_id.second.urr_id;
+  Logger::upf_n4().info(
+      "pfcp_session::add(urr) seid " SEID_FMT " URR=%u", seid, urr_id);
+  for (auto it = urrs.begin(); it != urrs.end(); ++it) {
+    if ((*it)->urr_id.second.urr_id == urr_id) {
+      Logger::upf_n4().info(
+          "  └─ Replacing existing URR %u in session " SEID_FMT, urr_id, seid);
+      *it = urr;
+      return;
+    }
+  }
+  Logger::upf_n4().info(
+      "  └─ Adding new URR %u to session " SEID_FMT, urr_id, seid);
+
+  // Measurement Method (§8.2.64)
+  if (urr->measurement_method.first) {
+    auto& mm = urr->measurement_method.second;
+    std::ostringstream ms;
+    if (mm.volum) ms << "VOLUM ";
+    if (mm.durat) ms << "DURAT ";
+    if (mm.event) ms << "EVENT ";
+    Logger::upf_n4().debug("     • Measurement Method: %s", ms.str().c_str());
+  }
+
+  // Reporting Triggers (§8.2.65)
+  if (urr->reporting_triggers.first) {
+    auto& rt = urr->reporting_triggers.second;
+    std::ostringstream ts;
+    if (rt.perio) ts << "PERIO ";
+    if (rt.volth) ts << "VOLTH ";
+    if (rt.timth) ts << "TIMTH ";
+    if (rt.quhti) ts << "QUHTI ";
+    if (rt.start) ts << "START ";
+    if (rt.stop) ts << "STOP ";
+    if (rt.droth) ts << "DROTH ";
+    if (rt.liusa) ts << "LIUSA ";
+    Logger::upf_n4().debug("     • Reporting Triggers: %s", ts.str().c_str());
+  }
+
+  // Measurement Period (§8.2.66)
+  if (urr->measurement_period.first)
+    Logger::upf_n4().debug(
+        "     • Measurement Period: %u s",
+        urr->measurement_period.second.measurement_period);
+
+  // Volume Threshold (§8.2.68)
+  if (urr->volume_threshold.first) {
+    auto& vt = urr->volume_threshold.second;
+    if (vt.tovol)
+      Logger::upf_n4().debug(
+          "     • Volume Threshold Total: %llu bytes",
+          (unsigned long long) vt.total_volume);
+    if (vt.ulvol)
+      Logger::upf_n4().debug(
+          "     • Volume Threshold UL: %llu bytes",
+          (unsigned long long) vt.uplink_volume);
+    if (vt.dlvol)
+      Logger::upf_n4().debug(
+          "     • Volume Threshold DL: %llu bytes",
+          (unsigned long long) vt.downlink_volume);
+  }
+
+  // Time Threshold (§8.2.70)
+  if (urr->time_threshold.first)
+    Logger::upf_n4().debug(
+        "     • Time Threshold: %u s",
+        urr->time_threshold.second.time_threshold);
+
+  // Volume Quota (§8.2.73)
+  if (urr->volume_quota.first) {
+    auto& vq = urr->volume_quota.second;
+    if (vq.tovol)
+      Logger::upf_n4().debug(
+          "     • Volume Quota Total: %llu bytes",
+          (unsigned long long) vq.total_volume);
+    if (vq.ulvol)
+      Logger::upf_n4().debug(
+          "     • Volume Quota UL: %llu bytes",
+          (unsigned long long) vq.uplink_volume);
+    if (vq.dlvol)
+      Logger::upf_n4().debug(
+          "     • Volume Quota DL: %llu bytes",
+          (unsigned long long) vq.downlink_volume);
+  }
+
+  // Time Quota (§8.2.74)
+  if (urr->time_quota.first)
+    Logger::upf_n4().debug(
+        "     • Time Quota: %u s", urr->time_quota.second.time_quota);
+
+  // Linked URR ID (§8.2.72)
+  if (urr->linked_urr_id.first)
+    Logger::upf_n4().debug(
+        "     • Linked URR ID: %u", urr->linked_urr_id.second.linked_urr_id);
+
+  urrs.push_back(urr);
+  Logger::upf_n4().debug("     • Total URRs in session: %zu", urrs.size());
+}
+
+//------------------------------------------------------------------------------
+// create_urr — 3GPP TS 29.244 Table 7.5.2.4-1
+// Mandatory IEs: URR ID, Measurement Method, Reporting Triggers
+
+//------------------------------------------------------------------------------
+bool pfcp_session::create(
+    const pfcp::create_urr& cr_urr, pfcp::cause_t& cause,
+    uint16_t& offending_ie) {
+  if (not cr_urr.urr_id.first) {
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_URR_ID;
+    return false;
+  }
+  if (not cr_urr.measurement_method.first) {
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_MEASUREMENT_METHOD;
+    return false;
+  }
+  if (not cr_urr.reporting_triggers.first) {
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_REPORTING_TRIGGERS;
+    return false;
+  }
+  auto urr = std::make_shared<pfcp::pfcp_urr>(cr_urr);
+  add(urr);
+  cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+  return true;
+}
+
+//------------------------------------------------------------------------------
+// update_urr — 3GPP TS 29.244 Table 7.5.4.4-1
+
+//------------------------------------------------------------------------------
+bool pfcp_session::update(
+    const pfcp::update_urr& urr_update, uint8_t& cause_value) {
+  if (not urr_update.urr_id.first) {
+    cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+    return false;
+  }
+  uint32_t urr_id = urr_update.urr_id.second.urr_id;
+  Logger::upf_n4().info(
+      "pfcp_session::update(urr) seid " SEID_FMT " URR=%u", seid, urr_id);
+  for (auto& existing : urrs) {
+    if (existing->urr_id.second.urr_id == urr_id) {
+      if (urr_update.measurement_method.first)
+        existing->measurement_method = urr_update.measurement_method;
+      if (urr_update.reporting_triggers.first)
+        existing->reporting_triggers = urr_update.reporting_triggers;
+      if (urr_update.measurement_period.first)
+        existing->measurement_period = urr_update.measurement_period;
+      if (urr_update.volume_threshold.first)
+        existing->volume_threshold = urr_update.volume_threshold;
+      if (urr_update.volume_quota.first)
+        existing->volume_quota = urr_update.volume_quota;
+      if (urr_update.time_threshold.first)
+        existing->time_threshold = urr_update.time_threshold;
+      if (urr_update.time_quota.first)
+        existing->time_quota = urr_update.time_quota;
+      if (urr_update.quota_holding_time.first)
+        existing->quota_holding_time = urr_update.quota_holding_time;
+      if (urr_update.monitoring_time.first)
+        existing->monitoring_time = urr_update.monitoring_time;
+      if (urr_update.linked_urr_id.first)
+        existing->linked_urr_id = urr_update.linked_urr_id;
+      Logger::upf_n4().info(
+          "  └─ Updated URR %u in session " SEID_FMT, urr_id, seid);
+      cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+      return true;
+    }
+  }
+  Logger::upf_n4().warn(
+      "  └─ URR %u not found in session " SEID_FMT " - cannot update", urr_id,
+      seid);
+  cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  return false;
+}
+
+//------------------------------------------------------------------------------
+// remove_urr — 3GPP TS 29.244 Table 7.5.4.8-1
+
+//------------------------------------------------------------------------------
+bool pfcp_session::remove(
+    const pfcp::remove_urr& rm_urr, pfcp::cause_t& cause,
+    uint16_t& offending_ie) {
+  if (not rm_urr.urr_id.first) {
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_URR_ID;
+    return false;
+  }
+  uint32_t urr_id = rm_urr.urr_id.second.urr_id;
+  Logger::upf_n4().info(
+      "pfcp_session::remove(urr) seid " SEID_FMT " URR=%u", seid, urr_id);
+  for (auto it = urrs.begin(); it != urrs.end(); ++it) {
+    if ((*it)->urr_id.second.urr_id == urr_id) {
+      urrs.erase(it);
+      Logger::upf_n4().info(
+          "  └─ Removed URR %u from session " SEID_FMT " (%zu URRs remaining)",
+          urr_id, seid, urrs.size());
+      cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+      return true;
+    }
+  }
+  Logger::upf_n4().warn(
+      "  └─ URR %u not found in session " SEID_FMT " - cannot remove", urr_id,
+      seid);
+  cause.cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  offending_ie      = PFCP_IE_URR_ID;
+  return false;
+}
+
+// =============================================================================
+// BAR — add / create / update / remove
+// =============================================================================
+
+//------------------------------------------------------------------------------
+void pfcp_session::add(std::shared_ptr<pfcp::pfcp_bar> bar) {
+  uint8_t bar_id = bar->bar_id.second.bar_id;
+  Logger::upf_n4().info(
+      "pfcp_session::add(bar) seid " SEID_FMT " BAR=%u", seid, bar_id);
+  for (auto it = bars.begin(); it != bars.end(); ++it) {
+    if ((*it)->bar_id.second.bar_id == bar_id) {
+      Logger::upf_n4().info(
+          "  └─ Replacing existing BAR %u in session " SEID_FMT, bar_id, seid);
+      *it = bar;
+      return;
+    }
+  }
+  Logger::upf_n4().info(
+      "  └─ Adding new BAR %u to session " SEID_FMT, bar_id, seid);
+
+  // Downlink Data Notification Delay (§8.2.28)
+  if (bar->downlink_data_notification_delay.first)
+    Logger::upf_n4().debug(
+        "     • DDN Delay: %u × 50ms",
+        bar->downlink_data_notification_delay.second.delay_value);
+
+  // Suggested Buffering Packets Count (§8.2.100)
+  if (bar->suggested_buffering_packets_count.first)
+    Logger::upf_n4().debug(
+        "     • Suggested Buffer Packets: %u",
+        bar->suggested_buffering_packets_count.second.packet_count);
+
+  bars.push_back(bar);
+  Logger::upf_n4().debug("     • Total BARs in session: %zu", bars.size());
+}
+
+//------------------------------------------------------------------------------
+// create_bar — 3GPP TS 29.244 Table 7.5.2.6-1
+// Mandatory IE: BAR ID
+
+//------------------------------------------------------------------------------
+bool pfcp_session::create(
+    const pfcp::create_bar& cr_bar, pfcp::cause_t& cause,
+    uint16_t& offending_ie) {
+  if (not cr_bar.bar_id.first) {
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_BAR_ID;
+    return false;
+  }
+  auto bar = std::make_shared<pfcp::pfcp_bar>(cr_bar);
+  add(bar);
+  cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+  return true;
+}
+
+//------------------------------------------------------------------------------
+// update_bar — 3GPP TS 29.244 Table 7.5.4.11-1
+// Delegates to pfcp_bar::update() which handles the type conversion between
+// pfcp::downlink_data_notification_delay_t → bar_dl_delay_t and
+// pfcp::suggested_buffering_packets_count_t → bar_buffering_count_t.
+
+//------------------------------------------------------------------------------
+bool pfcp_session::update(
+    const pfcp::update_bar_within_pfcp_session_modification_request& bar_update,
+    uint8_t& cause_value) {
+  if (not bar_update.bar_id.first) {
+    cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+    return false;
+  }
+  uint8_t bar_id = bar_update.bar_id.second.bar_id;
+  Logger::upf_n4().info(
+      "pfcp_session::update(bar) seid " SEID_FMT " BAR=%u", seid, bar_id);
+  for (auto& existing : bars) {
+    if (existing->bar_id.second.bar_id == bar_id) {
+      // Field-by-field conversion required: pair assignment is not possible
+      // because the stored types differ from the PFCP wire types.
+      // V17.10.0 §-refs: BAR ID §8.2.57, SugBuffPktCnt §8.2.100.
+
+      // §8.2.28 — Downlink Data Notification Delay (Sxa + N4 in Update BAR)
+      if (bar_update.downlink_data_notification_delay.first) {
+        existing->downlink_data_notification_delay.first = true;
+        existing->downlink_data_notification_delay.second.delay_value =
+            bar_update.downlink_data_notification_delay.second.delay;  // ×50 ms
+      }
+      // §8.2.100 — Suggested Buffering Packets Count (Sxb + Sxc + N4)
+      if (bar_update.suggested_buffering_packets_count.first) {
+        existing->suggested_buffering_packets_count.first = true;
+        existing->suggested_buffering_packets_count.second.packet_count =
+            bar_update.suggested_buffering_packets_count.second
+                .packets_count_value;
+      }
+      // §8.2.29 DL Buffering Duration and §8.2.30 DL Buffering Suggested
+      // Packet Count: not in update_bar_within_pfcp_session_modification_
+      // request (lib gap). Handled via pfcp_bar::update(report_response).
+      Logger::upf_n4().info(
+          "  └─ Updated BAR %u in session " SEID_FMT, bar_id, seid);
+      cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+      return true;
+    }
+  }
+  Logger::upf_n4().warn(
+      "  └─ BAR %u not found in session " SEID_FMT " - cannot update", bar_id,
+      seid);
+  cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  return false;
+}
+
+//------------------------------------------------------------------------------
+// remove_bar — 3GPP TS 29.244 Table 7.5.4.12-1
+
+//------------------------------------------------------------------------------
+bool pfcp_session::remove(
+    const pfcp::remove_bar& rm_bar, pfcp::cause_t& cause,
+    uint16_t& offending_ie) {
+  if (not rm_bar.bar_id.first) {
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_BAR_ID;
+    return false;
+  }
+  uint8_t bar_id = rm_bar.bar_id.second.bar_id;
+  Logger::upf_n4().info(
+      "pfcp_session::remove(bar) seid " SEID_FMT " BAR=%u", seid, bar_id);
+  for (auto it = bars.begin(); it != bars.end(); ++it) {
+    if ((*it)->bar_id.second.bar_id == bar_id) {
+      bars.erase(it);
+      Logger::upf_n4().info(
+          "  └─ Removed BAR %u from session " SEID_FMT " (%zu BARs remaining)",
+          bar_id, seid, bars.size());
+      cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+      return true;
+    }
+  }
+  Logger::upf_n4().warn(
+      "  └─ BAR %u not found in session " SEID_FMT " - cannot remove", bar_id,
+      seid);
+  cause.cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  offending_ie      = PFCP_IE_BAR_ID;
+  return false;
+}
+
+// =============================================================================
+// MAR — add / create / update / remove
+// =============================================================================
+
+//------------------------------------------------------------------------------
+void pfcp_session::add(std::shared_ptr<pfcp::pfcp_mar> mar) {
+  uint8_t mar_id = mar->mar_id.second.mar_id;
+  Logger::upf_n4().info(
+      "pfcp_session::add(mar) seid " SEID_FMT " MAR=%u", seid, mar_id);
+  for (auto it = mars.begin(); it != mars.end(); ++it) {
+    if ((*it)->mar_id.second.mar_id == mar_id) {
+      Logger::upf_n4().info(
+          "  └─ Replacing existing MAR %u in session " SEID_FMT, mar_id, seid);
+      *it = mar;
+      return;
+    }
+  }
+  Logger::upf_n4().info(
+      "  └─ Adding new MAR %u to session " SEID_FMT, mar_id, seid);
+
+  // Steering Functionality (§8.2.124)
+  if (mar->steering_functionality.first) {
+    uint8_t sf =
+        mar->steering_functionality.second.steering_functionality_value;
+    const char* sf_str = (sf == 0) ? "ATSSS-LL" : (sf == 1) ? "MPTCP" : "?";
+    Logger::upf_n4().debug("     • Steering Functionality: %s", sf_str);
+  }
+
+  // Steering Mode (§8.2.125)
+  if (mar->steering_mode.first) {
+    uint8_t sm         = mar->steering_mode.second.steering_mode_value;
+    const char* sm_str = (sm == 0) ? "Active-Standby" :
+                         (sm == 1) ? "Smallest Delay" :
+                         (sm == 2) ? "Load Balancing" :
+                         (sm == 3) ? "Priority-based" :
+                                     "?";
+    Logger::upf_n4().debug("     • Steering Mode: %s", sm_str);
+  }
+
+  // Access Forwarding Action Info 1 (§8.2.129)
+  if (mar->access_forwarding_action_info_1.first) {
+    auto& afai = mar->access_forwarding_action_info_1.second;
+    uint8_t prio_val =
+        afai.priority_present ? (uint8_t) afai.priority.priority_value : 0;
+    uint8_t weight_val =
+        afai.weight_present ? (uint8_t) afai.weight.weight_value : 0;
+    Logger::upf_n4().debug(
+        "     • AFAI-1: FAR=%u%s%s", afai.far_id.far_id,
+        afai.urr_id_present ?
+            fmt::format(", URR={}", afai.urr_id.urr_id).c_str() :
+            "",
+        afai.weight_present   ? fmt::format(", weight={}", weight_val).c_str() :
+        afai.priority_present ? fmt::format(", priority={}", prio_val).c_str() :
+                                "");
+  }
+
+  // Access Forwarding Action Info 2 (§8.2.130)
+  if (mar->access_forwarding_action_info_2.first) {
+    auto& afai = mar->access_forwarding_action_info_2.second;
+    uint8_t prio_val =
+        afai.priority_present ? (uint8_t) afai.priority.priority_value : 0;
+    uint8_t weight_val =
+        afai.weight_present ? (uint8_t) afai.weight.weight_value : 0;
+    Logger::upf_n4().debug(
+        "     • AFAI-2: FAR=%u%s%s", afai.far_id.far_id,
+        afai.urr_id_present ?
+            fmt::format(", URR={}", afai.urr_id.urr_id).c_str() :
+            "",
+        afai.weight_present   ? fmt::format(", weight={}", weight_val).c_str() :
+        afai.priority_present ? fmt::format(", priority={}", prio_val).c_str() :
+                                "");
+  }
+
+  mars.push_back(mar);
+  Logger::upf_n4().debug("     • Total MARs in session: %zu", mars.size());
+}
+
+// =============================================================================
+// MAR processing methods (create / update / remove)
+//
+// TODO MAR: re-enable when common-src adds pfcp::create_mar / update_mar /
+// remove_mar IE types. Matches the #if 0 guards on the call sites in
+// SessionManager.cpp and pfcp_switch.cpp, and on the declarations in
+// pfcp_session.hpp.
+// =============================================================================
+#if 0
+
+//------------------------------------------------------------------------------
+// create_mar — 3GPP TS 29.244 V17.10.0 Table 7.5.2.8-1
+// Mandatory IE: MAR ID §8.2.123. Converts access_forwarding_action_information
+// (IE types 166/167) → mar_access_forwarding_action_t field-by-field.
+// TODO V17.10.0: Thresholds (§8.2.196) and Steering Mode Indicator (§8.2.197)
+// are not yet in the OAI lib's create_mar — add when lib is updated.
+
+//------------------------------------------------------------------------------
+bool pfcp_session::create(
+    const pfcp::create_mar& cr_mar, pfcp::cause_t& cause,
+    uint16_t& offending_ie) {
+  if (not cr_mar.mar_id.first) {
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_MAR_ID;
+    return false;
+  }
+  auto mar    = std::make_shared<pfcp::pfcp_mar>();
+  mar->mar_id = cr_mar.mar_id;
+  if (cr_mar.steering_functionality.first)
+    mar->steering_functionality = cr_mar.steering_functionality;
+  if (cr_mar.steering_mode.first) mar->steering_mode = cr_mar.steering_mode;
+
+  // Convert access_forwarding_action_information →
+  // mar_access_forwarding_action_t
+  if (cr_mar.access_forwarding_action_information_1.first) {
+    const auto& afai = cr_mar.access_forwarding_action_information_1.second;
+    pfcp::mar_access_forwarding_action_t dst{};
+    pfcp::far_id_t far_val;
+    if (afai.get(far_val)) dst.far_id = far_val;
+    pfcp::urr_id_t urr_val;
+    if (afai.get(urr_val)) {
+      dst.urr_id         = urr_val;
+      dst.urr_id_present = true;
+    }
+    if (afai.weight.first) {
+      dst.weight.weight_value = afai.weight.second.weight_value;
+      dst.weight_present      = true;  // §8.2.126 — Load Balancing mode
+    }
+    if (afai.priority.first) {
+      dst.priority.priority_value = afai.priority.second.priority_value;
+      dst.priority_present = true;  // §8.2.127 — Active-Standby/Priority-based
+    }
+    // TODO V17.10.0: RAT Type (O, §8.2.186) — not yet in lib's AFAI type.
+    mar->access_forwarding_action_info_1 = {true, dst};
+  }
+  if (cr_mar.access_forwarding_action_information_2.first) {
+    const auto& afai = cr_mar.access_forwarding_action_information_2.second;
+    pfcp::mar_access_forwarding_action_t dst{};
+    pfcp::far_id_t far_val;
+    if (afai.get(far_val)) dst.far_id = far_val;
+    pfcp::urr_id_t urr_val;
+    if (afai.get(urr_val)) {
+      dst.urr_id         = urr_val;
+      dst.urr_id_present = true;
+    }
+    if (afai.weight.first) {
+      dst.weight.weight_value = afai.weight.second.weight_value;
+      dst.weight_present      = true;  // §8.2.126 — Load Balancing mode
+    }
+    if (afai.priority.first) {
+      dst.priority.priority_value = afai.priority.second.priority_value;
+      dst.priority_present = true;  // §8.2.127 — Active-Standby/Priority-based
+    }
+    // TODO V17.10.0: RAT Type (O, §8.2.186) — not yet in lib's AFAI type.
+    mar->access_forwarding_action_info_2 = {true, dst};
+  }
+  add(mar);
+  cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+  return true;
+}
+
+//------------------------------------------------------------------------------
+// update_mar — 3GPP TS 29.244 Table 7.5.4.16-1
+// Reuses the same AFAI conversion lambda as create_mar.
+
+//------------------------------------------------------------------------------
+bool pfcp_session::update(
+    const pfcp::update_mar& mar_update, uint8_t& cause_value) {
+  if (not mar_update.mar_id.first) {
+    cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+    return false;
+  }
+  uint8_t mar_id = mar_update.mar_id.second.mar_id;
+  Logger::upf_n4().info(
+      "pfcp_session::update(mar) seid " SEID_FMT " MAR=%u", seid, mar_id);
+  for (auto& existing : mars) {
+    if (existing->mar_id.second.mar_id == mar_id) {
+      if (mar_update.steering_functionality.first)
+        existing->steering_functionality = mar_update.steering_functionality;
+      if (mar_update.steering_mode.first)
+        existing->steering_mode = mar_update.steering_mode;
+
+      // AFAI field-by-field conversion (access_forwarding_action_information
+      // IE types 166/167 → mar_access_forwarding_action_t).
+      // TODO V17.10.0: Update 3GPP/Non-3GPP AFAI (IE types 175/176,
+      // Tables 7.5.4.16-2/3) not yet in lib — handled as full replace for now.
+      // TODO V17.10.0: Thresholds (§8.2.196) and Steering Mode Indicator
+      // (§8.2.197) not yet in lib's update_mar — add when lib is updated.
+      auto convert_afai =
+          [](const pfcp::access_forwarding_action_information& afai,
+             std::pair<bool, pfcp::mar_access_forwarding_action_t>& dst_pair) {
+            pfcp::mar_access_forwarding_action_t dst{};
+            pfcp::far_id_t far_val;
+            if (afai.get(far_val)) dst.far_id = far_val;
+            pfcp::urr_id_t urr_val;
+            if (afai.get(urr_val)) {
+              dst.urr_id         = urr_val;
+              dst.urr_id_present = true;
+            }
+            if (afai.weight.first) {
+              dst.weight.weight_value = afai.weight.second.weight_value;
+              dst.weight_present = true;  // §8.2.126 — Load Balancing mode
+            }
+            if (afai.priority.first) {
+              dst.priority.priority_value = afai.priority.second.priority_value;
+              dst.priority_present =
+                  true;  // §8.2.127 — Active-Standby/Priority-based
+            }
+            // TODO V17.10.0: RAT Type (O, §8.2.186) — not yet in lib's AFAI
+            // type.
+            dst_pair = {true, dst};
+          };
+
+      pfcp::access_forwarding_action_information afai;
+      if (mar_update.get_access_forwarding_action_information_1(afai))
+        convert_afai(afai, existing->access_forwarding_action_info_1);
+      if (mar_update.get_access_forwarding_action_information_2(afai))
+        convert_afai(afai, existing->access_forwarding_action_info_2);
+
+      Logger::upf_n4().info(
+          "  └─ Updated MAR %u in session " SEID_FMT, mar_id, seid);
+      cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+      return true;
+    }
+  }
+  Logger::upf_n4().warn(
+      "  └─ MAR %u not found in session " SEID_FMT " - cannot update", mar_id,
+      seid);
+  cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  return false;
+}
+
+//------------------------------------------------------------------------------
+// remove_mar — 3GPP TS 29.244 V17.10.0 Table 7.5.4.15-1
+
+//------------------------------------------------------------------------------
+bool pfcp_session::remove(
+    const pfcp::remove_mar& rm_mar, pfcp::cause_t& cause,
+    uint16_t& offending_ie) {
+  if (not rm_mar.mar_id.first) {
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_MAR_ID;
+    return false;
+  }
+  uint8_t mar_id = rm_mar.mar_id.second.mar_id;
+  Logger::upf_n4().info(
+      "pfcp_session::remove(mar) seid " SEID_FMT " MAR=%u", seid, mar_id);
+  for (auto it = mars.begin(); it != mars.end(); ++it) {
+    if ((*it)->mar_id.second.mar_id == mar_id) {
+      mars.erase(it);
+      Logger::upf_n4().info(
+          "  └─ Removed MAR %u from session " SEID_FMT " (%zu MARs remaining)",
+          mar_id, seid, mars.size());
+      cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+      return true;
+    }
+  }
+  Logger::upf_n4().warn(
+      "  └─ MAR %u not found in session " SEID_FMT " - cannot remove", mar_id,
+      seid);
+  cause.cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  offending_ie      = PFCP_IE_MAR_ID;
+  return false;
+}
+
+#endif  // MAR processing — re-enable when common-src adds MAR IE types
+
+// =============================================================================
+// PDR — update / remove / create
+// =============================================================================
+
+//------------------------------------------------------------------------------
+// update_pdr — 3GPP TS 29.244 Table 7.5.4.2-1
 
 //------------------------------------------------------------------------------
 bool pfcp_session::update(
@@ -404,6 +1120,78 @@ bool pfcp_session::update(
   cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
   return false;
 }
+
+//------------------------------------------------------------------------------
+// remove_pdr — 3GPP TS 29.244 Table 7.5.4.6-1
+
+//------------------------------------------------------------------------------
+bool pfcp_session::remove(
+    const pfcp::remove_pdr& pdr_removal, pfcp::cause_t& cause,
+    uint16_t& offending_ie) {
+  if (not pdr_removal.pdr_id.first) {
+    // should be caught in lower layer
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_PACKET_DETECTION_RULE_ID;
+    return false;
+  }
+
+  uint16_t pdr_id = pdr_removal.pdr_id.second.rule_id;
+
+  Logger::upf_n4().info(
+      "pfcp_session::remove(pdr) seid " SEID_FMT " PDR=%u", seid, pdr_id);
+
+  // Find and remove the PDR
+  for (auto it = pdrs.begin(); it != pdrs.end(); ++it) {
+    if ((*it)->pdr_id.rule_id == pdr_id) {
+      // Log details before removal
+      Logger::upf_n4().info(
+          "  └─ Removing PDR %u from session " SEID_FMT, pdr_id, seid);
+
+      // Show what we're removing
+      if ((*it)->pdi.first && (*it)->pdi.second.source_interface.first) {
+        uint8_t iface =
+            (*it)->pdi.second.source_interface.second.interface_value;
+        const char* dir = (iface == INTERFACE_VALUE_ACCESS) ? "Uplink" :
+                          (iface == INTERFACE_VALUE_CORE)   ? "Downlink" :
+                                                              "Unknown";
+        Logger::upf_n4().debug("     • Direction: %s", dir);
+      }
+
+      if ((*it)->far_id.first) {
+        Logger::upf_n4().debug(
+            "     • Was linked to FAR %u", (*it)->far_id.second.far_id);
+      }
+
+      if ((*it)->qer_id.first) {
+        Logger::upf_n4().debug(
+            "     • Was linked to QER %u", (*it)->qer_id.second.qer_id);
+      }
+
+      // Remove the PDR
+      pdrs.erase(it);
+      Logger::upf_n4().debug("     • Total PDRs remaining: %zu", pdrs.size());
+
+      cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+      return true;
+    }
+  }
+
+  // PDR not found
+  Logger::upf_n4().warn(
+      "  └─ PDR %u not found in session " SEID_FMT " - cannot remove", pdr_id,
+      seid);
+
+  cause.cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  offending_ie      = PFCP_IE_PACKET_DETECTION_RULE_ID;
+  return false;
+}
+
+// =============================================================================
+// FAR — update / remove / create
+// =============================================================================
+
+//------------------------------------------------------------------------------
+// update_far — 3GPP TS 29.244 Table 7.5.4.3-1
 
 //------------------------------------------------------------------------------
 bool pfcp_session::update(
@@ -540,180 +1328,7 @@ bool pfcp_session::update(
 }
 
 //------------------------------------------------------------------------------
-bool pfcp_session::update(
-    const pfcp::update_qer& qer_update, uint8_t& cause_value) {
-  uint32_t qer_id = qer_update.qer_id.second.qer_id;
-
-  Logger::upf_n4().info(
-      "pfcp_session::update(qer) seid " SEID_FMT " QER=%u", seid, qer_id);
-
-  // Find the QER to update
-  for (auto& existing_qer : qers) {
-    if (existing_qer->qer_id.second.qer_id == qer_id) {
-      Logger::upf_n4().info(
-          "  └─ Updating QER %u in session " SEID_FMT, qer_id, seid);
-
-      bool has_changes = false;
-
-      // Update Gate Status
-      if (qer_update.gate_status.first) {
-        const char* old_ul =
-            (existing_qer->gate_status.first &&
-             existing_qer->gate_status.second.ul_gate == PFCP_GATE_OPEN) ?
-                "OPEN" :
-                "CLOSED";
-        const char* old_dl =
-            (existing_qer->gate_status.first &&
-             existing_qer->gate_status.second.dl_gate == PFCP_GATE_OPEN) ?
-                "OPEN" :
-                "CLOSED";
-        const char* new_ul =
-            (qer_update.gate_status.second.ul_gate == PFCP_GATE_OPEN) ?
-                "OPEN" :
-                "CLOSED";
-        const char* new_dl =
-            (qer_update.gate_status.second.dl_gate == PFCP_GATE_OPEN) ?
-                "OPEN" :
-                "CLOSED";
-
-        if (strcmp(old_ul, new_ul) != 0 || strcmp(old_dl, new_dl) != 0) {
-          Logger::upf_n4().debug(
-              "     • Gate Status: UL=%s→%s, DL=%s→%s", old_ul, new_ul, old_dl,
-              new_dl);
-          has_changes = true;
-        }
-
-        existing_qer->gate_status = qer_update.gate_status;
-      }
-
-      // Update GBR
-      if (qer_update.guaranteed_bitrate.first) {
-        uint64_t old_gbr_dl =
-            existing_qer->guaranteed_bitrate.first ?
-                existing_qer->guaranteed_bitrate.second.dl_gbr :
-                0;
-        uint64_t new_gbr_dl = qer_update.guaranteed_bitrate.second.dl_gbr;
-
-        if (old_gbr_dl != new_gbr_dl) {
-          Logger::upf_n4().debug(
-              "     • GBR DL: %llu → %llu kbps", old_gbr_dl, new_gbr_dl);
-          has_changes = true;
-        }
-
-        existing_qer->guaranteed_bitrate = qer_update.guaranteed_bitrate;
-      }
-
-      // Update MBR
-      if (qer_update.maximum_bitrate.first) {
-        uint64_t old_mbr_dl = existing_qer->maximum_bitrate.first ?
-                                  existing_qer->maximum_bitrate.second.dl_mbr :
-                                  0;
-        uint64_t new_mbr_dl = qer_update.maximum_bitrate.second.dl_mbr;
-
-        if (old_mbr_dl != new_mbr_dl) {
-          Logger::upf_n4().debug(
-              "     • MBR DL: %llu → %llu kbps", old_mbr_dl, new_mbr_dl);
-          has_changes = true;
-        }
-
-        existing_qer->maximum_bitrate = qer_update.maximum_bitrate;
-      }
-
-      // Update QFI
-      if (qer_update.qos_flow_identifier.first) {
-        uint8_t old_qfi = existing_qer->qos_flow_id.first ?
-                              existing_qer->qos_flow_id.second.qfi :
-                              0;
-        uint8_t new_qfi = qer_update.qos_flow_identifier.second.qfi;
-
-        if (old_qfi != new_qfi) {
-          Logger::upf_n4().debug("     • QFI: %u → %u", old_qfi, new_qfi);
-          has_changes = true;
-        }
-
-        existing_qer->qos_flow_id = qer_update.qos_flow_identifier;
-      }
-
-      if (!has_changes) {
-        Logger::upf_n4().debug("     • No actual changes detected");
-      }
-
-      cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
-      return true;
-    }
-  }
-
-  // QER not found
-  Logger::upf_n4().warn(
-      "  └─ QER %u not found in session " SEID_FMT " - cannot update", qer_id,
-      seid);
-
-  cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
-  return false;
-}
-
-//------------------------------------------------------------------------------
-
-bool pfcp_session::remove(
-    const pfcp::remove_pdr& pdr_removal, pfcp::cause_t& cause,
-    uint16_t& offending_ie) {
-  if (not pdr_removal.pdr_id.first) {
-    // should be caught in lower layer
-    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-    offending_ie      = PFCP_IE_PACKET_DETECTION_RULE_ID;
-    return false;
-  }
-
-  uint16_t pdr_id = pdr_removal.pdr_id.second.rule_id;
-
-  Logger::upf_n4().info(
-      "pfcp_session::remove(pdr) seid " SEID_FMT " PDR=%u", seid, pdr_id);
-
-  // Find and remove the PDR
-  for (auto it = pdrs.begin(); it != pdrs.end(); ++it) {
-    if ((*it)->pdr_id.rule_id == pdr_id) {
-      // Log details before removal
-      Logger::upf_n4().info(
-          "  └─ Removing PDR %u from session " SEID_FMT, pdr_id, seid);
-
-      // Show what we're removing
-      if ((*it)->pdi.first && (*it)->pdi.second.source_interface.first) {
-        uint8_t iface =
-            (*it)->pdi.second.source_interface.second.interface_value;
-        const char* dir = (iface == INTERFACE_VALUE_ACCESS) ? "Uplink" :
-                          (iface == INTERFACE_VALUE_CORE)   ? "Downlink" :
-                                                              "Unknown";
-        Logger::upf_n4().debug("     • Direction: %s", dir);
-      }
-
-      if ((*it)->far_id.first) {
-        Logger::upf_n4().debug(
-            "     • Was linked to FAR %u", (*it)->far_id.second.far_id);
-      }
-
-      if ((*it)->qer_id.first) {
-        Logger::upf_n4().debug(
-            "     • Was linked to QER %u", (*it)->qer_id.second.qer_id);
-      }
-
-      // Remove the PDR
-      pdrs.erase(it);
-      Logger::upf_n4().debug("     • Total PDRs remaining: %zu", pdrs.size());
-
-      cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
-      return true;
-    }
-  }
-
-  // PDR not found
-  Logger::upf_n4().warn(
-      "  └─ PDR %u not found in session " SEID_FMT " - cannot remove", pdr_id,
-      seid);
-
-  cause.cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
-  offending_ie      = PFCP_IE_PACKET_DETECTION_RULE_ID;
-  return false;
-}
+// remove_far — 3GPP TS 29.244 Table 7.5.4.7-1
 
 //------------------------------------------------------------------------------
 bool pfcp_session::remove(
@@ -781,6 +1396,241 @@ bool pfcp_session::remove(
 }
 
 //------------------------------------------------------------------------------
+// create_far — 3GPP TS 29.244 Table 7.5.2.3-1
+
+//------------------------------------------------------------------------------
+bool pfcp_session::create(
+    const pfcp::create_far& cr_far, pfcp::cause_t& cause,
+    uint16_t& offending_ie) {
+  if (not cr_far.far_id.first) {
+    // should be caught in lower layer
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_FAR_ID;
+    return false;
+  }
+  if (not cr_far.apply_action.first) {
+    // should be caught in lower layer
+    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    offending_ie      = PFCP_IE_APPLY_ACTION;
+    return false;
+  }
+  if (cr_far.apply_action.second.forw) {
+    if (not cr_far.forwarding_parameters.first) {
+      // should be caught in lower layer
+      cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+      offending_ie      = PFCP_IE_FORWARDING_PARAMETERS;
+      return false;
+    }
+  }
+  if (cr_far.apply_action.second.dupl) {
+    if (not cr_far.duplicating_parameters.first) {
+      // should be caught in lower layer
+      cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+      offending_ie      = PFCP_IE_DUPLICATING_PARAMETERS;
+      return false;
+    }
+  }
+  pfcp_far* far                  = new pfcp_far(cr_far);
+  std::shared_ptr<pfcp_far> sfar = std::shared_ptr<pfcp_far>(far);
+  add(sfar);
+  cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+  return true;
+}
+
+// =============================================================================
+// QER — update / remove / create
+// =============================================================================
+
+//------------------------------------------------------------------------------
+// update_qer — 3GPP TS 29.244 V17.10.0 Table 7.5.4.5-1
+// Covers all IEs delegated to pfcp_qer::update() after logging old→new.
+// Field assignments are NOT repeated here; pfcp_qer::update() owns them.
+
+//------------------------------------------------------------------------------
+bool pfcp_session::update(
+    const pfcp::update_qer& qer_update, uint8_t& cause_value) {
+  // qer_update.qer_id is std::pair<bool, qer_id_t> in common-src.
+  uint32_t qer_id = qer_update.qer_id.second.qer_id;
+
+  Logger::upf_n4().info(
+      "pfcp_session::update(qer) seid " SEID_FMT " QER=%u", seid, qer_id);
+
+  // Find the QER to update
+  for (auto& existing_qer : qers) {
+    if (existing_qer->qer_id.second.qer_id == qer_id) {
+      Logger::upf_n4().info(
+          "  └─ Updating QER %u in session " SEID_FMT, qer_id, seid);
+
+      bool has_changes = false;
+
+      // Gate Status (§8.2.7)
+      if (qer_update.gate_status.first) {
+        const char* old_ul =
+            (existing_qer->gate_status.first &&
+             existing_qer->gate_status.second.ul_gate == PFCP_GATE_OPEN) ?
+                "OPEN" :
+                "CLOSED";
+        const char* old_dl =
+            (existing_qer->gate_status.first &&
+             existing_qer->gate_status.second.dl_gate == PFCP_GATE_OPEN) ?
+                "OPEN" :
+                "CLOSED";
+        const char* new_ul =
+            (qer_update.gate_status.second.ul_gate == PFCP_GATE_OPEN) ?
+                "OPEN" :
+                "CLOSED";
+        const char* new_dl =
+            (qer_update.gate_status.second.dl_gate == PFCP_GATE_OPEN) ?
+                "OPEN" :
+                "CLOSED";
+
+        if (strcmp(old_ul, new_ul) != 0 || strcmp(old_dl, new_dl) != 0) {
+          Logger::upf_n4().debug(
+              "     • Gate Status: UL=%s→%s, DL=%s→%s", old_ul, new_ul, old_dl,
+              new_dl);
+          has_changes = true;
+        }
+      }
+
+      // GBR (§8.2.9) — log both UL and DL
+      if (qer_update.guaranteed_bitrate.first) {
+        uint64_t old_ul_gbr =
+            existing_qer->guaranteed_bitrate.first ?
+                existing_qer->guaranteed_bitrate.second.ul_gbr :
+                0;
+        uint64_t old_dl_gbr =
+            existing_qer->guaranteed_bitrate.first ?
+                existing_qer->guaranteed_bitrate.second.dl_gbr :
+                0;
+        uint64_t new_ul_gbr = qer_update.guaranteed_bitrate.second.ul_gbr;
+        uint64_t new_dl_gbr = qer_update.guaranteed_bitrate.second.dl_gbr;
+
+        if (old_ul_gbr != new_ul_gbr || old_dl_gbr != new_dl_gbr) {
+          Logger::upf_n4().debug(
+              "     • GBR: UL: %llu → %llu kbps, DL: %llu → %llu kbps",
+              old_ul_gbr, new_ul_gbr, old_dl_gbr, new_dl_gbr);
+          has_changes = true;
+        }
+      }
+
+      // MBR (§8.2.8) — log both UL and DL
+      if (qer_update.maximum_bitrate.first) {
+        uint64_t old_ul_mbr = existing_qer->maximum_bitrate.first ?
+                                  existing_qer->maximum_bitrate.second.ul_mbr :
+                                  0;
+        uint64_t old_dl_mbr = existing_qer->maximum_bitrate.first ?
+                                  existing_qer->maximum_bitrate.second.dl_mbr :
+                                  0;
+        uint64_t new_ul_mbr = qer_update.maximum_bitrate.second.ul_mbr;
+        uint64_t new_dl_mbr = qer_update.maximum_bitrate.second.dl_mbr;
+
+        if (old_ul_mbr != new_ul_mbr || old_dl_mbr != new_dl_mbr) {
+          Logger::upf_n4().debug(
+              "     • MBR: UL: %llu → %llu kbps, DL: %llu → %llu kbps",
+              old_ul_mbr, new_ul_mbr, old_dl_mbr, new_dl_mbr);
+          has_changes = true;
+        }
+      }
+
+      // QFI (§8.2.89)
+      if (qer_update.qos_flow_identifier.first) {
+        uint8_t old_qfi = existing_qer->qos_flow_id.first ?
+                              existing_qer->qos_flow_id.second.qfi :
+                              0;
+        uint8_t new_qfi = qer_update.qos_flow_identifier.second.qfi;
+
+        if (old_qfi != new_qfi) {
+          Logger::upf_n4().debug("     • QFI: %u → %u", old_qfi, new_qfi);
+          has_changes = true;
+        }
+      }
+
+      // QER Correlation ID (§8.2.10)
+      if (qer_update.qer_correlation_id.first) {
+        uint32_t old_corr =
+            existing_qer->qer_correlation_id.first ?
+                existing_qer->qer_correlation_id.second.qer_correlation_id :
+                0;
+        uint32_t new_corr =
+            qer_update.qer_correlation_id.second.qer_correlation_id;
+
+        if (old_corr != new_corr) {
+          Logger::upf_n4().debug(
+              "     • QER Correlation ID: %u → %u", old_corr, new_corr);
+          has_changes = true;
+        }
+      }
+
+      // Reflective QoS (§8.2.88)
+      if (qer_update.reflective_qos.first) {
+        bool old_rqi = existing_qer->reflective_qos.first &&
+                       existing_qer->reflective_qos.second.rqi;
+        bool new_rqi = qer_update.reflective_qos.second.rqi;
+
+        if (old_rqi != new_rqi) {
+          Logger::upf_n4().debug(
+              "     • Reflective QoS: %s → %s",
+              old_rqi ? "Enabled" : "Disabled",
+              new_rqi ? "Enabled" : "Disabled");
+          has_changes = true;
+        }
+      }
+
+      // Paging Policy Indicator (§8.2.116)
+      if (qer_update.paging_policy_indicator.first) {
+        uint8_t old_ppi =
+            existing_qer->paging_policy_indicator.first ?
+                existing_qer->paging_policy_indicator.second.ppi_value :
+                0;
+        uint8_t new_ppi = qer_update.paging_policy_indicator.second.ppi_value;
+
+        if (old_ppi != new_ppi) {
+          Logger::upf_n4().debug(
+              "     • Paging Policy Indicator: %u → %u", old_ppi, new_ppi);
+          has_changes = true;
+        }
+      }
+
+      // Averaging Window (§8.2.115)
+      if (qer_update.averaging_window.first) {
+        uint32_t old_win =
+            existing_qer->averaging_window.first ?
+                existing_qer->averaging_window.second.averaging_window :
+                0;
+        uint32_t new_win = qer_update.averaging_window.second.averaging_window;
+
+        if (old_win != new_win) {
+          Logger::upf_n4().debug(
+              "     • Averaging Window: %u → %u ms", old_win, new_win);
+          has_changes = true;
+        }
+      }
+
+      if (!has_changes) {
+        Logger::upf_n4().debug("     • No actual changes detected");
+      }
+
+      // Delegate all field assignments to pfcp_qer::update() — single source
+      // of truth for the IE-to-field mapping (Table 7.5.4.5-1).
+      existing_qer->update(qer_update, cause_value);
+      cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+      return true;
+    }
+  }
+
+  // QER not found
+  Logger::upf_n4().warn(
+      "  └─ QER %u not found in session " SEID_FMT " - cannot update", qer_id,
+      seid);
+
+  cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+  return false;
+}
+
+//------------------------------------------------------------------------------
+// remove_qer — 3GPP TS 29.244 Table 7.5.4.9-1
+
+//------------------------------------------------------------------------------
 bool pfcp_session::remove(
     const pfcp::remove_qer& qer_removal, pfcp::cause_t& cause,
     uint16_t& offending_ie) {
@@ -841,42 +1691,8 @@ bool pfcp_session::remove(
 }
 
 //------------------------------------------------------------------------------
-bool pfcp_session::create(
-    const pfcp::create_far& cr_far, pfcp::cause_t& cause,
-    uint16_t& offending_ie) {
-  if (not cr_far.far_id.first) {
-    // should be caught in lower layer
-    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-    offending_ie      = PFCP_IE_FAR_ID;
-    return false;
-  }
-  if (not cr_far.apply_action.first) {
-    // should be caught in lower layer
-    cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-    offending_ie      = PFCP_IE_APPLY_ACTION;
-    return false;
-  }
-  if (cr_far.apply_action.second.forw) {
-    if (not cr_far.forwarding_parameters.first) {
-      // should be caught in lower layer
-      cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-      offending_ie      = PFCP_IE_FORWARDING_PARAMETERS;
-      return false;
-    }
-  }
-  if (cr_far.apply_action.second.dupl) {
-    if (not cr_far.duplicating_parameters.first) {
-      // should be caught in lower layer
-      cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
-      offending_ie      = PFCP_IE_DUPLICATING_PARAMETERS;
-      return false;
-    }
-  }
-  pfcp_far* far                  = new pfcp_far(cr_far);
-  std::shared_ptr<pfcp_far> sfar = std::shared_ptr<pfcp_far>(far);
-  add(sfar);
-  return true;
-}
+// create_pdr — 3GPP TS 29.244 Table 7.5.2.2-1
+// Allocates an F-TEID for ACCESS PDRs (uplink).
 
 //------------------------------------------------------------------------------
 bool pfcp_session::create(
@@ -926,7 +1742,7 @@ bool pfcp_session::create(
   if (pdi.source_interface.second.interface_value == INTERFACE_VALUE_ACCESS ||
       pdi.source_interface.second.interface_value ==
           INTERFACE_VALUE_CP_FUNCTION) {
-    // Uplink traffic
+    // Uplink — must have a local F-TEID (§8.2.3); allocate or use CP value
     if (not pdi.local_fteid.first) {
       cause.cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
       offending_ie      = PFCP_IE_F_TEID;
@@ -953,7 +1769,7 @@ bool pfcp_session::create(
       pdr->pdi.second.set(allocated_fteid);
     }
 
-    teid_uplink = allocated_fteid;
+    set(allocated_fteid);
 
     // Check if s_allocated_fteid is set
     pfcp::fteid_t fteid;
@@ -977,6 +1793,7 @@ bool pfcp_session::create(
     }
   } else if (
       pdi.source_interface.second.interface_value == INTERFACE_VALUE_CORE) {
+    // Downlink — register by UE IP for core-to-UE forwarding
     pfcp_pdr* pdr                  = new pfcp_pdr(cr_pdr);
     std::shared_ptr<pfcp_pdr> spdr = std::shared_ptr<pfcp_pdr>(pdr);
     pdr->set(get_up_seid());
@@ -1008,12 +1825,17 @@ bool pfcp_session::create(
   if (pdi.ethernet_pdu_session_information.first ||
       pdi.ethernet_packet_filter.first) {
     Logger::upf_n4().info(
-        "ETH-PDU: Sending PDN type to ETHERNET based on "
+        "ETH-PDU: Setting PDN type to ETHERNET based on "
         "ethernet_pdu_session_information or ethernet_packet_filter");
-    pdn_type = pfcp::pdn_type_value_e::ETHERNET;
+    set(pfcp::pdn_type_value_e::ETHERNET);
   }
+  cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
   return true;
 }
+
+//------------------------------------------------------------------------------
+// create_qer — 3GPP TS 29.244 Table 7.5.2.5-1
+// QFI is mandatory; GBR without MBR is invalid.
 
 //------------------------------------------------------------------------------
 bool pfcp_session::create(
@@ -1052,7 +1874,8 @@ bool pfcp_session::create(
   bool has_gbr = cr_qer.guaranteed_bitrate.first;
 
   if (has_mbr && has_gbr) {
-    // GBR QoS flow - both present, validate GBR values are <= MBR values
+    // GBR QoS flow (§8.2.8 MBR / §8.2.9 GBR) — both present, validate GBR <=
+    // MBR MBR values
     Logger::upf_n4().debug(
         "QER ID %d: GBR QoS flow detected (MBR and GBR present)",
         cr_qer.qer_id.second.qer_id);
@@ -1089,7 +1912,7 @@ bool pfcp_session::create(
         cr_qer.qer_id.second.qer_id);
   }
 
-  // QFI is mandatory according to 3GPP TS 29.244
+  // QFI (§8.2.89) is mandatory according to 3GPP TS 29.244
   if (not cr_qer.qos_flow_identifier.first) {
     cause.cause_value = CAUSE_VALUE_CONDITIONAL_IE_MISSING;
     offending_ie      = PFCP_IE_QFI;
@@ -1125,13 +1948,21 @@ bool pfcp_session::create(
   pfcp_qer* qer                  = new pfcp_qer(cr_qer);
   std::shared_ptr<pfcp_qer> sqer = std::shared_ptr<pfcp_qer>(qer);
   add(sqer);
+  cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
   return true;
 }
 
+// =============================================================================
+// Cleanup and display
+// =============================================================================
+
+//------------------------------------------------------------------------------
+// cleanup — remove all tun/teid mappings from pfcp_switch lookup tables then
+// clear all rule vectors.
+
 //------------------------------------------------------------------------------
 void pfcp_session::cleanup() {
-  for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it = pdrs.begin();
-       it != pdrs.end(); ++it) {
+  for (auto it = pdrs.begin(); it != pdrs.end(); ++it) {
     if (((*it)->pdi.first) && ((*it)->pdi.second.source_interface.first)) {
       if ((*it)->pdi.second.source_interface.second.interface_value ==
           INTERFACE_VALUE_ACCESS) {
@@ -1152,7 +1983,13 @@ void pfcp_session::cleanup() {
   }
   fars.clear();
   pdrs.clear();
+  urrs.clear();
+  bars.clear();
+  mars.clear();
 }
+
+//------------------------------------------------------------------------------
+// to_string — render all session PDRs as a formatted ASCII table.
 
 //------------------------------------------------------------------------------
 std::string pfcp_session::to_string() const {
@@ -1162,26 +1999,36 @@ std::string pfcp_session::to_string() const {
   oss << "\n";
   oss << "  "
          "┌────────────────────────────────────────────────────────────────────"
-         "──────────────────────────────────────────────────────────────────"
-         "─────────────────────────────────┐\n";
+         "──"
+         "─────────────────────────────────────────────────────────────────────"
+         "─"
+         "───────────────────────────────────────────────────┐\n";
   oss << fmt::format(
-      "  │{:^167}│\n", fmt::format("PDU SESSION RULES - Session {:#x}", seid));
+      "  │{:^191}│\n", fmt::format("PDU SESSION RULES - Session {:#x}", seid));
   oss << "  "
-         "├────────┬───────┬───────┬────────────┬───────────┬─────────────────┬"
-         "────────────┬────────────┬───────┬────────────────────────────────┬──"
-         "──────────────────────────────┤\n";
-  oss << "  │  PDR   │  FAR  │  QER  │ Precedence │ Direction │    UE IPv4     "
-         " │   Action   │  Dest If   │  QFI  │       Create Outer Hdr         "
-         "│       Remove Outer Hdr         │\n";
+         "├────────┬───────┬───────┬───────┬───────┬───────┬────────────┬──────"
+         "─"
+         "────┬─────────────────┬────────────┬────────────┬───────┬────────────"
+         "──"
+         "──────────────────┬────────────────────────────────┤\n";
+  oss << "  │  PDR   │  FAR  │  QER  │  URR  │  BAR  │  MAR  │ Precedence │ "
+         "Direction │"
+         "    UE IPv4      │   Action   │  Dest If   │  QFI  │       Create "
+         "Outer Hdr         │       Remove Outer Hdr         │\n";
   oss << "  "
-         "├────────┼───────┼───────┼────────────┼───────────┼─────────────────┼"
-         "────────────┼────────────┼───────┼────────────────────────────────┼──"
-         "──────────────────────────────┤\n";
+         "├────────┼───────┼───────┼───────┼───────┼───────┼────────────┼──────"
+         "─"
+         "────┼─────────────────┼────────────┼────────────┼───────┼────────────"
+         "──"
+         "──────────────────┼────────────────────────────────┤\n";
 
   // Process each PDR
   for (const auto& pdr : pdrs) {
     std::shared_ptr<pfcp::pfcp_far> far = nullptr;
     std::shared_ptr<pfcp::pfcp_qer> qer = nullptr;
+    std::shared_ptr<pfcp::pfcp_urr> urr = nullptr;
+    std::shared_ptr<pfcp::pfcp_bar> bar = nullptr;
+    std::shared_ptr<pfcp::pfcp_mar> mar = nullptr;
 
     // Get associated FAR
     if (pdr->far_id.first) {
@@ -1191,6 +2038,11 @@ std::string pfcp_session::to_string() const {
     // Get associated QER
     if (pdr->qer_id.first) {
       get(pdr->qer_id.second.qer_id, qer);
+    }
+
+    // Get associated URR
+    if (pdr->urr_id.first) {
+      get(pdr->urr_id.second.urr_id, urr);
     }
 
     // PDR ID (left-aligned)
@@ -1206,6 +2058,27 @@ std::string pfcp_session::to_string() const {
     // QER ID (left-aligned)
     if (qer) {
       oss << fmt::format(" {:<5} │", qer->qer_id.second.qer_id);
+    } else {
+      oss << " -     │";
+    }
+
+    // URR ID
+    if (urr) {
+      oss << fmt::format(" {:<5} │", urr->urr_id.second.urr_id);
+    } else {
+      oss << " -     │";
+    }
+
+    // BAR ID — session-level BARs (not linked per PDR; show first BAR if any)
+    if (!bars.empty() && bars.front()->bar_id.first) {
+      oss << fmt::format(" {:<5} │", bars.front()->bar_id.second.bar_id);
+    } else {
+      oss << " -     │";
+    }
+
+    // MAR ID — session-level MARs (not linked per PDR; show first MAR if any)
+    if (!mars.empty() && mars.front()->mar_id.first) {
+      oss << fmt::format(" {:<5} │", mars.front()->mar_id.second.mar_id);
     } else {
       oss << " -     │";
     }
@@ -1252,6 +2125,7 @@ std::string pfcp_session::to_string() const {
             break;
           default:
             direction = "?";
+            break;
         }
       }
     }
@@ -1303,6 +2177,7 @@ std::string pfcp_session::to_string() const {
           break;
         default:
           dest_if = "?";
+          break;
       }
     }
     oss << fmt::format(" {:<10} │", dest_if.empty() ? "-" : dest_if);
@@ -1350,6 +2225,7 @@ std::string pfcp_session::to_string() const {
         }
         default:
           create_hdr = "?";
+          break;
       }
     }
     oss << fmt::format(" {:<30} │", create_hdr.empty() ? "-" : create_hdr);
@@ -1383,6 +2259,7 @@ std::string pfcp_session::to_string() const {
           break;
         default:
           remove_hdr = "?";
+          break;
       }
     }
     oss << fmt::format(" {:<30} │\n", remove_hdr.empty() ? "-" : remove_hdr);
@@ -1390,9 +2267,11 @@ std::string pfcp_session::to_string() const {
 
   // Table footer
   oss << "  "
-         "└────────┴───────┴───────┴────────────┴───────────┴─────────────────┴"
-         "────────────┴────────────┴───────┴────────────────────────────────┴──"
-         "──────────────────────────────┘\n";
+         "└────────┴───────┴───────┴───────┴───────┴───────┴────────────┴──────"
+         "─"
+         "────┴─────────────────┴────────────┴────────────┴───────┴────────────"
+         "──"
+         "──────────────────┴────────────────────────────────┘\n";
   oss << "\n";
 
   return oss.str();

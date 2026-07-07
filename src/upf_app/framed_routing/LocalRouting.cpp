@@ -1,6 +1,6 @@
-//
-// Created by root on 7/22/24.
-//
+/*
+ * SPDX-License-Identifier: LicenseRef-CSSL-1.0
+ */
 
 #include <fmt/format.h>
 #include <arpa/inet.h>

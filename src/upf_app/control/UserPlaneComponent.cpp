@@ -2,28 +2,17 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file UserPlaneComponent.cpp
- * @brief User Plane Function Component Implementation
- *
- * Main orchestrator for UPF control plane, managing BPF/XDP programs,
- * PFCP sessions, and network interfaces according to 3GPP TS 23.501.
- */
-
 #include "UserPlaneComponent.h"
 #include "SessionManager.h"
 #include "SessionProgramManager.h"
 #include "SignalHandler.h"
 #include <upf_xdp_user.h>
-#include <far_tc_user.h>
 #include "logger.hpp"
-#include "upf_config.hpp"
+#include "Configuration.h"
+#include "upf_pipeline_config.h"  // PduSessionType, PipelineFeatureFlags, ProgIndex
 
 #include "version_utils.h"
 #include "startup_banner.hpp"
-
-using namespace oai::config;
-extern upf_config upf_cfg;
 
 //------------------------------------------------------------------------------
 // Constructor & Destructor
@@ -34,6 +23,10 @@ UserPlaneComponent::UserPlaneComponent() {
   libbpf_set_print(UserPlaneComponent::PrintLibbpfLog);
 #endif
 }
+
+//------------------------------------------------------------------------------
+// Network Configuration
+//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 UserPlaneComponent::~UserPlaneComponent() {
@@ -50,56 +43,94 @@ UserPlaneComponent& UserPlaneComponent::GetInstance() {
 }
 
 //------------------------------------------------------------------------------
+// Feature Flag Construction
+//------------------------------------------------------------------------------
+
+PipelineFeatureFlags UserPlaneComponent::BuildFeatureFlags() const {
+  // g_net_cfg is already populated by BuildNetworkConfig() at this point.
+  // All reads go through upf::Is*() / upf::Get*() — no upf_cfg access here.
+  PipelineFeatureFlags flags;
+
+  // eBPF Acceleration enabled
+  const bool bpf = upf::IsBpfDatapathEnabled();
+
+  // QoS: gate status in XDP + rate shaping in TC
+  flags.enable_qer = bpf && upf::IsQosEnabled();
+
+  // Usage Reporting Rules (volume/time measurement)
+  flags.enable_urr = bpf && upf::IsUrrEnabled();
+
+  // Buffering Action Rules (DL data notification for idle UEs)
+  flags.enable_bar = bpf && upf::IsBarEnabled();
+
+  // Multi-Access Rules (ATSSS steering)
+  flags.enable_mar = bpf && upf::IsMarEnabled();
+
+  // Framed Routing support
+  flags.enable_framed_routing = bpf && upf::IsFramedRoutingEnabled();
+
+  // PDU session type: select IP or ETH entry programs
+  // Config value: "ip" (default) or "ethernet"
+  flags.pdu_type = (upf::GetPduSessionType() == "ethernet") ?
+                       PduSessionType::Ethernet :
+                       PduSessionType::IP;
+
+  return flags;
+}
+
+//------------------------------------------------------------------------------
+
+//------------------------------------------------------------------------------
 // Initialization and Teardown
 //------------------------------------------------------------------------------
 
 void UserPlaneComponent::SetMembers(
-    const std::string& gtp_interface, const std::string& udp_interface) {
-  gtp_interface_ = gtp_interface;
-  udp_interface_ = udp_interface;
+    const std::string& gtp_interface, const std::string& non_gtp_interface) {
+  gtp_interface_     = gtp_interface;
+  non_gtp_interface_ = non_gtp_interface;
 
   // Create UPF XDP program (3GPP TS 23.501 Section 6.2.3)
   upf_xdp_program_ =
-      std::make_shared<UPF_XDPProgram>(gtp_interface, udp_interface, upf_cfg);
+      std::make_shared<UPF_XDPProgram>(gtp_interface, non_gtp_interface);
 
   if (!upf_xdp_program_) {
-    Logger::upf_app().error("Failed to initialize eBPF program");
-    throw std::runtime_error("eBPF program initialization failed");
+    Logger::upf_app().error("Failed to initialize BPF pipeline program");
+    throw std::runtime_error("BPF pipeline initialization failed");
   }
 
-  far_tc_program_ = std::make_shared<FARTCProgram>();
-  if (!far_tc_program_) {
-    Logger::upf_app().error("Failed to initialize FAR TC program");
-    throw std::runtime_error("FAR TC program initialization failed");
-  }
-
-  Logger::upf_app().info(
-      "UPF XDP program initialized (N3: %s, N6: %s)", gtp_interface.c_str(),
-      udp_interface.c_str());
+  Logger::upf_app().info("UPF_XDPProgram initialized");
 }
 
 //------------------------------------------------------------------------------
 void UserPlaneComponent::Setup(
-    const std::string& gtp_interface, const std::string& udp_interface) {
+    const std::string& gtp_interface, const std::string& non_gtp_interface) {
   Logger::upf_app().info("Setting up User Plane Component");
 
-  // QoS enablement check
-  const bool is_qos_enabled = upf_cfg.enable_bpf_datapath && upf_cfg.enable_qos;
+  // Step 1: Populate g_net_cfg from upf_cfg.
+  //   This is the ONLY place upf_cfg fields are copied into g_net_cfg.
+  //   All downstream code (programs, maps, SessionProgramManager) reads
+  //   from upf::g_net_cfg via the inline getters in Configuration.h.
+  Configuration::BuildNetworkConfig();
 
-  // Initialize interfaces and XDP program
-  SetMembers(gtp_interface, udp_interface);
+  // Step 2: Build feature flags (reads from g_net_cfg, not upf_cfg)
+  PipelineFeatureFlags flags = BuildFeatureFlags();
+
+  // // Log what we're about to configure
+  // LogPipelineConfig(flags);
+
+  // Initialize interfaces and XDP pipeline program
+  SetMembers(gtp_interface, non_gtp_interface);
 
   // Enable signal handlers for graceful shutdown
   SignalHandler::GetInstance().Enable();
 
-  // Setup XDP program with QoS configuration
-  upf_xdp_program_->Setup(is_qos_enabled);
-
-  // Setup FAR TC program for Ethernet PDU broadcast/multicast forwarding
-  if (upf_cfg.enable_bpf_datapath && upf_cfg.enable_eth_pdu) {
-    Logger::upf_app().info("ETH-PDU: setting up FAR TC broadcast program");
-    far_tc_program_->setup();
-  }
+  // Setup the tail-call pipeline:
+  //   - Opens skeleton
+  //   - Configures maps
+  //   - Loads all programs
+  //   - Populates PROG_ARRAY based on feature flags
+  //   - Links entry programs to N3/N6 interfaces
+  upf_xdp_program_->Setup(flags);
 
   // Get SessionProgramManager singleton
   SessionProgramManager& session_program_manager =
@@ -128,18 +159,50 @@ void UserPlaneComponent::Setup(
 
   Logger::upf_app().info("Session Manager initialized");
 
+  // Count loaded features
+  int feature_count = 3;  // Core: session_lookup + pdr_match + far
+  if (flags.enable_qer) feature_count++;
+  if (flags.enable_urr) feature_count++;
+  if (flags.enable_bar) feature_count++;
+  if (flags.enable_mar) feature_count++;
+  if (flags.enable_framed_routing) feature_count++;
+  if (flags.pdu_type == PduSessionType::Ethernet) feature_count++;  // broadcast
+
+  const char* pdu_str =
+      (flags.pdu_type == PduSessionType::Ethernet) ? "Ethernet" : "IP";
+
+  // Logger::upf_app().info(
+  //     "UPF Data Plane setup complete (PDU: %s, QoS: %s, "
+  //     "URR: %s, BAR: %s, MAR: %s, pipeline programs: %d)",
+  //     pdu_str, flags.enable_qer ? "on" : "off", flags.enable_urr ? "on" :
+  //     "off", flags.enable_bar ? "on" : "off", flags.enable_mar ? "on" :
+  //     "off", feature_count);
+
+  Logger::upf_app().info("");
+  Logger::upf_app().info(" Data Plane setup complete");
+  Logger::upf_app().info("  ├─ PDU Session Type  :  %s", pdu_str);
   Logger::upf_app().info(
-      "UPF Data Plane setup complete (QoS: %s)",
-      is_qos_enabled ? "enabled" : "disabled");
+      "  ├─ QoS Enforcement   :  %s", flags.enable_qer ? "✓ on" : "✗ off");
+  Logger::upf_app().info(
+      "  ├─ URR Reporting     :  %s", flags.enable_urr ? "✓ on" : "✗ off");
+  Logger::upf_app().info(
+      "  ├─ BAR Buffering     :  %s", flags.enable_bar ? "✓ on" : "✗ off");
+  Logger::upf_app().info(
+      "  ├─ MAR Steering      :  %s", flags.enable_mar ? "✓ on" : "✗ off");
+  Logger::upf_app().info("  └─ Pipeline slots    :  %d", feature_count);
+  Logger::upf_app().info("");
 
-  DisplayConfigSummary(upf_cfg);
+  // Display startup banners
+  DisplayConfigSummary();
+  DisplayNetworkInterfaces();
+  DisplayDataPlaneStatus();
+  DisplayPipelineConfig(flags);
+  DisplayDataPathArchitecture(flags);
 
-  DisplayNetworkInterfaces(upf_cfg);
-  DisplayDataPlaneStatus(upf_cfg);
-  std::string n3_mode = upf_xdp_program_->GetXdpModeString(upf_cfg.n3.if_name);
-  std::string n6_mode = upf_xdp_program_->GetXdpModeString(upf_cfg.n6.if_name);
-  size_t total_maps   = upf_xdp_program_->GetMapCount();
-  DisplayXdpConfiguration(upf_cfg, n3_mode, n6_mode, total_maps);
+  std::string n3_mode = upf_xdp_program_->GetXdpModeString(upf::GetN3Iface());
+  std::string n6_mode = upf_xdp_program_->GetXdpModeString(upf::GetN6Iface());
+  size_t total_maps   = upf_xdp_program_->GetTotalMapCount();
+  DisplayXdpConfiguration(n3_mode, n6_mode, total_maps);
 
   DisplayReadyMessage();
 }
@@ -151,14 +214,9 @@ void UserPlaneComponent::TearDown() {
   // Remove all sessions from singleton
   SessionProgramManager::GetInstance().RemoveAllSessions();
 
-  // Tear down XDP program
+  // Tear down XDP pipeline
   if (upf_xdp_program_) {
     upf_xdp_program_->TearDown();
-  }
-
-  // Tear down FAR TC program
-  if (far_tc_program_) {
-    far_tc_program_->tearDown();
   }
 
   // Reset session manager
@@ -188,8 +246,8 @@ std::string UserPlaneComponent::GetGTPInterface() const {
 }
 
 //------------------------------------------------------------------------------
-std::string UserPlaneComponent::GetUDPInterface() const {
-  return udp_interface_;
+std::string UserPlaneComponent::GetNonGTPInterface() const {
+  return non_gtp_interface_;
 }
 
 //------------------------------------------------------------------------------

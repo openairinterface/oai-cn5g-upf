@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Gate Status
- * Reference: 3GPP TS 29.244 Section 8.2.7
- */
-
 #ifndef _PFCP_GATE_STATUS_H
 #define _PFCP_GATE_STATUS_H
 

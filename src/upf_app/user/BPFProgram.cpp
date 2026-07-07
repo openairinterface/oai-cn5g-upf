@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file BPFProgram.cpp
- * @brief Implementation of BPF program base class
- */
-
 #include "BPFProgram.h"
 #include "logger.hpp"
 
@@ -16,7 +11,6 @@ uint32_t BPFProgram::id_counter_ = 1;
 //------------------------------------------------------------------------------
 BPFProgram::BPFProgram() : id_(id_counter_) {
   id_counter_++;
-  Logger::upf_app().info("BPF Program %u created", id_);
 }
 
 //------------------------------------------------------------------------------

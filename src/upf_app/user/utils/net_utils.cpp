@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/**
- * @file net_utils.cpp
- * @brief Implementation of network interface utilities
- */
-
 #include "net_utils.hpp"
 #include <ifaddrs.h>
 #include <net/if.h>

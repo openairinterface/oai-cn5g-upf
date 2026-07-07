@@ -2,11 +2,6 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-/*
- * PFCP Reflective QoS  Indicator (RQI)
- * Reference: 3GPP TS 29.244 Section 8.2.88
- */
-
 #ifndef _PFCP_REFLECTIVE_QOS_H
 #define _PFCP_REFLECTIVE_QOS_H
 
