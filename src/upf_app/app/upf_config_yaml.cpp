@@ -214,11 +214,11 @@ upf::upf(
           false, false, false, false, false, false, false, false),
       m_upf_datapath_configuration(),
       m_interfaces(interfaces) {
-  model::nrf::SnssaiUpfInfoItem item;
+  oai::_3gpp::model::SnssaiUpfInfoItem item;
   item.setSNssai(DEFAULT_SNSSAI);
   item.setDnnUpfInfoList(DEFAULT_DNN_LIST);
   m_upf_info.setSNssaiUpfInfoList(
-      std::vector<oai::model::nrf::SnssaiUpfInfoItem>{item});
+      std::vector<oai::_3gpp::model::SnssaiUpfInfoItem>{item});
 }
 
 //------------------------------------------------------------------------------
@@ -314,7 +314,7 @@ const std::vector<string_config_value> upf::get_smf_list() const {
 }
 
 //------------------------------------------------------------------------------
-const oai::model::nrf::UpfInfo& upf::get_upf_info() const {
+const oai::_3gpp::model::UpfInfo& upf::get_upf_info() const {
   return m_upf_info;
 }
 const std::map<std::string, upf_interface_config>& upf::get_interfaces() const {

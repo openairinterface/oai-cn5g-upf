@@ -1432,7 +1432,7 @@ class upf : public nf {
    * @note This structure is serialized to JSON for NRF registration
    * @see 3GPP TS 29.510 Section 6.1.6.2.9 (UPF NF Profile)
    */
-  oai::model::nrf::UpfInfo m_upf_info;
+  oai::_3gpp::model::UpfInfo m_upf_info;
 
   /**
    * @brief Remote N6 gateway address
@@ -1599,7 +1599,7 @@ class upf : public nf {
    * @brief Get UPF Info for NRF registration
    * @return Reference to UPF Info structure
    */
-  [[nodiscard]] const oai::model::nrf::UpfInfo& get_upf_info() const;
+  [[nodiscard]] const oai::_3gpp::model::UpfInfo& get_upf_info() const;
 
   /**
    * @brief Get datapath configuration
