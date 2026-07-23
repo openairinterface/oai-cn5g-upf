@@ -181,7 +181,6 @@ constexpr auto UPF_CONFIG_SMF_LIST = "smfs";
  * }
  * @endcode
  *
- * @author OpenAirInterface
  * @version 1.0
  */
 namespace oai::config {
@@ -462,7 +461,6 @@ class upf_support_features : public config_type {
  * int max_sessions = config.get_max_pdu_sessions();
  * @endcode
  *
- * @author OpenAirInterface
  * @version 1.0
  * @since Rel-16
  */
@@ -928,7 +926,6 @@ class upf_datapath_configuration : public config_type {
  * auto upf_info_item = n3.to_upf_info_item();
  * @endcode
  *
- * @author OpenAirInterface
  * @version 1.0
  */
 class upf_interface_config : public local_interface {
@@ -1121,7 +1118,6 @@ class upf_interface_config : public local_interface {
  * upf_app app(runtime_cfg);
  * @endcode
  *
- * @author OpenAirInterface
  * @version 1.0
  */
 class upf_config_yaml : public config {
@@ -1373,7 +1369,6 @@ class upf_config_yaml : public config {
  * auto& datapath = upf_cfg.get_datapath_configuration();
  * @endcode
  *
- * @author OpenAirInterface
  * @version 1.0
  */
 class upf : public nf {
