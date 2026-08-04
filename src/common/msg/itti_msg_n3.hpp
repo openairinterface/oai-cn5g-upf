@@ -4,9 +4,6 @@
 
 /*
  *  itti_msg_n3.hpp
- *
- *  Created on: Feb 05, 2019
- *  Author: lionel.gauthier@eurecom.fr
  */
 
 #ifndef ITTI_MSG_N3_HPP_INCLUDED_
