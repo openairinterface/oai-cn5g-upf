@@ -865,12 +865,9 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
       // ---- Create MARs (BPF only) — §7.5.2.8 Create MAR IE ----------------
       // pfcp_session::create(mar) populates session->mars so that
       // SessionProgramManager::CreatePipeline can populate mar_rules_map.
-      // TODO MAR: re-enable when common-src adds a `create_mars` vector to
-      // pfcp_session_establishment_request. The local pfcp::create_mar stub
-      // in simpleswitch/pfcp_mar.hpp keeps the loop body compiling once the
-      // field lands.
-#if 0
-      // enable_mar gate: skip MAR handling when multi-access steering is disabled.
+
+      // enable_mar gate: skip MAR handling when multi-access steering is
+      // disabled.
       if (isBpfAccelerationEnabled && upf_cfg.enable_mar) {
         if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
           for (auto it : req->pfcp_ies.create_mars) {
@@ -883,7 +880,6 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
           }
         }
       }
-#endif
 
       if (isBpfAccelerationEnabled) {
         Logger::upf_app().info(
@@ -1078,10 +1074,9 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     }
 
     // ---- Remove MARs (BPF only) — §7.5.4.15 Remove MAR IE ------------------
-    // TODO MAR: re-enable when common-src adds a `remove_mars` field. The
-    // local pfcp::remove_mar stub keeps the loop body compilable.
-#if 0
-    // enable_mar gate: skip MAR handling when multi-access steering is disabled.
+
+    // enable_mar gate: skip MAR handling when multi-access steering is
+    // disabled.
     if (isBpfAccelerationEnabled && upf_cfg.enable_mar) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.remove_mars) {
@@ -1098,7 +1093,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
     }
-#endif
 
     // ---- Create FARs --------------------------------------------------------
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
@@ -1194,10 +1188,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     }
 
     // ---- Create MARs (BPF only) — §7.5.2.8 Create MAR IE -------------------
-    // TODO MAR: re-enable when common-src adds a `create_mars` field. The
-    // local pfcp::create_mar stub keeps the loop body compilable.
-#if 0
-    // enable_mar gate: skip MAR handling when multi-access steering is disabled.
+    // enable_mar gate: skip MAR handling when multi-access steering is
+    // disabled.
     if (isBpfAccelerationEnabled && upf_cfg.enable_mar) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.create_mars) {
@@ -1208,7 +1200,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         }
       }
     }
-#endif
 
     // ---- Update PDRs / FARs / QERs ------------------------------------------
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
@@ -1241,8 +1232,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           if (not session->update(qer, cause_value)) {
             failed_rule_id_t failed_rule = {};
             failed_rule.rule_id_type     = FAILED_RULE_ID_TYPE_QER;
-            // update_qer::qer_id is std::pair<bool, qer_id_t> in common-src.
-            failed_rule.rule_id_value = qer.qer_id.qer_id;
+            failed_rule.rule_id_value    = qer.qer_id.qer_id;
             resp->pfcp_ies.set(failed_rule);
           }
         }
@@ -1287,10 +1277,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       }
 
       // ---- Update MARs (BPF only) — §7.5.4.16 Update MAR IE ----------------
-      // TODO MAR: re-enable when common-src adds an `update_mars` field. The
-      // local pfcp::update_mar stub keeps the loop body compilable.
-#if 0
-      // enable_mar gate: skip MAR handling when multi-access steering is disabled.
+      // enable_mar gate: skip MAR handling when multi-access steering is
+      // disabled.
       if (isBpfAccelerationEnabled && upf_cfg.enable_mar) {
         for (auto it : req->pfcp_ies.update_mars) {
           update_mar& mar     = it;
@@ -1303,7 +1291,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           }
         }
       }
-#endif
     }
 
     if (isBpfAccelerationEnabled) {

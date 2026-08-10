@@ -846,13 +846,7 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_mar> mar) {
 
 // =============================================================================
 // MAR processing methods (create / update / remove)
-//
-// TODO MAR: re-enable when common-src adds pfcp::create_mar / update_mar /
-// remove_mar IE types. Matches the #if 0 guards on the call sites in
-// SessionManager.cpp and pfcp_switch.cpp, and on the declarations in
-// pfcp_session.hpp.
 // =============================================================================
-#if 0
 
 //------------------------------------------------------------------------------
 // create_mar — 3GPP TS 29.244 V17.10.0 Table 7.5.2.8-1
@@ -1028,8 +1022,6 @@ bool pfcp_session::remove(
   offending_ie      = PFCP_IE_MAR_ID;
   return false;
 }
-
-#endif  // MAR processing — re-enable when common-src adds MAR IE types
 
 // =============================================================================
 // PDR — update / remove / create
@@ -1449,7 +1441,6 @@ bool pfcp_session::create(
 //------------------------------------------------------------------------------
 bool pfcp_session::update(
     const pfcp::update_qer& qer_update, uint8_t& cause_value) {
-  // qer_update.qer_id is std::pair<bool, qer_id_t> in common-src.
   uint32_t qer_id = qer_update.qer_id.qer_id;
 
   Logger::upf_n4().info(

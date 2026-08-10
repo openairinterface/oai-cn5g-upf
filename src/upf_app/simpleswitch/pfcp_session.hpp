@@ -193,12 +193,8 @@ class pfcp_session {
       const pfcp::update_bar_within_pfcp_session_modification_request& update,
       uint8_t& cause_value);
 
-  /** @brief Apply an Update MAR IE (Table 7.5.4.16-1).
-   *  TODO MAR: re-enable when common-src adds pfcp::update_mar. Matches the
-   *  #if 0 guards on the call sites in SessionManager.cpp / pfcp_switch.cpp. */
-#if 0
+  /** @brief Apply an Update MAR IE (Table 7.5.4.16-1). */
   bool update(const pfcp::update_mar& update, uint8_t& cause_value);
-#endif
 
   // ---- Create (3GPP TS 29.244 §7.5.2) -------------------------------------
 
@@ -228,14 +224,10 @@ class pfcp_session {
       const pfcp::create_bar& cr_bar, pfcp::cause_t& cause,
       uint16_t& offending_ie);
 
-  /** @brief Process a Create MAR IE (Table 7.5.2.8-1).
-   *  TODO MAR: re-enable when common-src adds pfcp::create_mar. Matches the
-   *  #if 0 guards on the call sites in SessionManager.cpp / pfcp_switch.cpp. */
-#if 0
+  /** @brief Process a Create MAR IE (Table 7.5.2.8-1). */
   bool create(
       const pfcp::create_mar& cr_mar, pfcp::cause_t& cause,
       uint16_t& offending_ie);
-#endif
 
   // ---- Remove (3GPP TS 29.244 §7.5.4) -------------------------------------
 
@@ -268,11 +260,9 @@ class pfcp_session {
   /** @brief Process a Remove MAR IE (Table 7.5.4.15-1).
    *  TODO MAR: re-enable when common-src adds pfcp::remove_mar. Matches the
    *  #if 0 guards on the call sites in SessionManager.cpp / pfcp_switch.cpp. */
-#if 0
   bool remove(
       const pfcp::remove_mar& rm_mar, pfcp::cause_t& cause,
       uint16_t& offending_ie);
-#endif
 };
 }  // namespace pfcp
 #endif  // FILE_PFCP_SESSION_HPP_SEEN
