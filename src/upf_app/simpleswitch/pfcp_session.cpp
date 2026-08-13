@@ -1441,7 +1441,14 @@ bool pfcp_session::create(
 //------------------------------------------------------------------------------
 bool pfcp_session::update(
     const pfcp::update_qer& qer_update, uint8_t& cause_value) {
-  uint32_t qer_id = qer_update.qer_id.qer_id;
+  if (not qer_update.qer_id.first) {
+    // should be caught in lower layer
+    cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    // TODO: store IE ID: PFCP_IE_QER_ID
+    return false;
+  }
+
+  uint32_t qer_id = qer_update.qer_id.second.qer_id;
 
   Logger::upf_n4().info(
       "pfcp_session::update(qer) seid " SEID_FMT " QER=%u", seid, qer_id);
