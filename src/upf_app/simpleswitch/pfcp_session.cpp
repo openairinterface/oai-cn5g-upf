@@ -1033,7 +1033,14 @@ bool pfcp_session::remove(
 //------------------------------------------------------------------------------
 bool pfcp_session::update(
     const pfcp::update_pdr& pdr_update, uint8_t& cause_value) {
-  uint16_t pdr_id = pdr_update.pdr_id.rule_id;
+  if (not pdr_update.pdr_id.first) {
+    // should be caught in lower layer
+    cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    // TODO: store IE ID
+    return false;
+  }
+
+  uint16_t pdr_id = pdr_update.pdr_id.second.rule_id;
 
   Logger::upf_n4().info(
       "pfcp_session::update(pdr) seid " SEID_FMT " PDR=%u", seid, pdr_id);

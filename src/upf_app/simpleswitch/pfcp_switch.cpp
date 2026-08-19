@@ -1209,7 +1209,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         if (not session->update(pdr, cause_value)) {
           failed_rule_id_t failed_rule = {};
           failed_rule.rule_id_type     = FAILED_RULE_ID_TYPE_PDR;
-          failed_rule.rule_id_value    = pdr.pdr_id.rule_id;
+          failed_rule.rule_id_value    = pdr.pdr_id.second.rule_id;
           resp->pfcp_ies.set(failed_rule);
         }
       }
