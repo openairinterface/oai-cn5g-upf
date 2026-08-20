@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: MIT
+#
+# Runtime dependencies for the UPF integration test suite.
+#
+# scapy supplies the PFCP protocol model (scapy.contrib.pfcp). Pinned because the
+# suite depends on concrete IE field names, and those have shifted between
+# releases (e.g. IE_FTEID uses `V4`/`TEID` while IE_FSEID uses `v4`/`seid`).
+# Verified against 2.7.0.
+scapy==2.7.0
