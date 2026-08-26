@@ -846,13 +846,7 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_mar> mar) {
 
 // =============================================================================
 // MAR processing methods (create / update / remove)
-//
-// TODO MAR: re-enable when common-src adds pfcp::create_mar / update_mar /
-// remove_mar IE types. Matches the #if 0 guards on the call sites in
-// SessionManager.cpp and pfcp_switch.cpp, and on the declarations in
-// pfcp_session.hpp.
 // =============================================================================
-#if 0
 
 //------------------------------------------------------------------------------
 // create_mar — 3GPP TS 29.244 V17.10.0 Table 7.5.2.8-1
@@ -1029,8 +1023,6 @@ bool pfcp_session::remove(
   return false;
 }
 
-#endif  // MAR processing — re-enable when common-src adds MAR IE types
-
 // =============================================================================
 // PDR — update / remove / create
 // =============================================================================
@@ -1041,7 +1033,14 @@ bool pfcp_session::remove(
 //------------------------------------------------------------------------------
 bool pfcp_session::update(
     const pfcp::update_pdr& pdr_update, uint8_t& cause_value) {
-  uint16_t pdr_id = pdr_update.pdr_id.rule_id;
+  if (not pdr_update.pdr_id.first) {
+    // should be caught in lower layer
+    cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    // TODO: store IE ID
+    return false;
+  }
+
+  uint16_t pdr_id = pdr_update.pdr_id.second.rule_id;
 
   Logger::upf_n4().info(
       "pfcp_session::update(pdr) seid " SEID_FMT " PDR=%u", seid, pdr_id);
@@ -1449,7 +1448,13 @@ bool pfcp_session::create(
 //------------------------------------------------------------------------------
 bool pfcp_session::update(
     const pfcp::update_qer& qer_update, uint8_t& cause_value) {
-  // qer_update.qer_id is std::pair<bool, qer_id_t> in common-src.
+  if (not qer_update.qer_id.first) {
+    // should be caught in lower layer
+    cause_value = CAUSE_VALUE_MANDATORY_IE_MISSING;
+    // TODO: store IE ID: PFCP_IE_QER_ID
+    return false;
+  }
+
   uint32_t qer_id = qer_update.qer_id.second.qer_id;
 
   Logger::upf_n4().info(

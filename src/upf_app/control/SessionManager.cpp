@@ -2064,11 +2064,6 @@ size_t SessionManager::HandleMarRemoval(
     itti_n4_session_modification_request* mod_req) {
   size_t removed_count = 0;
 
-  // TODO MAR: re-enable when common-src adds a `remove_mars` field to
-  // pfcp_session_modification_request. The local pfcp::remove_mar stub in
-  // simpleswitch/pfcp_mar.hpp lets the loop body keep compiling once the
-  // field is added.
-#if 0
   for (const auto& remove_mar : mod_req->pfcp_ies.remove_mars) {
     pfcp::mar_id_t mar_id;
     if (remove_mar.get(mar_id)) {
@@ -2077,7 +2072,6 @@ size_t SessionManager::HandleMarRemoval(
       }
     }
   }
-#endif
 
   return removed_count;
 }
@@ -2237,13 +2231,6 @@ size_t SessionManager::HandleMarUpdates(
     itti_n4_session_modification_request* mod_req) {
   size_t updated_count = 0;
 
-  // TODO MAR: re-enable when common-src adds an `update_mars` field to
-  // pfcp_session_modification_request. The local pfcp::update_mar and
-  // pfcp::access_forwarding_action_information stubs in
-  // simpleswitch/pfcp_mar.hpp keep the loop body compiling once the field
-  // is added (also see the conversion lambda below, which targets the
-  // lib-shape AFAI type and therefore stays inside the #if 0 block).
-#if 0
   for (const auto& update_mar : mod_req->pfcp_ies.update_mars) {
     // MAR ID — M, §8.2.123
     pfcp::mar_id_t mar_id_ie;
@@ -2312,13 +2299,13 @@ size_t SessionManager::HandleMarUpdates(
 
           // Weight — C, Load Balancing mode (§8.2.126)
           if (afai.weight.first) {
-            dst.weight.weight_value = afai.weight.second;
+            dst.weight.weight_value = afai.weight.second.weight_value;
             dst.weight_present      = true;
           }
 
           // Priority — C, Active-Standby / Priority-based mode (§8.2.127)
           if (afai.priority.first) {
-            dst.priority.priority_value = afai.priority.second;
+            dst.priority.priority_value = afai.priority.second.priority_value;
             dst.priority_present        = true;
           }
 
@@ -2349,7 +2336,6 @@ size_t SessionManager::HandleMarUpdates(
 
     updated_count++;
   }
-#endif
 
   // Update BPF mar_rules_map
   if (updated_count > 0) {
