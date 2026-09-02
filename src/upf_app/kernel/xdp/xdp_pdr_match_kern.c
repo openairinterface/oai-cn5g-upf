@@ -247,8 +247,7 @@ static __always_inline struct pfcp_pdr* match_pdr_n3(
     if ((ipaddr != 0) && (ipaddr != pkt_ue_ip)) continue;
 
     /* Source Interface must be ACCESS (N3) (§8.2.2) */
-    if (bpf_htonl(pdi.source_interface.interface_value) !=
-        INTERFACE_VALUE_ACCESS)
+    if (pdi.source_interface.interface_value != INTERFACE_VALUE_ACCESS)
       continue;
 
     /* F-TEID match if present (§8.2.3) */
@@ -480,17 +479,17 @@ static __always_inline struct pfcp_pdr* match_pdr_n6(
  */
 static __always_inline struct pfcp_pdr* match_pdr_eth_n3(
     u64 seid, u32 pkt_teid, u8 pkt_qfi) {
-  struct pfcp_pdr(*pdrs)[MAX_PDRS_PER_PDU_SESSION] =
+  struct pfcp_pdr(*pdrs)[MAX_PDRS_PER_ETH_PDU_SESSION] =
       bpf_map_lookup_elem(&eth_session_pdrs_map, &seid);
 
   if (!pdrs) {
-    // bpf_debug("ETH PDR Lookup: No PDRs for SEID = %llu", seid);
+    bpf_debug("ETH PDR Lookup: No PDRs for SEID = %llu", seid);
     return NULL;
   }
 
 #pragma clang loop unroll(full)
-  for (int i = 0; i < MAX_PDRS_PER_PDU_SESSION_LIMIT; i++) {
-    if (i >= MAX_PDRS_PER_PDU_SESSION) break;
+  for (int i = 0; i < MAX_PDRS_PER_ETH_PDU_SESSION_LIMIT; i++) {
+    if (i >= MAX_PDRS_PER_ETH_PDU_SESSION) break;
     struct pfcp_pdr* pdr = &(*pdrs)[i];
 
     if (pdr->pdr_id.rule_id == 0) continue;
@@ -498,15 +497,28 @@ static __always_inline struct pfcp_pdr* match_pdr_eth_n3(
     struct pdi pdi = pdr->pdi;
 
     /* Source Interface must be ACCESS (N3) (§8.2.2) */
-    if (bpf_htonl(pdi.source_interface.interface_value) !=
-        INTERFACE_VALUE_ACCESS)
+    if (pdi.source_interface.interface_value != INTERFACE_VALUE_ACCESS) {
+      bpf_debug(
+          "ETH PDR %u: source_interface mismatch (got %u, want ACCESS)",
+          pdr->pdr_id.rule_id, pdi.source_interface.interface_value);
       continue;
+    }
 
     /* F-TEID match if present (§8.2.3) */
-    if ((pdi.fteid.teid != 0) && (pdi.fteid.teid != pkt_teid)) continue;
+    if ((pdi.fteid.teid != 0) && (pdi.fteid.teid != pkt_teid)) {
+      bpf_debug(
+          "ETH PDR %u: TEID mismatch (pkt=0x%x, pdi=0x%x)", pdr->pdr_id.rule_id,
+          pkt_teid, pdi.fteid.teid);
+      continue;
+    }
 
     /* QFI match if present (§8.2.89) */
-    if ((pdi.qfi.qfi != 0) && (pdi.qfi.qfi != pkt_qfi)) continue;
+    if ((pdi.qfi.qfi != 0) && (pdi.qfi.qfi != pkt_qfi)) {
+      bpf_debug(
+          "ETH PDR %u: QFI mismatch (pkt=%u, pdi=%u)", pdr->pdr_id.rule_id,
+          pkt_qfi, pdi.qfi.qfi);
+      continue;
+    }
 
     bpf_debug("ETH PDR matched: Rule ID = %u", pdr->pdr_id.rule_id);
     bpf_debug(

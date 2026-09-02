@@ -53,6 +53,11 @@ const volatile int MAX_PDU_SESSIONS SEC(".rodata");
  *  Typical value: 16.  Set from config: max_pdrs_per_session. */
 const volatile int MAX_PDRS_PER_PDU_SESSION SEC(".rodata");
 
+/** Maximum PDRs per Ethernet PDU session (array size in
+ *  eth_session_pdrs_map, read only by match_pdr_eth_n3() in
+ *  xdp_pdr_match_kern.c). */
+const volatile int MAX_PDRS_PER_ETH_PDU_SESSION SEC(".rodata");
+
 /* --------------------------------------------------------------------------
  * SDF filter map  (sdf_maps.h, pipeline_maps.h)
  * -------------------------------------------------------------------------- */
