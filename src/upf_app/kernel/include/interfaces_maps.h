@@ -38,11 +38,11 @@ struct {
 /**
  * @brief XDP_REDIRECT target interface index map.
  *
- * Key:   u32   slot index (FlowDirection enum, see linux/custom_types.h)
+ * Key:   u32   slot index (FlowDirection enum, see custom_types.h)
  * Value: u32   ifindex of the target Linux network device
  * Size:  MAX_UPF_REDIRECT_INTERFACES (typically 2-3, set at runtime)
  *
- * Slot assignments (FlowDirection enum, kernel/include/linux/custom_types.h):
+ * Slot assignments (FlowDirection enum, kernel/include/custom_types.h):
  *   DOWNLINK = 0  -- redirect to N3 interface (gNB-facing, GTP-U encapped)
  *   UPLINK   = 1  -- redirect to N6 interface (DN-facing, after decap)
  *

@@ -5,7 +5,7 @@
 #ifndef __PIPELINE_TYPES_H__
 #define __PIPELINE_TYPES_H__
 
-#include "linux/custom_types.h"
+#include "custom_types.h"
 #include "pfcp/pfcp_far.h"
 #include "pfcp/pfcp_qer.h"
 #include "pfcp/pfcp_urr.h"

@@ -5,7 +5,7 @@
 #ifndef __ETH_SESSION_ID_H__
 #define __ETH_SESSION_ID_H__
 
-#include "linux/custom_types.h"
+#include "custom_types.h"
 
 /** @brief BPF map value for an Ethernet PDU session (key: uplink TEID).
  *

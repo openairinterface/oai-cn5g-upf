@@ -6,7 +6,7 @@
 #define __ETH_PDU_TYPES_H__
 
 #include <linux/if_ether.h>
-#include "linux/custom_types.h"
+#include "custom_types.h"
 
 /* ==========================================================================
  * teid_t_ -- GTP-U Tunnel Endpoint Identifier type alias

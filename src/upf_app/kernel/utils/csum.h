@@ -27,7 +27,7 @@
 #include <errno.h>
 #include <linux/version.h>
 #include <stdbool.h>
-#include "linux/custom_types.h"
+#include "custom_types.h"
 
 #ifndef likely
 #define likely(x) __builtin_expect(!!(x), 1)

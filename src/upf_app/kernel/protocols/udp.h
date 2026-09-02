@@ -8,7 +8,7 @@
 #include <linux/udp.h>
 #include <linux/bpf.h>
 #include <linux/if_ether.h>
-#include "linux/custom_types.h"
+#include "custom_types.h"
 #include "protocols/gtpu.h" /* GTP_UDP_PORT */
 
 /* ==========================================================================
