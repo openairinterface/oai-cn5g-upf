@@ -185,6 +185,14 @@ int handle_broadcast(struct __sk_buff* skb) {
       &eth_session_mapping_map, broadcast_callback_fn, &cb_ctx, 0);
   action = TC_ACT_SHOT;
 
+  /* size counts visited sessions (UL starts at 1: the source), not clones. */
+  if (cb_ctx.size == (is_uplink ? 1 : 0)) {
+    bpf_debug(
+        "eth_broadcast_tc: %s fan-out found no other session -- "
+        "eth_session_mapping_map may be empty or unshared",
+        is_uplink ? "UL" : "DL");
+  }
+
   /* ---------------------------------------------------------- */
   /*  UL: also forward the original up to N6 (DN-side)          */
   /* ---------------------------------------------------------- */
