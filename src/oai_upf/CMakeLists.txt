@@ -302,7 +302,8 @@ include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/bstr)
 
 
-include_directories(${SRC_TOP_DIR}/../build/ext/libbpf)
+# libbpf + linux UAPI headers, installed by build_helper.upf (make install_headers)
+include_directories(${SRC_TOP_DIR}/../build/ext/libbpf/root/usr/include)
 link_directories(${SRC_TOP_DIR}/../build/ext/libbpf/src)
 
 add_executable(upf

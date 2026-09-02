@@ -49,6 +49,15 @@ Source: https://github.com/gabime/spdlog
 Author: Gabi Melman (gmelman1@gmail.com)
 License: MIT License
 
+libbpf
+Source: https://github.com/libbpf/libbpf
+Version: v1.5.0 (pinned in build/scripts/build_helper.upf)
+License: LGPL-2.1 OR BSD-2-Clause
+Note: Fetched and built at install-deps time; its bpf/*.h 
+headers are installed to build/ext/libbpf/root/usr/include. 
+The linux/ UAPI headers (linux/bpf.h) come from the 
+distribution's own kernel-headers package.
+
 ------------------------------------------------------------------
 
 Optional:
@@ -65,7 +74,8 @@ MongoDB: Apache License 2.0
 
 Credits for work contributed from Sprint in Apache 2.0 License:
 
-The following files include contributions from Sprint and are licensed under Apache License 2.0:
+The following files include contributions from Sprint 
+and are licensed under Apache License 2.0:
 
 - src/oai_upf/options.hpp
 - src/oai_upf/options.cpp
@@ -78,50 +88,26 @@ Files: src/common-src/ngap/{libngap, libngap_ies}/*
 Source: https://github.com/mouse07410/asn1c
 Author: Lev Walkin <vlm@lionet.info>
 
+------------------------------------------------------------------
+
 Credits for file generated via openapi-generator.tech:
 
 Files: src/common-src/model/*
 Source: https://openapi-generator.tech/
 NOTE: Files were also edited manually to fix auto-generated errors
 
-Credits for files with Copyright of Facebook under:
-
-GPL-2.0 WITH Linux-syscall-note License:
-- src/upf_app/include/linux/btf.h
-
-LGPL-2.1 OR BSD-2-Clause License:
-- src/upf_app/include/libbpf_common.h
-- src/upf_app/include/bpf/libbpf_util.h
-- src/upf_app/include/bpf/libbpf_legacy.h
-- src/upf_app/include/bpf/libbpf_legacy.h
-- src/upf_app/include/bpf/libbpf_internal.h
-- src/upf_app/include/bpf/libbpf_version.h
-- src/upf_app/include/bpf/skel_internal.h
-- src/upf_app/include/bpf/btf.h
-
-Credits for files with Copyright of PLUMgrid under:
-
-GPL-2.0 WITH Linux-syscall-note License:
-- src/upf_app/include/linux/bpf.h
-
-Credits for files with Copyright of Intel Corporation under:
-
-GPL-2.0 WITH Linux-syscall-note License:
-- src/upf_app/include/linux/if_xdp.h
-- src/upf_app/include/bpf/xsk.h
-
-Credits for files with Copyright of Meta Platforms:
-
-LGPL-2.1 OR BSD-2-Clause License:
-- src/upf_app/include/bpf/usdt.bpf.h
-
-Credits for files with Copyright of Huawei Inc and Alexei Starovoitov <ast@kernel.org>:
-
-LGPL-2.1 OR BSD-2-Clause License:
-- src/upf_app/include/bpf/bpf.h
-- src/upf_app/include/bpf/libbpf.h
+-----------------------------------------------------------------
 
 Credits for files with Copyright of The Polycube Authors and Thiago Navarro:
 
 Apache License 2.0:
-- src/upf_app/bpf/utils/csum.h
+- src/upf_app/kernel/utils/csum.h
+
+-----------------------------------------------------------------
+
+Files under src/upf_app/kernel/{xdp,tc}
+
+Have char _license[] SEC("license") = "GPL"; at the bottom to load the
+program in the kernel. The license line is important for loading the program
+else it will be rejected by the kernel. Currently the actual source code
+is published under CSSL V1.0.

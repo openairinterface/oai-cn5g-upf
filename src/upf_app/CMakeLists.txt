@@ -43,6 +43,9 @@ include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/upf_app/user)           # BPFProgram, *_xdp_user, qer_tc_user, pdr_match_user
 include_directories(${SRC_TOP_DIR}/upf_app/framed_routing) # framed_routing_bpf.h, FramedRouting.hpp
 
+# libbpf + linux UAPI headers, installed by build_helper.upf (make install_headers)
+include_directories(${SRC_TOP_DIR}/../build/ext/libbpf/root/usr/include)
+
 # Kernel BPF headers — shared between kernel programs and user-space wrappers
 include_directories(${SRC_TOP_DIR}/upf_app/kernel)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel/include) # arp_table.h, interfaces.h, upf_xdp_maps.h,
@@ -125,6 +128,7 @@ add_library(UPF_XDP STATIC
 )
 
 target_include_directories(UPF_XDP PUBLIC
+  $<BUILD_INTERFACE:${SRC_TOP_DIR}/../build/ext/libbpf/root/usr/include>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/include>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/control>
@@ -174,6 +178,7 @@ add_library(UPF_TC STATIC
 )
 
 target_include_directories(UPF_TC PUBLIC
+  $<BUILD_INTERFACE:${SRC_TOP_DIR}/../build/ext/libbpf/root/usr/include>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/include>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/control>

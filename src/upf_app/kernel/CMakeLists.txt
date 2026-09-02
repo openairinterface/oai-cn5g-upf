@@ -31,6 +31,8 @@ include(${SRC_TOP_DIR}/upf_app/cmake/toolchain.cmake)
 #   kernel/xdp/           -- XDP program source directory                         #
 #   kernel/tc/            -- TC BPF program source directory                      #
 # =============================================================================== #
+# libbpf + linux UAPI headers, installed by build_helper.upf (make install_headers)
+include_directories(${SRC_TOP_DIR}/../build/ext/libbpf/root/usr/include)
 include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/include)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel)

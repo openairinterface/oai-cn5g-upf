@@ -5,7 +5,7 @@
 #ifndef OPENAIRINTERFACE_FRAMED_ROUTING_BPF_H
 #define OPENAIRINTERFACE_FRAMED_ROUTING_BPF_H
 
-#include "linux/custom_types.h"
+#include "custom_types.h"
 #include <stdint.h>
 
 struct FramedRoutingKeyBPF {

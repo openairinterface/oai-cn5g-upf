@@ -60,15 +60,22 @@ install_libbpf_from_git() {
   if [[ $prompt =~ [yY](es)* ]]
   then
     GIT_URL=https://github.com/libbpf/libbpf.git
-    echo "Install libbpf from $GIT_URL"
+    GIT_TAG=v1.5.0
+    echo "Install libbpf $GIT_TAG from $GIT_URL"
     pushd $OPENAIRCN_DIR/build/ext
     echo "Downloading libbpf"
-    if [[ $OPTION =~ -[yY](es)* ]]
-    then
-      $SUDO rm -rf libbpf
-    fi
+    # Remove a previous checkout so repeated --install-deps runs are safe.
+    $SUDO rm -rf libbpf
 
-    git clone $GIT_URL
+    # Checkout to tested version (same form as install_bpftool_from_git).
+    # No --depth: shallow fetches negotiate a different protocol that caching
+    # proxies and mirrors can reject, and this runs inside docker build.
+    git clone --branch $GIT_TAG $GIT_URL
+    ret=$?
+    if [[ $ret -ne 0 ]]; then
+      echo_error "libbpf: git clone $GIT_URL failed (rc=$ret)"
+      popd && return $ret
+    fi
     if [[ $OS_DISTRO == "ubuntu" ]]; then
       PACKAGE_LIST="\
         make \
@@ -97,13 +104,18 @@ install_libbpf_from_git() {
     fi
     $SUDO $INSTALLER install -y $PACKAGE_LIST
     cd libbpf
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
     # we used to checkout to 051a4009f94d5633a8f734ca4235f0a78ee90469 (aka v0.3)
     # that was restricting us to build on 5.1xx kernel hosts
-    # we are now back on the master branch (latest tag at time of writing is v1.4.5)
-    # displaying the last commit version
+    # displaying the checked-out version
     git log -n1
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
     cd src && make -j $(nproc)
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    # Install libbpf's own headers (bpf/bpf_helpers.h, bpf/libbpf.h, ...) where
+    # CMake looks for them. This does not provide linux/bpf.h and the other
+    # linux/ UAPI headers -- those come from the linux-libc-dev package.
+    make install_headers DESTDIR=$OPENAIRCN_DIR/build/ext/libbpf/root PREFIX=/usr
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
     $SUDO make install
     ret=$?;[[ $ret -ne 0 ]] && popd && return $ret

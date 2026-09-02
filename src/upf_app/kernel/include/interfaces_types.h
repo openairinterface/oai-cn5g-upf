@@ -5,7 +5,7 @@
 #ifndef __INTERFACES_TYPES_H__
 #define __INTERFACES_TYPES_H__
 
-#include "linux/custom_types.h"
+#include "custom_types.h"
 
 /* ==========================================================================
  * UPF reference point identifier

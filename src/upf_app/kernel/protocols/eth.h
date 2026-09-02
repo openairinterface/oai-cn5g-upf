@@ -7,7 +7,7 @@
 
 #include <linux/if_ether.h>
 #include <linux/bpf.h>
-#include "linux/custom_types.h"
+#include "custom_types.h"
 
 /* ==========================================================================
  * eth_is_bcast_or_mcast -- classify inner destination MAC

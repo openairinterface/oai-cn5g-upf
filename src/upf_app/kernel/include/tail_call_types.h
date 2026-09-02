@@ -5,7 +5,7 @@
 #ifndef __TAIL_CALL_TYPES_H__
 #define __TAIL_CALL_TYPES_H__
 
-#include "linux/custom_types.h"
+#include "custom_types.h"
 #include "packet_context.h"
 
 /* ==========================================================================

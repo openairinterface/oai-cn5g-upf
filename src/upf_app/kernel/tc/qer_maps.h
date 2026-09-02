@@ -6,7 +6,7 @@
 #define __QER_MAPS_H__
 
 #include <linux/bpf.h>
-#include "linux/custom_types.h"
+#include "custom_types.h"
 #include "sdf_filter.h"
 
 /* ========================================================================== */
