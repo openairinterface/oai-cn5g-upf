@@ -194,7 +194,7 @@ int xdp_n3_eth_entry(struct xdp_md* ctx) {
   }
 
   pctx->session_type = SESSION_TYPE_ETH_UPLINK;
-  pctx->pkt_teid     = gtpu->teid; /* network byte order — kept as-is */
+  pctx->pkt_teid     = pkt_teid; /* host byte order, matches n3_entry */
   pctx->qfi          = qfi;
   pctx->gnb_ipv4     = ip_outer->saddr; /* network byte order */
 
@@ -212,8 +212,8 @@ int xdp_n3_eth_entry(struct xdp_md* ctx) {
   pctx->pkt_filter_protocol = 0;
 
   bpf_debug(
-      "N3 ETH: TEID = 0x%x, QFI = %u, gNB = %pI4", bpf_ntohl(pctx->pkt_teid),
-      pctx->qfi, &pctx->gnb_ipv4);
+      "N3 ETH: TEID = 0x%x, QFI = %u, gNB = %pI4", pctx->pkt_teid, pctx->qfi,
+      &pctx->gnb_ipv4);
 
   /* ---------------------------------------------------------- */
   /*  Tail call: ETH session lookup                             */
