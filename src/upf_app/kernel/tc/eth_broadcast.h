@@ -23,9 +23,15 @@
 
 #include "utils/logger.h"
 #include "utils/types.h"
+#include "utils/csum.h"
 #include "protocols/gtpu.h"
 #include "eth_pdu_types.h"
 #include "eth_pdu_maps.h"
+#include "arp_maps.h"
+
+#ifndef AF_INET
+#define AF_INET 2
+#endif
 
 /* ========================================================================== */
 /*                         BROADCAST DEDUP FAN-OUT CAP                        */
@@ -65,6 +71,30 @@ struct callback_ctx {
 };
 
 /* ========================================================================== */
+/*                    FIB LOOKUP SCRATCH (STACK RELIEF)                       */
+/* ========================================================================== */
+
+/**
+ * @brief Per-CPU scratch slot for the ARP-miss FIB fallback lookup.
+ *
+ * struct bpf_fib_lookup is 64 bytes. broadcast_callback_fn() is invoked as
+ * a bpf_for_each_map_elem() callback, so its stack frame is combined with
+ * handle_broadcast()'s frame for the kernel verifier's stack-depth check
+ * (512-byte total budget across the call chain) -- keeping this struct on
+ * the callback's own stack pushed that combined total over the limit.
+ *
+ * BPF_MAP_TYPE_PERCPU_ARRAY gives each CPU its own copy, so this is safe
+ * with no locking: a single CPU never has two BPF program instances live
+ * in this struct concurrently.
+ */
+struct {
+  __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+  __uint(max_entries, 1);
+  __type(key, __u32);
+  __type(value, struct bpf_fib_lookup);
+} fib_lookup_scratch_map SEC(".maps");
+
+/* ========================================================================== */
 /*                         BROADCAST CALLBACK                                 */
 /* ========================================================================== */
 
@@ -93,6 +123,12 @@ static long broadcast_callback_fn(
   void* data            = (void*) (long) skb->data;
   void* data_end        = (void*) (long) skb->data_end;
 
+  struct ethhdr* eth_outer = (struct ethhdr*) data;
+  if ((void*) (eth_outer + 1) > data_end) {
+    bpf_debug("eth_broadcast: invalid outer Ethernet header");
+    return RET_SUCCESS; /* continue to next */
+  }
+
   struct iphdr* iph = (struct iphdr*) ((void*) data + sizeof(struct ethhdr));
   if ((void*) (iph + 1) > data_end) {
     bpf_debug("eth_broadcast: invalid IPv4 packet");
@@ -116,10 +152,65 @@ static long broadcast_callback_fn(
       ctx->pdu_sessions[v] = pdu_session->teid_dl;
       ctx->size += 1;
 
-      /* Rewrite outer GTP-U TEID + outer dst-IP for this session, then
-       * clone the packet out the egress (N3) interface. */
+      /* Resolve the outer dst MAC for this session's gNB IP BEFORE
+       * touching any header field. ARP is checked first; FIB is a fallback
+       * for parity with update_mac_address() / gtpu_decap_ipv4() elsewhere
+       * in the codebase. */
+      __u32 old_daddr   = iph->daddr;
+      __u32 new_daddr   = pdu_session->ipv4_address;
+      bool mac_resolved = false;
+
+      struct arp_entry* arp = bpf_map_lookup_elem(&arp_table_map, &new_daddr);
+      if (arp) {
+        __builtin_memcpy(eth_outer->h_dest, arp->mac_address, ETH_ALEN);
+        mac_resolved = true;
+      } else {
+        /* ARP miss -- fall back to a FIB lookup from an egress
+         * perspective.
+         *
+         * The lookup struct lives in fib_lookup_scratch_map, not on the
+         * stack. It is a per-CPU slot reused across calls, so it must be
+         * cleared before use. */
+        __u32 scratch_key = 0;
+        struct bpf_fib_lookup* fib =
+            bpf_map_lookup_elem(&fib_lookup_scratch_map, &scratch_key);
+        if (!fib) {
+          bpf_debug("eth_broadcast: fib_lookup_scratch_map lookup failed");
+          break;
+        }
+        __builtin_memset(fib, 0, sizeof(*fib));
+        fib->family      = AF_INET;
+        fib->tos         = iph->tos;
+        fib->l4_protocol = iph->protocol;
+        fib->tot_len     = bpf_ntohs(iph->tot_len);
+        fib->ipv4_src    = iph->saddr;
+        fib->ipv4_dst    = new_daddr;
+        fib->ifindex     = *ctx->ifindex;
+
+        int fib_rc =
+            bpf_fib_lookup(skb, fib, sizeof(*fib), BPF_FIB_LOOKUP_OUTPUT);
+        if (fib_rc == BPF_FIB_LKUP_RET_SUCCESS) {
+          __builtin_memcpy(eth_outer->h_dest, fib->dmac, ETH_ALEN);
+          mac_resolved = true;
+        } else {
+          bpf_debug(
+              "eth_broadcast: no ARP entry and FIB miss (rc=%d) for gNB "
+              "%pI4 -- skipping this clone",
+              fib_rc, &new_daddr);
+        }
+      }
+
+      if (!mac_resolved) break;
+
+      /* Rewrite outer GTP-U TEID + outer dst-IP for this session (dst
+       * MAC already written above), fix up the IPv4 header checksum for
+       * the daddr change, then clone the packet out the egress (N3)
+       * interface. */
       gtpuh->teid = pdu_session->teid_dl;
-      iph->daddr  = pdu_session->ipv4_address;
+      iph->daddr  = new_daddr;
+
+      bpf_l3_csum_replace(
+          skb, IP_CSUM_OFFSET, old_daddr, new_daddr, sizeof(new_daddr));
 
       int ret = bpf_clone_redirect(skb, *ctx->ifindex, 0);
       if (ret < 0) {
@@ -127,8 +218,8 @@ static long broadcast_callback_fn(
         return RET_PASS; /* stop iteration */
       }
       bpf_debug(
-          "eth_broadcast: cloned to PDU session TEID=0x%x",
-          bpf_ntohl(pdu_session->teid_dl));
+          "eth_broadcast: cloned to PDU session TEID=0x%x dst_mac=%pM",
+          bpf_ntohl(pdu_session->teid_dl), eth_outer->h_dest);
       break;
     }
   }
