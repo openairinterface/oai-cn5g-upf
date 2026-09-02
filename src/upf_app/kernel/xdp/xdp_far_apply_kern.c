@@ -308,12 +308,27 @@ gtpu_encap_ipv4(struct xdp_md* ctx, struct pfcp_far* far, u8 qfi) {
  *   Before: [ETH][IP-outer][UDP:2152][GTP-U][PDU-Sess-Container][IP][payload]
  *   After:  [ETH'][IP][payload]
  *
- * @param ctx XDP context
- * @param far FAR (must have FORW flag set in Apply Action)
+ * IP PDU sessions only -- the inner payload is a bare IP packet with no L2
+ * header of its own, so this function synthesizes a new outer Ethernet
+ * header via FIB/ARP resolution. An Ethernet PDU session's inner payload
+ * already carries the UE's own Ethernet header; reusing this function for
+ * that case misreads the inner ETH header as an IP header and discards the
+ * UE's L2 addressing -- use gtpu_decap_eth() instead.
+ *
+ * @param ctx  XDP context
+ * @param far  FAR (must have FORW flag set in Apply Action)
+ * @param pctx Packet context (used only to reject a misrouted ETH PDU call)
  * @return RET_SUCCESS, RET_DROP, or RET_FAILURE
  */
-static __always_inline u32
-gtpu_decap_ipv4(struct xdp_md* ctx, struct pfcp_far* far) {
+static __always_inline u32 gtpu_decap_ipv4(
+    struct xdp_md* ctx, struct pfcp_far* far,
+    const struct packet_context* pctx) {
+  if (IS_ETH_PDU(pctx->session_type)) {
+    bpf_debug(
+        "gtpu_decap_ipv4: refusing ETH PDU session -- use gtpu_decap_eth");
+    return RET_FAILURE;
+  }
+
   void* data     = (void*) (long) ctx->data;
   void* data_end = (void*) (long) ctx->data_end;
 
@@ -415,6 +430,79 @@ gtpu_decap_ipv4(struct xdp_md* ctx, struct pfcp_far* far) {
   }
 
   bpf_debug("GTP-U decapsulation complete");
+  return RET_SUCCESS;
+}
+
+/* ========================================================================== */
+/*         GTP-U DECAPSULATION — UPLINK, ETHERNET PDU (TS 23.501 §5.6.10.3)   */
+/* ========================================================================== */
+
+/**
+ * @brief Remove GTP-U outer headers from an Ethernet PDU session uplink
+ *        frame, exposing the UE's inner Ethernet frame unchanged.
+ *
+ * Applies Outer Header Removal (TS 29.244 §8.2.57) for the ETH PDU case.
+ * Unlike gtpu_decap_ipv4(), the inner payload here is a complete Ethernet
+ * frame the UE built (its own src/dst MAC, its own EtherType -- IPv4,
+ * IPv6, or a non-IP L2 protocol such as PROFINET/gPTP). An Ethernet PDU
+ * session is pure L2 transit (TS 23.501 §5.6.10.3).
+ *
+ * Packet transformation:
+ *   Before: [ETH][IP-outer][UDP:2152][GTP-U][PDU-Sess-Container][inner
+ * ETH][payload] After:  [inner ETH][payload]                    (byte-for-byte,
+ * untouched)
+ *
+ * @param ctx  XDP context
+ * @param far  FAR (must have FORW flag set in Apply Action)
+ * @param pctx Packet context (used only to reject a misrouted IP PDU call)
+ * @return RET_SUCCESS, RET_DROP, or RET_FAILURE
+ */
+static __always_inline u32 gtpu_decap_eth(
+    struct xdp_md* ctx, struct pfcp_far* far,
+    const struct packet_context* pctx) {
+  if (!IS_ETH_PDU(pctx->session_type)) {
+    bpf_debug("gtpu_decap_eth: refusing non-ETH PDU session");
+    return RET_FAILURE;
+  }
+
+  void* data     = (void*) (long) ctx->data;
+  void* data_end = (void*) (long) ctx->data_end;
+
+  struct ethhdr* eth_outer = data;
+
+  if ((void*) (eth_outer + 1) > data_end) {
+    bpf_debug("Error: Invalid Ethernet header");
+    return RET_DROP;
+  }
+
+  /* Verify FAR has forward action (§8.2.26 bit 1) */
+  if (!far->apply_action.forw) {
+    bpf_debug("Apply Action: FORW bit not set");
+    return RET_FAILURE;
+  }
+
+  bpf_debug("Outer Header Removal: GTP-U decapsulation (ETH PDU)");
+
+  /* Bounds-check the inner Ethernet header before committing to the strip. */
+  const __u32 strip_len = (__u32) sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE;
+  struct ethhdr* eth_inner = (void*) (data + strip_len);
+
+  if ((void*) (eth_inner + 1) > data_end) {
+    bpf_debug("Error: truncated inner Ethernet frame");
+    return RET_DROP;
+  }
+
+  /* Pure strip -- no memcpy, no FIB lookup, no ARP lookup, no MAC rewrite.
+   * The bytes that remain after the strip ARE the UE's inner Ethernet
+   * frame, untouched. */
+  if (bpf_xdp_adjust_head(ctx, (int32_t) strip_len)) {
+    bpf_debug(
+        "Outer Header Removal: "
+        "Failed to adjust head");
+    return RET_DROP;
+  }
+
+  bpf_debug("GTP-U decapsulation complete (ETH PDU)");
   return RET_SUCCESS;
 }
 
@@ -521,12 +609,13 @@ int far_apply(struct xdp_md* ctx) {
       }
 
       /*
-       * Unicast: strip GTP-U headers and forward inner
-       * Ethernet frame to N6 (same decap as IP PDU).
+       * Unicast: strip GTP-U headers and forward the UE's inner
+       * Ethernet frame to N6 unchanged (pure L2 transit -- no FIB/ARP,
+       * no MAC rewrite; see gtpu_decap_eth()).
        */
       bpf_debug("ETH PDU UL FORW: Unicast GTP strip");
 
-      int ret = gtpu_decap_ipv4(ctx, far);
+      int ret = gtpu_decap_eth(ctx, far, pctx);
 
       if (ret != RET_SUCCESS) {
         bpf_debug("ETH GTP-U decap failed (ret=%d)", ret);
@@ -550,7 +639,7 @@ int far_apply(struct xdp_md* ctx) {
           "Apply Action: FORW UL - "
           "Outer Header Removal");
 
-      int ret = gtpu_decap_ipv4(ctx, far);
+      int ret = gtpu_decap_ipv4(ctx, far, pctx);
 
       if (ret != RET_SUCCESS) {
         bpf_debug("GTP-U decap failed (ret = %d)", ret);
