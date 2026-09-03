@@ -1,0 +1,96 @@
+# SPDX-License-Identifier: MIT
+[project]
+name = "oai-upf-tests"
+version = "0.1.0"
+description = "PFCP/N4 test suite for the OAI CN5G UPF, on the reusable pfcpkit library"
+requires-python = ">=3.10"
+dependencies = ["scapy>=2.7.0"]
+
+[project.optional-dependencies]
+# `oai` holds what only the OAI adapter and its tooling need. Kept separate so a
+# project vendoring `pfcpkit` alone is not dragged into this UPF's requirements --
+# PyYAML exists solely for conf/make_test_config.py, which rewrites etc/config.yaml.
+oai = ["PyYAML>=6.0"]
+dev = ["pytest>=7.4", "ruff>=0.5", "mypy>=1.10", "oai-upf-tests[oai]"]
+
+# Two packages, one repo, one direction of dependency:
+#   pfcpkit   -- UPF-agnostic machinery: PFCP transport, models, report, scenario
+#                base and registry, capability protocols, generic inspectors.
+#                Ships no scenarios.
+#   upf_test  -- everything about this UPF: BPF map catalogue, HTB class-id
+#                arithmetic, log strings, deployment settings, and every scenario.
+# `unit/test_boundary.py` enforces that pfcpkit never imports upf_test, and that it
+# never grows a scenario package of its own.
+[tool.setuptools.packages.find]
+include = ["pfcpkit*", "upf_test*"]
+
+# ---------------------------------------------------------------------------
+# Lint / format
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",   # pycodestyle / pyflakes
+    "I",             # import sorting
+    "B",             # bugbear
+    "UP",            # pyupgrade
+    "SIM",           # simplify
+    "RET",           # return consistency
+    "ARG",           # unused arguments
+    "PTH",           # prefer pathlib
+]
+# Note: the TID group is deliberately not selected. Its only applicable rule,
+# TID252, bans intra-package relative imports -- which are intentional here:
+# they keep `pfcpkit` relocatable and make the layering visible at each import.
+ignore = [
+    "B008",  # function call in default argument -- not used here, but noisy with dataclasses
+]
+
+[tool.ruff.lint.per-file-ignores]
+# B027: the scenario base intentionally gives `arrange` and `teardown` non-abstract
+# no-op defaults -- a scenario whose subject *is* establishment has nothing to
+# arrange, and forcing every subclass to write `pass` would be noise. Only `act`
+# and `verify` are @abstractmethod.
+"pfcpkit/scenarios/base.py" = ["B027"]
+# Scenarios legitimately assign attributes in act() that verify() reads.
+"upf_test/scenarios/*.py" = ["B027"]
+"unit/**/*.py" = [
+    # Tests import scapy IE classes locally to keep each assertion self-describing.
+    "PLC0415",
+    # Test doubles implement an interface and need its full signature whether or
+    # not every parameter is used -- inherent to a fake, not a smell.
+    "ARG002",
+]
+
+# ---------------------------------------------------------------------------
+# Type checking
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.10"
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+strict_equality = true
+
+# Neither scapy nor PyYAML ships type information (types-PyYAML exists, but is
+# not worth a dependency for one config-generation script).
+[[tool.mypy.overrides]]
+module = ["scapy.*", "yaml"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# Test discovery
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["unit", "."]
+python_files = ["test_*.py"]
+markers = [
+    "integration: requires a running UPF (deselect with '-m \"not integration\"')",
+]
