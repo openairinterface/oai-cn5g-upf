@@ -4,16 +4,17 @@
 
 We want to make contributing to this project as easy and transparent as possible.
 
-Please refer to the steps described on our website: [How to contribute to OAI](https://www.openairinterface.org/?page_id=112)
-
-1. If you are contributing source code which is under CSSL License or will be in CSSL license then,
-sign and return a Contributor License Agreement to OAI team. Files under other licenses require signed commits.
-   - Individual contributors should sign the [ICLA](https://openairinterface.org/wp-content/uploads/2026/03/ICLA-OAI-RAN-5GCN-SPGW-CU-FlexRIC.pdf).
-   - Contributions made on behalf of an organization require the [CCLA](https://openairinterface.org/wp-content/uploads/2026/03/CCLA-OAI-RAN-5GCN-SPGW-CU-FLEXRIC.pdf).
-2. Create an account on [GitHub](https://github.com/) if you do not have any.
-3. Pull requests from forked repositories are currently not accepted.
-4. All pull requests must target the **`develop`** branch.
-5. Mandatory signing of all the commits using the email address used for CLA.
+1. If you are contributing source code that is covered by the CSSL License, or
+   will be covered by the CSSL License, you must sign and return a Contributor
+   License Agreement (CLA) to the OAI team:
+   * Individual contributors should sign the **ICLA**.
+   * Contributions made on behalf of an organization require the **CCLA**.
+   * You can find and sign the applicable CLA here: [Contributor License Agreement (CLA)](https://github.com/openairinterface/oai-cn5g-fed/wiki/Contributor-License-Agreement-%28CLA%29)
+2. Files under other licenses require signed commits.
+3. Create an account on [GitHub](https://github.com/) if you do not have any.
+4. Pull requests from forked repositories are currently not accepted.
+5. All pull requests must target the **`develop`** branch.
+6. Mandatory signing of all the commits using the email address used for CLA.
 
 ## Commit Guidelines
 
@@ -234,6 +235,10 @@ Example:
 
     Assisted-by: Claude:claude-3-opus
 ```
+
+You must use AI assistants responsibly. Always verify AI-generated output for correctness,
+keep it concise and relevant, and avoid posting large or unedited LLM-generated text.
+Curate the output so that it is clear, focused, and appropriate for the discussion.
 
 ### Rewriting Commits
 
