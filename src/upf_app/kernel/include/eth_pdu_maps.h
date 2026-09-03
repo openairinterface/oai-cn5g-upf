@@ -44,7 +44,8 @@ struct {
 /**
  * @brief Uplink TEID -> ETH session context.
  *
- * Key:   u32                     uplink GTP-U TEID (network byte order)
+ * Key:   u32                     uplink GTP-U TEID (host byte order
+ *                                 matches pctx->pkt_teid on the IP PDU path)
  * Value: struct eth_session_id  {teid_ul, teid_dl, ipv4_address, seid}
  * Size:  MAX_PDU_SESSIONS
  *
@@ -67,12 +68,14 @@ struct {
  * @brief Per-session PDR array for Ethernet PDU sessions.
  *
  * Key:   u64                                   SEID
- * Value: struct pfcp_pdr[MAX_PDRS_PER_PDU_SESSION]     PDR array, sorted by
- * precedence Size:  MAX_PDU_SESSIONS
+ * Value: struct pfcp_pdr[MAX_PDRS_PER_ETH_PDU_SESSION_LIMIT]  PDR array,
+ *        sorted by precedence
+ * Size:  MAX_PDU_SESSIONS
  *
  * ETH-PDU-path mirror of pdrs_per_session_map.
  * Kept separate because this is compiled as a distinct BPF object.
- * Read by the ETH PDR matching logic to find the highest-precedence match.
+ * Read by match_pdr_eth_n3() (xdp_pdr_match_kern.c) to find the
+ * highest-precedence match.
  *
  * NOTE: Map size = number of sessions, NOT total PDR count.
  */

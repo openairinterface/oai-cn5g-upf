@@ -261,6 +261,15 @@ class UPF_XDPProgram : public BPFProgram {
   void ShareMaps(struct bpf_object* src_obj, struct bpf_object* dst_obj);
 
   /**
+   * @brief Verify that every BPF map name shared by more than one loaded
+   *        program's bpf_object resolves to the SAME kernel map.
+   *
+   * ShareMapsOwned() redirects a hand-maintained initializer_list of map
+   * names via bpf_map__reuse_fd().
+   */
+  void VerifySharedMapIdentity() const;
+
+  /**
    * @brief Wrap the primary skeleton's 4 tail_call maps in BPFMap objects.
    *
    * @param primary_skeleton  bpf_object_skeleton* from the primary entry

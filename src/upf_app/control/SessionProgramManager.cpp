@@ -325,7 +325,8 @@ void SessionProgramManager::StorePduSessionInMap(
  * have no UE IP address.
  *
  * @param upf_xdp_program XDP program containing the maps
- * @param teid_ul Uplink TEID (map key, converted to network byte order)
+ * @param teid_ul Uplink TEID (map key, used directly in host byte order
+ *                matches pctx->pkt_teid as read by the XDP datapath)
  * @param teid_dl Downlink TEID (for GTP-U encap toward gNB)
  * @param gnb_ip gNodeB IPv4 address (for DL outer header creation)
  * @param seid Session Endpoint Identifier
@@ -350,7 +351,8 @@ void SessionProgramManager::StoreEthPduSessionInMap(
       return;
     }
 
-    uint32_t key = likely(IsLittleEndian()) ? htonl(teid_ul) : teid_ul;
+    // Map key is host byte order matching pctx->pkt_teid on the XDP
+    uint32_t key = teid_ul;
 
     struct eth_session_id eth_session = {0};
     eth_session.teid_ul = likely(IsLittleEndian()) ? htonl(teid_ul) : teid_ul;

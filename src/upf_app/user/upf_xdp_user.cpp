@@ -11,6 +11,9 @@
 #include <net/if.h>
 #include <stdexcept>
 #include <cstring>
+#include <string>
+#include <unordered_map>
+#include <vector>
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
 #include "logger.hpp"
@@ -222,6 +225,8 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
     if (eth_broadcast_tc_)
       ShareMapsOwned(
           sl_eth_obj, eth_broadcast_tc_->GetBpfObject(), eth_session_owned);
+    ShareMapsOwned(sl_eth_obj, pdr_->GetBpfObject(), eth_session_owned);
+    ShareMapsOwned(sl_eth_obj, far_->GetBpfObject(), eth_session_owned);
   }
 
   /* ── Step 4: Load far_ now that its n3_-owned symbols point at n3_'s maps
@@ -248,6 +253,8 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   if (urr_) ShareMapsOwned(far_obj, urr_->GetBpfObject(), far_owned);
   if (bar_) ShareMapsOwned(far_obj, bar_->GetBpfObject(), far_owned);
   if (mar_) ShareMapsOwned(far_obj, mar_->GetBpfObject(), far_owned);
+  if (eth_broadcast_tc_)
+    ShareMapsOwned(far_obj, eth_broadcast_tc_->GetBpfObject(), far_owned);
   /* n3_ is already loaded by Step 2, so reuse_fd against it is no longer
    * possible. That is harmless here: xdp_n3_entry_kern.c does not include
    * interfaces_maps.h or arp_maps.h and therefore declares none of
@@ -291,6 +298,12 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
 
   DisplayPipelineLoadTree(BuildPipelineLoadInfo(flags));
   Logger::upf_app().info("UPF_XDPProgram: all programs loaded");
+
+  /* Systemic guard against the ShareMapsOwned() bug class (a map added to a
+   * *_maps.h header, or a new BPF object including one, without adding it
+   * to every relevant share list): every program is loaded now, so cross-
+   * check that shared map names actually resolve to the same kernel map. */
+  VerifySharedMapIdentity();
 
   /* ── Step 7: Wrap the primary skeleton's 4 infrastructure maps.
    * tail_call_progs_map, packet_context_map, session_rules_enabled_map,
@@ -395,7 +408,13 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
 //------------------------------------------------------------------------------
 void UPF_XDPProgram::ShareMaps(
     struct bpf_object* src_obj, struct bpf_object* dst_obj) {
-  if (!src_obj || !dst_obj) return;
+  if (!src_obj || !dst_obj) {
+    Logger::upf_app().warn(
+        "ShareMaps: %s bpf_object is null -- skipping share (a program's "
+        "skeleton_ may not be synced yet; see ProgramLifeCycle open_fn)",
+        !src_obj ? "src" : "dst");
+    return;
+  }
   struct bpf_map* dst_map;
   bpf_object__for_each_map(dst_map, dst_obj) {
     const char* name    = bpf_map__name(dst_map);
@@ -412,7 +431,15 @@ void UPF_XDPProgram::ShareMaps(
 void UPF_XDPProgram::ShareMapsOwned(
     struct bpf_object* src, struct bpf_object* dst,
     const std::initializer_list<const char*>& owned_maps) {
-  if (!src || !dst) return;
+  if (!src || !dst) {
+    Logger::upf_app().warn(
+        "ShareMapsOwned: %s bpf_object is null -- skipping share of %zu "
+        "map(s) (first: '%s'). A program's skeleton_ may not be synced yet "
+        "-- see ProgramLifeCycle open_fn convention.",
+        !src ? "src" : "dst", owned_maps.size(),
+        owned_maps.size() ? *owned_maps.begin() : "?");
+    return;
+  }
   for (const char* name : owned_maps) {
     struct bpf_map* src_map = bpf_object__find_map_by_name(src, name);
     if (!src_map) continue;
@@ -422,6 +449,112 @@ void UPF_XDPProgram::ShareMapsOwned(
     if (!dst_map) continue;
     if (bpf_map__reuse_fd(dst_map, fd) != 0)
       Logger::upf_app().warn("ShareMapsOwned: reuse_fd failed for '%s'", name);
+  }
+}
+
+//------------------------------------------------------------------------------
+void UPF_XDPProgram::VerifySharedMapIdentity() const {
+  struct LabeledObject {
+    const char* label;
+    struct bpf_object* obj;
+  };
+
+  /* Every program whose bpf_object is loaded by the time Setup() reaches
+   * this point. qer_tc_ is intentionally excluded -- its lifecycle is
+   * driven per-session by SessionProgramManager, not by this Setup(). */
+  const LabeledObject candidates[] = {
+      {"n3", n3_ ? n3_->GetBpfObject() : nullptr},
+      {"n6", n6_ ? n6_->GetBpfObject() : nullptr},
+      {"n3_eth", n3_eth_ ? n3_eth_->GetBpfObject() : nullptr},
+      {"n6_eth", n6_eth_ ? n6_eth_->GetBpfObject() : nullptr},
+      {"sl_ip", sl_ip_ ? sl_ip_->GetBpfObject() : nullptr},
+      {"sl_eth", sl_eth_ ? sl_eth_->GetBpfObject() : nullptr},
+      {"pdr", pdr_ ? pdr_->GetBpfObject() : nullptr},
+      {"far", far_ ? far_->GetBpfObject() : nullptr},
+      {"qer", qer_ ? qer_->GetBpfObject() : nullptr},
+      {"urr", urr_ ? urr_->GetBpfObject() : nullptr},
+      {"bar", bar_ ? bar_->GetBpfObject() : nullptr},
+      {"mar", mar_ ? mar_->GetBpfObject() : nullptr},
+      {"eth_broadcast_tc",
+       eth_broadcast_tc_ ? eth_broadcast_tc_->GetBpfObject() : nullptr},
+  };
+
+  struct Instance {
+    const char* label;
+    __u32 id;
+  };
+  std::unordered_map<std::string, std::vector<Instance>> instances_by_name;
+
+  for (const auto& c : candidates) {
+    if (!c.obj) continue;
+    struct bpf_map* map;
+    bpf_object__for_each_map(map, c.obj) {
+      /* .rodata/.bss/.data-backed maps are compiler-synthesized, one
+       * private copy per BPF object BY DESIGN (each object's own string
+       * literals / constants) -- they are never meant to be shared, and
+       * flagging them here is a false positive on every single startup.
+       * bpf_map__is_internal() is the principled way to exclude them: a
+       * property of the map itself, not a name pattern to keep in sync
+       * (a prefix check on ".rodata" would miss libbpf-composed names
+       * like "xdp_sess.rodata", and an explicit allowlist of "the real
+       * maps" would just reintroduce the hand-maintained-list staleness
+       * this check exists to catch). */
+      if (bpf_map__is_internal(map)) continue;
+
+      const char* name = bpf_map__name(map);
+      if (!name) continue;
+      int fd = bpf_map__fd(map);
+      if (fd < 0) continue;
+
+      struct bpf_map_info info = {};
+      __u32 info_len           = sizeof(info);
+      if (bpf_map_get_info_by_fd(fd, &info, &info_len) != 0) continue;
+
+      instances_by_name[name].push_back({c.label, info.id});
+    }
+  }
+
+  std::vector<std::string> violations;
+
+  for (const auto& [name, instances] : instances_by_name) {
+    if (instances.size() < 2) continue;
+
+    __u32 first_id = instances.front().id;
+    bool mismatch  = false;
+    for (const auto& inst : instances) {
+      if (inst.id != first_id) {
+        mismatch = true;
+        break;
+      }
+    }
+    if (!mismatch) continue;
+
+    violations.push_back(name);
+
+    std::string detail;
+    for (const auto& inst : instances) {
+      detail += std::string(inst.label) + "=" + std::to_string(inst.id) + " ";
+    }
+    Logger::upf_app().error(
+        "Map identity check FAILED for '%s': programs disagree on the "
+        "kernel map (id per program: %s) -- one or more of them is reading "
+        "a private, unpopulated copy instead of the shared map. Check that "
+        "'%s' is included in every relevant ShareMapsOwned() call in "
+        "UPF_XDPProgram::Setup().",
+        name.c_str(), detail.c_str(), name.c_str());
+  }
+
+  if (!violations.empty()) {
+    std::string joined;
+    for (const auto& name : violations) joined += name + " ";
+    Logger::upf_app().error(
+        "UPF_XDPProgram: %zu shared BPF map(s) failed identity "
+        "verification (%s) -- the affected PDU session path(s) would "
+        "silently drop traffic. Refusing to continue startup.",
+        violations.size(), joined.c_str());
+    throw std::runtime_error(
+        "Shared BPF map identity verification failed -- see log for "
+        "affected map name(s)");
   }
 }
 
