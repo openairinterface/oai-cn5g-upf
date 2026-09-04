@@ -79,6 +79,7 @@ and are licensed under Apache License 2.0:
 
 - src/oai_upf/options.hpp
 - src/oai_upf/options.cpp
+- src/common/logger.hpp
 
 ------------------------------------------------------------------
 
