@@ -16,6 +16,12 @@ We want to make contributing to this project as easy and transparent as possible
 5. All pull requests must target the **`develop`** branch.
 6. Mandatory signing of all the commits using the email address used for CLA.
 
+## Check code has the required licenses
+
+Before opening a pull request, run `ci-scripts/check-licenses.sh` to verify
+that changed files and new files use an allowed license.
+Use `--verbose` for details or `--help` for usage and exit codes.
+
 ## Commit Guidelines
 
 Every pull request must pass two checks before it can be merged:
