@@ -343,7 +343,7 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
      * path already does this in n6_eth_entry_user.cpp; the IP path was
      * missing it.
      *
-     * FlowDirection enum (kernel/include/linux/custom_types.h):
+     * FlowDirection enum (kernel/include/custom_types.h):
      *   DOWNLINK = 0  -- redirect to N3 (gtp_interface_)
      *   UPLINK   = 1  -- redirect to N6 (non_gtp_interface_)
      */

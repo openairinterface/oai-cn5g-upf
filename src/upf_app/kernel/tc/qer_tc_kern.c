@@ -28,7 +28,7 @@
 /*                             PROJECT INCLUDES                               */
 /* ========================================================================== */
 
-#include "linux/custom_types.h"
+#include "custom_types.h"
 // #include "xdp_stats_kern.h"
 #include "pfcp/pfcp_far.h"
 #include "pfcp/pfcp_pdr.h"

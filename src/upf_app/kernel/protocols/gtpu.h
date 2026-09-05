@@ -8,7 +8,7 @@
 #include <linux/bpf.h>
 #include <linux/udp.h>
 #include <stdint.h>
-#include "linux/custom_types.h"
+#include "custom_types.h"
 #include "utils/logger.h"
 
 /* ==========================================================================

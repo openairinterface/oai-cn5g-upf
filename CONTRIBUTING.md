@@ -212,6 +212,10 @@ openairinterface developement procedure.
 - All code must be compatible with CSSL v1.0
 - Use appropriate SPDX license identifiers
 
+Before opening a pull request, run `ci-scripts/check-licenses.sh` to verify
+that changed files use an allowed license. Use `--verbose` for details or
+`--help` for usage and exit codes.
+
 AI agents MUST NOT add `Signed-off-by` nor `Co-authored-by` tags.  Only humans
 can legally certify the Developer Certificate of Origin (DCO).  The human
 submitter is responsible for:

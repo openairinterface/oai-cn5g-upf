@@ -23,7 +23,7 @@
 /*                             PROJECT INCLUDES                               */
 /* ========================================================================== */
 
-#include "linux/custom_types.h"
+#include "custom_types.h"
 #include "utils/logger.h"
 #include "utils/types.h"
 #include "protocols/gtpu.h"

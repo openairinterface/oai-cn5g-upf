@@ -5,7 +5,7 @@
 #ifndef __STATS_TYPES_H__
 #define __STATS_TYPES_H__
 
-#include "linux/custom_types.h"
+#include "custom_types.h"
 #include <linux/bpf.h>
 
 /* ==========================================================================

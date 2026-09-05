@@ -5,7 +5,7 @@
 #ifndef __SDF_TYPES_H__
 #define __SDF_TYPES_H__
 
-#include "linux/custom_types.h"
+#include "custom_types.h"
 
 /* ==========================================================================
  * TC classid minor-ID helper
