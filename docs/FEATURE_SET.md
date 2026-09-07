@@ -64,14 +64,14 @@ Based on document **3GPP TS 23.501 V16.0.0 §6.2.3**.
 | 5      | Packet inspection:                                                  |                    |                                             |
 |        | 1. Application detection based on service data flow template        | :heavy_check_mark: | SDF filter matching in eBPF                 |
 |        | 2. The optional PFDs received from the SMF in addition              | :large_orange_diamond: | Basic PFD support                       |
-| 6      | User Plane part of policy rule enforcement:                         |                    |                                             |
+| 6      | User Plane part of policy rule enforcement (eBPF data path):                         |                    |                                             |
 |        | 1. Gating                                                           | :heavy_check_mark: | Gate status via FAR actions                 |
 |        | 2. Redirection                                                      | :heavy_check_mark: |                                             |
 |        | 3. Traffic steering                                                 | :heavy_check_mark: | FAR-based forwarding (FORW, DROP, BUFF)     |
 | 7      | Lawful intercept (UP collection)                                    | :x:                | Not implemented                             |
 | 8      | Traffic usage reporting                                             | :large_orange_diamond: | URR support present, reporting limited  |
 | 9      | QoS handling for user plane:                                        |                    |                                             |
-|        | 1. UL/DL rate enforcement                                           | :heavy_check_mark: | TC-BPF HTB rate limiting                    |
+|        | 1. UL/DL rate enforcement                                           | :heavy_check_mark: | TC-BPF HTB rate limiting (eBPF datapath) and tc qdisc (simple switch)                  |
 |        | 2. Reflective QoS marking in DL                                     | :x:                | Not implemented                             |
 | 10     | Uplink Traffic verification (SDF to QoS flow mapping)               | :x:                | Not implemented (missing N9 implementation) |
 | 11     | Transport level packet marking in uplink and downlink               | :x:                | DSCP marking, QFI handling                  |
@@ -79,7 +79,7 @@ Based on document **3GPP TS 23.501 V16.0.0 §6.2.3**.
 |        | triggering                                                          |                    |                                             |
 | 13     | Sending and forwarding "end marker" to source NG-RAN node           | :x:                | Not implemented                             |
 | 14     | ARP requests/IPv6 Neighbour Solicitation handling based on          | :heavy_check_mark: | ARP resolution for N3/N6 interfaces         |
-|        | local cache for Ethernet PDUs                                       |                    |                                             |
+|        | local cache for Ethernet PDUs (eBPF data path)                                       |                    |                                             |
 | 15     | Packet duplication in downlink direction                            | :heavy_check_mark: | Not implemented                             |
 | 16     | Packet elimination in uplink direction in GTP-U layer               | :x:                | Not implemented                             |
 | 17     | NW-TT (Network-Terminate) functionality                             | :x:                | Not implemented                             |
@@ -131,6 +131,8 @@ These features are correctly out-of-scope for:
 ---
 
 ## N4 (PFCP) Protocol Support
+
+3GPP TS 29.244 V17.10.0
 
 | **ID** | **Classification**                                                  | **Status**         | **Comments**                                |
 | ------ | ------------------------------------------------------------------- | ------------------ | ------------------------------------------- |
