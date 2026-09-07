@@ -100,8 +100,6 @@ RUN apt-get update && \
     # Ubuntu 20 --> libldap-2.4-2
     # Ubuntu 22 --> libldap-2.5-0
     libldap-2.?-? \
-    libgoogle-glog0v5 \
-    libdouble-conversion3 \
     libconfig++9v5 \
     librtmp1 \
     libpsl5 \

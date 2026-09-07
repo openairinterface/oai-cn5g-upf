@@ -13,7 +13,6 @@ NC='\033[0m'         # ANSI color code to reset to default
 SCRIPT=$(readlink -f ${BASH_SOURCE})
 THIS_SCRIPT_PATH=`dirname $SCRIPT`
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper
-source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.fb_folly
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.fmt
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.spdlog
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.yamlcpp
@@ -311,6 +310,7 @@ check_install_upf_deps() {
     PACKAGE_LIST="\
       boost-devel \
       libconfig-devel \
+      libevent-devel \
       libgcrypt-devel \
       gmp-devel \
       libidn-devel \
@@ -373,9 +373,6 @@ check_install_upf_deps() {
   ret=$?;[[ $ret -ne 0 ]] && return $ret
   echo ""
   install_netlink_libraries $1 $2
-  ret=$?;[[ $ret -ne 0 ]] && return $ret
-
-  install_fb_folly_from_source $1 $2
   ret=$?;[[ $ret -ne 0 ]] && return $ret
 
   install_fmt_from_git $1 $2

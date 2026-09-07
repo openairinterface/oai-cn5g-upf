@@ -6,6 +6,7 @@
 #define FILE_UPF_CONFIG_HPP_SEEN
 
 #include <netinet/in.h>
+#include <sched.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -69,6 +70,16 @@ typedef struct nsf_cfg_s {
 } nsf_cfg_t;
 class upf_config {
  public:
+  /** @brief The lowest-numbered CPU of the container's own cpuset, kept for
+   *  the control plane. It is whichever CPU the operator gave us first -- not
+   *  CPU 0 of the machine, which the host may well keep for itself.
+   *  -1 when there is only one CPU and nothing can be reserved. */
+  static int reserved_control_cpu() {
+    // One source of truth: datapath_cpus() excludes exactly this CPU, and the
+    // two drifting apart would put the control plane on a datapath core.
+    return udp_server::control_cpu();
+  }
+
   /* Reader/writer lock for this configuration */
   std::mutex m_rw_lock;
   std::string pid_dir;
@@ -109,6 +120,8 @@ class upf_config {
   // Datapath configuration will be set from upf_datapath_configuration class
   uint32_t max_pdu_sessions;
   u_int16_t max_upf_interfaces;
+  u_int16_t n3_rx_threads;  ///< UL GTP-U receive threads (SO_REUSEPORT)
+  u_int16_t dl_rx_queues;   ///< DL tun receive queues (IFF_MULTI_QUEUE)
   u_int16_t max_upf_redirect_interfaces;
   u_int16_t max_pdrs_per_pdu_session;
   u_int16_t max_fars_per_pdu_session;
@@ -149,6 +162,26 @@ class upf_config {
         smfs(),
         nsf(),
         nrf_addr() {
+    // CPU placement comes from the container cpuset, never from a hardcoded
+    // core number: the old default pinned every thread to the machine's CPU 0,
+    // which fails with EINVAL as soon as the cpuset does not contain it.
+    //
+    // The control plane gets one of those CPUs to itself: the datapath are
+    // SCHED_FIFO and udp_server::datapath_cpus() keeps them off this one. Left
+    // to roam, an N4 thread queues behind a real-time thread at line rate,
+    // stops answering PFCP heartbeats, and the SMF drops the association.
+    // -1 when there is only one CPU: then nothing can be reserved.
+    const int control_cpu               = reserved_control_cpu();
+    itti.itti_timer_sched_params.cpu_id = control_cpu;
+    itti.n3_sched_params.cpu_id         = control_cpu;
+    itti.n4_sched_params.cpu_id         = control_cpu;
+    itti.upf_app_sched_params.cpu_id    = control_cpu;
+    itti.async_cmd_sched_params.cpu_id  = control_cpu;
+    n4.thread_rd_sched_params.cpu_id    = control_cpu;
+    // The N3 and N6 receive threads are the datapath: they are placed by
+    // udp_server::datapath_cpus(), which excludes the control CPU.
+    n3.thread_rd_sched_params.cpu_id            = -1;
+    n6.thread_rd_sched_params.cpu_id            = -1;
     itti.itti_timer_sched_params.sched_priority = 85;
     itti.n3_sched_params.sched_priority         = 84;
     itti.n4_sched_params.sched_priority         = 84;
@@ -173,8 +206,10 @@ class upf_config {
     enable_mar          = false;
     enable_snat         = false;
 
-    // Values from basic_nrf_config_ebpf.yaml (lines 373-564)
+    // Values from basic_nrf_config_ebpf.yaml
     max_upf_interfaces                            = 4;
+    n3_rx_threads                                 = 1;
+    dl_rx_queues                                  = 1;
     max_upf_redirect_interfaces                   = 2;
     max_pdu_sessions                              = 1000;
     max_pdrs_per_pdu_session                      = 8;
