@@ -5,14 +5,20 @@
 #include "pfcp_switch.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <stdexcept>
+#include <vector>
+#include <fcntl.h>
+#include <poll.h>
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
 #include <linux/if_tun.h>
 #include <linux/ip.h>
+#include <netinet/in.h>
 #include <sched.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -21,8 +27,10 @@
 #include "common_defs.h"
 #include "itti.hpp"
 #include "logger.hpp"
+#include "qos_mbr.hpp"
 #include "simple_switch.hpp"
 #include "upf_config.hpp"
+#include "upf_n4.hpp"
 #include "upf_pfcp_association.hpp"
 
 std::shared_ptr<SessionManager> session_manager;
@@ -36,116 +44,179 @@ using namespace std;
 extern itti_mw* itti_inst;
 extern upf_config upf_cfg;
 extern upf_n3* upf_n3_inst;
+extern upf_n4* upf_n4_inst;  // Usage Reports are sent over N4
 extern pfcp_switch* pfcp_switch_inst;
 
 // =============================================================================
-// PDN I/O threads
+// PDN I/O thread
 // =============================================================================
 
 //------------------------------------------------------------------------------
-// pdn_worker — DL packet processing thread.
-// Reads filled I/O buffers from work_pool_, dispatches to
-// pfcp_session_look_up_pack_in_core(), then returns buffer to free_pool_.
+// pdn_read_loop — DL datapath thread.
+// Reads IP packets from tun0 and forwards each one inline: PDR look-up, FAR,
+// GTP-U encapsulation and send.  One thread, no queue.
 
 //------------------------------------------------------------------------------
-void pfcp_switch::pdn_worker(
-    const int id, const oai::utils::thread_sched_params& sched_params) {
-  uint64_t count      = 0;
-  iovec_q_item_t* iov = nullptr;
+void pfcp_switch::pdn_read_loop(
+    int sock_r, int idx, oai::utils::thread_sched_params sched_params) {
+  uint64_t errors = 0;
 
-  terminatePW_ = false;
+  if (idx == 0) prThreadToCancel = pthread_self();
   sched_params.apply(TASK_NONE, Logger::pfcp_switch());
 
+  // This thread owns tun queue `idx` and is the only reader of it. The kernel
+  // steers a flow to one queue and keeps it there, so every packet of a flow
+  // is handled by this one thread and cannot overtake itself. Several threads
+  // sharing one queue -- what this replaced -- reordered ~17% of packets.
+  //
+  // The buffers keep ROOM_FOR_GTPV1U_G_PDU of headroom in front so that
+  // send_g_pdu() can write the GTP-U header in place without a copy. A tun fd
+  // yields one packet per read() and cannot be batched on receive; the
+  // transmit side is batched instead -- drain up to DL_BATCH packets,
+  // encapsulate them all, then hand the lot to one sendmmsg().
+  constexpr int DL_BATCH = UDP_TX_BATCH;
+  const size_t payload_capacity =
+      PFCP_SWITCH_RECV_BUFFER_SIZE - ROOM_FOR_GTPV1U_G_PDU;
+  std::vector<char> bufs((size_t) DL_BATCH * PFCP_SWITCH_RECV_BUFFER_SIZE);
+  char* payload[DL_BATCH];
+  ssize_t len[DL_BATCH];
+  for (int i = 0; i < DL_BATCH; i++)
+    payload[i] = bufs.data() + (size_t) i * PFCP_SWITCH_RECV_BUFFER_SIZE +
+                 ROOM_FOR_GTPV1U_G_PDU;
+
+  // The fd is O_NONBLOCK, so the drain below costs one read() per packet and
+  // nothing else. It used to poll() before every read to decide whether more
+  // was queued -- two syscalls per packet instead of one -- because the fd had
+  // to stay blocking for send_to_core()'s writes. Those now retry on EAGAIN
+  // instead, which costs nothing until the queue is actually full.
+  struct pollfd pfd = {};
+  pfd.fd            = sock_r;
+  pfd.events        = POLLIN;
+
+  const int q   = idx < TUN_MAX_QUEUES ? idx : TUN_MAX_QUEUES - 1;
+  auto last_log = std::chrono::steady_clock::now();
+  if (upf_n3_inst) upf_n3_inst->begin_tx_batch();
+
   while (1) {
-    work_pool_->blockingRead(iov);
-    if (terminatePW_) {
-      terminatePW_ = false;
-      return;
-    }
-    ++count;
-    // std::cout << "DL worker " << id << " count " << count << std::endl;
-    // exit thread
-    if (iov->msg_iov.iov_base) {
-      pfcp_session_look_up_pack_in_core(
-          (const char*) iov->msg_iov.iov_base, iov->msg_iov.iov_len);
-      free_pool_->blockingWrite(iov);
-    } else {
-      free(iov);
-      std::cout << "exit DL w" << id << " " << count << std::endl;
-      while (work_pool_->readIfNotEmpty(iov)) {
-        free(iov);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    // One clock read per batch, on one thread only. It has to be here rather
+    // than after the batch: this thread only sees a flow the hash sent to its
+    // queue, so it can sit in poll() indefinitely while the others are busy --
+    // which is exactly when the balance is worth logging.
+    if (q == 0) {
+      const auto now = std::chrono::steady_clock::now();
+      if (now - last_log >= std::chrono::seconds(10)) {
+        last_log = now;
+        log_tun_queue_balance();
       }
-      return;
     }
-    iov = nullptr;
+
+    int n = 0;
+    while (n < DL_BATCH) {
+      ssize_t r = read(sock_r, payload[n], payload_capacity);
+      if (r > 0) {
+        len[n++] = r;
+        continue;
+      }
+      if (r < 0 && errno == EINTR) continue;
+      if (r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
+      ++errors;
+      Logger::pfcp_switch().error(
+          "read failed rc=%d:%s nb_errors %d", r, strerror(errno), errors);
+      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+      exit(0);
+    }
+
+    if (n == 0) {
+      // Nothing queued. Anything already encapsulated has been flushed by the
+      // previous iteration, so it is safe to sleep here. The timeout only
+      // exists so an idle queue-0 thread still reaches the logging above.
+      poll(&pfd, 1, q == 0 ? 1000 : -1);
+      continue;
+    }
+
+    tun_q_[q].rx.fetch_add((uint64_t) n, std::memory_order_relaxed);
+    for (int i = 0; i < n; i++)
+      pfcp_session_look_up_pack_in_core(payload[i], len[i]);
+    if (upf_n3_inst) upf_n3_inst->flush_tx_batch();
   }
 }
 
 //------------------------------------------------------------------------------
-// pdn_read_loop — DL reader thread.
-// Reads IP packets from tun0 into pre-allocated I/O buffers, pushes into
-// work_pool_ for processing by pdn_worker.
+// log_tun_queue_balance -- one line every LOG_PERIOD, from the first DL thread
+// only. The flow hash spreads flows, not packets, so a handful of test flows
+// can land unevenly; without this the symptom (one thread at 100%, the rest
+// idle) is indistinguishable from a genuine ceiling.
+//------------------------------------------------------------------------------
+void pfcp_switch::log_tun_queue_balance() {
+  if (tun_fds_.size() < 2) return;
+  std::string s;
+  for (size_t i = 0; i < tun_fds_.size() && i < TUN_MAX_QUEUES; i++)
+    s.append(fmt::format(
+        "{}q{}: rx {} tx {}", i ? ", " : "", i,
+        tun_q_[i].rx.load(std::memory_order_relaxed),
+        tun_q_[i].tx.load(std::memory_order_relaxed)));
+  Logger::pfcp_switch().debug("tun queue balance -- %s", s.c_str());
+}
 
 //------------------------------------------------------------------------------
-void pfcp_switch::pdn_read_loop(
-    int sock_r, oai::utils::thread_sched_params sched_params) {
-  uint64_t count      = 0;
-  uint64_t errors     = 0;
-  iovec_q_item_t* iov = nullptr;
-  // struct sockaddr_in   sin = {};
-
-  prThreadToCancel = pthread_self();
-  // Producer should not interfere with consumer for not de-sequence IP packets
-  sched_params.sched_priority -= 1;
-  sched_params.apply(TASK_NONE, Logger::pfcp_switch());
-
-  while (1) {
-    if (!iov) {
-      free_pool_->blockingRead(iov);
-    }
-    // iov->msg.msg_name = &sin;
-    // iov->msg.msg_namelen = sizeof(sin);
-    // iov->msg.msg_iovlen = 1;
-    // iov->msg.msg_flags = 0;
-    iov->msg_iov.iov_len = PFCP_SWITCH_RECV_BUFFER_SIZE - ROOM_FOR_GTPV1U_G_PDU;
-    // iov->msg.msg_control = nullptr;      /* Set to NULL if not needed  */
-    // iov->msg.msg_controllen = 0;
-    // exit thread
-    if (iov->msg_iov.iov_base == nullptr) {
-      free(iov);
-      while (work_pool_->readIfNotEmpty(iov)) {
-        free(iov);
-      }
-      std::cout << "exit d" << count << std::endl;
-      return;
-    }
-    ssize_t nread;
-    if ((nread = read(sock_r, iov->msg_iov.iov_base, iov->msg_iov.iov_len)) >
-        0) {
-      ++count;
-      // std::cout << "pdn" << count << " " << nread << " bytes" << std::endl;
-      iov->msg_iov.iov_len = nread;
-      work_pool_->blockingWrite(iov);
-      iov = nullptr;
-    } else {
-      ++errors;
-      Logger::pfcp_switch().error(
-          "recvmsg failed rc=%d:%s nb_errors %d", nread, strerror(errno),
-          errors);
-      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-      exit(0);
-    }
+// flow_hash -- stable hash of an IPv4 flow, symmetric in the two endpoints so
+// both directions of a connection land on the same queue.
+//------------------------------------------------------------------------------
+static inline uint32_t flow_hash(const struct iphdr* iph, std::size_t len) {
+  uint32_t h       = iph->saddr ^ iph->daddr;  // symmetric in addresses
+  const size_t ihl = (size_t) iph->ihl * 4;
+  uint16_t sport = 0, dport = 0;
+  if ((iph->protocol == IPPROTO_TCP || iph->protocol == IPPROTO_UDP) &&
+      len >= ihl + 4) {
+    memcpy(&sport, (const uint8_t*) iph + ihl, sizeof(sport));
+    memcpy(&dport, (const uint8_t*) iph + ihl + 2, sizeof(dport));
   }
+  h ^= (uint32_t) (uint16_t) (sport ^ dport) << 16;  // symmetric in ports
+  h ^= (uint32_t) iph->protocol;
+  // Finaliser: the inputs are low-entropy (one subnet, sequential UE
+  // addresses), so without mixing the low bits the modulo below would leave
+  // whole queues empty.
+  h ^= h >> 16;
+  h *= 0x7feb352dU;
+  h ^= h >> 15;
+  h *= 0x846ca68bU;
+  h ^= h >> 16;
+  return h;
+}
+
+//------------------------------------------------------------------------------
+int pfcp_switch::tun_tx_fd(const struct iphdr* iph, std::size_t len) const {
+  const size_t n = tun_fds_.size();
+  if (n == 0) return sock_w;
+  if (n == 1) return tun_fds_[0];
+  return tun_fds_[flow_hash(iph, len) % n];
 }
 
 //------------------------------------------------------------------------------
 void pfcp_switch::send_to_core(char* const ip_packet, const ssize_t len) {
-  ssize_t bytes_sent;
-  // Logger::pfcp_switch().trace( "pfcp_switch::send_to_core %d bytes ", len);
-  if ((bytes_sent = write(sock_w, ip_packet, len)) < 0) {
+  const struct iphdr* iph = (const struct iphdr*) ip_packet;
+  const int fd            = tun_tx_fd(iph, (std::size_t) len);
+  for (size_t i = 0; i < tun_fds_.size() && i < TUN_MAX_QUEUES; i++)
+    if (tun_fds_[i] == fd) {
+      tun_q_[i].tx.fetch_add(1, std::memory_order_relaxed);
+      break;
+    }
+
+  // The fd is non-blocking so the downlink reader does not need a poll() per
+  // packet. EAGAIN here means the queue is momentarily full, not that the
+  // packet should be dropped -- wait briefly rather than lose it.
+  for (int attempt = 0;; attempt++) {
+    const ssize_t w = write(fd, ip_packet, len);
+    if (w >= 0) return;
+    if (errno == EINTR) continue;
+    if ((errno == EAGAIN || errno == EWOULDBLOCK) && attempt < 8) {
+      struct pollfd p = {fd, POLLOUT, 0};
+      poll(&p, 1, 1);
+      continue;
+    }
     Logger::pfcp_switch().error(
-        "write fd %d failed rc=%d:%s", sock_w, bytes_sent, strerror(errno));
+        "write fd %d failed rc=%d:%s", fd, w, strerror(errno));
+    return;
   }
 }
 
@@ -263,7 +334,7 @@ int pfcp_switch::create_pdn_socket(const char* const ifname) {
 }
 
 //------------------------------------------------------------------------------
-int pfcp_switch::tun_open(char* devname, int flags) {
+int pfcp_switch::tun_open(char* devname, int flags, bool multi_queue) {
   struct ifreq ifr;
   int fd, err;
   if ((fd = open("/dev/net/tun", flags)) == -1) {
@@ -272,6 +343,9 @@ int pfcp_switch::tun_open(char* devname, int flags) {
   }
   memset(&ifr, 0, sizeof(ifr));
   ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
+  // Each open with IFF_MULTI_QUEUE attaches another queue to the same device.
+  // The device itself must have been created with multi_queue or this fails.
+  if (multi_queue) ifr.ifr_flags |= IFF_MULTI_QUEUE;
   strncpy(ifr.ifr_name, devname, IFNAMSIZ);  // devname = tunX
 
   if ((err = ioctl(fd, TUNSETIFF, (void*) &ifr)) == -1) {
@@ -286,14 +360,20 @@ int pfcp_switch::tun_open(char* devname, int flags) {
 void pfcp_switch::setup_pdn_interfaces() {
   std::string cmd = {};
   int rc          = 0;
-  int if_index    = 0;
+  // Needed before the device exists: multi_queue can only be asked for at
+  // creation time, so the thread count has to be known here.
+  int nt = upf_cfg.dl_rx_queues < 1 ? 1 : upf_cfg.dl_rx_queues;
+  if (nt > TUN_MAX_QUEUES) nt = TUN_MAX_QUEUES;
+  int if_index = 0;
 
   for (int index = 0; index < upf_cfg.pdns.size(); index++) {
     pdn_cfg_t it = upf_cfg.pdns[index];
     int sock_r   = 0;
     if (index == 0) {
-      cmd = fmt::format("ip tuntap add mode tun dev tun{}", index);
-      rc  = system((const char*) cmd.c_str());
+      cmd = fmt::format(
+          "ip tuntap add mode tun {}dev tun{}", nt > 1 ? "multi_queue " : "",
+          index);
+      rc = system((const char*) cmd.c_str());
 
       cmd = fmt::format("ip link set dev tun{} up", index);
       rc  = system((const char*) cmd.c_str());
@@ -372,18 +452,41 @@ void pfcp_switch::setup_pdn_interfaces() {
     // index); rc = system ((const char*)cmd.c_str());
 
     if (index == 0) {
+      // One queue per thread. The kernel hashes each packet's flow and always
+      // puts a given flow in the same queue, so the thread that owns it is the
+      // only one that ever sees that flow -- ordering costs nothing and the
+      // threads no longer contend on one queue's lock. O_NONBLOCK lets the
+      // reader drain with one syscall per packet instead of poll()+read().
       cmd = fmt::format("tun{}", index);
-      if ((sock_r = tun_open((char*) cmd.c_str(), O_RDWR)) == RETURNerror) {
-        Logger::pfcp_switch().error("Could not set PDN interface read socket");
-        sleep(2);
-        exit(EXIT_FAILURE);
+      for (int q = 0; q < nt; q++) {
+        const int fd =
+            tun_open((char*) cmd.c_str(), O_RDWR | O_NONBLOCK, nt > 1);
+        if (fd == RETURNerror) {
+          Logger::pfcp_switch().error(
+              "Could not open tun%d queue %d of %d", index, q, nt);
+          sleep(2);
+          exit(EXIT_FAILURE);
+        }
+        tun_fds_.push_back(fd);
       }
+      sock_r = tun_fds_[0];
+      sock_w = tun_fds_[0];
 
-      sock_w = sock_r;
-
-      prThread_ = std::thread(
-          &pfcp_switch::pdn_read_loop, this, sock_r,
-          upf_cfg.n6.thread_rd_sched_params);
+      const std::vector<int> cpus =
+          nt > 1 ? udp_server::datapath_cpus(nt) : std::vector<int>{};
+      std::string where;
+      for (int c : cpus)
+        where.append(where.empty() ? " on CPU " : ",")
+            .append(std::to_string(c));
+      Logger::pfcp_switch().info(
+          "tun%d: %d receive thread(s), one queue each%s", index, nt,
+          where.c_str());
+      for (int q = 0; q < nt; q++) {
+        oai::utils::thread_sched_params sp = upf_cfg.n6.thread_rd_sched_params;
+        if (!cpus.empty()) sp.cpu_id = cpus[q];
+        prThreads_.emplace_back(
+            &pfcp_switch::pdn_read_loop, this, tun_fds_[q], q, sp);
+      }
       socks_r_ptr[index] = sock_r;
     }
   }
@@ -420,43 +523,27 @@ pfcp::fteid_t pfcp_switch::generate_fteid_n3() {
 pfcp_switch::pfcp_switch()
     : seid_generator_(),
       teid_n3_generator__(),
-      ue_ipv4_hbo2pfcp_pdr(PFCP_SWITCH_MAX_PDRS),
-      ul_n3_teid2pfcp_pdr(PFCP_SWITCH_MAX_PDRS),
-      up_seid2pfcp_sessions(PFCP_SWITCH_MAX_SESSIONS),
+      up_seid2pfcp_sessions(PFCP_SWITCH_MAX_SESSIONS, rcu_),
+      ul_n3_teid2pfcp_pdr(PFCP_SWITCH_MAX_PDRS, rcu_),
+      ue_ipv4_hbo2pfcp_pdr(PFCP_SWITCH_MAX_PDRS, rcu_),
       sock_w(0) {
   bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
-  num_threads_   = upf_cfg.n6.thread_rd_sched_params.thread_pool_size;
-  int num_blocks = num_threads_ * 16;
-  free_pool_     = new folly::MPMCQueue<iovec_q_item_t*>(num_blocks);
-  work_pool_     = new folly::MPMCQueue<iovec_q_item_t*>(num_blocks);
+  socks_r_ptr                   = new int[16];
+  prThreadToCancel              = (pthread_t) 0;
 
-  socks_r_ptr      = new int[16];
-  prThreadToCancel = (pthread_t) 0;
-
-  recv_buffer_alloc_ = (char*) calloc(num_blocks, PFCP_SWITCH_RECV_BUFFER_SIZE);
-
-  for (int i = 0; i < num_blocks; i++) {
-    iovec_q_item_s* v = (iovec_q_item_s*) calloc(1, sizeof(iovec_q_item_s));
-    v->msg_iov.iov_base =
-        (void*) ((uintptr_t) calloc(1, PFCP_SWITCH_RECV_BUFFER_SIZE) + (uintptr_t) ROOM_FOR_GTPV1U_G_PDU);
-    v->msg_iov.iov_len = PFCP_SWITCH_RECV_BUFFER_SIZE - ROOM_FOR_GTPV1U_G_PDU;
-    v->msg.msg_iovlen  = 1;
-    v->msg.msg_flags   = 0;
-    v->msg.msg_control = nullptr;
-    v->msg.msg_controllen = 0;
-    free_pool_->blockingWrite(v);
-  }
   if (!isBpfAccelerationEnabled) {
-    // num_threads_ is currently fixed to 1
-    for (int i = 0; i < num_threads_; i++) {
-      pwThread_ = std::thread(
-          &pfcp_switch::pdn_worker, this, i, upf_cfg.n6.thread_rd_sched_params);
-    }
     timer_min_commit_interval_id = 0;
     timer_max_commit_interval_id = 0;
     cp_fseid2pfcp_sessions = {}, sock_w = -1;
     pdn_if_index = -1;
     setup_pdn_interfaces();
+
+    // Usage reporting for the simple switch. The BPF datapath measures in
+    // urr_config_map and reports from its own path, so this thread is only
+    // started here.
+    if (upf_cfg.enable_urr) {
+      thread_usage_report_ = std::thread(&pfcp_switch::usage_report_loop, this);
+    }
   }
 }
 
@@ -467,21 +554,20 @@ pfcp_switch::~pfcp_switch() {
   for (int index = 0; index < upf_cfg.pdns.size(); index++) {
     shutdown(socks_r_ptr[index], SHUT_RDWR);
   }
-  if (prThreadToCancel != ((pthread_t) 0)) {
-    res = pthread_cancel(prThreadToCancel);
-    if (res != 0) {
-      Logger::pfcp_switch().error("could not cancel pdn_read thread");
+  for (auto& t : prThreads_) {
+    if (t.joinable()) {
+      res = pthread_cancel(t.native_handle());
+      if (res != 0) {
+        Logger::pfcp_switch().error("could not cancel pdn_read thread");
+      }
     }
-    // Stopping the pdn_worker thread
-    terminatePW_        = true;
-    iovec_q_item_t* iov = nullptr;
-    work_pool_->blockingWrite(iov);
-    while (terminatePW_) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-    prThread_.join();
-    pwThread_.join();
   }
+  for (auto& t : prThreads_) {
+    if (t.joinable()) t.join();
+  }
+  usage_report_stop_.store(true, std::memory_order_relaxed);
+  if (thread_usage_report_.joinable()) thread_usage_report_.join();
+  for (int fd : tun_fds_) close(fd);
   delete[] socks_r_ptr;
 }
 
@@ -505,11 +591,10 @@ bool pfcp_switch::get_pfcp_session_by_cp_fseid(
 bool pfcp_switch::get_pfcp_session_by_up_seid(
     const uint64_t cp_seid,
     std::shared_ptr<pfcp::pfcp_session>& session) const {
-  folly::AtomicHashMap<
-      uint64_t, std::shared_ptr<pfcp::pfcp_session>>::const_iterator sit =
-      up_seid2pfcp_sessions.find(cp_seid);
-  if (sit == up_seid2pfcp_sessions.end()) return false;
-  session = sit->second;
+  oai::upf::rcu_guard g(rcu_);
+  const auto* v = up_seid2pfcp_sessions.find(cp_seid);
+  if (!v) return false;
+  session = *v;  // control-plane caller wants ownership
   return true;
 }
 
@@ -517,11 +602,10 @@ bool pfcp_switch::get_pfcp_session_by_up_seid(
 bool pfcp_switch::get_pfcp_ul_pdrs_by_up_teid(
     const teid_t teid,
     std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>& pdrs) const {
-  folly::AtomicHashMap<
-      teid_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>::
-      const_iterator pit = ul_n3_teid2pfcp_pdr.find(teid);
-  if (pit == ul_n3_teid2pfcp_pdr.end()) return false;
-  pdrs = pit->second;
+  oai::upf::rcu_guard g(rcu_);
+  const auto* v = ul_n3_teid2pfcp_pdr.find(teid);
+  if (!v) return false;
+  pdrs = *v;
   return true;
 }
 
@@ -529,11 +613,10 @@ bool pfcp_switch::get_pfcp_ul_pdrs_by_up_teid(
 bool pfcp_switch::get_pfcp_dl_pdrs_by_ue_ip(
     const uint32_t ue_ip,
     std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>& pdrs) const {
-  folly::AtomicHashMap<
-      uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>::
-      const_iterator pit = ue_ipv4_hbo2pfcp_pdr.find(ue_ip);
-  if (pit == ue_ipv4_hbo2pfcp_pdr.end()) return false;
-  pdrs = pit->second;
+  oai::upf::rcu_guard g(rcu_);
+  const auto* v = ue_ipv4_hbo2pfcp_pdr.find(ue_ip);
+  if (!v) return false;
+  pdrs = *v;
   return true;
 }
 
@@ -545,15 +628,222 @@ void pfcp_switch::add_pfcp_session_by_cp_fseid(
 }
 
 //------------------------------------------------------------------------------
+// send_usage_report -- 3GPP TS 29.244 §7.5.8, Usage Report within a Session
+// Report Request.
+//
+// Reports the volume accumulated since the previous report, not a running
+// total: the SMF sums the deltas, and a delta stays correct across a restart
+// of either end in a way a cumulative counter does not.
+//------------------------------------------------------------------------------
+bool pfcp_switch::send_usage_report(
+    std::shared_ptr<pfcp::pfcp_session>& session, bool periodic) {
+  if (!session) return false;
+
+  // The periodic thread and session teardown can both land here for the same
+  // session. Reading the counters, moving the watermark and taking a sequence
+  // number have to happen as one step, or two reports overlap and the SMF
+  // either double-counts a delta or never sees one.
+  std::lock_guard<std::mutex> lk(session->report_mutex);
+
+  const uint64_t ul  = session->ul_octets.load(std::memory_order_relaxed);
+  const uint64_t dl  = session->dl_octets.load(std::memory_order_relaxed);
+  const uint64_t ulp = session->ul_packets.load(std::memory_order_relaxed);
+  const uint64_t dlp = session->dl_packets.load(std::memory_order_relaxed);
+
+  const uint64_t d_ul  = ul - session->reported_ul_octets;
+  const uint64_t d_dl  = dl - session->reported_dl_octets;
+  const uint64_t d_ulp = ulp - session->reported_ul_packets;
+  const uint64_t d_dlp = dlp - session->reported_dl_packets;
+
+  // Nothing moved: a report saying zero tells the SMF nothing it cannot
+  // already assume, and one per session per period would be pure noise.
+  if (d_ul == 0 && d_dl == 0) return false;
+
+  pfcp::pfcp_session_report_request h;
+
+  pfcp::report_type_t report = {};
+  report.usar                = 1;  // Usage Report -- §8.2.21
+  h.set(report);
+
+  pfcp::usage_report_within_pfcp_session_report_request ur = {};
+
+  // One URR per session is what the SMF creates here; if it sent several we
+  // still have a single set of counters, so report against the first.
+  pfcp::urr_id_t urr_id = {};
+  if (!session->urrs.empty() && session->urrs[0] &&
+      session->urrs[0]->urr_id.first) {
+    urr_id = session->urrs[0]->urr_id.second;
+  }
+  ur.set(urr_id);
+
+  pfcp::ur_seqn_t seqn = {};
+  seqn.ur_seqn         = session->ur_seqn++;
+  ur.set(seqn);
+
+  pfcp::usage_report_trigger_t trigger = {};
+  if (periodic) {
+    trigger.perio = 1;  // periodic reporting
+  } else {
+    trigger.immer = 1;  // immediate report (session teardown / query)
+  }
+  ur.set(trigger);
+
+  pfcp::volume_measurement_t vol = {};
+  vol.tovol                      = 1;
+  vol.ulvol                      = 1;
+  vol.dlvol                      = 1;
+  vol.tonop                      = 1;
+  vol.ulnop                      = 1;
+  vol.dlnop                      = 1;
+  vol.total_volume               = d_ul + d_dl;
+  vol.uplink_volume              = d_ul;
+  vol.downlink_volume            = d_dl;
+  vol.total_nop                  = d_ulp + d_dlp;
+  vol.uplink_nop                 = d_ulp;
+  vol.downlink_nop               = d_dlp;
+  ur.set(vol);
+
+  pfcp::duration_measurement_t dur = {};
+  dur.duration =
+      std::chrono::duration_cast<std::chrono::seconds>(
+          std::chrono::steady_clock::now() - session->measurement_start)
+          .count();
+  ur.set(dur);
+
+  h.set(ur);
+
+  // Advance the watermark only once the message is handed to N4. The counters
+  // keep climbing underneath; taking the delta against the values read at the
+  // top means traffic during this call is counted next time, never dropped.
+  session->reported_ul_octets  = ul;
+  session->reported_dl_octets  = dl;
+  session->reported_ul_packets = ulp;
+  session->reported_dl_packets = dlp;
+
+  upf_n4_inst->send_n4_msg(session->cp_fseid, h);
+
+  Logger::pfcp_switch().debug(
+      "Usage Report seid 0x%lx: ul=%lu B (%lu pkt) dl=%lu B (%lu pkt)",
+      session->seid, d_ul, d_ulp, d_dl, d_dlp);
+  return true;
+}
+
+//------------------------------------------------------------------------------
+// usage_report_loop -- one thread for every session, not one per session.
+//
+// Reporting is a control-plane rate: a handful of messages per session per
+// minute. A thread each would cost more in stacks and scheduler pressure than
+// the reports are worth, so this walks the session table on a fixed tick.
+//------------------------------------------------------------------------------
+void pfcp_switch::usage_report_loop() {
+  // §8.2.42 Measurement Period is per URR; the SMF in this deployment does not
+  // send one, so fall back to a period that is frequent enough to be useful
+  // and rare enough to be invisible.
+  constexpr int kPeriodSeconds = 30;
+
+  while (!usage_report_stop_.load(std::memory_order_relaxed)) {
+    // One-second ticks, so shutdown does not wait out a whole period.
+    for (int i = 0; i < kPeriodSeconds; i++) {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+      if (usage_report_stop_.load(std::memory_order_relaxed)) return;
+    }
+    if (!upf_cfg.enable_urr) continue;
+
+    std::vector<std::shared_ptr<pfcp::pfcp_session>> snapshot;
+    up_seid2pfcp_sessions.for_each(
+        [&snapshot](
+            const uint64_t&, const std::shared_ptr<pfcp::pfcp_session>& v) {
+          if (v) snapshot.push_back(v);
+        });
+    for (auto& sess : snapshot) send_usage_report(sess, true);
+  }
+}
+
+//------------------------------------------------------------------------------
+// apply_qos_mbr / release_qos_mbr -- QER Maximum Bitrate enforcement.
+//
+// A QER carries the MBR (3GPP TS 29.244 §8.2.8) and QFI (§8.2.89); the
+// downlink TEID that identifies the flow on the wire comes from the FAR's
+// Outer Header Creation. Pair them up and hand the rate to the policer.
+// Nothing is attached to the interface until a session actually has a rate.
+//------------------------------------------------------------------------------
+void pfcp_switch::apply_qos_mbr(std::shared_ptr<pfcp::pfcp_session>& session) {
+  if (!upf_cfg.enable_qos || upf_cfg.enable_bpf_datapath || !session) return;
+
+  // Several QERs can bound one session (a session-AMBR one plus per-flow
+  // ones). Take the tightest in each direction: whichever limit is lowest is
+  // the one the session must not exceed, and picking any other would let it
+  // through.
+  uint64_t ul_mbr = 0;
+  uint64_t dl_mbr = 0;
+  uint8_t qfi     = session->qfi;
+  for (const auto& q : session->qers) {
+    if (!q) continue;
+    if (q->maximum_bitrate.first) {
+      // PFCP expresses MBR in kbit/s (§8.2.8).
+      const uint64_t ul = q->maximum_bitrate.second.ul_mbr * 1000ULL;
+      const uint64_t dl = q->maximum_bitrate.second.dl_mbr * 1000ULL;
+      if (ul > 0 && (ul_mbr == 0 || ul < ul_mbr)) ul_mbr = ul;
+      if (dl > 0 && (dl_mbr == 0 || dl < dl_mbr)) dl_mbr = dl;
+    }
+    if (q->qos_flow_id.first) qfi = q->qos_flow_id.second.qfi;
+  }
+
+  std::vector<oai::upf::qos_mbr::teid_rate> uplink, downlink;
+
+  // Downlink: the TEID the packet will carry towards the gNB comes from the
+  // FAR's Outer Header Creation. The uplink FAR has none, so this naturally
+  // picks out the downlink ones.
+  for (const auto& f : session->fars) {
+    if (!f || !f->forwarding_parameters.first) continue;
+    const auto& fp = f->forwarding_parameters.second;
+    if (!fp.outer_header_creation.first) continue;
+    const uint32_t teid = fp.outer_header_creation.second.teid;
+    if (teid != 0) downlink.push_back({teid, dl_mbr});
+  }
+
+  // Uplink: the TEID arriving from the gNB is the one this UPF allocated and
+  // reported in the PDI's local F-TEID. Metering it on ingress drops an
+  // over-limit packet before the UPF spends anything decapsulating it.
+  for (const auto& p : session->pdrs) {
+    if (!p || !p->pdi.first) continue;
+    const auto& pdi = p->pdi.second;
+    if (!pdi.local_fteid.first) continue;
+    const uint32_t teid = pdi.local_fteid.second.teid;
+    if (teid != 0) uplink.push_back({teid, ul_mbr});
+  }
+
+  Logger::pfcp_switch().debug(
+      "QoS/MBR: seid 0x%lx has %zu QER(s), ul_mbr=%lu dl_mbr=%lu bps, "
+      "%zu uplink + %zu downlink TEID(s), qfi=%u",
+      session->seid, session->qers.size(), ul_mbr, dl_mbr, uplink.size(),
+      downlink.size(), qfi);
+
+  oai::upf::qos_mbr::instance().set_rates(
+      upf_cfg.n3.if_name, session->seid, uplink, downlink);
+}
+
+//------------------------------------------------------------------------------
+void pfcp_switch::release_qos_mbr(
+    std::shared_ptr<pfcp::pfcp_session>& session) {
+  if (session) oai::upf::qos_mbr::instance().clear_rates(session->seid);
+}
+
+//------------------------------------------------------------------------------
 void pfcp_switch::add_pfcp_session_by_up_seid(
     const uint64_t seid, std::shared_ptr<pfcp::pfcp_session>& session) {
-  std::pair<uint64_t, std::shared_ptr<pfcp::pfcp_session>> entry(seid, session);
-  up_seid2pfcp_sessions.insert(entry);
+  up_seid2pfcp_sessions.insert(seid, session);
 }
 
 //------------------------------------------------------------------------------
 void pfcp_switch::remove_pfcp_session(
     std::shared_ptr<pfcp::pfcp_session>& session) {
+  // Last chance to account for this session: whatever it moved since the
+  // previous periodic report would otherwise be lost with it.
+  if (upf_cfg.enable_urr && !upf_cfg.enable_bpf_datapath) {
+    send_usage_report(session, false);
+  }
+  release_qos_mbr(session);
   session->cleanup();
   cp_fseid2pfcp_sessions.erase(session->cp_fseid);
   up_seid2pfcp_sessions.erase(session->seid);
@@ -575,35 +865,158 @@ void pfcp_switch::remove_pfcp_session(const pfcp::fseid_t& cp_fseid) {
 //------------------------------------------------------------------------------
 void pfcp_switch::add_pfcp_ul_pdr_by_up_teid(
     const teid_t teid, std::shared_ptr<pfcp::pfcp_pdr>& pdr) {
-  folly::AtomicHashMap<
-      teid_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>::
-      const_iterator pit = ul_n3_teid2pfcp_pdr.find(teid);
-  if (pit == ul_n3_teid2pfcp_pdr.end()) {
-    std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs =
-        std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>(
-            new std::vector<std::shared_ptr<pfcp::pfcp_pdr>>());
-    pdrs->push_back(pdr);
+  // Copy-on-write. The old code push_back()ed into the live vector while
+  // datapath threads were iterating it -- a race that no amount of reference
+  // counting fixed, because the shared_ptr protected the vector object, not
+  // its contents. Building a new vector and publishing it means a reader
+  // always sees one immutable, internally consistent list; the old one is
+  // freed by the RCU domain once those readers have finished with it.
+  auto fresh = std::make_shared<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>();
+  {
+    oai::upf::rcu_guard g(rcu_);
+    const auto* cur = ul_n3_teid2pfcp_pdr.find(teid);
+    if (cur) *fresh = **cur;  // copy the existing entries
+  }
+  // Keep the vector ordered by precedence, using pfcp_pdr::operator< exactly
+  // as the original did: insert before the first entry that compares less.
+  // The original returned without inserting when no such entry existed, so a
+  // PDR that sorted last was silently dropped; appending fixes that.
+  auto it = fresh->begin();
+  while (it != fresh->end() && !(*(*it) < *pdr)) ++it;
+  fresh->insert(it, pdr);
+  ul_n3_teid2pfcp_pdr.insert(teid, fresh);
+}
 
-    std::pair<
-        teid_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>
-        entry(teid, pdrs);
-    // Logger::pfcp_switch().info( "add_pfcp_ul_pdr_by_up_teid tunnel " TEID_FMT
-    // " ", teid);
-    ul_n3_teid2pfcp_pdr.insert(entry);
-  } else {
-    // sort by precedence
-    // const std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>&
-    // spdrs = pit->second;
-    std::vector<std::shared_ptr<pfcp::pfcp_pdr>>* pdrs = pit->second.get();
-    for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it =
-             pdrs->begin();
-         it < pdrs->end(); ++it) {
-      if (*(it->get()) < *(pdr.get())) {
-        pit->second->insert(it, pdr);
-        return;
+//------------------------------------------------------------------------------
+// remove_pdr_from_lookup -- take one PDR out of the table that feeds it.
+//
+// A PFCP Remove PDR used to take the rule out of the session and stop there,
+// so the TEID and UE-IP tables kept forwarding through it until the whole
+// session was deleted. Publishing a new vector without that PDR closes the
+// window without one: readers hold an rcu_guard and see either list whole.
+//------------------------------------------------------------------------------
+void pfcp_switch::remove_pdr_from_lookup(
+    const std::shared_ptr<pfcp::pfcp_pdr>& pdr) {
+  if (!pdr || !pdr->pdi.first || !pdr->pdi.second.source_interface.first)
+    return;
+  const auto& pdi = pdr->pdi.second;
+
+  if (pdi.source_interface.second.interface_value == INTERFACE_VALUE_ACCESS &&
+      pdi.local_fteid.first) {
+    const teid_t teid = pdi.local_fteid.second.teid;
+    auto fresh =
+        std::make_shared<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>();
+    {
+      oai::upf::rcu_guard g(rcu_);
+      const auto* cur = ul_n3_teid2pfcp_pdr.find(teid);
+      if (cur) {
+        for (const auto& p : **cur)
+          if (p != pdr) fresh->push_back(p);
       }
     }
+    if (fresh->empty())
+      remove_pfcp_ul_pdrs_by_up_teid(teid);
+    else
+      ul_n3_teid2pfcp_pdr.insert(teid, fresh);
+
+  } else if (
+      pdi.source_interface.second.interface_value == INTERFACE_VALUE_CORE &&
+      pdi.ue_ip_address.first && pdi.ue_ip_address.second.v4) {
+    const uint32_t ue_ip =
+        be32toh(pdi.ue_ip_address.second.ipv4_address.s_addr);
+    auto fresh =
+        std::make_shared<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>();
+    {
+      oai::upf::rcu_guard g(rcu_);
+      const auto* cur = ue_ipv4_hbo2pfcp_pdr.find(ue_ip);
+      if (cur) {
+        for (const auto& p : **cur)
+          if (p != pdr) fresh->push_back(p);
+      }
+    }
+    if (fresh->empty())
+      remove_pfcp_dl_pdrs_by_ue_ip(ue_ip);  // also drops any framed routes
+    else
+      ue_ipv4_hbo2pfcp_pdr.insert(ue_ip, fresh);
   }
+}
+
+//------------------------------------------------------------------------------
+// replace_pdr_in_lookup -- point the tables at an updated PDR.
+//
+// The key lives in the PDI, so an Update PDR can move the rule to a different
+// TEID or UE address. Under the same key one publish swaps the rule and a
+// reader never sees it missing; across keys the new entry goes in first, so
+// the flow stays reachable while the old one is retired.
+//------------------------------------------------------------------------------
+void pfcp_switch::replace_pdr_in_lookup(
+    const std::shared_ptr<pfcp::pfcp_pdr>& old_pdr,
+    const std::shared_ptr<pfcp::pfcp_pdr>& new_pdr) {
+  if (!old_pdr || !new_pdr) return;
+
+  const auto key_of = [](const std::shared_ptr<pfcp::pfcp_pdr>& p, bool& is_ul,
+                         teid_t& teid, uint32_t& ue_ip) {
+    is_ul = false;
+    teid  = 0;
+    ue_ip = 0;
+    if (!p->pdi.first || !p->pdi.second.source_interface.first) return false;
+    const auto& pdi = p->pdi.second;
+    if (pdi.source_interface.second.interface_value == INTERFACE_VALUE_ACCESS &&
+        pdi.local_fteid.first) {
+      is_ul = true;
+      teid  = pdi.local_fteid.second.teid;
+      return true;
+    }
+    if (pdi.source_interface.second.interface_value == INTERFACE_VALUE_CORE &&
+        pdi.ue_ip_address.first && pdi.ue_ip_address.second.v4) {
+      ue_ip = be32toh(pdi.ue_ip_address.second.ipv4_address.s_addr);
+      return true;
+    }
+    return false;
+  };
+
+  bool o_ul = false, n_ul = false;
+  teid_t o_teid = 0, n_teid = 0;
+  uint32_t o_ip = 0, n_ip = 0;
+  const bool o_keyed = key_of(old_pdr, o_ul, o_teid, o_ip);
+  const bool n_keyed = key_of(new_pdr, n_ul, n_teid, n_ip);
+
+  if (!n_keyed) {  // the update left it with no key of its own
+    if (o_keyed) remove_pdr_from_lookup(old_pdr);
+    return;
+  }
+
+  // Same key: one copy-on-write publish with the old rule swapped out.
+  if (o_keyed && o_ul == n_ul &&
+      ((n_ul && o_teid == n_teid) || (!n_ul && o_ip == n_ip))) {
+    auto fresh =
+        std::make_shared<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>();
+    {
+      oai::upf::rcu_guard g(rcu_);
+      const auto* cur = n_ul ? ul_n3_teid2pfcp_pdr.find(n_teid) :
+                               ue_ipv4_hbo2pfcp_pdr.find(n_ip);
+      if (cur) {
+        for (const auto& p : **cur)
+          fresh->push_back(p == old_pdr ? new_pdr : p);
+      }
+    }
+    if (fresh->empty()) fresh->push_back(new_pdr);
+    if (n_ul)
+      ul_n3_teid2pfcp_pdr.insert(n_teid, fresh);
+    else
+      ue_ipv4_hbo2pfcp_pdr.insert(n_ip, fresh);
+    return;
+  }
+
+  // The key moved: file it under the new one before retiring the old.
+  if (n_ul) {
+    auto p = new_pdr;
+    add_pfcp_ul_pdr_by_up_teid(n_teid, p);
+  } else {
+    auto p = new_pdr;
+    add_pfcp_dl_pdr_by_ue_ip(n_ip, p);
+  }
+  if (o_keyed) remove_pdr_from_lookup(old_pdr);
 }
 
 //------------------------------------------------------------------------------
@@ -614,54 +1027,19 @@ void pfcp_switch::remove_pfcp_ul_pdrs_by_up_teid(const teid_t teid) {
 //------------------------------------------------------------------------------
 void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
     const uint32_t ue_ip, std::shared_ptr<pfcp::pfcp_pdr>& pdr) {
-  folly::AtomicHashMap<
-      uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>::
-      const_iterator pit = ue_ipv4_hbo2pfcp_pdr.find(ue_ip);
-
-  if (pit == ue_ipv4_hbo2pfcp_pdr.end()) {
-    std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs =
-        std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>(
-            new std::vector<std::shared_ptr<pfcp::pfcp_pdr>>());
-    pdrs->push_back(pdr);
-    std::pair<
-        uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>
-        entry(ue_ip, pdrs);
-    ue_ipv4_hbo2pfcp_pdr.insert(entry);
-    if (!upf_cfg.enable_bpf_datapath && upf_cfg.enable_fr &&
-        pdr->pdi.second.framed_route.first) {
-      for (const auto& item : pdr->pdi.second.framed_route.second) {
-        Logger::pfcp_switch().debug("framed routing ip: %s", item.framed_route);
-        fr->addFramedRoute(ue_ip, item);
-      }
+  // Same copy-on-write rule as the uplink side. Note the previous code
+  // replaced the whole entry for a repeat UE IP, so a single-PDR vector
+  // preserves that behaviour.
+  auto fresh = std::make_shared<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>();
+  fresh->push_back(pdr);
+  const bool is_new = (ue_ipv4_hbo2pfcp_pdr.find(ue_ip) == nullptr);
+  ue_ipv4_hbo2pfcp_pdr.insert(ue_ip, fresh);
+  if (is_new && !upf_cfg.enable_bpf_datapath && upf_cfg.enable_fr &&
+      pdr->pdi.second.framed_route.first) {
+    for (const auto& item : pdr->pdi.second.framed_route.second) {
+      Logger::pfcp_switch().debug("framed routing ip: %s", item.framed_route);
+      fr->addFramedRoute(ue_ip, item);
     }
-    // Logger::pfcp_switch().info( "add_pfcp_dl_pdr_by_ue_ip UE IP %8x", ue_ip);
-  } else {
-    // TODO: Dirty fix — replace existing entry for same UE IP
-    ue_ipv4_hbo2pfcp_pdr.erase(ue_ip);
-    std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs =
-        std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>(
-            new std::vector<std::shared_ptr<pfcp::pfcp_pdr>>());
-    pdrs->push_back(pdr);
-    std::pair<
-        uint32_t, std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>>
-        entry(ue_ip, pdrs);
-    ue_ipv4_hbo2pfcp_pdr.insert(entry);
-
-    /*
-    // sort by precedence
-    // const std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>&
-    // spdrs = pit->second;
-    std::vector<std::shared_ptr<pfcp::pfcp_pdr>>* pdrs = pit->second.get();
-    for (std::vector<std::shared_ptr<pfcp::pfcp_pdr>>::iterator it =
-             pdrs->begin();
-         it < pdrs->end(); ++it) {
-      if (*(it->get()) < *(pdr.get())) {
-        pit->second->insert(it, pdr);
-        return;
-      }
-    }
-
-*/
   }
 }
 
@@ -676,9 +1054,10 @@ void pfcp_switch::remove_pfcp_dl_pdrs_by_ue_ip(const uint32_t ue_ip) {
 //------------------------------------------------------------------------------
 std::string pfcp_switch::to_string() const {
   std::string s = {};
-  for (const auto& it : up_seid2pfcp_sessions) {
-    s.append(it.second->to_string());
-  }
+  up_seid2pfcp_sessions.for_each(
+      [&s](const uint64_t&, const std::shared_ptr<pfcp::pfcp_session>& v) {
+        s.append(v->to_string());
+      });
   return s;
 }
 
@@ -792,10 +1171,11 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             break;
           }
 
-          // Create QER if BPF acceleration is enabled.
-          // enable_qos gate: skip QER handling when QoS enforcement is
-          // disabled.
-          if (isBpfAccelerationEnabled && upf_cfg.enable_qos) {
+          // QERs are parsed whenever QoS is enabled, for either datapath.
+          // The simple switch enforces the Maximum Bitrate with a token bucket
+          // on TC egress (see qos_mbr.hpp); it used to skip QER IEs entirely
+          // because only the BPF datapath could act on them.
+          if (upf_cfg.enable_qos) {
             pfcp::qer_id_t qer_id = {};
             if (cr_pdr.get(qer_id)) {
               pfcp::create_qer cr_qer = {};
@@ -832,7 +1212,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
       // urr_volume_counters_map in the BPF program.
       // enable_urr gate: when URR is disabled, skip SMF-sent Create URR IEs
       // (Open5GS/Free5GC SMFs send URRs regardless of the UPF's local setting).
-      if (isBpfAccelerationEnabled && upf_cfg.enable_urr) {
+      if (upf_cfg.enable_urr) {
         if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
           for (auto it : req->pfcp_ies.create_urrs) {
             create_urr& cr_urr = it;
@@ -894,6 +1274,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         s = std::shared_ptr<pfcp_session>(session);
         add_pfcp_session_by_cp_fseid(fseid, s);
         add_pfcp_session_by_up_seid(session->seid, s);
+        apply_qos_mbr(s);
         // start_timer_min_commit_interval();
         // start_timer_max_commit_interval();
 
@@ -924,9 +1305,10 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
 
   if (Logger::should_log(spdlog::level::debug)) {
     // Print PDU session rules table
-    for (const auto& it : up_seid2pfcp_sessions) {
-      std::cout << it.second->to_string();
-    }
+    up_seid2pfcp_sessions.for_each(
+        [](const uint64_t&, const std::shared_ptr<pfcp::pfcp_session>& v) {
+          std::cout << v->to_string();
+        });
   }
 }
 
@@ -972,6 +1354,14 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
       remove_pdr& pdr = it;
 
+      // Take it out of the datapath tables first, while the rule is still
+      // reachable through the session.
+      std::shared_ptr<pfcp::pfcp_pdr> spdr = {};
+      if (pdr.pdr_id.first && session->get(pdr.pdr_id.second.rule_id, spdr) &&
+          spdr) {
+        remove_pdr_from_lookup(spdr);
+      }
+
       if (not session->remove(pdr, cause, offending_ie.offending_ie)) {
         if (cause.cause_value ==
             CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE) {
@@ -1008,14 +1398,20 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     }
 
     // ---- Remove QERs (BPF only) ---------------------------------------------
-    // enable_qos gate: skip QER handling when QoS enforcement is disabled.
-    if (isBpfAccelerationEnabled && upf_cfg.enable_qos) {
+    // Both datapaths handle QERs: BPF via qer_config_map, the simple switch
+    // via a token bucket (see apply_qos_mbr).
+    if (upf_cfg.enable_qos) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.remove_qers) {
-          Logger::upf_app().info("Modify datapath: remove(qer)");
-          call_datapath(
-              nullptr, req, nullptr, session, session_manager,
-              &SessionManager::ModifySession);
+          // Only the BPF datapath has a SessionManager to call: it is null
+          // under the simple switch, so calling through it segfaults. The
+          // rule removal below is what both datapaths share.
+          if (isBpfAccelerationEnabled) {
+            Logger::upf_app().info("Modify datapath: remove(qer)");
+            call_datapath(
+                nullptr, req, nullptr, session, session_manager,
+                &SessionManager::ModifySession);
+          }
           remove_qer& qer = it;
 
           if (not session->remove(qer, cause, offending_ie.offending_ie)) {
@@ -1035,7 +1431,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     // Removes URR from session->urrs so the BPF urr_config_map entry is
     // cleaned up on the next ModifyPipeline call via call_datapath().
     // enable_urr gate (see establishment path).
-    if (isBpfAccelerationEnabled && upf_cfg.enable_urr) {
+    if (upf_cfg.enable_urr) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.remove_urrs) {
           remove_urr& urr = it;
@@ -1144,8 +1540,9 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     }
 
     // ---- Create QERs (BPF only) ---------------------------------------------
-    // enable_qos gate: skip QER handling when QoS enforcement is disabled.
-    if (isBpfAccelerationEnabled && upf_cfg.enable_qos) {
+    // Both datapaths handle QERs: BPF via qer_config_map, the simple switch
+    // via a token bucket (see apply_qos_mbr).
+    if (upf_cfg.enable_qos) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.create_qers) {
           create_qer& cr_qer = it;
@@ -1160,7 +1557,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     // Populates session->urrs so that SessionProgramManager::ModifyPipeline
     // can write urr_config_map entries for the new URRs.
     // enable_urr gate (see establishment path).
-    if (isBpfAccelerationEnabled && upf_cfg.enable_urr) {
+    if (upf_cfg.enable_urr) {
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         for (auto it : req->pfcp_ies.create_urrs) {
           create_urr& cr_urr = it;
@@ -1224,8 +1621,8 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           resp->pfcp_ies.set(failed_rule);
         }
       }
-      // enable_qos gate: skip QER handling when QoS enforcement is disabled.
-      if (isBpfAccelerationEnabled && upf_cfg.enable_qos) {
+      // Both datapaths handle QERs -- see the Create QER block above.
+      if (upf_cfg.enable_qos) {
         for (auto it : req->pfcp_ies.update_qers) {
           update_qer& qer     = it;
           uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
@@ -1244,7 +1641,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       // urr_volume_counters_map counters are preserved (BPF_NOEXIST semantics
       // in PopulateUrrConfigMap).
       // enable_urr gate (see establishment path).
-      if (isBpfAccelerationEnabled && upf_cfg.enable_urr) {
+      if (upf_cfg.enable_urr) {
         for (auto it : req->pfcp_ies.update_urrs) {
           update_urr& urr     = it;
           uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
@@ -1299,6 +1696,12 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           nullptr, req, nullptr, session, session_manager,
           &SessionManager::ModifySession);
     }
+
+    // Re-programme the rate limiters. This is the hook that matters in
+    // practice: the downlink FAR only learns its Outer Header Creation TEID
+    // once the gNB reports its N3 tunnel, which arrives here and not at
+    // establishment.
+    apply_qos_mbr(s);
   }
 
   resp->pfcp_ies.set(cause);
@@ -1309,9 +1712,10 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
   if (Logger::should_log(spdlog::level::debug)) {
     // Print PDU session rules table
-    for (const auto& it : up_seid2pfcp_sessions) {
-      std::cout << it.second->to_string();
-    }
+    up_seid2pfcp_sessions.for_each(
+        [](const uint64_t&, const std::shared_ptr<pfcp::pfcp_session>& v) {
+          std::cout << v->to_string();
+        });
   }
 }
 
@@ -1352,9 +1756,10 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
 
   if (Logger::should_log(spdlog::level::debug)) {
     // Print PDU session rules table
-    for (const auto& it : up_seid2pfcp_sessions) {
-      std::cout << it.second->to_string();
-    }
+    up_seid2pfcp_sessions.for_each(
+        [](const uint64_t&, const std::shared_ptr<pfcp::pfcp_session>& v) {
+          std::cout << v->to_string();
+        });
   }
 }
 
@@ -1373,10 +1778,16 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
     const endpoint& r_endpoint, const uint32_t tunnel_id) {
   bool isInAccess = false;
   if (!upf_cfg.nsf.bypass_ul_pfcp_rules) {
-    std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs = {};
-    if (get_pfcp_ul_pdrs_by_up_teid(tunnel_id, pdrs)) {
-      bool nocp = false;
-      bool buff = false;
+    // One RCU critical section covers every pointer this packet touches.
+    // Nothing below copies a shared_ptr, so the packet costs two plain stores
+    // to this thread's own cache line instead of ~8 atomic RMWs on lines
+    // shared with every other core.
+    oai::upf::rcu_guard rg(rcu_);
+    const auto* pdrs_p = find_ul_pdrs(tunnel_id);
+    if (pdrs_p) {
+      const auto& pdrs = *pdrs_p;
+      bool nocp        = false;
+      bool buff        = false;
       for (auto it_pdr = pdrs->begin(); it_pdr < pdrs->end(); ++it_pdr) {
         isInAccess = (*it_pdr)->look_up_pack_in_access(
             iph, num_bytes, r_endpoint, tunnel_id);
@@ -1388,22 +1799,28 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
               fr_ue_ip, num_bytes, r_endpoint, tunnel_id);
         }
         if (isInAccess) {
-          Logger::pfcp_switch().info(
-              "PDR/PDI IP is %4x ",
-              it_pdr->get()
-                  ->pdi.second.ue_ip_address.second.ipv4_address.s_addr);
-          Logger::pfcp_switch().info("Upstream IP is %4x ", iph->saddr);
-          std::shared_ptr<pfcp::pfcp_session> ssession = {};
-          uint64_t lseid                               = 0;
+          // NOTE: no logging on the per-packet fast path.  These were info()
+          // calls, which pass should_log() at the shipped default log level
+          // (config.yaml: general: debug) and cost two fmt::sprintf plus a
+          // sink write on every uplink packet.
+          uint64_t lseid = 0;
           if ((*it_pdr)->get(lseid)) {
-            if (get_pfcp_session_by_up_seid(lseid, ssession)) {
+            const auto* sess_p = find_session(lseid);
+            if (sess_p) {
+              const auto& ssession  = *sess_p;
               pfcp::far_id_t far_id = {};
               if ((*it_pdr)->get(far_id)) {
                 std::shared_ptr<pfcp::pfcp_far> sfar = {};
                 if (ssession->get(far_id.far_id, sfar)) {
                   // Maintain uplink QFI in session
-                  uint8_t qfi   = (*it_pdr)->pdi.second.qfi.second.qfi;
-                  ssession->qfi = qfi;
+                  uint8_t qfi = (*it_pdr)->pdi.second.qfi.second.qfi;
+                  ssession->qfi.store(qfi, std::memory_order_relaxed);
+                  // Volume measured on the packet the UE actually sent, i.e.
+                  // after decapsulation -- what §8.2.44 asks for and what the
+                  // subscriber is billed on.
+                  ssession->ul_octets.fetch_add(
+                      num_bytes, std::memory_order_relaxed);
+                  ssession->ul_packets.fetch_add(1, std::memory_order_relaxed);
                   sfar->apply_forwarding_rules(iph, num_bytes, nocp, buff, 0);
                 }
               }
@@ -1464,9 +1881,14 @@ void pfcp_switch::pfcp_session_look_up_pack_in_core(
   struct iphdr* iph = (struct iphdr*) buffer;
   std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs;
 
+  // See the uplink path: one critical section, no per-packet refcounting.
+  oai::upf::rcu_guard rg(rcu_);
+
   if (iph->version == 4) {
-    uint32_t ue_ip    = be32toh(iph->daddr);
-    bool is_pdr_ue_ip = get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs);
+    uint32_t ue_ip     = be32toh(iph->daddr);
+    const auto* pdrs_p = find_dl_pdrs(ue_ip);
+    bool is_pdr_ue_ip  = (pdrs_p != nullptr);
+    if (is_pdr_ue_ip) pdrs = *pdrs_p;
     if (!is_pdr_ue_ip && upf_cfg.enable_fr) {
       uint32_t fr_ip = fr->retrieveUEIp(ue_ip);
       ue_ip          = fr_ip != 0 ? fr_ip : ue_ip;
@@ -1484,8 +1906,21 @@ void pfcp_switch::pfcp_session_look_up_pack_in_core(
               pfcp::far_id_t far_id = {};
               if ((*it)->get(far_id)) {
                 std::shared_ptr<pfcp::pfcp_far> sfar = {};
-                uint8_t qfi                          = ssession->qfi;
+                // The QFI belongs to the flow this packet matched, so read
+                // it from the matched rule, which is immutable once published.
+                // Resolving it through the session's QER list instead would
+                // mean walking a vector the control plane can be editing.
+                // Rules that carry no QFI fall back to the session-wide value
+                // learned from uplink traffic.
+                uint8_t qfi = ssession->qfi.load(std::memory_order_relaxed);
+                if ((*it)->pdi.first && (*it)->pdi.second.qfi.first) {
+                  qfi = (*it)->pdi.second.qfi.second.qfi;
+                }
                 if (ssession->get(far_id.far_id, sfar)) {
+                  // Counted before encapsulation, to match the uplink side.
+                  ssession->dl_octets.fetch_add(
+                      num_bytes, std::memory_order_relaxed);
+                  ssession->dl_packets.fetch_add(1, std::memory_order_relaxed);
                   sfar->apply_forwarding_rules(iph, num_bytes, nocp, buff, qfi);
                   if (buff) {
                     (*it)->buffering_requested(buffer, num_bytes);
