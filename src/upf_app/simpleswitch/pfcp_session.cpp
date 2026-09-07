@@ -1046,10 +1046,16 @@ bool pfcp_session::update(
       "pfcp_session::update(pdr) seid " SEID_FMT " PDR=%u", seid, pdr_id);
 
   // Find the PDR to update
-  for (auto& existing_pdr : pdrs) {
-    if (existing_pdr->pdr_id.rule_id == pdr_id) {
+  for (auto& slot : pdrs) {
+    if (slot->pdr_id.rule_id == pdr_id) {
       Logger::upf_n4().info(
           "  └─ Updating PDR %u in session " SEID_FMT, pdr_id, seid);
+
+      // Update a copy, not the rule the datapath is reading. The PDI carries
+      // the uplink TEID and the UE address, so editing it in place both races
+      // the packet threads and leaves the rule filed under its old key.
+      const std::shared_ptr<pfcp::pfcp_pdr> old_pdr = slot;
+      auto existing_pdr = std::make_shared<pfcp::pfcp_pdr>(*old_pdr);
 
       // Track what changed
       bool has_changes = false;
@@ -1104,6 +1110,14 @@ bool pfcp_session::update(
 
       if (!has_changes) {
         Logger::upf_n4().debug("     • No actual changes detected");
+      }
+
+      // Publish the new rule, then move the lookup tables onto it: the key
+      // moves with the PDI, so an update that changes the TEID or the UE
+      // address has to be re-filed or the new one is unreachable.
+      slot = existing_pdr;
+      if (pfcp_switch_inst) {
+        pfcp_switch_inst->replace_pdr_in_lookup(old_pdr, existing_pdr);
       }
 
       cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;

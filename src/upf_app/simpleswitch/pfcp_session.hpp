@@ -5,6 +5,10 @@
 #ifndef FILE_PFCP_SESSION_HPP_SEEN
 #define FILE_PFCP_SESSION_HPP_SEEN
 
+#include <atomic>
+#include <chrono>
+#include <mutex>
+
 #include "3gpp_29.244.h"
 #include "msg_pfcp.hpp"  // must precede FramedRouting.hpp (pfcp::framed_route_s)
 #include "framed_routing/FramedRouting.hpp"
@@ -59,7 +63,35 @@ class pfcp_session {
   // ---- PDN context ---------------------------------------------------------
   pfcp::pdn_type_value_e pdn_type;  ///< PDN type (IPv4/IPv6/IPv4v6/Ethernet),
                                     ///< default is 0 (undefined)
-  uint8_t qfi = 0x05;  ///< Default QFI for DN-originated packets (§8.2.89)
+  /// Fallback QFI for DN-originated packets (§8.2.89), learned from uplink
+  /// traffic when the downlink rule carries none. Several receive threads
+  /// touch it at once, so it is atomic; the value a downlink packet should
+  /// really carry comes from its own PDR or QER.
+  std::atomic<uint8_t> qfi{0x05};
+
+  /** @name Usage measurement (3GPP TS 29.244 §8.2.44 Volume Measurement)
+   *
+   *  Counted on the datapath, so they are touched per packet by whichever
+   *  thread owns the session's queue -- relaxed atomics: the reporting thread
+   *  wants a recent total, not a synchronised instant, and ordering against
+   *  other memory would cost more than the number is worth.
+   *
+   *  Reported values are deltas since the last report, which is what the SMF
+   *  accumulates; reported_* holds what was last sent.
+   *  @{ */
+  std::atomic<uint64_t> ul_octets{0};
+  std::atomic<uint64_t> dl_octets{0};
+  std::atomic<uint64_t> ul_packets{0};
+  std::atomic<uint64_t> dl_packets{0};
+  uint64_t reported_ul_octets  = 0;
+  uint64_t reported_dl_octets  = 0;
+  uint64_t reported_ul_packets = 0;
+  uint64_t reported_dl_packets = 0;
+  uint32_t ur_seqn             = 0;  ///< §8.2.52, increments per report sent
+  std::mutex report_mutex;           ///< one report at a time for this session
+  std::chrono::steady_clock::time_point measurement_start =
+      std::chrono::steady_clock::now();
+  /** @} */
 
   // TO DO better than this :(sooner the better)  when inserting or removing new
   // PDRs, FARS, should not conflict with switching operations
