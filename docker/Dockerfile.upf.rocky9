@@ -66,7 +66,6 @@ RUN microdnf update -y && \
       initscripts \
       libicu \
       boost \
-      libevent \
       libnl3 \
       #libasan \
       findutils \
@@ -83,10 +82,6 @@ COPY --from=oai-upf-builder \
 
 # Copying installed libraries from builder
 COPY --from=oai-upf-builder \
-# Currently we keep these folly dependencies from the builder
-    /lib64/libgflags.so.2.* \
-    /lib64/libglog.so.0 \
-    /lib64/libdouble-conversion.so.3 \
     /usr/local/lib64/libspdlog.so \
     /usr/local/lib64/libfmt.so \
     /usr/local/lib64/libyaml-cpp.so.0.* \

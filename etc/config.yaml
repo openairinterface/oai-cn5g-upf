@@ -461,7 +461,7 @@ upf:
     # ---------------------------------------------------------------------------
     # NETWORK INTERFACE LIMITS
     # ---------------------------------------------------------------------------
-    
+
     # Maximum network interfaces UPF can manage
     # Includes: N3 (GTP-U), N4 (PFCP), N6 (Data Network), N9 (inter-UPF)
     # 
@@ -472,6 +472,21 @@ upf:
     # Default: 4
     # Range: 2-16
     max_upf_interfaces: 4
+
+    # ---------------------------------------------------------------------------
+    # DATAPATH FAN-OUT (simple-switch datapath only)
+    # ---------------------------------------------------------------------------
+
+    # One CPU of the container's cpuset is kept for the control plane, so give
+    # the container one core MORE than the number of threads here. Without the
+    # spare core the datapath threads (real-time priority) starve the N4
+    # thread, and beyond that, more cores than threads LOSES throughput -- the
+    # scheduler migrates the threads and their caches go cold.
+    #
+    # Default: 1
+    # Range: 1-16
+    n3_rx_threads: 1
+    dl_rx_queues: 1
 
     # Maximum interfaces for traffic redirection (egress interfaces)
     # Used in FARs for forwarding packets to specific destinations

@@ -68,6 +68,8 @@ constexpr auto UPF_MAX_SDF_FILTERS_PER_PDU_SESSION =
 constexpr auto UPF_MAX_SDF_FILTER_STRING_LENGTH =
     "max_sdf_filter_string_length";
 constexpr auto UPF_MAX_UPF_INTERFACES          = "max_upf_interfaces";
+constexpr auto UPF_N3_RX_THREADS               = "n3_rx_threads";
+constexpr auto UPF_DL_RX_QUEUES                = "dl_rx_queues";
 constexpr auto UPF_MAX_UPF_REDIRECT_INTERFACES = "max_upf_redirect_interfaces";
 constexpr auto UPF_MAX_ARP_ENTRIES             = "max_arp_entries";
 constexpr auto UPF_MAX_APPLICATION_IDS_PER_SESSION =
@@ -95,6 +97,8 @@ constexpr auto UPF_MAX_SDF_FILTERS_PER_PDU_SESSION_LABEL =
 constexpr auto UPF_MAX_SDF_FILTER_STRING_LENGTH_LABEL =
     "MAX Size Buffer for SDF Filter Description String";
 constexpr auto UPF_MAX_UPF_INTERFACES_LABEL = "Max UPF Interfaces";
+constexpr auto UPF_N3_RX_THREADS_LABEL      = "N3 RX Threads (UL)";
+constexpr auto UPF_DL_RX_QUEUES_LABEL       = "TUN RX Queues (DL)";
 constexpr auto UPF_MAX_UPF_REDIRECT_INTERFACES_LABEL =
     "Max UPF Redirect Interfaces";
 constexpr auto UPF_MAX_ARP_ENTRIES_LABEL = "Max ARP Entries";
@@ -124,7 +128,10 @@ constexpr int UPF_DEFAULT_MAX_SDF_FILTERS_PER_PDU_SESSION = 8;
 constexpr int UPF_DEFAULT_MAX_SDF_FILTER_STRING_LENGTH    = 512;
 
 // Network Interface Limits
-constexpr int UPF_DEFAULT_MAX_UPF_INTERFACES          = 4;
+constexpr int UPF_DEFAULT_MAX_UPF_INTERFACES = 4;
+// 1 = the original single-threaded datapath, one core per direction.
+constexpr int UPF_DEFAULT_N3_RX_THREADS               = 1;
+constexpr int UPF_DEFAULT_DL_RX_QUEUES                = 1;
 constexpr int UPF_DEFAULT_MAX_UPF_REDIRECT_INTERFACES = 2;
 constexpr int UPF_DEFAULT_MAX_ARP_ENTRIES             = 256;
 
@@ -593,6 +600,25 @@ class upf_datapath_configuration : public config_type {
   int_config_value m_max_upf_interfaces{};
 
   /**
+   * @brief Uplink GTP-U receive threads.
+   *
+   * Each thread owns its own UDP socket bound to the N3 address:port with
+   * SO_REUSEPORT; the kernel hashes the 4-tuple across them, so traffic from
+   * distinct gNBs is what spreads. 1 keeps the single-threaded datapath.
+   * Give the UPF one core per thread -- more cores than threads costs
+   * throughput through migration.
+   */
+  int_config_value m_n3_rx_threads{};
+
+  /**
+   * @brief Downlink tun receive queues (IFF_MULTI_QUEUE), one thread each.
+   *
+   * The kernel selects a queue by flow hash, so distinct UE flows spread.
+   * 1 keeps the single-queue datapath.
+   */
+  int_config_value m_dl_rx_queues{};
+
+  /**
    * @brief Maximum number of redirect interfaces
    *
    * Interfaces used for traffic redirection (e.g., for lawful intercept,
@@ -850,6 +876,8 @@ class upf_datapath_configuration : public config_type {
    * @note Minimum 2 required (N3 + N6)
    */
   [[nodiscard]] int get_max_upf_interfaces() const;
+  [[nodiscard]] int get_n3_rx_threads() const;
+  [[nodiscard]] int get_dl_rx_queues() const;
 
   /**
    * @brief Get maximum redirect interfaces
