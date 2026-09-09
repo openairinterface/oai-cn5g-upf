@@ -5,7 +5,7 @@
 #ifndef __ARP_TYPES_H__
 #define __ARP_TYPES_H__
 
-#include "linux/custom_types.h"
+#include "custom_types.h"
 
 /* ==========================================================================
  * ARP cache entry

@@ -19,7 +19,7 @@
 /*                             PROJECT INCLUDES                               */
 /* ========================================================================== */
 
-#include "linux/custom_types.h"
+#include "custom_types.h"
 #include "utils/logger.h"
 
 /* Maps and definitions */

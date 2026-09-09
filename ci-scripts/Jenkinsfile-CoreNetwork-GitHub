@@ -249,10 +249,44 @@ pipeline {
       }
     }
 
-    // Code checks first: so a formatting or cppcheck
+    // Code checks first: license check, formatting and cppcheck
     // failure is reported before the image builds start.
     stage('Code Checks') {
       parallel {
+        // Every source file must declare one of the licences in LICENSES/preferred/
+        // The check is an allowlist, so a file under
+        // any other licence -- GPL, Apache, BSD -- fails regardless of whether we
+        // anticipated it. Third-party exceptions are recorded in NOTICE.
+        stage('License Check') {
+          steps {
+            script {
+              sh "mkdir -p archives"
+              def licenseExitCode = sh(
+                // `pipefail` makes returnStatus reflect check-licenses.sh rather
+                // than tee, while tee preserves the log for the build archive.
+                script: '''#!/usr/bin/env bash
+                  set -o pipefail
+                  bash ./ci-scripts/check-licenses.sh 2>&1 | tee archives/license_check.log
+                ''',
+                returnStatus: true
+              )
+              if (licenseExitCode != 0) {
+                error("Files declaring a license outside LICENSES/preferred/ found")
+              }
+            }
+          }
+          post {
+            success {
+              script {
+                notifyStageStatus('SUCCESS', 'Passed')
+              }
+            }
+            failure {
+              sh "echo 'License check Analysis for OAI-${NF} status is FAILURE' >> archives/license_check.log"
+            }
+          }
+        }
+
         stage('Static Code Analysis') {
           agent { label cppcheckNode }
           options { skipDefaultCheckout() }
@@ -320,9 +354,10 @@ pipeline {
         }
       }
       post {
-        // Both checks run on their own agents. Restore their logs here rather
-        // than in a later stage: a failure here skips everything downstream, and
-        // the logs are exactly what explains that failure in the report.
+        // Some checks run on their own agents. Restore their logs
+        // here rather than in a later stage: a failure here skips everything
+        // downstream, and the logs are exactly what explains that failure in
+        // the report.
         always {
           script {
             try { unstash 'cppcheckLogs' }

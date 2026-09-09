@@ -11,7 +11,7 @@
 #include <linux/in.h>
 #include <linux/bpf.h>
 #include <linux/if_ether.h>
-#include "linux/custom_types.h"
+#include "custom_types.h"
 
 /* Byte offset of the IPv4 checksum field from the start of the packet
  * (after the Ethernet header). Used by checksum update helpers. */
