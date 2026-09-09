@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: MIT
+#
+# Optional containerised test runner. The host path is the default; use this when
+# installing scapy on a CI agent is undesirable.
+#
+# Needs the Docker CLI (not the daemon) because datapath inspection runs
+# bpftool/tc inside the UPF container via `docker exec`.
+
+FROM python:3.12-slim
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+        docker.io \
+        iproute2 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /tests
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Source is bind-mounted at run time so edits need no rebuild.
+ENTRYPOINT ["python3", "run_scenarios.py"]
+CMD ["--all"]
