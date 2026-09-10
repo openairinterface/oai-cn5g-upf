@@ -38,7 +38,7 @@ void pfcp_far::apply_forwarding_rules(
   // far_id.far_id);
   if (apply_action.forw) {
     if (forwarding_parameters.first) {
-      auto rule = forwarding_parameters.second;
+      const auto& rule = forwarding_parameters.second;
       if (rule.destination_interface.first) {
         if (rule.destination_interface.second.interface_value ==
             INTERFACE_VALUE_ACCESS) {

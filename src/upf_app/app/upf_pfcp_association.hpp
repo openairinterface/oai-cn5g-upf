@@ -8,9 +8,8 @@
 #include "3gpp_29.244.h"
 #include "itti.hpp"
 
-#include <folly/AtomicHashMap.h>
-#include <folly/AtomicLinkedList.h>
 #include <mutex>
+#include <unordered_map>
 #include <vector>
 
 namespace oai {
@@ -21,6 +20,11 @@ namespace app {
 class pfcp_association {
  public:
   pfcp::node_id_t node_id;  // peer
+  // A Node ID may be an FQDN, which cannot go in a sockaddr. Remember the
+  // address the peer actually talks from, or anything we originate towards it
+  // (heartbeats, Session Reports) has nowhere to go.
+  struct in_addr peer_addr = {};
+  bool has_peer_addr       = false;
   std::size_t hash_node_id;
   pfcp::recovery_time_stamp_t recovery_time_stamp;
   std::pair<bool, pfcp::cp_function_features_s> function_features;
@@ -98,10 +102,13 @@ class pfcp_association {
 class pfcp_associations {
  private:
   std::vector<std::shared_ptr<pfcp_association>> pending_associations;
-  folly::AtomicHashMap<int32_t, std::shared_ptr<pfcp_association>> associations;
+  /// Control-plane only: a few entries, never touched on the packet path.
+  std::unordered_map<int32_t, std::shared_ptr<pfcp_association>> associations;
+  mutable std::mutex associations_mutex;
 
-  pfcp_associations()
-      : associations(PFCP_MAX_ASSOCIATIONS), pending_associations(){};
+  pfcp_associations() : associations(), pending_associations() {
+    associations.reserve(PFCP_MAX_ASSOCIATIONS);
+  };
   void trigger_heartbeat_request_procedure(
       std::shared_ptr<pfcp_association>& s);
   bool remove_peer_candidate_node(
@@ -116,6 +123,11 @@ class pfcp_associations {
   pfcp_associations(pfcp_associations const&) = delete;
   void operator=(pfcp_associations const&) = delete;
 
+  // Records where the peer talks from, so an FQDN Node ID is still reachable.
+  void set_peer_addr(const pfcp::node_id_t& node_id, const endpoint& e);
+  // Registers @p sa under @p node_id, replacing any previous association.
+  void store_association(
+      const pfcp::node_id_t& node_id, std::shared_ptr<pfcp_association>& sa);
   bool add_association(
       pfcp::node_id_t& node_id,
       pfcp::recovery_time_stamp_t& recovery_time_stamp);

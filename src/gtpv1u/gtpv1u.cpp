@@ -6,7 +6,6 @@
 #include "conversions.hpp"
 #include "gtpu.h"
 #include "gtpv1u.hpp"
-
 #include <cstdlib>
 #include <sched.h>
 
@@ -43,7 +42,7 @@ extern itti_mw* itti_inst;
 gtpu_l4_stack::gtpu_l4_stack(
     const struct in_addr& address, const uint16_t port_num,
     const oai::utils::thread_sched_params& sched_params,
-    const bool send_ext_hdr)
+    const bool send_ext_hdr, int n_rx)
     : udp_s(udp_server(address, port_num)), send_ext_hdr(send_ext_hdr) {
   Logger::gtpv1_u().info(
       "gtpu_l4_stack created listening to %s:%d",
@@ -53,13 +52,13 @@ gtpu_l4_stack::gtpu_l4_stack(
   srand(time(NULL));
   seq_num         = rand() & 0x7FFFFFFF;
   restart_counter = 0;
-  udp_s.start_receive(this, sched_params);
+  udp_s.start_receive(this, sched_params, n_rx);
 }
 //------------------------------------------------------------------------------
 gtpu_l4_stack::gtpu_l4_stack(
     const struct in6_addr& address, const uint16_t port_num,
     const oai::utils::thread_sched_params& sched_params,
-    const bool send_ext_hdr)
+    const bool send_ext_hdr, int n_rx)
     : udp_s(udp_server(address, port_num)), send_ext_hdr(send_ext_hdr) {
   Logger::gtpv1_u().info(
       "gtpu_l4_stack created listening to %s:%d",
@@ -69,13 +68,13 @@ gtpu_l4_stack::gtpu_l4_stack(
   srand(time(NULL));
   seq_num         = rand() & 0x7FFFFFFF;
   restart_counter = 0;
-  udp_s.start_receive(this, sched_params);
+  udp_s.start_receive(this, sched_params, n_rx);
 }
 //------------------------------------------------------------------------------
 gtpu_l4_stack::gtpu_l4_stack(
     char* address, const uint16_t port_num,
     const oai::utils::thread_sched_params& sched_params,
-    const bool send_ext_hdr)
+    const bool send_ext_hdr, int n_rx)
     : udp_s(udp_server(address, port_num)), send_ext_hdr(send_ext_hdr) {
   Logger::gtpv1_u().info(
       "gtpu_l4_stack created listening to %s:%d", address, port_num);
@@ -84,7 +83,7 @@ gtpu_l4_stack::gtpu_l4_stack(
   srand(time(NULL));
   seq_num         = rand() & 0x7FFFFFFF;
   restart_counter = 0;
-  udp_s.start_receive(this, sched_params);
+  udp_s.start_receive(this, sched_params, n_rx);
 }
 
 //------------------------------------------------------------------------------

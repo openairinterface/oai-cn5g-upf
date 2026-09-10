@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
+#include <memory>
 #include "common_defs.h"
 #include "logger.hpp"
 #include "pfcp_switch.hpp"
@@ -50,55 +51,81 @@ bool pfcp_associations::add_association(
     pfcp::node_id_t& node_id,
     pfcp::recovery_time_stamp_t& recovery_time_stamp) {
   std::shared_ptr<pfcp_association> sa = {};
-  if (remove_peer_candidate_node(node_id, sa)) {
-    sa->recovery_time_stamp  = recovery_time_stamp;
-    sa->function_features    = {};
-    std::size_t hash_node_id = std::hash<pfcp::node_id_t>{}(node_id);
-    associations.insert((int32_t) hash_node_id, sa);
-    trigger_heartbeat_request_procedure(sa);
-    return true;
+  // The CP function may initiate the association itself, in which case there
+  // is no pending candidate for it. Accept it anyway: we answer "request
+  // accepted", so the association has to exist afterwards or everything that
+  // looks a peer up later (Session Reports) silently finds nothing.
+  if (!remove_peer_candidate_node(node_id, sa)) {
+    sa = std::make_shared<pfcp_association>(node_id);
   }
-  return false;
+  sa->recovery_time_stamp = recovery_time_stamp;
+  sa->function_features   = {};
+  store_association(node_id, sa);
+  return true;
 }
 //------------------------------------------------------------------------------
 bool pfcp_associations::add_association(
     pfcp::node_id_t& node_id, pfcp::recovery_time_stamp_t& recovery_time_stamp,
     pfcp::cp_function_features_s& function_features) {
   std::shared_ptr<pfcp_association> sa = {};
-  if (remove_peer_candidate_node(node_id, sa)) {
-    sa->recovery_time_stamp = recovery_time_stamp;
-    sa->set(function_features);
-    std::size_t hash_node_id = std::hash<pfcp::node_id_t>{}(node_id);
-    associations.insert((int32_t) hash_node_id, sa);
-    trigger_heartbeat_request_procedure(sa);
-    return true;
+  if (!remove_peer_candidate_node(node_id, sa)) {
+    sa = std::make_shared<pfcp_association>(node_id);
   }
-  return false;
+  sa->recovery_time_stamp = recovery_time_stamp;
+  sa->set(function_features);
+  store_association(node_id, sa);
+  return true;
 }
 
+//------------------------------------------------------------------------------
+void pfcp_associations::store_association(
+    const pfcp::node_id_t& node_id, std::shared_ptr<pfcp_association>& sa) {
+  std::size_t hash_node_id = std::hash<pfcp::node_id_t>{}(node_id);
+  {
+    std::lock_guard<std::mutex> lk(associations_mutex);
+    associations[(int32_t) hash_node_id] = sa;
+  }
+  // Only heartbeat a peer we started the association with. Answering the CP's
+  // heartbeats is enough the other way round: an SMF that also receives
+  // requests on that socket discards them as untriggered messages and then
+  // tears the association down.
+  if (node_id.node_id_type == pfcp::NODE_ID_TYPE_IPV4_ADDRESS) {
+    trigger_heartbeat_request_procedure(sa);
+  }
+  Logger::upf_n4().info(
+      "Associated with CP function %s", node_id.toString().c_str());
+}
+//------------------------------------------------------------------------------
+void pfcp_associations::set_peer_addr(
+    const pfcp::node_id_t& node_id, const endpoint& e) {
+  if (e.family() != AF_INET) return;
+  std::shared_ptr<pfcp_association> sa = {};
+  if (!get_association(node_id, sa) || !sa) return;
+  sa->peer_addr =
+      reinterpret_cast<const struct sockaddr_in*>(&e.addr_storage)->sin_addr;
+  sa->has_peer_addr = true;
+}
 //------------------------------------------------------------------------------
 bool pfcp_associations::get_association(
     const pfcp::node_id_t& node_id,
     std::shared_ptr<pfcp_association>& sa) const {
   std::size_t hash_node_id = std::hash<pfcp::node_id_t>{}(node_id);
-  auto pit                 = associations.find((int32_t) hash_node_id);
-  if (pit == associations.end())
-    return false;
-  else {
+  std::lock_guard<std::mutex> lk(associations_mutex);
+  auto pit = associations.find((int32_t) hash_node_id);
+  if (pit != associations.end()) {
     sa = pit->second;
     return true;
   }
+  return false;
 }
 //------------------------------------------------------------------------------
 bool pfcp_associations::get_association(
     const pfcp::fseid_t& cp_fseid,
     std::shared_ptr<pfcp_association>& sa) const {
-  folly::AtomicHashMap<int32_t, std::shared_ptr<pfcp_association>>::iterator it;
-
-  FOR_EACH(it, associations) {
-    std::shared_ptr<pfcp_association> a = it->second;
-    if (it->second->has_session(cp_fseid)) {
-      sa = it->second;
+  std::lock_guard<std::mutex> lk(associations_mutex);
+  for (const auto& entry : associations) {
+    if (entry.second->has_session(cp_fseid)) {
+      sa = entry.second;
       return true;
     }
   }
@@ -200,6 +227,19 @@ void pfcp_associations::notify_add_session(
   std::shared_ptr<pfcp_association> sa = {};
   if (get_association(node_id, sa)) {
     sa->notify_add_session(cp_fseid);
+    Logger::upf_app().debug(
+        "Session registered with association %s: cp_fseid seid=0x%lx v4=%u "
+        "addr=0x%x",
+        node_id.toString().c_str(), cp_fseid.seid, cp_fseid.v4,
+        cp_fseid.ipv4_address.s_addr);
+  } else {
+    // Silence here is why a Session Report later cannot find its association:
+    // the report path looks the session up by cp_fseid, and nothing ever
+    // recorded it.
+    Logger::upf_app().warn(
+        "Session NOT registered: no association for node %s. Session Reports "
+        "for cp_fseid seid=0x%lx will not be sent.",
+        node_id.toString().c_str(), cp_fseid.seid);
   }
 }
 //------------------------------------------------------------------------------

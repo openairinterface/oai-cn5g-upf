@@ -100,7 +100,7 @@ void upf_n3_task(void* args_p) {
 upf_n3::upf_n3()
     : gtpu_l4_stack(
           upf_cfg.n3.addr4, upf_cfg.n3.port, upf_cfg.n3.thread_rd_sched_params,
-          upf_cfg.enable_5g_features) {
+          upf_cfg.enable_5g_features, upf_cfg.n3_rx_threads) {
   Logger::upf_n3().startup("Starting...");
   if (itti_inst->create_task(
           TASK_UPF_N3, upf_n3_task, &upf_cfg.itti.n3_sched_params)) {
@@ -140,25 +140,44 @@ void upf_n3::handle_receive(
   if (gtpuh->version == 1) {
     // Do it fast, do not go throught handle_receive_gtpv1u_msg()
     if (gtpuh->message_type == GTPU_G_PDU) {
-      // Fast-path: compute inner-payload offset without full deserialisation
-      uint8_t gtp_flags = recv_buffer[GTPU_MESSAGE_FLAGS_POS_IN_UDP_PAYLOAD];
+      // Fast-path: compute inner-payload offset without full deserialisation.
+      const uint8_t gtp_flags =
+          recv_buffer[GTPU_MESSAGE_FLAGS_POS_IN_UDP_PAYLOAD];
+      // Length counts everything after the mandatory 8 bytes (§5.1).
+      const std::size_t total =
+          GTPV1U_MSG_HEADER_MIN_SIZE + be16toh(gtpuh->message_length);
       std::size_t gtp_payload_offset = GTPV1U_MSG_HEADER_MIN_SIZE;
 
-      // Optional fields: Sequence Number, N-PDU, Extension Header (§5.1)
-      if ((((gtp_flags & GTPU_MESSAGE_VERSION_MASK)) &&
-           (gtp_flags & GTPU_MESSAGE_PT_MASK)) &&
-          ((gtp_flags & GTPU_MESSAGE_EXT_HEADER_MASK) ||
-           (gtp_flags & GTPU_MESSAGE_SN_MASK) ||
-           (gtp_flags & GTPU_MESSAGE_PN_MASK)))
+      // §5.1: Sequence Number, N-PDU Number and Next Extension Header Type are
+      // ONE 4-byte block, present if any of E/S/PN is set -- not one field per
+      // flag. The old code added 4 for the block and 4 again for `flags & 0x07`
+      // (E|S|PN, where only E means an extension header follows), so a sender
+      // that sets S or PN without E had its inner header read 4 bytes late.
+      if (gtp_flags & (GTPU_MESSAGE_EXT_HEADER_MASK | GTPU_MESSAGE_SN_MASK |
+                       GTPU_MESSAGE_PN_MASK)) {
         gtp_payload_offset += 4;
-
-      std::size_t gtp_payload_length = be16toh(gtpuh->message_length);
-      if (gtp_flags & 0x07) {
-        // Extension header(s) present — skip PDU Session Container (4 bytes)
-        gtp_payload_offset += 4;
-        gtp_payload_length -= 4;
+        // §5.2: extension headers are chained -- each is 4*len bytes and its
+        // last byte names the next; 0 ends the chain. Only one (the PDU
+        // Session Container) is expected, but a chain is legal.
+        while ((gtp_flags & GTPU_MESSAGE_EXT_HEADER_MASK) &&
+               gtp_payload_offset < total &&
+               (uint8_t) recv_buffer[gtp_payload_offset - 1]) {
+          const uint8_t units = (uint8_t) recv_buffer[gtp_payload_offset];
+          if (units == 0) break;  // malformed: would not advance
+          gtp_payload_offset += units * 4;
+        }
       }
-      uint32_t tunnel_id = be32toh(gtpuh->teid);
+      // Truncated or malformed: nothing safe to read past the header.
+      if (gtp_payload_offset >= total || total > bytes_transferred) {
+        Logger::upf_n3().trace("Malformed GTPU_G_PDU packet");
+        return;
+      }
+      // The inner packet is what is left, i.e. what the UE actually sent. The
+      // old code subtracted only the extension header, so this was 4 bytes too
+      // long whenever E was set -- which over-reported the URR uplink volume
+      // (§8.2.44) by 4 bytes on every packet.
+      const std::size_t gtp_payload_length = total - gtp_payload_offset;
+      uint32_t tunnel_id                   = be32toh(gtpuh->teid);
 
       struct iphdr* iph = (struct iphdr*) &recv_buffer[gtp_payload_offset];
       if (iph->version == 4) {

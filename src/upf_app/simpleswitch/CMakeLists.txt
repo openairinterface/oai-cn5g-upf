@@ -11,6 +11,7 @@ include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 include_directories(${SRC_TOP_DIR}/upf_app/control)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel)
+include_directories(${OPENAIRCN_DIR}/build/upf/build/skel)
 #include_directories(${SRC_TOP_DIR}/upf_app/kernel/include)
 #include_directories(${SRC_TOP_DIR}/upf_app/include)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
@@ -35,8 +36,9 @@ add_library (SIMPLE_SWITCH STATIC
   pfcp_mar.cpp
   pfcp_session.cpp
   pfcp_switch.cpp
+  qos_mbr.cpp
   simple_switch.cpp
   ${SRC_TOP_DIR}/upf_app/framed_routing/FramedRouting.cpp
   ${SRC_TOP_DIR}/upf_app/framed_routing/LocalRouting.cpp
 )
-  
+

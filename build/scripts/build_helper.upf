@@ -13,7 +13,6 @@ NC='\033[0m'         # ANSI color code to reset to default
 SCRIPT=$(readlink -f ${BASH_SOURCE})
 THIS_SCRIPT_PATH=`dirname $SCRIPT`
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper
-source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.fb_folly
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.fmt
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.spdlog
 source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.yamlcpp
@@ -122,30 +121,6 @@ install_libbpf_from_git() {
   fi
   echo "libbpf installation complete"
   return 0
-}
-
-
-#-------------------------------------------------------------------------------
-check_enable_bpf_datapath() {
-  # Parse the YAML Config file and check if enable_bpf_datapath is set to yes
-  enable_bpf_datapath=$(grep -A 50 "upf:" $CONFIG_FILE | grep "enable_bpf_datapath:" | head -1 | awk '{print $2}')
-  if [ "$enable_bpf_datapath" == "yes" ]; then
-    return 0
-  else
-    return 1
-  fi
-}
-
-
-#-------------------------------------------------------------------------------
-check_enable_qos() {
-  # Parse the YAML Config file and check if enable_qos is set to yes
-  enable_qos=$(grep -A 50 "upf:" $CONFIG_FILE | grep "enable_qos:" | head -1 | awk '{print $2}')
-  if [ "$enable_qos" == "yes" ]; then
-    return 0
-  else
-    return 1
-  fi
 }
 
 
@@ -311,6 +286,7 @@ check_install_upf_deps() {
     PACKAGE_LIST="\
       boost-devel \
       libconfig-devel \
+      libevent-devel \
       libgcrypt-devel \
       gmp-devel \
       libidn-devel \
@@ -335,35 +311,11 @@ check_install_upf_deps() {
   echo_info "distro libs installation complete"
 
   echo ""
-  echo "Auto-detecting UPF features:"
-  check_enable_bpf_datapath
-  if [ $? -eq 0 ]; then
-    check_enable_qos
-    if [ $? -eq 0 ]; then
-      echo -e "     BPF Datapath: [$GREEN on $NC  ]"
-      echo -e "      QoS Feature: [$GREEN on $NC  ]"
-      echo ""
-    else
-      echo -e "     BPF Datapath: [$GREEN on $NC  ]"
-      echo -e "      QoS Feature: [$RED off $NC ]"
-      echo ""
-    fi
-  else
-    echo -e "     BPF Datapath: [$RED off $NC ]"
-    echo -e "      QoS Feature: [$RED off $NC ]"
-    echo ""
-  fi
-
-  echo -e "$YELLOW WARNINGS: "
-  echo -e "           1. Even when "BPF Datapath" and/or "QoS Feature" are/is disabled"
-  echo -e "              we still build and install BPF and Netlinks libraries."
-  echo -e "              The purpose is to have one-time UPF build process with all these libs"
-  echo -e "              built and linked to the project. Thie difference would be on the"
-  echo -e "              execution path, which depends on enabling or disabling these features."
-  echo ""
-  echo -e "           2. The QoS Feature is only available for the BPF Datapath mode, "
-  echo -e "              so not usable for the Simple Switch mode. This is due to the "
-  echo -e "              use of eBPF TC programming for qdisc filtering and classifying. $NC"
+  echo -e "$YELLOW NOTE: both datapaths are always built, along with the BPF and"
+  echo -e "       netlink libraries they need. enable_bpf_datapath picks between"
+  echo -e "       them at run time, and QoS (QER MBR enforcement) works either"
+  echo -e "       way: the BPF datapath programmes eBPF TC filters, the simple"
+  echo -e "       switch uses tc u32 with action police. $NC"
   echo ""
 
   install_libbpf_from_git $1 $2
@@ -373,9 +325,6 @@ check_install_upf_deps() {
   ret=$?;[[ $ret -ne 0 ]] && return $ret
   echo ""
   install_netlink_libraries $1 $2
-  ret=$?;[[ $ret -ne 0 ]] && return $ret
-
-  install_fb_folly_from_source $1 $2
   ret=$?;[[ $ret -ne 0 ]] && return $ret
 
   install_fmt_from_git $1 $2
