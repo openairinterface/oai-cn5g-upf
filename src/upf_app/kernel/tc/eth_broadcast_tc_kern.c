@@ -186,6 +186,17 @@ int handle_broadcast(struct __sk_buff* skb) {
       &eth_session_mapping_map, broadcast_callback_fn, &cb_ctx, 0);
   action = TC_ACT_SHOT;
 
+  /* cb_ctx.size starts at 1 for UL (the source session's dedup entry,
+   * not a clone) and 0 for DL; broadcast_callback_fn increments it once
+   * per real bpf_clone_redirect(). */
+  int clones = cb_ctx.size - (is_uplink ? 1 : 0);
+  if (clones == 0) {
+    bpf_debug(
+        "eth_broadcast_tc: %s fan-out produced ZERO clones -- "
+        "eth_session_mapping_map may be empty or unshared; dropping",
+        is_uplink ? "UL" : "DL");
+  }
+
   /* ---------------------------------------------------------- */
   /*  UL: also forward the original up to N6 (DN-side)          */
   /* ---------------------------------------------------------- */

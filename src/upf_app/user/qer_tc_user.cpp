@@ -84,6 +84,7 @@ QERTCProgram::QERTCProgram()
 
     // Configure map sizes and .rodata constants
     this->ConfigureQerMaps(skel);
+    skeleton_ = skel;
     return skel;
   };
 

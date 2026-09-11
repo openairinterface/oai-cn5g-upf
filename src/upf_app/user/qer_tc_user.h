@@ -216,7 +216,7 @@ class QERTCProgram : public BPFProgram {
   // ==========================================================================
   // Skeleton and lifecycle
   // ==========================================================================
-  qer_tc_kern_c* skeleton_;                           ///< BPF skeleton
+  qer_tc_kern_c* skeleton_ = nullptr;                 ///< BPF skeleton
   std::shared_ptr<QerTCProgramLifeCycle> lifecycle_;  ///< Lifecycle manager
 
   // ==========================================================================

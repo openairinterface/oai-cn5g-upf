@@ -49,6 +49,7 @@ int session_lookup_eth(struct xdp_md* ctx) {
   /*  ETH PDU sessions are identified by TEID (not UE IP).      */
   /*  The eth_session_mapping_map is populated by control plane  */
   /*  during PFCP Session Establishment (TS 29.244 §7.2.2).     */
+  /*  Key is host byte order, matching pctx->pkt_teid.           */
   /* ---------------------------------------------------------- */
   __u32 teid = pctx->pkt_teid;
 
@@ -56,7 +57,7 @@ int session_lookup_eth(struct xdp_md* ctx) {
       bpf_map_lookup_elem(&eth_session_mapping_map, &teid);
 
   if (!session) {
-    bpf_debug("ETH Lookup: No session for TEID=0x%x", bpf_ntohl(teid));
+    bpf_debug("ETH Lookup: No session for TEID=0x%x", teid);
     return xdp_stats_record_action(ctx, XDP_DROP);
   }
 
