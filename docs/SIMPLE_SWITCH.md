@@ -75,19 +75,29 @@ direction for the session AMBR (3GPP TS 29.244 §8.2.8). Turn it on with
 The meter is a departure clock, so the same state answers both "may I send
 this?" and "when may I send this?", and one setting picks which:
 
-* `qos_shape_ms: 0` **polices** the downlink — a packet over rate is dropped,
-  and `qos_burst_ms` is the burst forgiven first.
-* `qos_shape_ms: N` **shapes** it — a packet over rate waits for its slot, for
-  at most N ms, and is dropped only if its slot is further out than that.
+* `qos_shape_ms: 0` **polices** — a packet over rate is dropped, and
+  `qos_burst_ms` is the burst forgiven first.
+* `qos_shape_ms: N` **shapes** — a packet over rate waits for its slot, for at
+  most N ms, and is dropped only if its slot is further out than that.
+
+`qos_shape_ms` is the downlink and `qos_shape_ul_ms` the uplink, separately,
+because they are not the same problem. The uplink defaults to policing: by the
+time a packet reaches the UPF the radio has already been spent, so holding it
+relieves nothing and only hides the loss from the sender.
 
 Shaping costs a copy and a buffer for each packet it holds, and nothing at all
 for traffic inside its rate. It is worth it for TCP: at an MBR well under line
 rate and a 20 ms allowance, a policed flow settles around a tenth of its MBR
 because the drops keep collapsing the congestion window, while a shaped one
-holds about 97% of it. With a large allowance (say 400 ms of burst) a policer
-rarely bites and the two behave alike. The uplink always polices — by the time
-a packet reaches the UPF the radio has already been spent, so delaying it
-relieves nothing and only hides the loss signal from the UE.
+holds about 97% of it, in either direction. With a large allowance (say 400 ms
+of burst) a policer rarely bites and the two behave alike.
+
+**Do not shape a session that carries delay-critical traffic.** A packet inside
+its rate is never queued, so it is unaffected — but one that shares the session
+AMBR with a flow saturating it inherits that queue: measured through this UPF,
+a ping alongside a bulk flow goes from 33 µs when policing to 19.8 ms with a
+20 ms shaper. The session AMBR is one clock for the whole session, and it does
+not yet exclude GBR flows the way TS 23.501 §5.7.2.6 requires.
 
 Each downlink thread holds its own queue, 1024 packets, and that slab is the
 hard ceiling behind the time horizon: with `qos_shape_ms` set so high that the
@@ -111,6 +121,7 @@ deletion.
 | `enable_urr` | measure volume and send usage reports | — |
 | `qos_burst_ms` | burst forgiven before the policer drops, in ms of rate | 400 |
 | `qos_shape_ms` | 0 polices the downlink; above 0 shapes it, holding a packet at most this long | 0 |
+| `qos_shape_ul_ms` | the same for the uplink | 0 |
 
 Start with one thread per direction and raise both together.
 

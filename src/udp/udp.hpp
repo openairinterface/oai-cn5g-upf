@@ -37,6 +37,11 @@ class udp_application {
   virtual void start_receive(
       udp_application* gtp_stack,
       const oai::utils::thread_sched_params& sched_params);
+  /** @brief Called before the receive thread waits: send whatever the uplink
+   *  shaper is holding whose slot has come, and say in nanoseconds how long
+   *  until the next one is due. A negative answer means nothing is waiting and
+   *  the thread may block as long as it likes. */
+  virtual int64_t on_idle() { return -1; }
 };
 class udp_server;
 

@@ -68,6 +68,10 @@ class pfcp_pdr {
 
   /// MBR meter for this PDR's QoS flow, null when nothing limits it.
   /// Held here so the datapath finds it with the rule it already matched.
+  ///
+  /// Read and written only through std::atomic_load / std::atomic_store:
+  /// pfcp_switch::apply_qos_mbr() replaces it on the N4 thread while the
+  /// datapath threads are reading it per packet.
   std::shared_ptr<oai::upf::qos_mbr> qos;
 
   /// QFI for the PDU Session Container, resolved by

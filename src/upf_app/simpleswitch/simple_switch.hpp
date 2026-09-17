@@ -91,6 +91,13 @@ class upf_n3 : public gtpv1u::gtpu_l4_stack {
       const endpoint& r_endpoint);
 
   //------------------------------------------------------------------------------
+  /** @brief Before this receive thread waits: release whatever the uplink
+   *  shaper is holding whose slot has come, and report how long until the
+   *  next one. Negative when nothing is held, which is the normal case and
+   *  costs one virtual call per batch. */
+  int64_t on_idle() override;
+
+  //------------------------------------------------------------------------------
   /** @brief Encapsulate an IPv4 packet in GTP-U and send it to a gNB (N3).
    *
    *  Builds a GTP-U G-PDU (3GPP TS 29.281 §5.1) with an optional PDU Session

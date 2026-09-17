@@ -4,6 +4,7 @@
 
 #include "udp.hpp"
 
+#include <poll.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -109,7 +110,24 @@ void udp_server::udp_read_loop(
       msgs[i].msg_hdr.msg_namelen = sizeof(struct sockaddr_storage);
     }
 
-    int nrecv = recvmmsg(fd, msgs, UDP_RECV_VLEN, MSG_WAITFORONE, nullptr);
+    // Nothing held: block, which is the whole of the fast path. Something
+    // held: wait only until its slot, then take whatever has arrived.
+    //
+    // ppoll() rather than recvmmsg()'s own timeout, which cannot be used for
+    // this: it is checked only after a datagram has been received, so on a
+    // silent socket the call blocks anyway and the held packets are stranded.
+    const int64_t wait_ns = app_->on_idle();
+    int nrecv;
+    if (wait_ns < 0) {
+      nrecv = recvmmsg(fd, msgs, UDP_RECV_VLEN, MSG_WAITFORONE, nullptr);
+    } else {
+      struct timespec ts = {
+          (time_t) (wait_ns / 1000000000LL), (long) (wait_ns % 1000000000LL)};
+      struct pollfd pfd = {fd, POLLIN, 0};
+      ppoll(&pfd, 1, &ts, nullptr);
+      nrecv = recvmmsg(fd, msgs, UDP_RECV_VLEN, MSG_DONTWAIT, nullptr);
+      if (nrecv < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) continue;
+    }
 
     if (terminateRL_) return;
     if (nrecv < 0) {
