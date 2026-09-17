@@ -71,6 +71,7 @@ constexpr auto UPF_MAX_UPF_INTERFACES          = "max_upf_interfaces";
 constexpr auto UPF_N3_RX_THREADS               = "n3_rx_threads";
 constexpr auto UPF_DL_RX_QUEUES                = "dl_rx_queues";
 constexpr auto UPF_QOS_BURST_MS                = "qos_burst_ms";
+constexpr auto UPF_QOS_SHAPE_MS                = "qos_shape_ms";
 constexpr auto UPF_MAX_UPF_REDIRECT_INTERFACES = "max_upf_redirect_interfaces";
 constexpr auto UPF_MAX_ARP_ENTRIES             = "max_arp_entries";
 constexpr auto UPF_MAX_APPLICATION_IDS_PER_SESSION =
@@ -101,6 +102,7 @@ constexpr auto UPF_MAX_UPF_INTERFACES_LABEL = "Max UPF Interfaces";
 constexpr auto UPF_N3_RX_THREADS_LABEL      = "N3 RX Threads (UL)";
 constexpr auto UPF_DL_RX_QUEUES_LABEL       = "TUN RX Queues (DL)";
 constexpr auto UPF_QOS_BURST_MS_LABEL       = "QoS policer burst (ms)";
+constexpr auto UPF_QOS_SHAPE_MS_LABEL       = "QoS shaper queue (ms)";
 constexpr auto UPF_MAX_UPF_REDIRECT_INTERFACES_LABEL =
     "Max UPF Redirect Interfaces";
 constexpr auto UPF_MAX_ARP_ENTRIES_LABEL = "Max ARP Entries";
@@ -135,6 +137,7 @@ constexpr int UPF_DEFAULT_MAX_UPF_INTERFACES = 4;
 constexpr int UPF_DEFAULT_N3_RX_THREADS               = 1;
 constexpr int UPF_DEFAULT_DL_RX_QUEUES                = 1;
 constexpr int UPF_DEFAULT_QOS_BURST_MS                = 400;
+constexpr int UPF_DEFAULT_QOS_SHAPE_MS                = 0;
 constexpr int UPF_DEFAULT_MAX_UPF_REDIRECT_INTERFACES = 2;
 constexpr int UPF_DEFAULT_MAX_ARP_ENTRIES             = 256;
 
@@ -621,6 +624,7 @@ class upf_datapath_configuration : public config_type {
    */
   int_config_value m_dl_rx_queues{};
   int_config_value m_qos_burst_ms{};
+  int_config_value m_qos_shape_ms{};
 
   /**
    * @brief Maximum number of redirect interfaces
@@ -883,6 +887,7 @@ class upf_datapath_configuration : public config_type {
   [[nodiscard]] int get_n3_rx_threads() const;
   [[nodiscard]] int get_dl_rx_queues() const;
   [[nodiscard]] int get_qos_burst_ms() const;
+  [[nodiscard]] int get_qos_shape_ms() const;
 
   /**
    * @brief Get maximum redirect interfaces

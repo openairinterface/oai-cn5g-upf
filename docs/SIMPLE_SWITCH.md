@@ -68,11 +68,32 @@ side; only the N4 thread writes.
 ## 4. QoS and usage reporting
 
 When a QER carries a Maximum Bitrate, the UPF meters the flow in user space
-with a token bucket per PDR plus one shared per session and direction for the
-session AMBR (3GPP TS 29.244 §8.2.8). It polices rather than shapes: excess is
-dropped. `qos_burst_ms` sets how much burst is forgiven — too little and TCP
-never reaches its MBR, too much and the MBR itself leaks. Turn it on with
+against two rates: the QoS flow's own MBR, and one shared per session and
+direction for the session AMBR (3GPP TS 29.244 §8.2.8). Turn it on with
 `enable_qos: yes`.
+
+The meter is a departure clock, so the same state answers both "may I send
+this?" and "when may I send this?", and one setting picks which:
+
+* `qos_shape_ms: 0` **polices** the downlink — a packet over rate is dropped,
+  and `qos_burst_ms` is the burst forgiven first.
+* `qos_shape_ms: N` **shapes** it — a packet over rate waits for its slot, for
+  at most N ms, and is dropped only if its slot is further out than that.
+
+Shaping costs a copy and a buffer for each packet it holds, and nothing at all
+for traffic inside its rate. It is worth it for TCP: at an MBR well under line
+rate and a 20 ms allowance, a policed flow settles around a tenth of its MBR
+because the drops keep collapsing the congestion window, while a shaped one
+holds about 97% of it. With a large allowance (say 400 ms of burst) a policer
+rarely bites and the two behave alike. The uplink always polices — by the time
+a packet reaches the UPF the radio has already been spent, so delaying it
+relieves nothing and only hides the loss signal from the UE.
+
+Each downlink thread holds its own queue, 1024 packets, and that slab is the
+hard ceiling behind the time horizon: with `qos_shape_ms` set so high that the
+queue would need more, the extra is dropped on arrival rather than admitted.
+The queue's depth, what it has held and dropped, and how late it has been all
+appear on the `tun queue balance` debug line.
 
 With `enable_urr: yes` a thread walks the session table every 30 seconds and
 sends a PFCP Session Report Request for each session that moved traffic, with
@@ -88,7 +109,8 @@ deletion.
 | `dl_rx_queues` | `tun0` queues, one downlink thread each | 1 |
 | `enable_qos` | enforce QER Maximum Bitrate | — |
 | `enable_urr` | measure volume and send usage reports | — |
-| `qos_burst_ms` | burst forgiven by the MBR bucket, in ms of rate | 400 |
+| `qos_burst_ms` | burst forgiven before the policer drops, in ms of rate | 400 |
+| `qos_shape_ms` | 0 polices the downlink; above 0 shapes it, holding a packet at most this long | 0 |
 
 Start with one thread per direction and raise both together.
 
