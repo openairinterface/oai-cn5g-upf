@@ -10,6 +10,7 @@
 #include <fstream>
 #include <iomanip>
 #include <stdexcept>
+#include <unordered_map>
 #include <vector>
 #include <fcntl.h>
 #include <poll.h>
@@ -19,10 +20,12 @@
 #include <linux/if_tun.h>
 #include <linux/ip.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sched.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 
 #include "common_defs.h"
 #include "itti.hpp"
@@ -47,6 +50,84 @@ extern upf_n3* upf_n3_inst;
 extern upf_n4* upf_n4_inst;  // Usage Reports are sent over N4
 extern pfcp_switch* pfcp_switch_inst;
 
+namespace {
+// A full table drops the rule without a word, and the miss only shows up later
+// as traffic that matches nothing. Say so where it happens.
+template<typename Map, typename Key, typename Val>
+void insert_or_error(Map& map, const Key key, Val val, const char* what) {
+  if (!map.insert(key, std::move(val)))
+    Logger::pfcp_switch().error(
+        "%s table is full: 0x%lx not installed, its packets will match no rule",
+        what, (unsigned long) key);
+}
+
+// --- checksums, for the segments this code builds itself ---------------------
+// Only needed on the GSO path: a segment the kernel did not create has no
+// checksum of its own, and the inner header travels end to end inside GTP-U,
+// so it has to be right here. This is work the kernel would otherwise have
+// done while segmenting, not extra work.
+
+/// Sum @p len bytes into a 32-bit accumulator, ones-complement style.
+inline uint32_t csum_partial(const void* p, size_t len, uint32_t sum) {
+  const auto* b = (const uint8_t*) p;
+  while (len > 1) {
+    uint16_t w;
+    memcpy(&w, b, 2);
+    sum += w;
+    b += 2;
+    len -= 2;
+  }
+  if (len) sum += *b;  // odd trailing byte, already in network order
+  return sum;
+}
+
+inline uint16_t csum_fold(uint32_t sum) {
+  while (sum >> 16) sum = (sum & 0xFFFF) + (sum >> 16);
+  return (uint16_t) ~sum;
+}
+
+/// IPv4 header checksum, over the header only (§RFC 791).
+inline void ip_csum_set(struct iphdr* iph) {
+  iph->check = 0;
+  iph->check = csum_fold(csum_partial(iph, (size_t) iph->ihl * 4, 0));
+}
+
+/// TCP checksum over the pseudo-header plus the segment (§RFC 793).
+inline void tcp_csum_set(struct iphdr* iph, size_t l4_len) {
+  auto* th   = (struct tcphdr*) ((uint8_t*) iph + (size_t) iph->ihl * 4);
+  th->check  = 0;
+  uint32_t s = 0;
+  s          = csum_partial(&iph->saddr, 4, s);
+  s          = csum_partial(&iph->daddr, 4, s);
+  const uint16_t proto_be = htons(IPPROTO_TCP);
+  const uint16_t len_be   = htons((uint16_t) l4_len);
+  s                       = csum_partial(&proto_be, 2, s);
+  s                       = csum_partial(&len_be, 2, s);
+  s                       = csum_partial(th, l4_len, s);
+  th->check               = csum_fold(s);
+}
+
+/// @brief Finish a checksum the kernel deliberately left incomplete.
+///
+/// TUN_F_CSUM has to be advertised to get TSO, and it also stops the kernel
+/// checksumming the packets it does *not* split. Those arrive with NEEDS_CSUM
+/// set and the two bytes at csum_start+csum_offset holding the pseudo-header
+/// sum instead of a finished checksum. Forwarding one unchanged puts a packet
+/// on the air that every receiver counts as a bad segment and discards.
+///
+/// That partial sum lies inside the range being summed, so summing
+/// [csum_start, end) and folding picks it up: the field must be read as part
+/// of the data, never cleared first.
+inline void vnet_complete_csum(
+    char* pkt, size_t plen, uint16_t csum_start, uint16_t csum_offset) {
+  const size_t at = (size_t) csum_start + csum_offset;
+  if (csum_start >= plen || at + sizeof(uint16_t) > plen) return;  // malformed
+  const uint16_t c =
+      csum_fold(csum_partial(pkt + csum_start, plen - csum_start, 0));
+  memcpy(pkt + at, &c, sizeof(c));
+}
+}  // namespace
+
 // =============================================================================
 // PDN I/O thread
 // =============================================================================
@@ -55,6 +136,110 @@ extern pfcp_switch* pfcp_switch_inst;
 // pdn_read_loop — DL datapath thread.
 // Reads IP packets from tun0 and forwards each one inline: PDR look-up, FAR,
 // GTP-U encapsulation and send.  One thread, no queue.
+
+//------------------------------------------------------------------------------
+// segment_and_forward -- split one GSO super-packet into MTU-sized packets.
+//
+// The kernel hands over a single TCP segment of up to 64 kB together with the
+// MSS it was built for, and leaves the splitting to whoever asked for
+// TUNSETOFFLOAD. Each piece needs the original headers, its own sequence
+// number, its own IP ID and its own checksums -- precisely the work the kernel
+// does in tcp_gso_segment(), moved here so it costs one syscall instead of
+// forty-odd.
+//
+// Anything not understood is forwarded whole: it is a valid packet either way,
+// and passing it through is always safer than dropping it.
+//
+// `off` is the cursor into the payload: it comes in 0 and goes out equal to
+// `plen` when the packet is done. A 64 kB super-packet with a small MSS needs
+// more segments than one send batch has slots, so when the slots run out the
+// caller flushes the batch and calls again from the cursor. Every path that
+// gives up on a packet sets the cursor to `plen`, so the caller's loop always
+// terminates.
+//
+// @returns how many slots were filled.
+int pfcp_switch::segment_and_forward(
+    const char* pkt, std::size_t plen, const struct upf_vnet_hdr& vnet,
+    char** slot, ssize_t* slot_len, int max_slots, std::size_t slot_capacity,
+    std::size_t& off) {
+  if (max_slots <= 0) return 0;  // no room left; the cursor stands still
+  const auto give_up = [&off, plen]() { off = plen; };
+
+  const auto* iph  = (const struct iphdr*) pkt;
+  const size_t mss = vnet.gso_size;
+
+  // Only IPv4 TCP is split here. IPv6 and everything else falls through to the
+  // copy below, which still forwards the packet correctly.
+  const bool splittable = plen >= sizeof(struct iphdr) && iph->version == 4 &&
+                          iph->protocol == IPPROTO_TCP && mss > 0 &&
+                          (vnet.gso_type == UPF_VNET_HDR_GSO_TCPV4 ||
+                           vnet.gso_type == UPF_VNET_HDR_GSO_NONE);
+
+  // Pass it on unchanged. Right for a packet that is already one segment, and
+  // the only thing that can be done with one this cannot read.
+  const auto forward_whole = [&]() {
+    give_up();
+    if (plen > slot_capacity) {
+      Logger::pfcp_switch().warn(
+          "downlink: %zu-byte packet (gso_type %u) does not fit a %zu-byte "
+          "slot and cannot be split, dropped",
+          plen, (unsigned) vnet.gso_type, slot_capacity);
+      return 0;
+    }
+    memcpy(slot[0], pkt, plen);
+    slot_len[0] = (ssize_t) plen;
+    return 1;
+  };
+
+  if (!splittable) return forward_whole();
+
+  const size_t ihl = (size_t) iph->ihl * 4;
+  if (plen < ihl + sizeof(struct tcphdr)) return forward_whole();
+  const auto* th   = (const struct tcphdr*) (pkt + ihl);
+  const size_t thl = (size_t) th->doff * 4;
+  const size_t hdr = ihl + thl;
+  if (plen <= hdr || hdr + mss > slot_capacity) return forward_whole();
+
+  // Anything longer than one segment has to be split even when it would fit a
+  // slot: a slot holds 1984 bytes, so a two-segment super-packet used to go out
+  // whole, and the kernel then fragmented it on the N3 link. That doubles the
+  // packet rate downlink and is invisible from here -- it shows up only as
+  // Ip/FragOKs climbing at the packet rate.
+  if (plen <= hdr + mss) return forward_whole();
+
+  const size_t body   = plen - hdr;
+  const uint32_t seq0 = ntohl(th->seq);
+  const uint16_t id0  = ntohs(iph->id);
+
+  int filled = 0;
+  for (; off < body && filled < max_slots; off += mss) {
+    const size_t chunk = std::min(mss, body - off);
+    const bool last    = (off + chunk >= body);
+    char* out          = slot[filled];
+    memcpy(out, pkt, hdr);                      // headers
+    memcpy(out + hdr, pkt + hdr + off, chunk);  // this segment's payload
+
+    auto* oiph    = (struct iphdr*) out;
+    auto* oth     = (struct tcphdr*) (out + ihl);
+    oiph->tot_len = htons((uint16_t) (hdr + chunk));
+    // A distinct ID per segment: they are separate datagrams on the wire and
+    // sharing one ID breaks any receiver that reassembles by it.
+    oiph->id = htons((uint16_t) (id0 + off / mss));
+    oth->seq = htonl(seq0 + (uint32_t) off);
+    if (!last) {
+      // Only the final segment carries end-of-data markers.
+      oth->fin = 0;
+      oth->psh = 0;
+    }
+    ip_csum_set(oiph);
+    tcp_csum_set(oiph, thl + chunk);
+
+    slot_len[filled] = (ssize_t) (hdr + chunk);
+    ++filled;
+  }
+  if (off >= body) give_up();  // nothing of this packet is left
+  return filled;
+}
 
 //------------------------------------------------------------------------------
 void pfcp_switch::pdn_read_loop(
@@ -70,10 +255,11 @@ void pfcp_switch::pdn_read_loop(
   // sharing one queue -- what this replaced -- reordered ~17% of packets.
   //
   // The buffers keep ROOM_FOR_GTPV1U_G_PDU of headroom in front so that
-  // send_g_pdu() can write the GTP-U header in place without a copy. A tun fd
-  // yields one packet per read() and cannot be batched on receive; the
-  // transmit side is batched instead -- drain up to DL_BATCH packets,
-  // encapsulate them all, then hand the lot to one sendmmsg().
+  // send_g_pdu() can write the GTP-U header in place without a copy. The
+  // transmit side is batched -- drain up to DL_BATCH packets, encapsulate them
+  // all, then hand the lot to one sendmmsg(). Every queued buffer has to stay
+  // untouched until that flush, which is why each packet needs a slot of its
+  // own rather than one shared scratch buffer.
   constexpr int DL_BATCH = UDP_TX_BATCH;
   const size_t payload_capacity =
       PFCP_SWITCH_RECV_BUFFER_SIZE - ROOM_FOR_GTPV1U_G_PDU;
@@ -83,6 +269,17 @@ void pfcp_switch::pdn_read_loop(
   for (int i = 0; i < DL_BATCH; i++)
     payload[i] = bufs.data() + (size_t) i * PFCP_SWITCH_RECV_BUFFER_SIZE +
                  ROOM_FOR_GTPV1U_G_PDU;
+
+  // With IFF_VNET_HDR every read is prefixed by this header, and when it says
+  // GSO the packet that follows can be up to 64 kB -- far more than one slot
+  // holds. The read therefore scatters into [slot, spill]: an ordinary packet
+  // lands wholly in the slot and is forwarded with no copy at all, exactly as
+  // before. Only an oversized one reaches `spill`, and then the slot's share is
+  // copied to the front of `spill` so the segmenter sees one contiguous packet.
+  // That copy is once per super-packet, not once per segment.
+  constexpr size_t GSO_MAX = 65536 + 128;
+  std::vector<char> spill(payload_capacity + GSO_MAX);
+  struct upf_vnet_hdr vnet = {};
 
   // The fd is O_NONBLOCK, so the drain below costs one read() per packet and
   // nothing else. It used to poll() before every read to decide whether more
@@ -95,7 +292,19 @@ void pfcp_switch::pdn_read_loop(
 
   const int q   = idx < TUN_MAX_QUEUES ? idx : TUN_MAX_QUEUES - 1;
   auto last_log = std::chrono::steady_clock::now();
-  if (upf_n3_inst) upf_n3_inst->begin_tx_batch();
+
+  // Encapsulate and send whatever is queued. Normally once per batch, but also
+  // mid-batch when a GSO super-packet needs more slots than are left.
+  const auto forward_batch = [&](int count) {
+    if (count <= 0) return;
+    tun_q_[q].rx.fetch_add((uint64_t) count, std::memory_order_relaxed);
+    for (int i = 0; i < count; i++)
+      pfcp_session_look_up_pack_in_core(payload[i], len[i]);
+    if (upf_n3_inst) upf_n3_inst->flush_tx_batch();
+  };
+  // Send this queue's traffic on the matching N3 socket, so downlink thread q
+  // and uplink receive thread q share one socket and no two threads share any.
+  if (upf_n3_inst) upf_n3_inst->begin_tx_batch(q);
 
   while (1) {
     // One clock read per batch, on one thread only. It has to be here rather
@@ -110,18 +319,53 @@ void pfcp_switch::pdn_read_loop(
       }
     }
 
-    int n = 0;
+    int n         = 0;  // slots filled with ready-to-forward packets
+    bool gso_seen = false;
     while (n < DL_BATCH) {
-      ssize_t r = read(sock_r, payload[n], payload_capacity);
+      struct iovec iov[3];
+      iov[0].iov_base = &vnet;
+      iov[0].iov_len  = sizeof(vnet);
+      iov[1].iov_base = payload[n];
+      iov[1].iov_len  = payload_capacity;
+      iov[2].iov_base = spill.data() + payload_capacity;
+      iov[2].iov_len  = GSO_MAX;
+
+      ssize_t r = readv(sock_r, iov, 3);
       if (r > 0) {
-        len[n++] = r;
+        const size_t plen = (size_t) r - sizeof(vnet);
+        if (plen <= payload_capacity &&
+            vnet.gso_type == UPF_VNET_HDR_GSO_NONE) {
+          // Ordinary packet, already in its slot: no copy, no segmenting. It
+          // may still need its checksum finishing -- see vnet_complete_csum().
+          if (vnet.flags & UPF_VNET_HDR_F_NEEDS_CSUM)
+            vnet_complete_csum(
+                payload[n], plen, vnet.csum_start, vnet.csum_offset);
+          len[n++] = (ssize_t) plen;
+          continue;
+        }
+        // Oversized, or flagged as a segment the kernel did not split. Make it
+        // contiguous at the front of `spill`, then fan it out into the slots.
+        // It has already been read off the tun, so it is this thread's only
+        // copy: when it needs more slots than the batch has left, send what is
+        // there and carry on from the cursor rather than lose the tail.
+        memcpy(spill.data(), payload[n], payload_capacity);
+        gso_seen = true;
+        for (std::size_t off = 0; off < plen;) {
+          n += segment_and_forward(
+              spill.data(), plen, vnet, payload + n, len + n, DL_BATCH - n,
+              payload_capacity, off);
+          if (off < plen) {
+            forward_batch(n);
+            n = 0;
+          }
+        }
         continue;
       }
       if (r < 0 && errno == EINTR) continue;
       if (r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
       ++errors;
       Logger::pfcp_switch().error(
-          "read failed rc=%d:%s nb_errors %d", r, strerror(errno), errors);
+          "readv failed rc=%d:%s nb_errors %d", r, strerror(errno), errors);
       std::this_thread::sleep_for(std::chrono::milliseconds(1000));
       exit(0);
     }
@@ -133,11 +377,9 @@ void pfcp_switch::pdn_read_loop(
       poll(&pfd, 1, q == 0 ? 1000 : -1);
       continue;
     }
+    (void) gso_seen;
 
-    tun_q_[q].rx.fetch_add((uint64_t) n, std::memory_order_relaxed);
-    for (int i = 0; i < n; i++)
-      pfcp_session_look_up_pack_in_core(payload[i], len[i]);
-    if (upf_n3_inst) upf_n3_inst->flush_tx_batch();
+    forward_batch(n);
   }
 }
 
@@ -148,14 +390,21 @@ void pfcp_switch::pdn_read_loop(
 // idle) is indistinguishable from a genuine ceiling.
 //------------------------------------------------------------------------------
 void pfcp_switch::log_tun_queue_balance() {
-  if (tun_fds_.size() < 2) return;
   std::string s;
   for (size_t i = 0; i < tun_fds_.size() && i < TUN_MAX_QUEUES; i++)
     s.append(fmt::format(
         "{}q{}: rx {} tx {}", i ? ", " : "", i,
         tun_q_[i].rx.load(std::memory_order_relaxed),
         tun_q_[i].tx.load(std::memory_order_relaxed)));
-  Logger::pfcp_switch().debug("tun queue balance -- %s", s.c_str());
+  // Map versions retired but not yet freed. Non-zero is normal -- that is the
+  // reclamation delay RCU trades for a lock-free read side. A peak that only
+  // ever climbs is a reader that stopped leaving its critical section, which
+  // from the outside is indistinguishable from a leak.
+  const size_t pending = rcu_.pending();
+  if (pending > rcu_pending_hwm_) rcu_pending_hwm_ = pending;
+  Logger::pfcp_switch().debug(
+      "tun queue balance -- %s; rcu retired %zu, peak %zu", s.c_str(), pending,
+      rcu_pending_hwm_);
 }
 
 //------------------------------------------------------------------------------
@@ -202,11 +451,25 @@ void pfcp_switch::send_to_core(char* const ip_packet, const ssize_t len) {
       break;
     }
 
+  // The queue was opened with IFF_VNET_HDR, so every write has to start with
+  // one. These packets arrive one at a time off the air and are already at
+  // most an MTU, so there is nothing to coalesce: the header says "no GSO, no
+  // checksum work" and the payload follows unchanged. writev keeps that a
+  // single syscall rather than prepending the header with a copy.
+  struct upf_vnet_hdr vnet = {};
+  vnet.flags               = 0;
+  vnet.gso_type            = UPF_VNET_HDR_GSO_NONE;
+  struct iovec iov[2];
+  iov[0].iov_base = &vnet;
+  iov[0].iov_len  = sizeof(vnet);
+  iov[1].iov_base = ip_packet;
+  iov[1].iov_len  = (size_t) len;
+
   // The fd is non-blocking so the downlink reader does not need a poll() per
   // packet. EAGAIN here means the queue is momentarily full, not that the
   // packet should be dropped -- wait briefly rather than lose it.
   for (int attempt = 0;; attempt++) {
-    const ssize_t w = write(fd, ip_packet, len);
+    const ssize_t w = writev(fd, iov, 2);
     if (w >= 0) return;
     if (errno == EINTR) continue;
     if ((errno == EAGAIN || errno == EWOULDBLOCK) && attempt < 8) {
@@ -342,7 +605,15 @@ int pfcp_switch::tun_open(char* devname, int flags, bool multi_queue) {
     return RETURNerror;
   }
   memset(&ifr, 0, sizeof(ifr));
-  ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
+  // IFF_VNET_HDR is what makes a tun fd able to carry more than one packet per
+  // syscall. Without it the kernel segments every TCP stream down to the MTU
+  // before handing it over, so a 3 Gbit/s flow costs ~270k read() calls a
+  // second and each one allocates an skb and copies ~1.4 kB -- which is where
+  // essentially all of the CPU went (97% kernel time, most of it in
+  // tun_get_user). With it, each packet is prefixed by a virtio_net_hdr and
+  // the kernel may hand over a single segment of up to 64 kB, which this code
+  // then splits itself. One syscall for ~45 packets instead of 45.
+  ifr.ifr_flags = IFF_TUN | IFF_NO_PI | IFF_VNET_HDR;
   // Each open with IFF_MULTI_QUEUE attaches another queue to the same device.
   // The device itself must have been created with multi_queue or this fails.
   if (multi_queue) ifr.ifr_flags |= IFF_MULTI_QUEUE;
@@ -352,6 +623,33 @@ int pfcp_switch::tun_open(char* devname, int flags, bool multi_queue) {
     Logger::pfcp_switch().error("ioctl TUNSETIFF %d %s", err, strerror(errno));
     close(fd);
     return RETURNerror;
+  }
+
+  // The header size has to be agreed explicitly: the kernel defaults to the
+  // 10-byte layout but will use 12 if asked, and reading the wrong number of
+  // bytes shifts every packet.
+  int vnet_hdr_sz = (int) sizeof(struct upf_vnet_hdr);
+  if (ioctl(fd, TUNSETVNETHDRSZ, &vnet_hdr_sz) == -1) {
+    Logger::pfcp_switch().error(
+        "ioctl TUNSETVNETHDRSZ %s -- falling back to one packet per syscall",
+        strerror(errno));
+    close(fd);
+    return RETURNerror;
+  }
+
+  // Announce what this code can un-do itself. TSO is the one that matters:
+  // it is what lets the kernel stop segmenting. Checksum offload comes with
+  // it, because a segment the kernel has not split has no per-segment
+  // checksum to compute -- segment_and_forward() computes them.
+  const unsigned int offload =
+      TUN_F_CSUM | TUN_F_TSO4 | TUN_F_TSO6 | TUN_F_TSO_ECN;
+  if (ioctl(fd, TUNSETOFFLOAD, offload) == -1) {
+    // Not fatal: without it the kernel simply keeps segmenting for us, which
+    // is exactly the old behaviour. The vnet header is still present.
+    Logger::pfcp_switch().warn(
+        "ioctl TUNSETOFFLOAD %s -- kernel will keep segmenting, expect the "
+        "old one-syscall-per-packet cost",
+        strerror(errno));
   }
   return fd;
 }
@@ -528,7 +826,7 @@ pfcp_switch::pfcp_switch()
       ue_ipv4_hbo2pfcp_pdr(PFCP_SWITCH_MAX_PDRS, rcu_),
       sock_w(0) {
   bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
-  socks_r_ptr                   = new int[16];
+  socks_r_ptr                   = {};
   prThreadToCancel              = (pthread_t) 0;
 
   if (!isBpfAccelerationEnabled) {
@@ -568,7 +866,6 @@ pfcp_switch::~pfcp_switch() {
   usage_report_stop_.store(true, std::memory_order_relaxed);
   if (thread_usage_report_.joinable()) thread_usage_report_.join();
   for (int fd : tun_fds_) close(fd);
-  delete[] socks_r_ptr;
 }
 
 // =============================================================================
@@ -645,10 +942,10 @@ bool pfcp_switch::send_usage_report(
   // either double-counts a delta or never sees one.
   std::lock_guard<std::mutex> lk(session->report_mutex);
 
-  const uint64_t ul  = session->ul_octets.load(std::memory_order_relaxed);
-  const uint64_t dl  = session->dl_octets.load(std::memory_order_relaxed);
-  const uint64_t ulp = session->ul_packets.load(std::memory_order_relaxed);
-  const uint64_t dlp = session->dl_packets.load(std::memory_order_relaxed);
+  const uint64_t ul  = session->total_ul_octets();
+  const uint64_t dl  = session->total_dl_octets();
+  const uint64_t ulp = session->total_ul_packets();
+  const uint64_t dlp = session->total_dl_packets();
 
   const uint64_t d_ul  = ul - session->reported_ul_octets;
   const uint64_t d_dl  = dl - session->reported_dl_octets;
@@ -760,79 +1057,118 @@ void pfcp_switch::usage_report_loop() {
 }
 
 //------------------------------------------------------------------------------
-// apply_qos_mbr / release_qos_mbr -- QER Maximum Bitrate enforcement.
+// resolve_pdr_qfis -- which QFI each PDR's packets must carry, worked out
+// once per session change.
 //
-// A QER carries the MBR (3GPP TS 29.244 §8.2.8) and QFI (§8.2.89); the
-// downlink TEID that identifies the flow on the wire comes from the FAR's
-// Outer Header Creation. Pair them up and hand the rate to the policer.
-// Nothing is attached to the interface until a session actually has a rate.
+// An uplink PDR has it in its PDI. A downlink PDR does not: every downlink
+// FAR of a session shares one TEID, so the QoS flows are told apart solely by
+// the QFI in the PDU Session Container, which comes from the linked QER.
+//------------------------------------------------------------------------------
+void pfcp_switch::resolve_pdr_qfis(
+    std::shared_ptr<pfcp::pfcp_session>& session) {
+  if (!session) return;
+  for (const auto& p : session->pdrs) {
+    if (!p) continue;
+    if (p->pdi.first && p->pdi.second.qfi.first) {
+      p->tx_qfi = p->pdi.second.qfi.second.qfi;
+      continue;
+    }
+    p->tx_qfi = -1;
+    if (!p->qer_id.first) continue;
+    std::shared_ptr<pfcp::pfcp_qer> q = {};
+    if (session->get(p->qer_id.second.qer_id, q) && q && q->qos_flow_id.first)
+      p->tx_qfi = q->qos_flow_id.second.qfi;
+  }
+}
+
+//------------------------------------------------------------------------------
+// apply_qos_mbr -- give every PDR the meter its QoS flow is entitled to.
+//
+// A QER carries the MBR (3GPP TS 29.244 §8.2.8). Which QER bounds the whole
+// session and which bounds one flow is not flagged anywhere: the session-AMBR
+// QER is the one every QoS flow's PDRs point at, a per-flow QER is pointed at
+// by a single flow's. So classify by how many distinct QFIs reference each,
+// which is structural rather than a guess from the rates.
 //------------------------------------------------------------------------------
 void pfcp_switch::apply_qos_mbr(std::shared_ptr<pfcp::pfcp_session>& session) {
   if (!upf_cfg.enable_qos || upf_cfg.enable_bpf_datapath || !session) return;
 
-  // Several QERs can bound one session (a session-AMBR one plus per-flow
-  // ones). Take the tightest in each direction: whichever limit is lowest is
-  // the one the session must not exceed, and picking any other would let it
-  // through.
-  uint64_t ul_mbr = 0;
-  uint64_t dl_mbr = 0;
-  uint8_t qfi     = session->qfi;
-  for (const auto& q : session->qers) {
-    if (!q) continue;
-    if (q->maximum_bitrate.first) {
-      // PFCP expresses MBR in kbit/s (§8.2.8).
-      const uint64_t ul = q->maximum_bitrate.second.ul_mbr * 1000ULL;
-      const uint64_t dl = q->maximum_bitrate.second.dl_mbr * 1000ULL;
-      if (ul > 0 && (ul_mbr == 0 || ul < ul_mbr)) ul_mbr = ul;
-      if (dl > 0 && (dl_mbr == 0 || dl < dl_mbr)) dl_mbr = dl;
-    }
-    if (q->qos_flow_id.first) qfi = q->qos_flow_id.second.qfi;
+  std::unordered_map<uint32_t, std::shared_ptr<pfcp::pfcp_qer>> qer_by_id;
+  for (const auto& q : session->qers)
+    if (q && q->qer_id.first) qer_by_id[q->qer_id.second.qer_id] = q;
+
+  // A QFI is 6 bits (§8.2.89), so the QFIs pointing at a QER fit in a mask.
+  std::unordered_map<uint32_t, uint64_t> qfis_of;
+  for (const auto& p : session->pdrs)
+    if (p && p->qer_id.first)
+      qfis_of[p->qer_id.second.qer_id] |=
+          1ULL << (p->tx_qfi < 0 ? 0 : p->tx_qfi & 63);
+
+  const auto session_wide = [&qfis_of](uint32_t id) {
+    const auto it = qfis_of.find(id);
+    // Referenced by no PDR at all: an AMBR QER the SMF sent without wiring it
+    // to one, which is how several of them signal the session limit.
+    // More than one bit set: shared by several flows, so session-wide.
+    return it == qfis_of.end() || (it->second & (it->second - 1)) != 0;
+  };
+
+  // PFCP expresses MBR in kbit/s (§8.2.8).
+  uint64_t sess_ul = 0, sess_dl = 0;
+  for (const auto& e : qer_by_id) {
+    if (!e.second->maximum_bitrate.first || !session_wide(e.first)) continue;
+    const uint64_t ul = e.second->maximum_bitrate.second.ul_mbr * 1000ULL;
+    const uint64_t dl = e.second->maximum_bitrate.second.dl_mbr * 1000ULL;
+    if (ul && (!sess_ul || ul < sess_ul)) sess_ul = ul;
+    if (dl && (!sess_dl || dl < sess_dl)) sess_dl = dl;
   }
 
-  std::vector<oai::upf::qos_mbr::teid_rate> uplink, downlink;
+  // One AMBR bucket per direction for the whole session, kept on the session
+  // and handed to every PDR of that direction -- the AMBR is a limit on the
+  // session, so its credit has to be spent from one place. Rebuilt only when
+  // the rate changes, so a Session Modification does not reset the credit.
+  const auto session_bucket = [&](std::shared_ptr<oai::upf::qos_bucket>& b,
+                                  uint64_t bps) {
+    if (!bps)
+      b.reset();
+    else if (!b || b->rate() != bps)
+      b = std::make_shared<oai::upf::qos_bucket>(bps, upf_cfg.qos_burst_ms);
+  };
+  session_bucket(session->qos_session_ul, sess_ul);
+  session_bucket(session->qos_session_dl, sess_dl);
 
-  // Downlink: the TEID the packet will carry towards the gNB comes from the
-  // FAR's Outer Header Creation. The uplink FAR has none, so this naturally
-  // picks out the downlink ones.
-  for (const auto& f : session->fars) {
-    if (!f || !f->forwarding_parameters.first) continue;
-    const auto& fp = f->forwarding_parameters.second;
-    if (!fp.outer_header_creation.first) continue;
-    const uint32_t teid = fp.outer_header_creation.second.teid;
-    if (teid != 0) downlink.push_back({teid, dl_mbr});
-  }
-
-  // Uplink: the TEID arriving from the gNB is the one this UPF allocated and
-  // reported in the PDI's local F-TEID. Metering it on ingress drops an
-  // over-limit packet before the UPF spends anything decapsulating it.
   for (const auto& p : session->pdrs) {
     if (!p || !p->pdi.first) continue;
-    const auto& pdi = p->pdi.second;
-    if (!pdi.local_fteid.first) continue;
-    const uint32_t teid = pdi.local_fteid.second.teid;
-    if (teid != 0) uplink.push_back({teid, ul_mbr});
+    const bool is_dl = p->pdi.second.source_interface.first &&
+                       p->pdi.second.source_interface.second.interface_value ==
+                           INTERFACE_VALUE_CORE;
+    uint64_t flow = 0;
+    if (p->qer_id.first) {
+      const auto it = qer_by_id.find(p->qer_id.second.qer_id);
+      if (it != qer_by_id.end() && it->second->maximum_bitrate.first &&
+          !session_wide(it->first))
+        flow = is_dl ? it->second->maximum_bitrate.second.dl_mbr * 1000ULL :
+                       it->second->maximum_bitrate.second.ul_mbr * 1000ULL;
+    }
+    const auto& sess =
+        is_dl ? session->qos_session_dl : session->qos_session_ul;
+
+    if (!flow && !sess) {
+      p->qos.reset();
+    } else if (!p->qos || !p->qos->same_as(flow, sess)) {
+      p->qos =
+          std::make_shared<oai::upf::qos_mbr>(flow, sess, upf_cfg.qos_burst_ms);
+    }
+    Logger::pfcp_switch().debug(
+        "QoS/MBR: seid 0x%lx PDR %u %s: flow %lu bps, session %lu bps",
+        session->seid, p->pdr_id.rule_id, is_dl ? "downlink" : "uplink", flow,
+        sess ? sess->rate() : 0);
   }
-
-  Logger::pfcp_switch().debug(
-      "QoS/MBR: seid 0x%lx has %zu QER(s), ul_mbr=%lu dl_mbr=%lu bps, "
-      "%zu uplink + %zu downlink TEID(s), qfi=%u",
-      session->seid, session->qers.size(), ul_mbr, dl_mbr, uplink.size(),
-      downlink.size(), qfi);
-
-  oai::upf::qos_mbr::instance().set_rates(
-      upf_cfg.n3.if_name, session->seid, uplink, downlink);
-}
-
-//------------------------------------------------------------------------------
-void pfcp_switch::release_qos_mbr(
-    std::shared_ptr<pfcp::pfcp_session>& session) {
-  if (session) oai::upf::qos_mbr::instance().clear_rates(session->seid);
 }
 
 //------------------------------------------------------------------------------
 void pfcp_switch::add_pfcp_session_by_up_seid(
     const uint64_t seid, std::shared_ptr<pfcp::pfcp_session>& session) {
-  up_seid2pfcp_sessions.insert(seid, session);
+  insert_or_error(up_seid2pfcp_sessions, seid, session, "session");
 }
 
 //------------------------------------------------------------------------------
@@ -843,7 +1179,6 @@ void pfcp_switch::remove_pfcp_session(
   if (upf_cfg.enable_urr && !upf_cfg.enable_bpf_datapath) {
     send_usage_report(session, false);
   }
-  release_qos_mbr(session);
   session->cleanup();
   cp_fseid2pfcp_sessions.erase(session->cp_fseid);
   up_seid2pfcp_sessions.erase(session->seid);
@@ -877,14 +1212,22 @@ void pfcp_switch::add_pfcp_ul_pdr_by_up_teid(
     const auto* cur = ul_n3_teid2pfcp_pdr.find(teid);
     if (cur) *fresh = **cur;  // copy the existing entries
   }
-  // Keep the vector ordered by precedence, using pfcp_pdr::operator< exactly
-  // as the original did: insert before the first entry that compares less.
-  // The original returned without inserting when no such entry existed, so a
-  // PDR that sorted last was silently dropped; appending fixes that.
+  // Ordered by precedence, lowest value first: §8.2.11 makes the lower value
+  // the higher precedence, and the look-up takes the first PDR that matches.
+  // Drop an older copy of this same PDR first, so a repeated Session
+  // Modification does not stack duplicates behind each other.
+  fresh->erase(
+      std::remove_if(
+          fresh->begin(), fresh->end(),
+          [&pdr](const std::shared_ptr<pfcp::pfcp_pdr>& e) {
+            return e && e->local_seid == pdr->local_seid &&
+                   e->pdr_id.rule_id == pdr->pdr_id.rule_id;
+          }),
+      fresh->end());
   auto it = fresh->begin();
-  while (it != fresh->end() && !(*(*it) < *pdr)) ++it;
+  while (it != fresh->end() && *(*it) < *pdr) ++it;
   fresh->insert(it, pdr);
-  ul_n3_teid2pfcp_pdr.insert(teid, fresh);
+  insert_or_error(ul_n3_teid2pfcp_pdr, teid, fresh, "uplink PDR");
 }
 
 //------------------------------------------------------------------------------
@@ -917,7 +1260,7 @@ void pfcp_switch::remove_pdr_from_lookup(
     if (fresh->empty())
       remove_pfcp_ul_pdrs_by_up_teid(teid);
     else
-      ul_n3_teid2pfcp_pdr.insert(teid, fresh);
+      insert_or_error(ul_n3_teid2pfcp_pdr, teid, fresh, "uplink PDR");
 
   } else if (
       pdi.source_interface.second.interface_value == INTERFACE_VALUE_CORE &&
@@ -937,7 +1280,7 @@ void pfcp_switch::remove_pdr_from_lookup(
     if (fresh->empty())
       remove_pfcp_dl_pdrs_by_ue_ip(ue_ip);  // also drops any framed routes
     else
-      ue_ipv4_hbo2pfcp_pdr.insert(ue_ip, fresh);
+      insert_or_error(ue_ipv4_hbo2pfcp_pdr, ue_ip, fresh, "downlink PDR");
   }
 }
 
@@ -1002,9 +1345,9 @@ void pfcp_switch::replace_pdr_in_lookup(
     }
     if (fresh->empty()) fresh->push_back(new_pdr);
     if (n_ul)
-      ul_n3_teid2pfcp_pdr.insert(n_teid, fresh);
+      insert_or_error(ul_n3_teid2pfcp_pdr, n_teid, fresh, "uplink PDR");
     else
-      ue_ipv4_hbo2pfcp_pdr.insert(n_ip, fresh);
+      insert_or_error(ue_ipv4_hbo2pfcp_pdr, n_ip, fresh, "downlink PDR");
     return;
   }
 
@@ -1027,13 +1370,27 @@ void pfcp_switch::remove_pfcp_ul_pdrs_by_up_teid(const teid_t teid) {
 //------------------------------------------------------------------------------
 void pfcp_switch::add_pfcp_dl_pdr_by_ue_ip(
     const uint32_t ue_ip, std::shared_ptr<pfcp::pfcp_pdr>& pdr) {
-  // Same copy-on-write rule as the uplink side. Note the previous code
-  // replaced the whole entry for a repeat UE IP, so a single-PDR vector
-  // preserves that behaviour.
+  // Same copy-on-write rule and the same precedence ordering as the uplink
+  // side: a UE has one downlink PDR per QoS flow, all sharing its address, so
+  // they must all stay reachable. Replacing the entry would leave only the
+  // last, and once SDF filters are enforced that one rejects everything it
+  // was not written for.
   auto fresh = std::make_shared<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>();
-  fresh->push_back(pdr);
   const bool is_new = (ue_ipv4_hbo2pfcp_pdr.find(ue_ip) == nullptr);
-  ue_ipv4_hbo2pfcp_pdr.insert(ue_ip, fresh);
+  {
+    oai::upf::rcu_guard g(rcu_);
+    const auto* cur = ue_ipv4_hbo2pfcp_pdr.find(ue_ip);
+    if (cur)
+      for (const auto& e : **cur)
+        // A re-sent PDR replaces its older self rather than joining it.
+        if (e && !(e->local_seid == pdr->local_seid &&
+                   e->pdr_id.rule_id == pdr->pdr_id.rule_id))
+          fresh->push_back(e);
+  }
+  auto at = fresh->begin();
+  while (at != fresh->end() && *(*at) < *pdr) ++at;
+  fresh->insert(at, pdr);
+  insert_or_error(ue_ipv4_hbo2pfcp_pdr, ue_ip, fresh, "downlink PDR");
   if (is_new && !upf_cfg.enable_bpf_datapath && upf_cfg.enable_fr &&
       pdr->pdi.second.framed_route.first) {
     for (const auto& item : pdr->pdi.second.framed_route.second) {
@@ -1274,6 +1631,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         s = std::shared_ptr<pfcp_session>(session);
         add_pfcp_session_by_cp_fseid(fseid, s);
         add_pfcp_session_by_up_seid(session->seid, s);
+        resolve_pdr_qfis(s);
         apply_qos_mbr(s);
         // start_timer_min_commit_interval();
         // start_timer_max_commit_interval();
@@ -1701,6 +2059,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     // practice: the downlink FAR only learns its Outer Header Creation TEID
     // once the gNB reports its N3 tunnel, which arrives here and not at
     // establishment.
+    resolve_pdr_qfis(s);
     apply_qos_mbr(s);
   }
 
@@ -1793,10 +2152,15 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
             iph, num_bytes, r_endpoint, tunnel_id);
         if (!isInAccess && upf_cfg.enable_fr &&
             it_pdr->get()->pdi.second.framed_route.first) {
-          auto fr_ue_ip   = (struct iphdr*) malloc(sizeof(struct iphdr));
-          fr_ue_ip->saddr = be32toh(fr->retrieveUEIp(be32toh(iph->saddr)));
-          isInAccess      = (*it_pdr)->look_up_pack_in_access(
-              fr_ue_ip, num_bytes, r_endpoint, tunnel_id);
+          // A stack copy of the real header: the framed-route retry only
+          // substitutes the source address and every other field must still be
+          // the packet's own. This used to malloc() an iphdr that was never
+          // freed -- a leak on the per-packet path -- and left all the fields
+          // except saddr uninitialised.
+          struct iphdr fr_ue_ip = *iph;
+          fr_ue_ip.saddr = be32toh(fr->retrieveUEIp(be32toh(iph->saddr)));
+          isInAccess     = (*it_pdr)->look_up_pack_in_access(
+              &fr_ue_ip, num_bytes, r_endpoint, tunnel_id);
         }
         if (isInAccess) {
           // NOTE: no logging on the per-packet fast path.  These were info()
@@ -1810,17 +2174,17 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
               const auto& ssession  = *sess_p;
               pfcp::far_id_t far_id = {};
               if ((*it_pdr)->get(far_id)) {
-                std::shared_ptr<pfcp::pfcp_far> sfar = {};
-                if (ssession->get(far_id.far_id, sfar)) {
+                pfcp::pfcp_far* sfar = ssession->find_far(far_id.far_id);
+                if (sfar) {
                   // Maintain uplink QFI in session
                   uint8_t qfi = (*it_pdr)->pdi.second.qfi.second.qfi;
                   ssession->qfi.store(qfi, std::memory_order_relaxed);
-                  // Volume measured on the packet the UE actually sent, i.e.
-                  // after decapsulation -- what §8.2.44 asks for and what the
-                  // subscriber is billed on.
-                  ssession->ul_octets.fetch_add(
-                      num_bytes, std::memory_order_relaxed);
-                  ssession->ul_packets.fetch_add(1, std::memory_order_relaxed);
+                  // Over its MBR: dropped before it is counted, so the
+                  // usage report holds what was forwarded (§8.2.8, §8.2.44).
+                  // Volume is the decapsulated packet, i.e. what the UE sent.
+                  if ((*it_pdr)->qos && !(*it_pdr)->qos->pass(num_bytes))
+                    return;
+                  ssession->add_ul(num_bytes);
                   sfar->apply_forwarding_rules(iph, num_bytes, nocp, buff, 0);
                 }
               }
@@ -1829,9 +2193,10 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
           }
 
         } else {
-          Logger::pfcp_switch().info(
-              "pfcp_session_look_up_pack_in_access failed PDR id %4x ",
-              (*it_pdr)->pdr_id.rule_id);
+          Logger::pfcp_switch().trace(
+              "uplink TEID 0x%x: PDR %u does not match this packet, trying "
+              "the next by precedence",
+              tunnel_id, (*it_pdr)->pdr_id.rule_id);
         }
       }
     } else {
@@ -1879,33 +2244,35 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
 void pfcp_switch::pfcp_session_look_up_pack_in_core(
     const char* buffer, const std::size_t num_bytes) {
   struct iphdr* iph = (struct iphdr*) buffer;
-  std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>> pdrs;
 
-  // See the uplink path: one critical section, no per-packet refcounting.
+  // See the uplink path: one critical section, no per-packet refcounting. The
+  // guard keeps every object below alive for the whole section, so copying a
+  // shared_ptr buys nothing and costs an atomic increment and decrement on a
+  // line every downlink thread and the control plane share -- which is both
+  // slower and, worse, load-dependent.
   oai::upf::rcu_guard rg(rcu_);
 
   if (iph->version == 4) {
     uint32_t ue_ip     = be32toh(iph->daddr);
     const auto* pdrs_p = find_dl_pdrs(ue_ip);
-    bool is_pdr_ue_ip  = (pdrs_p != nullptr);
-    if (is_pdr_ue_ip) pdrs = *pdrs_p;
-    if (!is_pdr_ue_ip && upf_cfg.enable_fr) {
-      uint32_t fr_ip = fr->retrieveUEIp(ue_ip);
-      ue_ip          = fr_ip != 0 ? fr_ip : ue_ip;
-      is_pdr_ue_ip   = get_pfcp_dl_pdrs_by_ue_ip(ue_ip, pdrs);
+    if (!pdrs_p && upf_cfg.enable_fr) {
+      const uint32_t fr_ip = fr->retrieveUEIp(ue_ip);
+      ue_ip                = fr_ip != 0 ? fr_ip : ue_ip;
+      pdrs_p               = find_dl_pdrs(ue_ip);
     }
-    if (is_pdr_ue_ip) {
-      bool nocp = false;
-      bool buff = false;
+    if (pdrs_p) {
+      const auto* pdrs = pdrs_p->get();
+      bool nocp        = false;
+      bool buff        = false;
       for (auto it = pdrs->begin(); it < pdrs->end(); ++it) {
         if ((*it)->look_up_pack_in_core(iph, num_bytes)) {
-          std::shared_ptr<pfcp::pfcp_session> ssession = {};
-          uint64_t lseid                               = 0;
+          uint64_t lseid = 0;
           if ((*it)->get(lseid)) {
-            if (get_pfcp_session_by_up_seid(lseid, ssession)) {
+            const auto* sess_p = find_session(lseid);
+            if (sess_p) {
+              const auto& ssession  = *sess_p;
               pfcp::far_id_t far_id = {};
               if ((*it)->get(far_id)) {
-                std::shared_ptr<pfcp::pfcp_far> sfar = {};
                 // The QFI belongs to the flow this packet matched, so read
                 // it from the matched rule, which is immutable once published.
                 // Resolving it through the session's QER list instead would
@@ -1913,14 +2280,12 @@ void pfcp_switch::pfcp_session_look_up_pack_in_core(
                 // Rules that carry no QFI fall back to the session-wide value
                 // learned from uplink traffic.
                 uint8_t qfi = ssession->qfi.load(std::memory_order_relaxed);
-                if ((*it)->pdi.first && (*it)->pdi.second.qfi.first) {
-                  qfi = (*it)->pdi.second.qfi.second.qfi;
-                }
-                if (ssession->get(far_id.far_id, sfar)) {
+                if ((*it)->tx_qfi >= 0) qfi = (uint8_t) (*it)->tx_qfi;
+                pfcp::pfcp_far* sfar = ssession->find_far(far_id.far_id);
+                if (sfar) {
+                  if ((*it)->qos && !(*it)->qos->pass(num_bytes)) return;
                   // Counted before encapsulation, to match the uplink side.
-                  ssession->dl_octets.fetch_add(
-                      num_bytes, std::memory_order_relaxed);
-                  ssession->dl_packets.fetch_add(1, std::memory_order_relaxed);
+                  ssession->add_dl(num_bytes);
                   sfar->apply_forwarding_rules(iph, num_bytes, nocp, buff, qfi);
                   if (buff) {
                     (*it)->buffering_requested(buffer, num_bytes);
@@ -1934,17 +2299,24 @@ void pfcp_switch::pfcp_session_look_up_pack_in_core(
           }
           return;
         } else {
-          Logger::pfcp_switch().info(
-              "look_up_pack_in_core failed PDR id %4x ", (*it)->pdr_id.rule_id);
+          Logger::pfcp_switch().trace(
+              "downlink UE %u.%u.%u.%u: PDR %u does not match this packet, "
+              "trying the next by precedence",
+              (ue_ip >> 24) & 0xff, (ue_ip >> 16) & 0xff, (ue_ip >> 8) & 0xff,
+              ue_ip & 0xff, (*it)->pdr_id.rule_id);
         }
       }
     } else {
-      Logger::pfcp_switch().info(
-          "pfcp_session_look_up_pack_in_core UE IP %8x not found", ue_ip);
+      Logger::pfcp_switch().trace(
+          "downlink: no session owns UE IP %u.%u.%u.%u, packet dropped",
+          (ue_ip >> 24) & 0xff, (ue_ip >> 16) & 0xff, (ue_ip >> 8) & 0xff,
+          ue_ip & 0xff);
     }
   } else if (iph->version == 6) {
     // TODO: IPv6 downlink look-up
   } else {
-    Logger::pfcp_switch().info("Unknown IP version %d packet", iph->version);
+    Logger::pfcp_switch().trace(
+        "downlink: not an IPv4 or IPv6 packet (version %d), dropped",
+        iph->version);
   }
 }

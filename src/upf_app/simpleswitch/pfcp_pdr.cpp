@@ -59,13 +59,10 @@ bool pfcp_pdr::look_up_pack_in_access(
         return false;
       }
     }
-    // SDF Filter (§8.2.5) — TODO: optimized flow description matching
-    if (pdi.second.sdf_filter.first) {
-      // TODO (create ss_pdi_t with ss_sdf_filter_t with optimized flow
-      // description matching )
-      return true;
-    }
-    return true;  // No SDF filter — match accepted
+    // SDF Filter (§8.2.5). Without this every PDR of the session matched
+    // every packet, so per-flow rules -- the whole point of a packet filter --
+    // could not be told apart.
+    return oai::upf::sdf_match(sdf, iph, num_bytes, true, pdi_ue_ipv4());
   } else {
     return false;  // PDI is mandatory per spec
   }
@@ -100,13 +97,8 @@ bool pfcp_pdr::look_up_pack_in_core(
       return false;
     }
   }
-  // SDF filters TODO vector
-  // if (pdi.second.sdf_filter.first) {
-  // TODO (create ss_pdi_t with ss_sdf_filter_t with optimized flow description
-  // matching )
-  return true;
-  //}
-  // return false;
+  // SDF Filter (§8.2.5), same as the uplink but travelling the other way.
+  return oai::upf::sdf_match(sdf, iph, num_bytes, false, pdi_ue_ipv4());
 }
 
 //------------------------------------------------------------------------------
@@ -121,8 +113,12 @@ bool pfcp_pdr::update(
     outer_header_removal.first = true;  // §8.2.64 — Sxa+Sxb+N4+N4mb
   if (updated_pdr.get(precedence.second))
     precedence.first = true;  // §8.2.11 — Sxb+Sxc+N4+N4mb
-  if (updated_pdr.get(pdi.second))
+  if (updated_pdr.get(pdi.second)) {
     pdi.first = true;  // grouped IE type=2 — Sxa+Sxb+Sxc+N4+N4mb
+    // The PDI carries the SDF filter, so the compiled rule is now stale. An
+    // AF-initiated QoS change arrives exactly this way.
+    compile_sdf();
+  }
   if (updated_pdr.get(far_id.second))
     far_id.first = true;  // §8.2.74 — Sxa+Sxb+Sxc+N4+N4mb
   if (updated_pdr.get(urr_id.second))
