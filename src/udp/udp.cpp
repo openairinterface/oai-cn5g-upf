@@ -45,14 +45,22 @@ static std::string string_to_hex(const std::string& input) {
 //------------------------------------------------------------------------------
 thread_local bool udp_server::tx_batching_ = false;
 thread_local int udp_server::tx_count_     = 0;
+thread_local int udp_server::tx_sock_      = -1;
 thread_local struct mmsghdr udp_server::tx_msgs_[UDP_TX_BATCH];
 thread_local struct iovec udp_server::tx_iov_[UDP_TX_BATCH];
 thread_local struct sockaddr_storage udp_server::tx_addr_[UDP_TX_BATCH];
+thread_local char udp_server::tx_cmsg_[UDP_TX_BATCH][CMSG_SPACE(sizeof(int))];
 
 //------------------------------------------------------------------------------
-void udp_server::begin_tx_batch() {
+void udp_server::begin_tx_batch(int idx) {
   tx_batching_ = true;
   tx_count_    = 0;
+  // Send on this thread's own socket. Sharing one socket for transmit puts
+  // every downlink thread on the same sk_wmem_alloc, which is an atomic on one
+  // cache line that all of them write for every packet. idx is the caller's
+  // queue number, so downlink thread i and receive thread i land on the same
+  // socket and nothing is shared between threads at all.
+  tx_sock_ = sockets_.empty() ? socket_ : sockets_[idx % sockets_.size()];
 }
 
 //------------------------------------------------------------------------------
@@ -62,7 +70,7 @@ void udp_server::flush_tx_batch() {
   if (tx_count_ <= 0) return;
   int n     = tx_count_;
   tx_count_ = 0;  // reset first: a short send must not be retried into itself
-  int sent  = sendmmsg(socket_, tx_msgs_, n, 0);
+  int sent  = sendmmsg(tx_sock_ >= 0 ? tx_sock_ : socket_, tx_msgs_, n, 0);
   if (sent < n) {
     Logger::udp().error(
         "sendmmsg sent %d of %d (%s)", sent, n, strerror(errno));
@@ -70,15 +78,17 @@ void udp_server::flush_tx_batch() {
 }
 
 //------------------------------------------------------------------------------
-void udp_server::udp_read_loop(oai::utils::thread_sched_params sched_params) {
+void udp_server::udp_read_loop(
+    oai::utils::thread_sched_params sched_params, int fd) {
   sched_params.apply(TASK_NONE, Logger::udp());
 
   // One recvmmsg() collects up to UDP_RECV_VLEN datagrams per syscall and each
-  // is handed to the application on this same thread.  Several threads call it
-  // on the same socket: the kernel hands each caller the next datagrams in the
-  // queue, so the work spreads without anything having to decide where a
-  // packet goes.  The receive-queue lock is taken once per batch, not per
-  // packet.
+  // is handed to the application on this same thread.  This thread owns `fd`:
+  // the sockets share an address through SO_REUSEPORT and the kernel hashes
+  // each flow to one of them, so the work spreads without anything having to
+  // decide where a packet goes, and no receive queue is touched by two threads.
+  // Transmit goes out of the same socket, so a flow uses one socket end to end.
+  tx_sock_ = fd;
   std::vector<char> bufs(
       static_cast<size_t>(UDP_RECV_VLEN) * UDP_RECV_BUFFER_SIZE);
   struct mmsghdr msgs[UDP_RECV_VLEN];
@@ -99,7 +109,7 @@ void udp_server::udp_read_loop(oai::utils::thread_sched_params sched_params) {
       msgs[i].msg_hdr.msg_namelen = sizeof(struct sockaddr_storage);
     }
 
-    int nrecv = recvmmsg(socket_, msgs, UDP_RECV_VLEN, MSG_WAITFORONE, nullptr);
+    int nrecv = recvmmsg(fd, msgs, UDP_RECV_VLEN, MSG_WAITFORONE, nullptr);
 
     if (terminateRL_) return;
     if (nrecv < 0) {
@@ -113,6 +123,31 @@ void udp_server::udp_read_loop(oai::utils::thread_sched_params sched_params) {
           static_cast<char*>(iovecs[i].iov_base), msgs[i].msg_len, r_endpoint);
     }
   }
+}
+
+//------------------------------------------------------------------------------
+// clone_socket -- another socket on the very same address and port.
+//
+// SO_REUSEPORT was already being set on the one socket this class created,
+// which did nothing: the kernel only hashes datagrams across a group, and a
+// group of one is just a socket. With a socket per receive thread the group is
+// real, and each thread then has its own receive queue, its own
+// sk_receive_queue lock and its own sk_rmem_alloc counter instead of every
+// thread contending for one set shared between them.
+int udp_server::clone_socket() {
+  if (bind_addrlen_ == 0) return -1;
+  int sd = socket(bind_addr_.ss_family, SOCK_DGRAM, IPPROTO_UDP);
+  if (sd < 0) {
+    Logger::udp().error("pool socket creation failed (%s)", strerror(errno));
+    return -1;
+  }
+  apply_socket_options(sd);  // must set SO_REUSEPORT before bind()
+  if (bind(sd, (struct sockaddr*) &bind_addr_, bind_addrlen_) < 0) {
+    Logger::udp().error("pool socket bind failed (%s)", strerror(errno));
+    close(sd);
+    return -1;
+  }
+  return sd;
 }
 
 //------------------------------------------------------------------------------
@@ -174,6 +209,10 @@ int udp_server::create_socket(
     return errno;
   }
   sa_family = AF_INET;
+  // Remembered so clone_socket() can bind more sockets to this same address:
+  // SO_REUSEPORT only spreads traffic when several sockets share one endpoint.
+  memcpy(&bind_addr_, &addr, sizeof(addr));
+  bind_addrlen_ = sizeof(addr);
   return sd;
 }
 //------------------------------------------------------------------------------
@@ -216,6 +255,8 @@ int udp_server::create_socket(
     return errno;
   }
   sa_family = AF_INET6;
+  memcpy(&bind_addr_, &addr, sizeof(addr));
+  bind_addrlen_ = sizeof(addr);
   return sd;
 }
 //------------------------------------------------------------------------------
@@ -295,13 +336,18 @@ int udp_server::control_cpu() {
 
 //------------------------------------------------------------------------------
 std::vector<int> udp_server::datapath_cpus(int n) {
-  // The cursor is what keeps the uplink and downlink pools apart. Both call
-  // this independently; when each computed the same list from scratch, uplink
-  // thread i and downlink thread i were pinned to the same core every time.
+  // Both pools get the same list, so uplink thread i and downlink thread i
+  // share a core on purpose. A packet is carried end to end by one thread of
+  // one pool -- the tun thread encapsulates and transmits its own downlink,
+  // the N3 thread decapsulates and writes its own uplink -- so for a given
+  // direction only one of the pair is on the path at all. Measured: a downlink
+  // run with the pools on separate cores left every N3 core at 0% while the
+  // tun cores saturated. Sharing therefore costs nothing a unidirectional load
+  // can see, and asks for max(n3_rx_threads, dl_rx_queues) + 1 CPUs instead of
+  // the sum. A full-duplex load does put both on one core; give it more CPUs.
   static std::mutex mu;
   static std::vector<int> pool;
-  static size_t cursor = 0;
-  static bool warned   = false;
+  static bool warned = false;
   std::lock_guard<std::mutex> lk(mu);
 
   if (pool.empty()) {
@@ -316,18 +362,17 @@ std::vector<int> udp_server::datapath_cpus(int n) {
   }
 
   std::vector<int> out;
-  for (int i = 0; i < n; i++) out.push_back(pool[cursor++ % pool.size()]);
+  for (int i = 0; i < n; i++) out.push_back(pool[(size_t) i % pool.size()]);
 
-  // cursor > pool.size() means a later pool has started reusing cores an
-  // earlier one already has: uplink and downlink now share, which is what the
-  // extra cores would have prevented.
-  if (!warned && cursor > pool.size()) {
+  // More threads in one pool than there are cores: now two threads of the same
+  // direction share, which is the sharing that does cost throughput.
+  if (!warned && (size_t) n > pool.size()) {
     warned = true;
     Logger::udp().warn(
-        "datapath threads now share cores: %zu CPU(s) after reserving one for "
-        "the control plane, and %zu thread(s) placed. Give the container "
-        "n3_rx_threads + dl_rx_queues + 1 CPUs to keep a core per thread",
-        pool.size(), cursor);
+        "%d datapath thread(s) of one direction on %zu CPU(s) after reserving "
+        "one for the control plane, so they share cores. Give the container "
+        "max(n3_rx_threads, dl_rx_queues) + 1 CPUs",
+        n, pool.size());
   }
   return out;
 }
@@ -342,19 +387,39 @@ void udp_server::start_receive(
   if (n_rx < 1) n_rx = 1;
   if (n_rx > UDP_MAX_RX_THREADS) n_rx = UDP_MAX_RX_THREADS;
 
+  // One socket per receive thread. The first is the one the constructor made,
+  // so the control path keeps working through socket_ unchanged; the rest join
+  // its SO_REUSEPORT group. A socket that no thread reads would still be given
+  // datagrams by the hash and silently fill, so the pool is exactly as large
+  // as the number of readers -- never larger.
+  sockets_.clear();
+  sockets_.push_back(socket_);
+  for (int i = 1; i < n_rx; i++) {
+    const int sd = clone_socket();
+    if (sd < 0) {
+      Logger::udp().warn(
+          "port %d: only %zu of %d sockets; the rest share, which is slower "
+          "but correct",
+          port_, sockets_.size(), n_rx);
+      break;
+    }
+    sockets_.push_back(sd);
+  }
+
   const std::vector<int> cpus =
       n_rx > 1 ? datapath_cpus(n_rx) : std::vector<int>{};
   std::string where;
   for (int c : cpus)
     where.append(where.empty() ? " on CPU " : ",").append(std::to_string(c));
   Logger::udp().info(
-      "udp_server on port %d: %d receive thread(s) on one socket%s", port_,
-      n_rx, where.c_str());
+      "udp_server on port %d: %d receive thread(s), %zu socket(s)%s", port_,
+      n_rx, sockets_.size(), where.c_str());
 
   for (int i = 0; i < n_rx; i++) {
     oai::utils::thread_sched_params sp = sched_params;
     if (!cpus.empty()) sp.cpu_id = cpus[i];
-    rthreads_.emplace_back(&udp_server::udp_read_loop, this, sp);
+    rthreads_.emplace_back(
+        &udp_server::udp_read_loop, this, sp, sockets_[i % sockets_.size()]);
   }
 }
 

@@ -122,6 +122,7 @@ class upf_config {
   u_int16_t max_upf_interfaces;
   u_int16_t n3_rx_threads;  ///< UL GTP-U receive threads (SO_REUSEPORT)
   u_int16_t dl_rx_queues;   ///< DL tun receive queues (IFF_MULTI_QUEUE)
+  u_int16_t qos_burst_ms;   ///< QER policer bucket depth, in ms of its rate
   u_int16_t max_upf_redirect_interfaces;
   u_int16_t max_pdrs_per_pdu_session;
   u_int16_t max_fars_per_pdu_session;
@@ -210,6 +211,7 @@ class upf_config {
     max_upf_interfaces                            = 4;
     n3_rx_threads                                 = 1;
     dl_rx_queues                                  = 1;
+    qos_burst_ms                                  = 400;
     max_upf_redirect_interfaces                   = 2;
     max_pdu_sessions                              = 1000;
     max_pdrs_per_pdu_session                      = 8;
