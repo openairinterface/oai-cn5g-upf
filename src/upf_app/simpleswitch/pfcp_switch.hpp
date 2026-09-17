@@ -94,8 +94,12 @@ class pfcp_switch {
   /// lands on, so an uneven split is a real failure mode and has to be
   /// visible. Written on the datapath, hence one cache line each.
   struct alignas(64) tun_q_stats_t {
-    std::atomic<uint64_t> rx{0};  ///< DL packets read from this queue
-    std::atomic<uint64_t> tx{0};  ///< UL packets written into this queue
+    std::atomic<uint64_t> rx{0};      ///< DL packets read from this queue
+    std::atomic<uint64_t> tx{0};      ///< UL packets written into this queue
+    std::atomic<uint64_t> shaped{0};  ///< DL packets held for their slot
+    std::atomic<uint64_t> shape_drop{0};  ///< dropped: queue full, or too late
+    std::atomic<uint32_t> queued{0};      ///< packets waiting right now
+    std::atomic<uint64_t> wait_max{0};    ///< ns released later than its slot
   };
   tun_q_stats_t tun_q_[TUN_MAX_QUEUES];
 
@@ -332,9 +336,16 @@ class pfcp_switch {
       const endpoint& r_endpoint){};
 
   //------------------------------------------------------------------------------
-  /** @brief Match and forward a downlink packet read from tun0 (N6). */
+  /** @brief Match and forward a downlink packet read from tun0 (N6).
+   *  @param released true when this packet has already waited for its QoS
+   *         slot, so the meter must not be asked for another one. */
   void pfcp_session_look_up_pack_in_core(
-      const char* buffer, const std::size_t num_bytes);
+      const char* buffer, const std::size_t num_bytes, bool released = false);
+
+  //------------------------------------------------------------------------------
+  /** @brief Send whatever the shaper is holding whose slot has come, and say
+   *  how long until the next one is due (a negative value: nothing waiting). */
+  int64_t release_shaped(int q);
 
   //------------------------------------------------------------------------------
   /** @brief Return false if the packet destination is a local UE subnet
