@@ -130,6 +130,15 @@ upf_n3::upf_n3()
 //   Assume the buffer is a raw IPv4/IPv6 packet (no GTP encapsulation).
 
 //------------------------------------------------------------------------------
+// The uplink receive thread is about to wait: let the shaper send what is due
+// and tell the loop how long it may sleep. Costs one call per batch when
+// nothing is shaped, which is the normal case.
+//------------------------------------------------------------------------------
+int64_t upf_n3::on_idle() {
+  return pfcp_switch_inst ? pfcp_switch_inst->release_shaped() : -1;
+}
+
+//------------------------------------------------------------------------------
 void upf_n3::handle_receive(
     char* recv_buffer, const std::size_t bytes_transferred,
     const endpoint& r_endpoint) {

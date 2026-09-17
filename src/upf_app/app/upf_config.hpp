@@ -127,6 +127,10 @@ class upf_config {
   /// instead: a packet over rate waits for its slot, for at most this long,
   /// and is dropped only if its slot is further out than that.
   u_int16_t qos_shape_ms;
+  /// The same for the uplink, and 0 by default on purpose: by the time a
+  /// packet reaches the UPF the radio has already been spent, so holding it
+  /// relieves nothing and only hides the loss from the sender.
+  u_int16_t qos_shape_ul_ms;
   u_int16_t max_upf_redirect_interfaces;
   u_int16_t max_pdrs_per_pdu_session;
   u_int16_t max_fars_per_pdu_session;
@@ -217,6 +221,7 @@ class upf_config {
     dl_rx_queues                                  = 1;
     qos_burst_ms                                  = 400;
     qos_shape_ms                                  = 0;
+    qos_shape_ul_ms                               = 0;
     max_upf_redirect_interfaces                   = 2;
     max_pdu_sessions                              = 1000;
     max_pdrs_per_pdu_session                      = 8;

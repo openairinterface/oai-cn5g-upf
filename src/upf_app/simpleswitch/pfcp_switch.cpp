@@ -128,18 +128,19 @@ inline void vnet_complete_csum(
 }
 
 //------------------------------------------------------------------------------
-// The downlink shaper's queue: what a packet that is over rate waits in until
-// the slot its meter reserved for it comes round.
+// The shaper's queue: what a packet that is over rate waits in until the slot
+// its meter reserved for it comes round.
 //
-// One of these per downlink thread, reached through a thread_local, so there
-// is no lock and no sharing: the thread that queued a packet is the thread
-// that releases it, and a flow is only ever on one thread. The rates
-// themselves stay shared (see qos_bucket), which is what keeps a session AMBR
-// exact across threads without any of them having to own it.
+// One per datapath thread, reached through a thread_local, so there is no lock
+// and no sharing: the thread that queued a packet is the thread that releases
+// it, and a flow is only ever on one thread. The rates themselves stay shared
+// (see qos_bucket), which is what keeps a session AMBR exact across threads
+// without any of them having to own it.
 //
-// Storage is one slab taken at start-up. Nothing is allocated on the packet
-// path, and when the slab is full the packet is dropped -- a shaper with an
-// unbounded queue is just latency with extra steps.
+// Storage is one slab taken the first time a thread shapes anything. Nothing
+// is allocated on the packet path, and when the slab is full the packet is
+// dropped -- a shaper with an unbounded queue is just latency with extra
+// steps.
 //------------------------------------------------------------------------------
 constexpr size_t SHAPER_SLOTS = 1024;
 
@@ -147,6 +148,8 @@ struct shaped_packet {
   uint64_t due;   ///< ns, steady_clock: when this packet may be sent
   uint32_t slot;  ///< index into the slab
   uint32_t len;
+  uint32_t teid;  ///< uplink: the tunnel it arrived on. 0 means downlink.
+  endpoint peer;  ///< uplink: the gNB it came from, for the rule match
 };
 
 /// Later departures sort last, so the vector is a min-heap on `due`.
@@ -160,13 +163,10 @@ struct shaper_queue {
   std::vector<char> slab;
   std::vector<uint32_t> free_slots;
   std::vector<shaped_packet> heap;
+  /// Only this thread writes them; the logger reads them from another.
+  std::atomic<uint64_t> held{0}, dropped{0}, queued{0}, late_max{0};
 
-  shaper_queue() {
-    slab.resize(SHAPER_SLOTS * PFCP_SWITCH_RECV_BUFFER_SIZE);
-    free_slots.reserve(SHAPER_SLOTS);
-    heap.reserve(SHAPER_SLOTS);
-    for (uint32_t i = 0; i < SHAPER_SLOTS; i++) free_slots.push_back(i);
-  }
+  shaper_queue();
 
   /// Where a packet sits in its slot: after the room send_g_pdu() needs to
   /// write the GTP-U header in front of it, exactly like a receive buffer, so
@@ -180,25 +180,46 @@ struct shaper_queue {
 
   bool has_room() const { return !free_slots.empty(); }
 
-  bool hold(const char* pkt, size_t len, uint64_t due) {
+  bool hold(
+      const char* pkt, size_t len, uint64_t due, uint32_t teid,
+      const endpoint* peer) {
     if (free_slots.empty() || len > capacity) return false;
     const uint32_t slot = free_slots.back();
     free_slots.pop_back();
     memcpy(payload(slot), pkt, len);
-    heap.push_back({due, slot, (uint32_t) len});
+    heap.push_back(
+        {due, slot, (uint32_t) len, teid, peer ? *peer : endpoint()});
     std::push_heap(heap.begin(), heap.end(), shaped_later());
+    held.fetch_add(1, std::memory_order_relaxed);
+    queued.store(heap.size(), std::memory_order_relaxed);
     return true;
   }
+
+  void drop() { dropped.fetch_add(1, std::memory_order_relaxed); }
 };
+
+/// Every queue that exists, so the queue-balance line can report them without
+/// any of the threads knowing its own index. Appended to once per thread.
+std::mutex shaper_reg_mu;
+std::vector<shaper_queue*> shaper_reg;
+
+shaper_queue::shaper_queue() {
+  slab.resize(SHAPER_SLOTS * PFCP_SWITCH_RECV_BUFFER_SIZE);
+  free_slots.reserve(SHAPER_SLOTS);
+  heap.reserve(SHAPER_SLOTS);
+  for (uint32_t i = 0; i < SHAPER_SLOTS; i++) free_slots.push_back(i);
+  std::lock_guard<std::mutex> lk(shaper_reg_mu);
+  shaper_reg.push_back(this);
+}
 
 shaper_queue& shaper() {
   static thread_local shaper_queue q;
   return q;
 }
 
-/// The downlink thread whose queue this is, so the release path can count
-/// against the right one. -1 on any thread that does not shape.
-thread_local int shaper_q_ = -1;
+/// Whether this thread shapes at all. Armed on the first packet it meters, so
+/// no thread that never shapes ever builds a slab.
+thread_local bool shaping_ = false;
 }  // namespace
 
 // =============================================================================
@@ -368,8 +389,8 @@ void pfcp_switch::pdn_read_loop(
   // This thread's shaping queue, if the downlink shapes at all. Touching it
   // here also builds it now rather than on the first packet that needs it.
   if (upf_cfg.enable_qos && upf_cfg.qos_shape_ms) {
-    shaper();
-    shaper_q_ = q;
+    shaper();  // build the slab now rather than on the first packet
+    shaping_ = true;
   }
 
   // Encapsulate and send whatever is queued. Normally once per batch, but also
@@ -457,7 +478,7 @@ void pfcp_switch::pdn_read_loop(
       // slot it reserved. ppoll() rather than poll() because a millisecond of
       // rounding is a millisecond of rate at stake, and because the wait has
       // to be shortened, never lengthened.
-      int64_t wait_ns       = shaper_q_ >= 0 ? release_shaped(q) : -1;
+      int64_t wait_ns       = release_shaped();
       const int64_t idle_ns = q == 0 ? 1000000000LL : -1;
       if (wait_ns < 0) wait_ns = idle_ns;
       if (idle_ns >= 0 && idle_ns < wait_ns) wait_ns = idle_ns;
@@ -473,7 +494,7 @@ void pfcp_switch::pdn_read_loop(
     (void) gso_seen;
 
     forward_batch(n);
-    if (shaper_q_ >= 0) release_shaped(q);
+    release_shaped();
   }
 }
 
@@ -486,7 +507,47 @@ void pfcp_switch::pdn_read_loop(
 // waits, and a pointer kept across that wait is a pointer to a rule that may
 // be gone.
 //------------------------------------------------------------------------------
-int64_t pfcp_switch::release_shaped(int q) {
+// meter -- charge one packet to its rates, and hold it if it has to wait.
+//
+// Returns false when the caller must let this packet go: either the rate said
+// no, or it said "later" and there was nowhere to keep it. `teid` and `peer`
+// are what the uplink needs to find its rule again at release; the downlink
+// finds it from the packet's own address and passes 0.
+//------------------------------------------------------------------------------
+bool pfcp_switch::meter(
+    oai::upf::qos_mbr& qos, const char* pkt, std::size_t len, uint32_t teid,
+    const endpoint* peer) {
+  // An uplink thread arms itself here: it is not the one that runs the
+  // downlink loop, and it only ever needs a queue if this direction shapes.
+  if (!shaping_ && teid && upf_cfg.qos_shape_ul_ms) {
+    shaper();
+    shaping_ = true;
+  }
+  // Whether this thread could hold the packet at all: the slab is the hard
+  // ceiling behind the time horizon.
+  const bool may_wait = shaping_ && shaper().has_room();
+  const uint64_t due  = qos.due_at(len, may_wait);
+  if (due == oai::upf::QOS_TOO_LATE) {
+    if (shaping_) shaper().drop();
+    return false;
+  }
+  if (!due) return true;  // inside its rate: send it now
+  if (!shaper().hold(pkt, len, due, teid, peer)) shaper().drop();
+  return false;  // held, or dropped for want of a slot; either way not now
+}
+
+//------------------------------------------------------------------------------
+// release_shaped -- forward every held packet whose slot has come, and say how
+// long until the next one is due.
+//
+// Called once per batch and again before the thread waits, so a queue is never
+// left holding a packet that is already due. The rule is looked up again
+// rather than remembered: a session can be modified or deleted while a packet
+// waits, and a pointer kept across that wait is a pointer to a rule that may
+// be gone.
+//------------------------------------------------------------------------------
+int64_t pfcp_switch::release_shaped() {
+  if (!shaping_) return -1;
   auto& sq = shaper();
   if (sq.heap.empty()) return -1;
 
@@ -499,16 +560,21 @@ int64_t pfcp_switch::release_shaped(int q) {
     const shaped_packet p = sq.heap.front();
     std::pop_heap(sq.heap.begin(), sq.heap.end(), shaped_later());
     sq.heap.pop_back();
-    if (now - p.due > tun_q_[q].wait_max.load(std::memory_order_relaxed))
-      tun_q_[q].wait_max.store(now - p.due, std::memory_order_relaxed);
-    pfcp_session_look_up_pack_in_core(sq.payload(p.slot), p.len, true);
+    if (now - p.due > sq.late_max.load(std::memory_order_relaxed))
+      sq.late_max.store(now - p.due, std::memory_order_relaxed);
+    if (p.teid)
+      pfcp_session_look_up_pack_in_access(
+          (struct iphdr*) sq.payload(p.slot), p.len, p.peer, p.teid, true);
+    else
+      pfcp_session_look_up_pack_in_core(sq.payload(p.slot), p.len, true);
     sq.free_slots.push_back(p.slot);
     sent++;
   }
   // Send them now rather than leaving them in the batch: the packets that end
-  // a burst have nothing behind them to flush it.
+  // a burst have nothing behind them to flush it. Downlink only -- the uplink
+  // writes each packet to tun as it goes.
   if (sent && upf_n3_inst) upf_n3_inst->flush_tx_batch();
-  tun_q_[q].queued.store((uint32_t) sq.heap.size(), std::memory_order_relaxed);
+  sq.queued.store(sq.heap.size(), std::memory_order_relaxed);
   if (sq.heap.empty()) return -1;
   return (int64_t) (sq.heap.front().due - now);
 }
@@ -530,12 +596,15 @@ void pfcp_switch::log_tun_queue_balance() {
   // held, how many it gave up on, what it is holding now and how late it has
   // been. A shaper with no view of its own latency is how bufferbloat ships.
   uint64_t shaped = 0, sdrop = 0, queued = 0, wait = 0;
-  for (size_t i = 0; i < tun_fds_.size() && i < TUN_MAX_QUEUES; i++) {
-    shaped += tun_q_[i].shaped.load(std::memory_order_relaxed);
-    sdrop += tun_q_[i].shape_drop.load(std::memory_order_relaxed);
-    queued += tun_q_[i].queued.load(std::memory_order_relaxed);
-    const uint64_t w = tun_q_[i].wait_max.load(std::memory_order_relaxed);
-    if (w > wait) wait = w;
+  {
+    std::lock_guard<std::mutex> lk(shaper_reg_mu);
+    for (const auto* sq : shaper_reg) {
+      shaped += sq->held.load(std::memory_order_relaxed);
+      sdrop += sq->dropped.load(std::memory_order_relaxed);
+      queued += sq->queued.load(std::memory_order_relaxed);
+      const uint64_t w = sq->late_max.load(std::memory_order_relaxed);
+      if (w > wait) wait = w;
+    }
   }
   if (shaped || sdrop)
     s.append(fmt::format(
@@ -1271,20 +1340,25 @@ void pfcp_switch::apply_qos_mbr(std::shared_ptr<pfcp::pfcp_session>& session) {
   // and handed to every PDR of that direction -- the AMBR is a limit on the
   // session, so its credit has to be spent from one place. Rebuilt only when
   // the rate changes, so a Session Modification does not reset the credit.
-  // One tolerance, read two ways: when the downlink shapes it is how long a
+  // One tolerance, read two ways: where the direction shapes it is how long a
   // packet may wait for its slot, otherwise it is the burst a policer forgives.
-  const bool shape = upf_cfg.qos_shape_ms > 0;
-  const uint64_t tolerance =
-      shape ? upf_cfg.qos_shape_ms : upf_cfg.qos_burst_ms;
-  const auto session_bucket = [&](std::shared_ptr<oai::upf::qos_bucket>& b,
-                                  uint64_t bps) {
+  // The two directions are set apart because they are not the same problem --
+  // see qos_shape_ul_ms.
+  const bool shape_dl = upf_cfg.qos_shape_ms > 0;
+  const bool shape_ul = upf_cfg.qos_shape_ul_ms > 0;
+  const uint64_t tol_dl =
+      shape_dl ? upf_cfg.qos_shape_ms : upf_cfg.qos_burst_ms;
+  const uint64_t tol_ul =
+      shape_ul ? upf_cfg.qos_shape_ul_ms : upf_cfg.qos_burst_ms;
+  const auto session_bucket = [](std::shared_ptr<oai::upf::qos_bucket>& b,
+                                 uint64_t bps, uint64_t tol, bool shape) {
     if (!bps)
       b.reset();
     else if (!b || b->rate() != bps)
-      b = std::make_shared<oai::upf::qos_bucket>(bps, tolerance, shape);
+      b = std::make_shared<oai::upf::qos_bucket>(bps, tol, shape);
   };
-  session_bucket(session->qos_session_ul, sess_ul);
-  session_bucket(session->qos_session_dl, sess_dl);
+  session_bucket(session->qos_session_ul, sess_ul, tol_ul, shape_ul);
+  session_bucket(session->qos_session_dl, sess_dl, tol_dl, shape_dl);
 
   for (const auto& p : session->pdrs) {
     if (!p || !p->pdi.first) continue;
@@ -1305,8 +1379,8 @@ void pfcp_switch::apply_qos_mbr(std::shared_ptr<pfcp::pfcp_session>& session) {
     if (!flow && !sess) {
       p->qos.reset();
     } else if (!p->qos || !p->qos->same_as(flow, sess)) {
-      p->qos =
-          std::make_shared<oai::upf::qos_mbr>(flow, sess, tolerance, shape);
+      p->qos = std::make_shared<oai::upf::qos_mbr>(
+          flow, sess, is_dl ? tol_dl : tol_ul, is_dl ? shape_dl : shape_ul);
     }
     Logger::pfcp_switch().debug(
         "QoS/MBR: seid 0x%lx PDR %u %s: flow %lu bps, session %lu bps",
@@ -2284,7 +2358,7 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
 //------------------------------------------------------------------------------
 void pfcp_switch::pfcp_session_look_up_pack_in_access(
     struct iphdr* const iph, const std::size_t num_bytes,
-    const endpoint& r_endpoint, const uint32_t tunnel_id) {
+    const endpoint& r_endpoint, const uint32_t tunnel_id, bool released) {
   bool isInAccess = false;
   if (!upf_cfg.nsf.bypass_ul_pfcp_rules) {
     // One RCU critical section covers every pointer this packet touches.
@@ -2332,7 +2406,10 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
                   // Over its MBR: dropped before it is counted, so the
                   // usage report holds what was forwarded (§8.2.8, §8.2.44).
                   // Volume is the decapsulated packet, i.e. what the UE sent.
-                  if ((*it_pdr)->qos && !(*it_pdr)->qos->pass(num_bytes))
+                  if ((*it_pdr)->qos && !released &&
+                      !meter(
+                          *(*it_pdr)->qos, (const char*) iph, num_bytes,
+                          tunnel_id, &r_endpoint))
                     return;
                   ssession->add_ul(num_bytes);
                   sfar->apply_forwarding_rules(iph, num_bytes, nocp, buff, 0);
@@ -2436,31 +2513,9 @@ void pfcp_switch::pfcp_session_look_up_pack_in_core(
                   // Metered once: a packet coming back out of the shaper
                   // already holds a slot, and asking for a second one would
                   // charge the rate twice and pace it at half.
-                  if ((*it)->qos && !released) {
-                    // Whether this thread could hold the packet at all: the
-                    // slab is the hard ceiling behind the time horizon.
-                    const bool may_wait = shaper_q_ >= 0 && shaper().has_room();
-                    const uint64_t due =
-                        (*it)->qos->due_at(num_bytes, may_wait);
-                    if (due == oai::upf::QOS_TOO_LATE) {
-                      if (shaper_q_ >= 0)
-                        tun_q_[shaper_q_].shape_drop.fetch_add(
-                            1, std::memory_order_relaxed);
-                      return;
-                    }
-                    if (due) {  // over rate: wait for the slot it was given
-                      if (shaper_q_ < 0 ||
-                          !shaper().hold(buffer, num_bytes, due)) {
-                        if (shaper_q_ >= 0)
-                          tun_q_[shaper_q_].shape_drop.fetch_add(
-                              1, std::memory_order_relaxed);
-                        return;
-                      }
-                      tun_q_[shaper_q_].shaped.fetch_add(
-                          1, std::memory_order_relaxed);
-                      return;
-                    }
-                  }
+                  if ((*it)->qos && !released &&
+                      !meter(*(*it)->qos, buffer, num_bytes, 0, nullptr))
+                    return;
                   // Counted after the wait, so a report never claims a packet
                   // that is still queued -- or one that was dropped waiting.
                   ssession->add_dl(num_bytes);

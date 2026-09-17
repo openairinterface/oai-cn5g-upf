@@ -318,7 +318,8 @@ class pfcp_switch {
   /** @brief Match and forward an uplink IPv4 packet from N3 (with TEID). */
   void pfcp_session_look_up_pack_in_access(
       struct iphdr* const iph, const std::size_t num_bytes,
-      const endpoint& r_endpoint, const uint32_t tunnel_id);
+      const endpoint& r_endpoint, const uint32_t tunnel_id,
+      bool released = false);
 
   //------------------------------------------------------------------------------
   /** @brief Match and forward an uplink IPv6 packet from N3 (with TEID). */
@@ -343,9 +344,18 @@ class pfcp_switch {
       const char* buffer, const std::size_t num_bytes, bool released = false);
 
   //------------------------------------------------------------------------------
-  /** @brief Send whatever the shaper is holding whose slot has come, and say
-   *  how long until the next one is due (a negative value: nothing waiting). */
-  int64_t release_shaped(int q);
+  /** @brief Charge one packet to its rates; false when the caller must let it
+   *  go, either because the rate refused it or because it is now held.
+   *  @param teid uplink: the tunnel to find the rule again with. 0 downlink.
+   *  @param peer uplink: the gNB it arrived from. */
+  bool meter(
+      oai::upf::qos_mbr& qos, const char* pkt, std::size_t len, uint32_t teid,
+      const endpoint* peer);
+
+  //------------------------------------------------------------------------------
+  /** @brief Send whatever this thread's shaper is holding whose slot has come,
+   *  and say how long until the next one is due (negative: nothing waiting). */
+  int64_t release_shaped();
 
   //------------------------------------------------------------------------------
   /** @brief Return false if the packet destination is a local UE subnet
