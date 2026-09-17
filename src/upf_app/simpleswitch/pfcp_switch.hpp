@@ -5,6 +5,7 @@
 #ifndef FILE_PFCP_SWITCH_HPP_SEEN
 #define FILE_PFCP_SWITCH_HPP_SEEN
 
+#include <array>
 #include <atomic>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
@@ -33,6 +34,35 @@
 namespace oai {
 namespace upf {
 namespace app {
+
+/**
+ * @brief The virtio-net header a tun queue opened with IFF_VNET_HDR prefixes
+ *        to every packet, in both directions.
+ *
+ * Declared here rather than included from <linux/virtio_net.h>, which does not
+ * compile as C++: it declares a field called `class`. The layout is fixed by
+ * the virtio specification and is what TUNSETVNETHDRSZ is told to expect, so
+ * restating it is safe -- but the size must stay 10 bytes, hence the assert.
+ */
+struct upf_vnet_hdr {
+  uint8_t flags;
+  uint8_t gso_type;
+  uint16_t hdr_len;     ///< bytes of header before the payload
+  uint16_t gso_size;    ///< MSS: payload bytes per segment once split
+  uint16_t csum_start;  ///< only meaningful with NEEDS_CSUM
+  uint16_t csum_offset;
+} __attribute__((packed));
+static_assert(
+    sizeof(struct upf_vnet_hdr) == 10,
+    "virtio_net_hdr is 10 bytes; TUNSETVNETHDRSZ agrees that with the kernel");
+
+/// @name virtio_net_hdr values used here (virtio spec §5.1.6).
+/// @{
+#define UPF_VNET_HDR_F_NEEDS_CSUM 1
+#define UPF_VNET_HDR_GSO_NONE 0
+#define UPF_VNET_HDR_GSO_TCPV4 1
+#define UPF_VNET_HDR_GSO_TCPV6 4
+/// @}
 
 /// Maximum sessions tracked simultaneously
 #define PFCP_SWITCH_MAX_SESSIONS 1024
@@ -68,10 +98,11 @@ class pfcp_switch {
     std::atomic<uint64_t> tx{0};  ///< UL packets written into this queue
   };
   tun_q_stats_t tun_q_[TUN_MAX_QUEUES];
+
   pthread_t prThreadToCancel;  ///< pthread handle used to cancel a DL reader
                                ///< on shutdown
-  int* socks_r_ptr;  ///< Array[16] of read sockets, one per PDN interface
-  int sock_w;        ///< Write socket for tun0 (DL injection)
+  std::array<int, 16> socks_r_ptr;  ///< Read sockets, one per PDN interface
+  int sock_w;                       ///< Write socket for tun0 (DL injection)
   // std::string                               gw_mac_address;
   int pdn_if_index;  ///< if_index of the tun0 PDN interface (N6)
 
@@ -106,6 +137,9 @@ class pfcp_switch {
   /// it outlives them: members are destroyed in reverse order, so the maps go
   /// first and free their own nodes directly.
   mutable oai::upf::rcu_domain rcu_;
+  /// Peak number of retired map versions still awaiting reclamation, logged
+  /// with the queue balance. Touched only by the first DL thread.
+  size_t rcu_pending_hwm_ = 0;
 
   std::thread thread_usage_report_;  ///< periodic Usage Report sender
   std::atomic<bool> usage_report_stop_{false};
@@ -197,6 +231,31 @@ class pfcp_switch {
   /** @brief DL reader thread: reads tun queue @p idx and forwards inline. */
   void pdn_read_loop(
       int sock_r, int idx, oai::utils::thread_sched_params sched_params);
+
+  /** @brief Split one GSO super-packet into MTU-sized packets.
+   *
+   *  With IFF_VNET_HDR the kernel stops segmenting TCP and hands over up to
+   *  64 kB at a time; this does the splitting instead, which is what turns one
+   *  syscall into one packet rather than forty.
+   *
+   *  @param pkt           the super-packet, contiguous.
+   *  @param plen          its length.
+   *  @param vnet          header the kernel supplied, carrying the MSS.
+   *  @param slot          output buffers, each with GTP-U headroom in front.
+   *  @param slot_len      per-slot length, written here.
+   *  @param max_slots     how many slots are free.
+   *  @param slot_capacity usable bytes per slot.
+   *  @param off           in/out payload cursor: 0 on the first call, and set
+   *                       to @p plen once the packet is fully segmented. A
+   *                       super-packet can need more segments than a batch has
+   *                       slots, so the caller flushes and calls again with
+   *                       the cursor it was left, rather than dropping the
+   *                       tail of a packet it has already consumed.
+   *  @returns slots filled. */
+  int segment_and_forward(
+      const char* pkt, std::size_t plen, const struct upf_vnet_hdr& vnet,
+      char** slot, ssize_t* slot_len, int max_slots, std::size_t slot_capacity,
+      std::size_t& off);
 
   //------------------------------------------------------------------------------
   /** @brief Open an AF_PACKET/SOCK_DGRAM socket on @p ifname, optionally
@@ -290,10 +349,15 @@ class pfcp_switch {
    *  as such rather than looking like a throughput ceiling. */
   void log_tun_queue_balance();
 
+  /** @brief Work out each PDR's transmit QFI and cache it on the PDR.
+   *
+   *  Must run before apply_qos_mbr() and before any packet is forwarded, and
+   *  independently of enable_qos: the QFI goes on the wire whether or not a
+   *  rate is enforced. */
+  void resolve_pdr_qfis(std::shared_ptr<pfcp::pfcp_session>& session);
+
   /** @brief Programme QER Maximum Bitrate into the policer for a session. */
   void apply_qos_mbr(std::shared_ptr<pfcp::pfcp_session>& session);
-  /** @brief Remove that session's rate limiters. */
-  void release_qos_mbr(std::shared_ptr<pfcp::pfcp_session>& session);
 
   /** @brief Send a Session Report with the volume measured since the last one.
    *

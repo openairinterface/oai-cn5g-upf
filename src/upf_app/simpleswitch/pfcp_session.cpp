@@ -61,7 +61,7 @@ pfcp::pdn_type_value_e pfcp_session::get_pdn_type() {
 //------------------------------------------------------------------------------
 bool pfcp_session::get(
     const uint32_t far_id, std::shared_ptr<pfcp::pfcp_far>& far) const {
-  for (auto it : fars) {
+  for (const auto& it : fars) {
     if (it->far_id.far_id == far_id) {
       far = it;
       return true;
@@ -71,9 +71,45 @@ bool pfcp_session::get(
 }
 
 //------------------------------------------------------------------------------
+// publish_fars -- hand the datapath a new generation of the FAR vector.
+//
+// The N4 thread owns `fars` and may push to it, erase from it or replace a
+// rule in it at any time. A forwarding thread walking that same vector is
+// undefined behaviour on its own, before anything is said about the lifetime
+// of what it finds. So the datapath never sees `fars`: it sees this copy,
+// swapped in whole, and keeps whichever generation it picked up until it is
+// done with it.
+//------------------------------------------------------------------------------
+void pfcp_session::publish_fars() {
+  std::atomic_store_explicit(
+      &fars_view,
+      std::make_shared<const std::vector<std::shared_ptr<pfcp::pfcp_far>>>(
+          fars),
+      std::memory_order_release);
+}
+
+//------------------------------------------------------------------------------
+// find_far -- the datapath's FAR lookup, over the published snapshot.
+//
+// Returns the rule rather than a pointer into the vector: remove(far) and
+// cleanup() both drop the session's reference on the N4 thread, so a borrowed
+// pointer can name a rule that has already been freed. The reference costs an
+// increment and a decrement, which is the price of not forwarding through
+// freed memory.
+std::shared_ptr<pfcp::pfcp_far> pfcp_session::find_far(
+    const uint32_t far_id) const {
+  const auto view =
+      std::atomic_load_explicit(&fars_view, std::memory_order_acquire);
+  if (!view) return nullptr;
+  for (const auto& it : *view)
+    if (it->far_id.far_id == far_id) return it;
+  return nullptr;
+}
+
+//------------------------------------------------------------------------------
 bool pfcp_session::get(
     const uint16_t pdr_id, std::shared_ptr<pfcp::pfcp_pdr>& pdr) const {
-  for (auto it : pdrs) {
+  for (const auto& it : pdrs) {
     if (it->pdr_id.rule_id == pdr_id) {
       pdr = it;
       return true;
@@ -85,7 +121,7 @@ bool pfcp_session::get(
 //------------------------------------------------------------------------------
 bool pfcp_session::get(
     const uint32_t qer_id, std::shared_ptr<pfcp::pfcp_qer>& qer) const {
-  for (auto it : qers) {
+  for (const auto& it : qers) {
     if (it->qer_id.first && it->qer_id.second.qer_id == qer_id) {
       qer = it;
       return true;
@@ -228,6 +264,7 @@ void pfcp_session::add(std::shared_ptr<pfcp::pfcp_far> far) {
   }
 
   fars.push_back(far);
+  publish_fars();
   Logger::upf_n4().debug("     • Total FARs in session: %zu", fars.size());
 }
 
@@ -1101,11 +1138,14 @@ bool pfcp_session::update(
         existing_pdr->precedence = pdr_update.precedence;
       }
 
-      // Update PDI (Packet Detection Information)
+      // Update PDI (Packet Detection Information). Through set(), not by
+      // assigning pdi: the SDF filter is compiled from the flow description
+      // and cached beside it, so a plain assignment leaves an Update PDR
+      // matching against the filter it just replaced.
       if (pdr_update.pdi.first) {
         Logger::upf_n4().debug("     • Updated PDI");
-        existing_pdr->pdi = pdr_update.pdi;
-        has_changes       = true;
+        existing_pdr->set(pdr_update.pdi.second);
+        has_changes = true;
       }
 
       if (!has_changes) {
@@ -1215,10 +1255,19 @@ bool pfcp_session::update(
       "pfcp_session::update(far) seid " SEID_FMT " FAR=%u", seid, far_id);
 
   // Find the FAR to update
-  for (auto& existing_far : fars) {
-    if (existing_far->far_id.far_id == far_id) {
+  for (auto& slot : fars) {
+    if (slot->far_id.far_id == far_id) {
       Logger::upf_n4().info(
           "  └─ Updating FAR %u in session " SEID_FMT, far_id, seid);
+
+      // Copy on write. A forwarding thread may be inside
+      // apply_forwarding_rules() on this very rule, and editing its fields
+      // underneath would let a packet leave with half of the old destination
+      // and half of the new one -- an outer header built from the previous
+      // TEID and the new address, say. The update lands on a private copy
+      // that is published in its place; the old rule stays alive for as long
+      // as a reader still holds it.
+      auto existing_far = std::make_shared<pfcp::pfcp_far>(*slot);
 
       bool has_changes = false;
 
@@ -1326,6 +1375,11 @@ bool pfcp_session::update(
         Logger::upf_n4().debug("     • No actual changes detected");
       }
 
+      // Swap the updated rule in, then hand the datapath the generation that
+      // contains it.
+      slot = existing_far;
+      publish_fars();
+
       cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
       return true;
     }
@@ -1391,6 +1445,7 @@ bool pfcp_session::remove(
 
       // Remove the FAR
       fars.erase(it);
+      publish_fars();
       Logger::upf_n4().debug("     • Total FARs remaining: %zu", fars.size());
 
       cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
@@ -1443,8 +1498,7 @@ bool pfcp_session::create(
       return false;
     }
   }
-  pfcp_far* far                  = new pfcp_far(cr_far);
-  std::shared_ptr<pfcp_far> sfar = std::shared_ptr<pfcp_far>(far);
+  std::shared_ptr<pfcp_far> sfar = std::make_shared<pfcp_far>(cr_far);
   add(sfar);
   cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
   return true;
@@ -1783,9 +1837,9 @@ bool pfcp_session::create(
           "TEID " TEID_FMT " received from CP", allocated_fteid.teid);
       // return false;
     }
-    pfcp_pdr* pdr = new pfcp_pdr(cr_pdr);
+    std::shared_ptr<pfcp_pdr> spdr = std::make_shared<pfcp_pdr>(cr_pdr);
     if (local_fteid.ch) {
-      pdr->pdi.second.set(allocated_fteid);
+      spdr->pdi.second.set(allocated_fteid);
     }
 
     set(allocated_fteid);
@@ -1798,10 +1852,9 @@ bool pfcp_session::create(
       return false;
     }
 
-    std::shared_ptr<pfcp_pdr> spdr = std::shared_ptr<pfcp_pdr>(pdr);
     if (pfcp_switch_inst->create_packet_in_access(
             spdr, allocated_fteid, cause.cause_value)) {
-      pdr->set(get_up_seid());
+      spdr->set(get_up_seid());
       add(spdr);
     } else {
       cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
@@ -1813,9 +1866,8 @@ bool pfcp_session::create(
   } else if (
       pdi.source_interface.second.interface_value == INTERFACE_VALUE_CORE) {
     // Downlink — register by UE IP for core-to-UE forwarding
-    pfcp_pdr* pdr                  = new pfcp_pdr(cr_pdr);
-    std::shared_ptr<pfcp_pdr> spdr = std::shared_ptr<pfcp_pdr>(pdr);
-    pdr->set(get_up_seid());
+    std::shared_ptr<pfcp_pdr> spdr = std::make_shared<pfcp_pdr>(cr_pdr);
+    spdr->set(get_up_seid());
     if ((pdi.ue_ip_address.first) && (pdi.ue_ip_address.second.v4)) {
       pfcp_switch_inst->add_pfcp_dl_pdr_by_ue_ip(
           be32toh(pdi.ue_ip_address.second.ipv4_address.s_addr), spdr);
@@ -1964,8 +2016,7 @@ bool pfcp_session::create(
   }
   */
 
-  pfcp_qer* qer                  = new pfcp_qer(cr_qer);
-  std::shared_ptr<pfcp_qer> sqer = std::shared_ptr<pfcp_qer>(qer);
+  std::shared_ptr<pfcp_qer> sqer = std::make_shared<pfcp_qer>(cr_qer);
   add(sqer);
   cause.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
   return true;
@@ -2001,6 +2052,7 @@ void pfcp_session::cleanup() {
     }
   }
   fars.clear();
+  publish_fars();
   pdrs.clear();
   urrs.clear();
   bars.clear();

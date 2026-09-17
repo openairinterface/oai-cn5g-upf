@@ -5,93 +5,119 @@
 #ifndef QOS_MBR_HPP_SEEN
 #define QOS_MBR_HPP_SEEN
 
+#include <atomic>
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
-#include <mutex>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
+#include <memory>
+#include <utility>
 
 namespace oai::upf {
 
 /**
- * @brief QER Maximum Bitrate enforcement with the kernel's own policer.
+ * @brief One token bucket: a rate, and how much of a burst is forgiven.
  *
- * A QER (3GPP TS 29.244 §8.2.8) gives a QoS flow a Maximum Bitrate. Each
- * session's GTP-U TEID gets a `u32` filter on the N3 interface's clsact hook
- * -- uplink on ingress, downlink on egress -- carrying an `action police`
- * token bucket that drops whatever is over the rate:
+ * It polices rather than shapes: 3GPP TS 29.244 §8.2.8 makes the MBR a
+ * ceiling, not a smoothing requirement, so excess is dropped. How much of a
+ * burst is forgiven is `qos_burst_ms` -- too little and TCP never reaches its
+ * MBR, too much and the MBR itself leaks.
+ */
+class qos_bucket {
+ public:
+  qos_bucket(uint64_t rate_bps, uint64_t burst_ms)
+      : rate_(rate_bps), burst_(burst_bytes(rate_bps, burst_ms)) {}
+
+  uint64_t rate() const { return rate_; }
+
+  /** @brief Charge `n` bytes; false when the bucket is empty, i.e. over rate.
+   *  `now` is passed in so a packet metered against several buckets reads the
+   *  clock once. */
+  bool pass(uint64_t now, uint64_t n) {
+    if (!rate_) return true;
+    // Whoever wins this exchange owns the elapsed window and is the only one
+    // that credits it; a concurrent metering sees dt 0 and credits nothing,
+    // which under-credits -- the safe direction for a limit.
+    const uint64_t prev = last_.exchange(now, std::memory_order_relaxed);
+    // Clamp the idle window: the bucket cannot hold more than `burst_`
+    // anyway, and it stops the multiply below from overflowing.
+    uint64_t dt = now > prev ? now - prev : 0;
+    if (dt > 1000000000ULL) dt = 1000000000ULL;
+    const uint64_t refill = dt * (rate_ / 8) / 1000000000ULL;
+
+    // One QoS flow can carry several inner flows, which the kernel hashes to
+    // different tun queues, so two threads can meter one bucket at once. The
+    // balance therefore moves with a CAS: a load/store pair lets both threads
+    // debit the same credit and each write back its own remainder, so both
+    // pass and the bucket runs at twice its rate. The retry recomputes from
+    // the fresh balance, so `refill` lands exactly once.
+    uint64_t t = tokens_.load(std::memory_order_relaxed);
+    uint64_t left;
+    bool ok;
+    do {
+      left = t + refill;
+      if (left > burst_) left = burst_;
+      ok = left >= n;
+      if (ok) left -= n;
+    } while (!tokens_.compare_exchange_weak(
+        t, left, std::memory_order_relaxed, std::memory_order_relaxed));
+    return ok;
+  }
+
+ private:
+  /// A rate low enough that `burst_ms` of it is under one packet still has to
+  /// pass packets, so the window has a floor.
+  static uint64_t burst_bytes(uint64_t rate_bps, uint64_t ms) {
+    const uint64_t w = rate_bps / 8 * ms / 1000;
+    return w > 64 * 1024 ? w : 64 * 1024;
+  }
+
+  const uint64_t rate_;   ///< bits/s; 0 means unlimited
+  const uint64_t burst_;  ///< bytes
+  std::atomic<uint64_t> tokens_{0};
+  std::atomic<uint64_t> last_{0};  ///< ns of the previous refill
+};
+
+/**
+ * @brief QER Maximum Bitrate enforcement (3GPP TS 29.244 §8.2.8).
  *
- *   tc filter add dev N3 egress protocol ip prio P u32 \
- *      match ip protocol 17 0xff match u32 <TEID> 0xffffffff at 32 \
- *      action police rate <MBR> burst <10ms> conform-exceed drop
+ * The QoS flow's own MBR bucket, plus the session AMBR bucket behind it,
+ * hanging off the PDR the packet matched, so metering costs one clock read and
+ * needs no look-up. This replaces programming `tc`, which meant restating the
+ * rule on the wire at a hard-coded byte offset and forking /bin/sh per filter
+ * on the PFCP path.
  *
- * It polices rather than shapes because shaping needs a root qdisc, and the
- * UPF transmits from a single-TX-queue veth where any root qdisc puts every
- * transmit thread behind one lock (HTB and EDT+fq were both measured at about
- * a third of the throughput). §8.2.8 makes the MBR a limit, not a smoothing
- * requirement, so dropping the excess is the right semantics; the burst sets
- * how much of one is absorbed.
- *
- * Nothing is installed until a session actually carries a rate, so a
- * deployment without QoS keeps a bare `noqueue` interface.
+ * The session bucket is owned by the pfcp_session and shared by every PDR of
+ * that session and direction -- one per PDR would let each PDR pass the whole
+ * AMBR on its own, which is not what "session AMBR" means.
  */
 class qos_mbr {
  public:
-  static qos_mbr& instance() {
-    static qos_mbr s;
-    return s;
+  qos_mbr(
+      uint64_t flow_bps, std::shared_ptr<qos_bucket> session, uint64_t burst_ms)
+      : flow_(flow_bps, burst_ms), session_(std::move(session)) {}
+
+  /** @brief Same limits? Then keep this meter, and the credit it has built up
+   *  -- a Session Modification arrives for every handover and must not reset a
+   *  limiter that did not change. */
+  bool same_as(
+      uint64_t flow_bps, const std::shared_ptr<qos_bucket>& session) const {
+    return flow_.rate() == flow_bps && session_ == session;
   }
 
-  /** @brief One TEID and the rate that applies to it, in bits per second. */
-  struct teid_rate {
-    uint32_t teid;
-    uint64_t bps;
-  };
-
-  /**
-   * @brief Set one PDU session's Maximum Bitrates.
-   *
-   * Call it again whenever the session changes: TEIDs that dropped out are
-   * removed, and one whose rate is unchanged keeps its filter -- and so its
-   * accumulated credit, which matters because a Session Modification arrives
-   * for every handover and must not reset a limiter that did not change.
-   *
-   * @param ifname the N3 interface
-   * @param seid   UP SEID, so a later call can find what this one wrote
-   * @param uplink   TEIDs metered on ingress; a rate of 0 is skipped
-   * @param downlink TEIDs metered on egress; a rate of 0 is skipped
-   */
-  bool set_rates(
-      const std::string& ifname, uint64_t seid,
-      const std::vector<teid_rate>& uplink,
-      const std::vector<teid_rate>& downlink);
-
-  /** @brief Drop a released session's filters. Safe if it had none. */
-  void clear_rates(uint64_t seid);
+  /** @brief Meter one packet; false when it is over rate and must be dropped.
+   *  A packet has to fit under its own flow's MBR and the session AMBR both.
+   *  A packet the flow drops is not charged to the session. */
+  bool pass(std::size_t bytes) {
+    const uint64_t now =
+        (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count();
+    return flow_.pass(now, bytes) && (!session_ || session_->pass(now, bytes));
+  }
 
  private:
-  qos_mbr()               = default;
-  qos_mbr(const qos_mbr&) = delete;
-  qos_mbr& operator=(const qos_mbr&) = delete;
-
-  /** @brief Add the clsact qdisc, once per interface. */
-  bool ensure_clsact(const std::string& ifname);
-
-  struct filter {
-    std::string ifname;
-    bool egress;
-    int prio;  ///< identifies the filter for deletion
-    uint32_t teid;
-    uint64_t bps;
-  };
-  bool install(filter& f);
-  void remove(const filter& f);
-
-  std::mutex mu_;
-  std::unordered_set<std::string> clsact_;  ///< interfaces already set up
-  std::unordered_map<uint64_t, std::vector<filter>> by_seid_;
-  int next_prio_ = 100;  ///< 1..99 left free for anything hand-installed
+  qos_bucket flow_;
+  std::shared_ptr<qos_bucket> session_;
 };
 
 }  // namespace oai::upf

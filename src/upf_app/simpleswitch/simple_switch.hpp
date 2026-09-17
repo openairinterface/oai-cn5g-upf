@@ -108,7 +108,7 @@ class upf_n3 : public gtpv1u::gtpu_l4_stack {
   void send_g_pdu(
       const struct in_addr& peer_addr, const uint16_t peer_udp_port,
       const uint32_t tunnel_id, const char* send_buffer,
-      const ssize_t num_bytes, uint8_t qfi);
+      const ssize_t num_bytes, uint8_t qfi, uint8_t tos = 0);
 
   //------------------------------------------------------------------------------
   /** @brief Encapsulate an IPv6 packet in GTP-U and send it to a gNB (N3). */

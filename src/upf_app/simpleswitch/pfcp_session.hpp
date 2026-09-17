@@ -79,10 +79,73 @@ class pfcp_session {
    *  Reported values are deltas since the last report, which is what the SMF
    *  accumulates; reported_* holds what was last sent.
    *  @{ */
-  std::atomic<uint64_t> ul_octets{0};
-  std::atomic<uint64_t> dl_octets{0};
-  std::atomic<uint64_t> ul_packets{0};
-  std::atomic<uint64_t> dl_packets{0};
+  /** Sharded, one cache line per datapath thread.
+   *
+   *  A single counter per session is one cache line that every thread carrying
+   *  any of that session's flows writes on every packet. The flow hash spreads
+   *  a UE's flows across queues, so that is the normal case, not a corner one,
+   *  and the line then moves between cores on each packet -- a cost that grows
+   *  with the number of threads, which is exactly the wrong way round.
+   *
+   *  Each thread writes only its own line; the reporting path, which runs
+   *  every 30 seconds, pays the summing instead. */
+  static constexpr int COUNTER_SHARDS = 16;
+  struct alignas(64) counter_shard {
+    std::atomic<uint64_t> ul_octets{0};
+    std::atomic<uint64_t> dl_octets{0};
+    std::atomic<uint64_t> ul_packets{0};
+    std::atomic<uint64_t> dl_packets{0};
+  };
+  counter_shard counters[COUNTER_SHARDS];
+
+  /** @brief This thread's shard, handed out once per thread on first use.
+   *  Which thread gets which shard does not matter, only that two busy threads
+   *  rarely share one. */
+  static int my_shard() {
+    static thread_local int s = -1;
+    if (s < 0) {
+      static std::atomic<int> next{0};
+      s = next.fetch_add(1, std::memory_order_relaxed) % COUNTER_SHARDS;
+    }
+    return s;
+  }
+
+  void add_ul(uint64_t octets) {
+    auto& c = counters[my_shard()];
+    c.ul_octets.fetch_add(octets, std::memory_order_relaxed);
+    c.ul_packets.fetch_add(1, std::memory_order_relaxed);
+  }
+  void add_dl(uint64_t octets) {
+    auto& c = counters[my_shard()];
+    c.dl_octets.fetch_add(octets, std::memory_order_relaxed);
+    c.dl_packets.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  /// Totals across every shard; for the reporting path only.
+  uint64_t total_ul_octets() const {
+    uint64_t t = 0;
+    for (const auto& c : counters)
+      t += c.ul_octets.load(std::memory_order_relaxed);
+    return t;
+  }
+  uint64_t total_dl_octets() const {
+    uint64_t t = 0;
+    for (const auto& c : counters)
+      t += c.dl_octets.load(std::memory_order_relaxed);
+    return t;
+  }
+  uint64_t total_ul_packets() const {
+    uint64_t t = 0;
+    for (const auto& c : counters)
+      t += c.ul_packets.load(std::memory_order_relaxed);
+    return t;
+  }
+  uint64_t total_dl_packets() const {
+    uint64_t t = 0;
+    for (const auto& c : counters)
+      t += c.dl_packets.load(std::memory_order_relaxed);
+    return t;
+  }
   uint64_t reported_ul_octets  = 0;
   uint64_t reported_dl_octets  = 0;
   uint64_t reported_ul_packets = 0;
@@ -97,7 +160,12 @@ class pfcp_session {
   // PDRs, FARS, should not conflict with switching operations
 
   // ---- Rule vectors (3GPP TS 29.244 §7.5.2) --------------------------------
-  // TO DO: add locking for concurrent insert/remove vs. switching operations.
+  // Control-plane copies, mutated only on the N4 task thread. The datapath
+  // must not walk these: an N4 message can be erasing from one while a
+  // forwarding thread iterates it. `fars` has a published snapshot below for
+  // exactly that reason.
+  // TO DO: the same treatment for pdrs/qers/urrs, which the control plane also
+  // reaches through the lookup tables rather than directly.
   std::vector<std::shared_ptr<pfcp::pfcp_pdr>>
       pdrs;  ///< Packet Detection Rules §7.5.2.2
   std::vector<std::shared_ptr<pfcp::pfcp_far>>
@@ -111,6 +179,13 @@ class pfcp_session {
   std::vector<std::shared_ptr<pfcp::pfcp_mar>>
       mars;  ///< Multi-Access Rules §7.5.2.8
 
+  /// What the datapath reads instead of `fars`: an immutable copy, replaced
+  /// wholesale by publish_fars() whenever a rule is added, updated or removed.
+  /// Published with std::atomic_store, read with std::atomic_load, so a
+  /// forwarding thread always sees one whole generation of the vector and the
+  /// rules in it stay alive for as long as it holds them.
+  std::shared_ptr<const std::vector<std::shared_ptr<pfcp::pfcp_far>>> fars_view;
+
   // ---- Direction-split PDR caches (populated by pfcp_switch) ---------------
   std::vector<std::shared_ptr<pfcp::pfcp_pdr>>
       pdrs_uplink;  ///< ACCESS-interface PDRs
@@ -123,6 +198,13 @@ class pfcp_session {
       qers_downlink;  ///< Downlink QERs
 
   pfcp::fteid_t teid_uplink = {};  ///< Allocated N3 F-TEID (§8.2.3)
+
+  // ---- Session AMBR meters (3GPP TS 29.244 §8.2.8) --------------------------
+  /// One bucket per direction for the whole session, shared by every PDR that
+  /// direction has: a bucket per PDR would let each PDR pass the full AMBR.
+  /// Null when no QER bounds the session. Set by pfcp_switch::apply_qos_mbr().
+  std::shared_ptr<oai::upf::qos_bucket> qos_session_ul;
+  std::shared_ptr<oai::upf::qos_bucket> qos_session_dl;
 
   //------------------------------------------------------------------------------
   /** @brief Default constructor — reserves typical rule vector capacities. */
@@ -155,7 +237,11 @@ class pfcp_session {
         bars(c.bars),
         mars(c.mars),
         teid_uplink(c.teid_uplink),
-        pdn_type(c.pdn_type) {}
+        qos_session_ul(c.qos_session_ul),
+        qos_session_dl(c.qos_session_dl),
+        pdn_type(c.pdn_type) {
+    publish_fars();
+  }
 
   //------------------------------------------------------------------------------
   virtual ~pfcp_session() {
@@ -181,6 +267,19 @@ class pfcp_session {
   //------------------------------------------------------------------------------
   /** @brief Find a FAR by its 32-bit FAR ID (§8.2.74). */
   bool get(const uint32_t, std::shared_ptr<pfcp::pfcp_far>&) const;
+
+  /** @brief Republish `fars` for the datapath. Every path that changes the
+   *  vector, or any rule in it, must call this or the datapath keeps
+   *  forwarding through the generation before the change. */
+  void publish_fars();
+
+  /** @brief Datapath FAR lookup, over the published snapshot.
+   *
+   *  Returns a strong reference, not a borrowed pointer: the RCU guard the
+   *  caller holds keeps the *session* alive, but remove(far) and cleanup()
+   *  drop the rule's own reference on the N4 thread. Null when no FAR carries
+   *  @p far_id. */
+  std::shared_ptr<pfcp::pfcp_far> find_far(const uint32_t far_id) const;
 
   /** @brief Find a PDR by its 16-bit PDR ID (§8.2.36). */
   bool get(const uint16_t, std::shared_ptr<pfcp::pfcp_pdr>&) const;

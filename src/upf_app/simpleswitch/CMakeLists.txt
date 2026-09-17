@@ -36,7 +36,7 @@ add_library (SIMPLE_SWITCH STATIC
   pfcp_mar.cpp
   pfcp_session.cpp
   pfcp_switch.cpp
-  qos_mbr.cpp
+  sdf_filter.cpp
   simple_switch.cpp
   ${SRC_TOP_DIR}/upf_app/framed_routing/FramedRouting.cpp
   ${SRC_TOP_DIR}/upf_app/framed_routing/LocalRouting.cpp
