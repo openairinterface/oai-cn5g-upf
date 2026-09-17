@@ -7,6 +7,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <mutex>
 #include <vector>
@@ -105,23 +107,72 @@ class rcu_domain {
     std::atomic<uint64_t> epoch{0};  // 0 == quiescent
   };
 
+  /**
+   * @brief This thread's slot in this domain.
+   *
+   * The index is per thread and process-wide rather than per domain, and every
+   * domain indexes its own array of slots with it. A per-domain counter cannot
+   * work: the cached index lives in one thread_local shared by all domains, so
+   * a second domain -- one built per case in a test, or a switch torn down and
+   * rebuilt -- would find an index its own counter never issued and sit in a
+   * slot nothing scans.
+   */
   reader_slot& slot_for_this_thread() noexcept {
-    thread_local int idx = -1;
-    if (idx < 0) {
-      idx = next_slot_.fetch_add(1, std::memory_order_relaxed);
-      // More datapath threads than slots would be a configuration error; fall
-      // back to sharing slot 0, which is conservative (never frees too early).
-      if (idx >= MAX_READERS) idx = 0;
+    thread_local slot_ticket ticket;
+    return slots_[ticket.idx];
+  }
+
+  /** @brief A thread's slot number, held for as long as the thread lives.
+   *
+   *  Returning it on exit is what keeps MAX_READERS a limit on readers alive at
+   *  once rather than on threads ever created: the datapath makes its threads
+   *  once, but a test that runs a case per thread would otherwise walk into the
+   *  abort below after enough cases.
+   */
+  struct slot_ticket {
+    const int idx;
+    slot_ticket() noexcept : idx(claim_thread_slot()) {}
+    ~slot_ticket() { release_thread_slot(idx); }
+  };
+
+  static int claim_thread_slot() noexcept {
+    std::lock_guard<std::mutex> lk(slot_mu_);
+    if (!free_slots_.empty()) {
+      const int idx = free_slots_.back();
+      free_slots_.pop_back();
+      return idx;  // quiescent in every domain: its thread left before it
     }
-    return slots_[idx];
+    const int idx = high_water_.load(std::memory_order_relaxed);
+    // Two threads on one slot is a use-after-free waiting to happen: the
+    // first to read_unlock() zeroes the epoch the other is still inside, so
+    // the reclaimer frees memory that thread is reading. There is no safe
+    // fallback, and the config caps keep this unreachable, so stop here
+    // rather than degrade into something that corrupts memory silently.
+    if (idx >= MAX_READERS) {
+      fprintf(
+          stderr,
+          "rcu_domain: more than %d reader threads at once (check the "
+          "datapath thread/queue counts)\n",
+          MAX_READERS);
+      std::abort();
+    }
+    high_water_.store(idx + 1, std::memory_order_relaxed);
+    return idx;
+  }
+
+  static void release_thread_slot(int idx) noexcept {
+    std::lock_guard<std::mutex> lk(slot_mu_);
+    free_slots_.push_back(idx);
   }
 
   /** @brief Oldest epoch any reader is still inside; ~0 if all are quiescent.
    */
   uint64_t oldest_active_epoch() const noexcept {
     uint64_t oldest = UINT64_MAX;
-    const int n     = next_slot_.load(std::memory_order_relaxed);
-    const int upto  = (n < MAX_READERS) ? n : MAX_READERS;
+    // Threads that never read this domain leave their slot at 0, so scanning
+    // every slot handed out process-wide costs a few quiescent loads.
+    const int n    = high_water_.load(std::memory_order_relaxed);
+    const int upto = (n < MAX_READERS) ? n : MAX_READERS;
     for (int i = 0; i < upto; i++) {
       const uint64_t e = slots_[i].epoch.load(std::memory_order_seq_cst);
       if (e != 0 && e < oldest) oldest = e;
@@ -145,7 +196,13 @@ class rcu_domain {
   }
 
   reader_slot slots_[MAX_READERS];
-  std::atomic<int> next_slot_{0};
+  /// Slot bookkeeping for the whole process: a thread keeps one number in
+  /// every domain it reads, so the assignment cannot be per domain.
+  /// high_water_ is how far any reclaimer has to scan and only ever grows;
+  /// free_slots_ holds the numbers of threads that have exited.
+  static inline std::atomic<int> high_water_{0};
+  static inline std::mutex slot_mu_;
+  static inline std::vector<int> free_slots_;
   std::atomic<uint64_t> global_{1};
   mutable std::mutex retire_mu_;
   std::vector<std::pair<uint64_t, std::function<void()>>> retired_;
