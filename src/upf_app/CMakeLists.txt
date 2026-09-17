@@ -66,6 +66,7 @@ set(CMAKE_C_FLAGS "-Wno-gnu-variable-sized-type-not-at-end")
 # ==========================================================================
 set(UPF_CONTROL_SOURCES
   control/UserPlaneComponent.cpp
+  control/BarDdnConsumer.cpp
   control/Configuration.cpp
   control/SignalHandler.cpp
   control/SessionProgramManager.cpp

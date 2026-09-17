@@ -119,17 +119,39 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
   if (qer_it != qer_programs_map_.end()) {
     Logger::upf_app().debug(
         "Tearing down QER program for seid " SEID_FMT, seid);
-    qer_it->second->TearDown();
+    try {
+      qer_it->second->TearDown();
+    } catch (const std::exception& e) {
+      Logger::upf_app().error(
+          "QER program teardown failed for seid " SEID_FMT
+          ": %s — continuing with BPF map cleanup",
+          seid, e.what());
+    } catch (...) {
+      Logger::upf_app().error(
+          "QER program teardown failed for seid " SEID_FMT
+          ": unknown exception — continuing with BPF map cleanup",
+          seid);
+    }
     qer_programs_map_.erase(qer_it);
   }
 
   // Clean up rules_enabled entry from BPF map
   auto upf_xdp_program = UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
   if (upf_xdp_program) {
+    /*
+     * TryRemove(), not Remove(): teardown deletes per-session entries from
+     * maps this session may never have used (a session with no URR has no
+     * urr_config_map entry, a session with no BAR has no bar_state entry).
+     * Remove() THROWS on -ENOENT, and a throw here used to abort every
+     * remaining cleanup line below it -- in particular it could skip the
+     * bar_state_map erase, leaving a latched notification_sent behind for a
+     * re-established SEID to inherit. Deleting an absent entry is
+     * a normal, expected outcome on this path, not an error.
+     */
     auto rules_en_map =
         upf_xdp_program->GetMapByName("session_rules_enabled_map");
     if (rules_en_map) {
-      rules_en_map->Remove(seid);
+      rules_en_map->TryRemove(seid);
     }
 
     // Determine PDU session type before erasing the tracking entry
@@ -140,21 +162,32 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
       if (is_eth_pdu) {
         Logger::upf_app().debug(
             "Cleaning up ETH PDU maps for seid " SEID_FMT, seid);
+        auto eth_pdrs = upf_xdp_program->GetMapByName("eth_session_pdrs_map");
+        if (eth_pdrs) eth_pdrs->TryRemove(seid);
       }
       session_pdu_type_map_.erase(pdu_type_it);
     }
 
-    // Clean up URR/BAR/MAR dedicated config + runtime state maps
+    // Clean up URR/BAR/MAR dedicated config + runtime state maps.
+    // BAR first: erasing bar_config_map/bar_state_map is what guarantees a
+    // re-established SEID starts with a clear DDN one-shot latch.
+    auto bar_prog = upf_xdp_program->GetBarProgram();
+    if (bar_prog) {
+      /* Owns both BAR maps; non-throwing (BARProgram::Remove). */
+      bar_prog->Remove(seid, 0 /* bar_id unused: both maps key on SEID */);
+    } else {
+      auto bar_cfg_map = upf_xdp_program->GetMapByName("bar_config_map");
+      if (bar_cfg_map) bar_cfg_map->TryRemove(seid);
+      auto bar_st_map = upf_xdp_program->GetMapByName("bar_state_map");
+      if (bar_st_map) bar_st_map->TryRemove(seid);
+    }
     auto urr_cfg_map = upf_xdp_program->GetMapByName("urr_config_map");
-    if (urr_cfg_map) urr_cfg_map->Remove(seid);
+    if (urr_cfg_map) urr_cfg_map->TryRemove(seid);
     auto urr_vol_map = upf_xdp_program->GetMapByName("urr_volume_counters_map");
-    if (urr_vol_map) urr_vol_map->Remove(seid);
-    auto bar_cfg_map = upf_xdp_program->GetMapByName("bar_config_map");
-    if (bar_cfg_map) bar_cfg_map->Remove(seid);
-    auto bar_st_map = upf_xdp_program->GetMapByName("bar_state_map");
-    if (bar_st_map) bar_st_map->Remove(seid);
+    if (urr_vol_map) urr_vol_map->TryRemove(seid);
     auto mar_map = upf_xdp_program->GetMapByName("mar_rules_map");
-    if (mar_map) mar_map->Remove(seid);
+
+    if (mar_map) mar_map->TryRemove(seid);
 
     // Prune rules_match_pdr_map / eth_rules_match_pdr_map, sdf_filters_map,
     // and the per-session PDR array itself. Every recorded PDR and QFI is
@@ -172,7 +205,7 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
     const char* pdrs_map_name =
         is_eth_pdu ? "eth_session_pdrs_map" : "pdrs_per_session_map";
     auto pdrs_map = upf_xdp_program->GetMapByName(pdrs_map_name);
-    if (pdrs_map) pdrs_map->Remove(seid);
+    if (pdrs_map) pdrs_map->TryRemove(seid);
     // Clean up session_by_ue_ip_map so a UE that re-attaches with the same
     // static IP isn't attributed to this now-deleted session.
     auto ue_ip_it = session_ue_ip_key_map_.find(seid);
@@ -200,6 +233,24 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
           pfcp_programs->begin(), pfcp_programs->end(),
           [seid](const PfcpProgramInfo& info) { return info.seid == seid; }),
       pfcp_programs->end());
+}
+
+//------------------------------------------------------------------------------
+/**
+ * @brief Clear the DDN one-shot latch of a session.
+ *
+ * @param seid Session Endpoint Identifier
+ * @return true if a bar_state entry existed and was zeroed.
+ *
+ * @see BARProgram::ResetBarState -- overwrite-if-present (BPF_EXIST), never
+ *      creates an entry for an unknown/stale SEID.
+ */
+bool SessionProgramManager::ResetBarState(uint64_t seid) {
+  auto upf_xdp_program = UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
+  if (!upf_xdp_program) return false;
+  auto bar_prog = upf_xdp_program->GetBarProgram();
+  if (!bar_prog) return false;
+  return bar_prog->ResetBarState(seid);
 }
 
 //------------------------------------------------------------------------------
@@ -672,11 +723,15 @@ void SessionProgramManager::SetupSessionEnforcementPrograms(
   }
 
   // BAR: populate bar_config_map + initialise bar_state_map.
+  // session->fars is passed for the FAR->BAR NOCP join: the BAR IE carries
+  // no Apply Action, so bar_config.notify_cp (which gates DDN emission in
+  // the XDP BAR program, TS 29.244 Section 8.2.26) is derived from the FARs
+  // that reference the BAR ID and have apply_action.nocp set.
   if ((rules_flags & RULE_BAR_ENABLED) && !session->bars.empty()) {
     auto bar = upf_xdp_program->GetBarProgram();
     if (bar) {
       logger.debug("Setup BARProgram for SEID=" SEID_FMT, seid);
-      bar->Setup(seid, session->bars);
+      bar->Setup(seid, session->bars, session->fars);
     }
   }
 

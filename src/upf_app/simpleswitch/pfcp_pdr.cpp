@@ -7,6 +7,7 @@
 #include "common_defs.h"
 #include "endian.h"
 #include "pfcp_pdr.hpp"
+#include "upf_dldr_report.hpp"
 #include "upf_n4.hpp"
 #include "logger.hpp"
 #include "upf_config.hpp"
@@ -171,16 +172,10 @@ void pfcp_pdr::notify_cp_requested(
     Logger::upf_n4().trace("notify_cp_requested()");
     notified_cp = true;
 
-    pfcp::pfcp_session_report_request h;
-
-    pfcp::report_type_t report = {};
-    report.dldr = 1;  // Downlink Data Report — Report Type §8.2.21
-
-    pfcp::downlink_data_report dl_data_report;
-    dl_data_report.set(pdr_id);
-
-    h.set(report);
-    h.set(dl_data_report);
+    // Report built by the shared helper so the eBPF datapath emits the very
+    // same wire image (see upf_dldr_report.hpp).
+    pfcp::pfcp_session_report_request h =
+        oai::upf::app::make_dldr_report(pdr_id);
 
     upf_n4_inst->send_n4_msg(session->cp_fseid, h);
   }

@@ -19,11 +19,15 @@
  *
  * Key:   __u64              SEID
  * Value: struct bar_config  {bar_id, suggested_buf_pkt_cnt,
- *                            dl_notification_delay_sec}
+ *                            dl_notification_delay_50ms, notify_cp}
  * Size:  MAX_PDU_SESSIONS
  *
- * Written by SessionProgramManager when a Create BAR IE (§7.5.2.6)
- * or Update BAR IE (§7.5.4.11) is present in a PFCP message.
+ * Written by BARProgram::Setup()/PopulateBarConfigMap() when a Create BAR IE
+ * (§7.5.2.6) or Update BAR IE (§7.5.4.11) is present in a PFCP message.
+ *
+ * @note The plain __u64 key holds exactly ONE BAR per SEID; BARProgram::Setup
+ *       rejects sessions presenting more than one BAR rather than letting the
+ *       extras overwrite the first.
  */
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
@@ -40,10 +44,11 @@ struct {
  * @brief Per-session DDN suppression and buffer overflow state.
  *
  * Key:   __u64             SEID
- * Value: struct bar_state  {last_ddn_ns, buffered_pkt_count, notification_sent}
+ * Value: struct bar_state  {notify_epoch_ns, buffered_pkt_count,
+ *                           notification_sent}
  * Size:  MAX_PDU_SESSIONS
  *
- * Created (zeroed) by SessionProgramManager on session establishment.
+ * Created (zeroed) by BARProgram::InitBarStateMap on session establishment.
  * Updated atomically by xdp_bar_apply_kern.c.
  * Reset by SessionProgramManager when the FAR apply action changes
  * from BUFF → FORW (UE becomes reachable again).

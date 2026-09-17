@@ -115,6 +115,11 @@ void setup_bpf() {
 
   auto pUPF_XDPProgram = UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
   pUPF_XDPProgram->SetFramedRouting(upf_cfg.enable_fr);
+
+  // Drain bar_ddn_ringbuf_map so the Dowlink Data Notification events the XDP
+  // BAR program produces actually reach the control plane (only when
+  // enable_bpf_datapath is set).
+  UserPlaneComponent::GetInstance().StartDdnConsumer();
 }
 
 //------------------------------------------------------------------------------

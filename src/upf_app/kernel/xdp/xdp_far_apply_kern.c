@@ -632,18 +632,19 @@ int far_apply(struct xdp_md* ctx) {
   }
 
   /* -------------------------------------------------------------- */
-  /*  Priority 4: NOTIFY_CP (§8.2.26 bit 3) — informational        */
+  /*  Priority 4: NOTIFY_CP (§8.2.26 bit 3) — handled by the BAR    */
   /* -------------------------------------------------------------- */
-  if (action & PFCP_APPLY_ACTION_NOCP) {
-    bpf_debug(
-        "Apply Action: NOCP ( SEID = %llu ) - "
-        "not supported in XDP",
-        seid);
-    /*
-     * TODO: Trigger notification to control plane via
-     * bpf_perf_event_output() or BPF_MAP_TYPE_RINGBUF
-     */
-  }
+  /*
+   * NOCP is deliberately NOT acted on here. The CP notification (DDN) is
+   * produced by the BAR program on the BUFF path above: the control plane
+   * joins FAR.apply_action.nocp onto the referenced BAR and stores it as
+   * bar_config.notify_cp, which gates bar_notify_if_due()
+   * (xdp_bar_apply_kern.c). Do NOT add a second ring-buffer emit here — it
+   * would double-notify the SMF for the very same DL burst.
+   *
+   * NOCP without BUFF is a documented no-op: with nothing buffered there is
+   * no DL data to report on.
+   */
 
   /* -------------------------------------------------------------- */
   /*  Priority 5: DUPLICATE (§8.2.26 bit 4)                         */

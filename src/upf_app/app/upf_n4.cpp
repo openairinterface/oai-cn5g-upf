@@ -137,6 +137,13 @@ void upf_n4_task(void* args_p) {
         }
         break;
 
+      case N4_SESSION_REPORT_REQUEST:
+        if (itti_n4_session_report_request* m =
+                dynamic_cast<itti_n4_session_report_request*>(msg)) {
+          upf_n4_inst->handle_itti_msg(ref(*m));
+        }
+        break;
+
       case N4_SESSION_REPORT_RESPONSE:
         if (itti_n4_session_report_response* m =
                 dynamic_cast<itti_n4_session_report_response*>(msg)) {
@@ -160,6 +167,10 @@ void upf_n4_task(void* args_p) {
               // TODO
               // upf_n4_inst->time_out_event_association_request(to->timer_id,
               // to->arg1_user, to->arg2_user);
+              break;
+            case PFCP_TIMER_ARG1_MSG_RETRY:
+            case PFCP_TIMER_ARG1_PROC_CLEANUP:
+              upf_n4_inst->time_out_itti_event(to->timer_id);
               break;
             default:;
           }
@@ -572,6 +583,10 @@ void upf_n4::handle_itti_msg(itti_n4_session_deletion_response& msg) {
   send_n4_msg(msg);
 }
 //------------------------------------------------------------------------------
+void upf_n4::handle_itti_msg(itti_n4_session_report_request& msg) {
+  send_n4_msg(msg);
+}
+//------------------------------------------------------------------------------
 void upf_n4::send_n4_msg(itti_n4_association_setup_request& i) {
   send_request(i.r_endpoint, i.pfcp_ies, TASK_UPF_N4, i.trxn_id);
 }
@@ -649,6 +664,60 @@ void upf_n4::send_n4_msg(
         "Could not send PFCP_SESSION_REPORT_REQUEST, cause association not "
         "found for cp_fseid");
   }
+}
+//------------------------------------------------------------------------------
+bool upf_n4::enqueue_session_report_request(
+    const pfcp::fseid_t& cp_fseid, const pfcp::pfcp_session_report_request& s,
+    bool& association_found) {
+  association_found = false;
+
+  std::shared_ptr<pfcp_association> sa = {};
+  if (!pfcp_associations::get_instance().get_association(cp_fseid, sa) || !sa) {
+    Logger::upf_n4().warn(
+        "Could not enqueue PFCP_SESSION_REPORT_REQUEST, cause association not "
+        "found for cp_fseid " SEID_FMT,
+        cp_fseid.seid);
+    return false;
+  }
+
+  const pfcp::node_id_t& peer_node_id = sa->peer_node_id();
+  if (peer_node_id.node_id_type != pfcp::NODE_ID_TYPE_IPV4_ADDRESS) {
+    Logger::upf_n4().warn(
+        "Could not enqueue PFCP_SESSION_REPORT_REQUEST for cp_fseid " SEID_FMT
+        ", TODO node_id IPV6, FQDN!",
+        cp_fseid.seid);
+    return false;
+  }
+  association_found = true;
+
+  if (!itti_inst) {
+    Logger::upf_n4().error(
+        "Could not enqueue PFCP_SESSION_REPORT_REQUEST for cp_fseid " SEID_FMT
+        ", ITTI is not up",
+        cp_fseid.seid);
+    return false;
+  }
+
+  auto isrr = std::make_shared<itti_n4_session_report_request>(
+      TASK_UPF_N4, TASK_UPF_N4);
+  isrr->trxn_id    = generate_trxn_id();
+  isrr->pfcp_ies   = s;
+  isrr->seid       = cp_fseid.seid;
+  isrr->r_endpoint = endpoint(peer_node_id.u1.ipv4_address, pfcp::default_port);
+
+  if (itti_inst->send_msg(isrr) != RETURNok) {
+    Logger::upf_n4().error(
+        "Could not enqueue PFCP_SESSION_REPORT_REQUEST to TASK_UPF_N4 for "
+        "cp_fseid " SEID_FMT " (trxn_id %lu)",
+        cp_fseid.seid, isrr->trxn_id);
+    return false;
+  }
+
+  Logger::upf_n4().debug(
+      "Queued PFCP_SESSION_REPORT_REQUEST on TASK_UPF_N4, seid " SEID_FMT
+      " (CP F-SEID) trxn_id %lu",
+      isrr->seid, isrr->trxn_id);
+  return true;
 }
 //------------------------------------------------------------------------------
 void upf_n4::send_heartbeat_request(std::shared_ptr<pfcp_association>& a) {
