@@ -352,6 +352,42 @@ class pfcp_pdr {
     return (precedence.second.precedence < rhs.precedence.second.precedence);
   }
 };
+
+//------------------------------------------------------------------------------
+/**
+ * @brief Re-arm the per-PDR CP-notify one-shot for every PDR of a FAR.
+ *
+ * simpleswitch counterpart of BARProgram::ResetBarState(): the eBPF
+ * datapath latches "a DDN was already sent for this idle burst" in
+ * bar_state.notify_epoch_ns, the simpleswitch datapath latches exactly the
+ * same thing in pfcp_pdr::notified_cp (see notify_cp_requested(), which sends
+ * the Downlink Data Report only `if (not notified_cp)`). Neither latch was
+ * ever cleared, so a SECOND idle -> DL -> paging cycle on the same session
+ * never re-notified the SMF.
+ *
+ * Call this on the same transition the eBPF reset uses -- a FAR LEAVING
+ * buffering, see apply_action_leaves_buffering() -- so that simpleswitch does
+ * not regress with the bug the eBPF path just fixed.
+ *
+ * @param pdrs    The session's PDRs (null entries are ignored).
+ * @param far_id  FAR that left buffering; only PDRs referencing it (§8.2.74)
+ *                are re-armed, so a multi-FAR session does not lose the
+ *                latch of a FAR that is still buffering.
+ * @return Number of PDRs whose latch was actually cleared.
+ */
+inline size_t rearm_notified_cp(
+    const std::vector<std::shared_ptr<pfcp_pdr>>& pdrs, uint32_t far_id) {
+  size_t rearmed = 0;
+  for (const auto& pdr : pdrs) {
+    if (!pdr) continue;
+    if (!pdr->far_id.first) continue; /* PDR references no FAR */
+    if (pdr->far_id.second.far_id != far_id) continue;
+    if (!pdr->notified_cp) continue; /* nothing latched */
+    pdr->notified_cp = false;
+    ++rearmed;
+  }
+  return rearmed;
+}
 }  // namespace pfcp
 
 #include "pfcp_session.hpp"

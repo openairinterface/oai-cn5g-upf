@@ -100,7 +100,8 @@ void pfcp_l4_stack::start_msg_retry_timer(
     pfcp_procedure& p, uint32_t time_out_milli_seconds,
     const task_id_t& task_id, const uint32_t& seq_num) {
   p.retry_timer_id = itti_inst->timer_setup(
-      time_out_milli_seconds / 1000, time_out_milli_seconds % 1000, task_id);
+      time_out_milli_seconds / 1000, time_out_milli_seconds % 1000, task_id,
+      PFCP_TIMER_ARG1_MSG_RETRY);
   msg_out_retry_timers.insert(
       std::pair<timer_id_t, uint32_t>(p.retry_timer_id, seq_num));
   //   logger_common::pfcp().trace( "Started
@@ -130,7 +131,8 @@ void pfcp_l4_stack::start_proc_cleanup_timer(
     pfcp_procedure& p, uint32_t time_out_milli_seconds,
     const task_id_t& task_id, const uint32_t& seq_num) {
   p.proc_cleanup_timer_id = itti_inst->timer_setup(
-      time_out_milli_seconds / 1000, time_out_milli_seconds % 1000, task_id);
+      time_out_milli_seconds / 1000, time_out_milli_seconds % 1000, task_id,
+      PFCP_TIMER_ARG1_PROC_CLEANUP);
   proc_cleanup_timers.insert(
       std::pair<timer_id_t, uint32_t>(p.proc_cleanup_timer_id, seq_num));
   //   logger_common::pfcp().trace( "Started
@@ -143,7 +145,8 @@ void pfcp_l4_stack::stop_proc_cleanup_timer(pfcp_procedure& p) {
   //   logger_common::pfcp().trace( "Stopped
   //   proc cleanup timer %d, proc %"
   // PRId64"",p.proc_cleanup_timer_id, p.trxn_id);
-  msg_out_retry_timers.erase(p.proc_cleanup_timer_id);
+
+  proc_cleanup_timers.erase(p.proc_cleanup_timer_id);
   p.proc_cleanup_timer_id = 0;
 }
 //------------------------------------------------------------------------------
@@ -897,6 +900,7 @@ void pfcp_l4_stack::time_out_event(
             "Delete proc %" PRId64 " Retry %d seq %d timer id %u",
             it_proc->second.trxn_id, it_proc->second.retry_count,
             it_proc->first, timer_id);
+        trxn_id2seq_num.erase(it_proc->second.trxn_id);
         pending_procedures.erase(it_proc);
       }
     }

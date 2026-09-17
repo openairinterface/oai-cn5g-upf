@@ -21,7 +21,7 @@
  *
  * @note dl_data_notification_delay.delay_value > 0 activates DDN
  *       suppression: the data plane skips duplicate notifications within
- *       the delay window (tracked in bar_state_map.last_ddn_ns).
+ *       the delay window (tracked in bar_state_map.notify_epoch_ns).
  *
  * Control-plane-only IE (not used by bar_apply XDP program):
  *   mt_edt_control_information — the decision to initiate MT-EDT is taken

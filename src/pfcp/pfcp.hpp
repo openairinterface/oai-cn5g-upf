@@ -57,6 +57,10 @@ class pfcp_procedure {
 
 enum pfcp_transaction_action { DELETE_TX = 0, CONTINUE_TX };
 
+#define PFCP_TIMER_ARG1_BASE (0x50464350ULL) /* 'P' 'F' 'C' 'P' */
+#define PFCP_TIMER_ARG1_MSG_RETRY (PFCP_TIMER_ARG1_BASE + 1)
+#define PFCP_TIMER_ARG1_PROC_CLEANUP (PFCP_TIMER_ARG1_BASE + 2)
+
 class pfcp_l4_stack : public udp_application {
 #define PFCP_T1_RESPONSE_MS 1000
 #define PFCP_N1_REQUESTS 3

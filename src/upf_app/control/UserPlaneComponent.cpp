@@ -3,6 +3,7 @@
  */
 
 #include "UserPlaneComponent.h"
+#include "BarDdnConsumer.h"
 #include "SessionManager.h"
 #include "SessionProgramManager.h"
 #include "SignalHandler.h"
@@ -208,8 +209,53 @@ void UserPlaneComponent::Setup(
 }
 
 //------------------------------------------------------------------------------
+void UserPlaneComponent::StartDdnConsumer() {
+  if (!upf_xdp_program_) {
+    Logger::upf_app().warn(
+        "DDN ring-buffer consumer not started: no XDP pipeline");
+    return;
+  }
+
+  auto bar_program = upf_xdp_program_->GetBarProgram();
+  if (!bar_program) {
+    // enable_bar == false: the BAR program was never instantiated, so there
+    // is no ring to poll. Not an error.
+    Logger::upf_app().info(
+        "BAR disabled -- DDN ring-buffer consumer not started");
+    return;
+  }
+
+  if (!ddn_consumer_) {
+    ddn_consumer_ = std::make_unique<oai::upf::app::BarDdnConsumer>();
+  }
+
+  // bar_ddn_ringbuf_map is reachable ONLY through the BAR program:
+  // UPF_XDPProgram::GetMapByName() knows bar_config_map / bar_state_map and
+  // returns nullptr for the ring.
+  (void) ddn_consumer_->Start(bar_program->GetBarDdnRingbuf());
+}
+
+//------------------------------------------------------------------------------
+void UserPlaneComponent::StopDdnConsumer() {
+  if (ddn_consumer_) {
+    ddn_consumer_->Stop();
+  }
+}
+
+//------------------------------------------------------------------------------
 void UserPlaneComponent::TearDown() {
   Logger::upf_app().info("Tearing down User Plane Component");
+
+  /*
+   * FIRST, before anything is dismantled. The DDN poll thread
+   * resolves UP SEIDs against pfcp_switch and, posts to the
+   * N4 ITTI task; RemoveAllSessions() below erases the bar_config_map /
+   * bar_state_map entries, and SignalHandler::TearDown() deletes upf_app /
+   * pfcp_switch / itti_inst immediately after this function returns. A late
+   * event consumed after either point would race freed state.
+   * Stop() joins the thread, so this is a hard barrier, not a request.
+   */
+  StopDdnConsumer();
 
   // Remove all sessions from singleton
   SessionProgramManager::GetInstance().RemoveAllSessions();

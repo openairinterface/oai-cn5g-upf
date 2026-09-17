@@ -33,6 +33,14 @@
 class SessionManager;
 class UPF_XDPProgram;
 
+namespace oai {
+namespace upf {
+namespace app {
+class BarDdnConsumer;
+}
+}  // namespace upf
+}  // namespace oai
+
 /**
  * @class UserPlaneComponent
  * @brief Main orchestrator for UPF user plane data path
@@ -111,9 +119,32 @@ class UserPlaneComponent : public ISessionObserver {
       const std::string& gtp_interface, const std::string& non_gtp_interface);
 
   /**
+   * @brief Start the eBPF DDN ring-buffer consumer
+   *
+   * Resolves bar_ddn_ringbuf_map through
+   * UPF_XDPProgram::GetBarProgram()->GetBarDdnRingbuf() and hands it to a
+   * BarDdnConsumer poll thread owned by this component. A no-op (info log,
+   * no thread) when the BAR feature is disabled, so it is safe to call
+   * unconditionally from the eBPF bring-up path.
+   *
+   * Must be called AFTER Setup(): the BAR program has to be loaded before the
+   * ring has an fd.
+   */
+  void StartDdnConsumer();
+
+  /**
+   * @brief Stop and join the DDN ring-buffer consumer. Idempotent.
+   *
+   * Called first by TearDown(); exposed separately so a shutdown path can
+   * quiesce the poll thread earlier if it ever needs to.
+   */
+  void StopDdnConsumer();
+
+  /**
    * @brief Tear down user plane component and cleanup resources
    *
    * Performs graceful shutdown:
+   *   - Stops the DDN ring-buffer poll thread (must be first)
    *   - Removes all active sessions
    *   - Unloads BPF tail-call pipeline
    *   - Releases network interfaces
@@ -245,6 +276,11 @@ class UserPlaneComponent : public ISessionObserver {
 
   /// BPF data plane manager (entry programs + shared map ownership)
   std::shared_ptr<UPF_XDPProgram> upf_xdp_program_;
+
+  /// DDN ring-buffer poll thread. Owned here so its lifetime is
+  /// bounded by the datapath's: created in StartDdnConsumer(), joined at the
+  /// very top of TearDown(), before any BAR map entry is erased.
+  std::unique_ptr<oai::upf::app::BarDdnConsumer> ddn_consumer_;
 
   /// N3 GTP-U interface name
   std::string gtp_interface_;

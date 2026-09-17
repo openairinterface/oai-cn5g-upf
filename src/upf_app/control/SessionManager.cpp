@@ -546,7 +546,18 @@ SessionOperationResult SessionManager::RemoveSession(
   uint64_t seid = session->get_up_seid();
   Logger::upf_app().info("RemoveSession() seid " SEID_FMT, seid);
 
+  /*
+   * bar_state_map is erased inside DeleteSession() ->
+   * SessionProgramManager::RemovePipeline() -> RemoveSession(seid), which
+   * deletes both BAR maps for this SEID.
+   */
   return DeleteSession(seid);
+}
+
+//------------------------------------------------------------------------------
+bool SessionManager::ResetBarState(uint64_t seid) {
+  if (!session_program_manager_) return false;
+  return session_program_manager_->ResetBarState(seid);
 }
 
 //------------------------------------------------------------------------------
@@ -1426,6 +1437,8 @@ size_t SessionManager::HandleFarUpdates(
     std::shared_ptr<pfcp::pfcp_session> session,
     itti_n4_session_modification_request* mod_req) {
   size_t updated_count = 0;
+  // set when at least one FAR of this session LEFT buffering.
+  bool left_buffering = false;
 
   for (const auto& update_far : mod_req->pfcp_ies.update_fars) {
     // Extract FAR ID — M, §8.2.74
@@ -1467,8 +1480,25 @@ size_t SessionManager::HandleFarUpdates(
     //     grouped=303 Remove MBS Unicast Parameters (C, N4mb)
     //     §8.2.31 PFCPSMReq-Flags SNDEM/DROBU/QAURR not acted on
     // -------------------------------------------------------------------------
+
+    const bool leaves_buffering =
+        pfcp::far_update_leaves_buffering(*existing_far, update_far);
+
     uint8_t cause_value = pfcp::CAUSE_VALUE_REQUEST_ACCEPTED;
     existing_far->update(update_far, cause_value);
+
+    if (leaves_buffering) {
+      Logger::upf_app().warn(
+          "FAR %u seid " SEID_FMT
+          ": BUFF edge observed in SessionManager — pfcp_switch did NOT "
+          "pre-apply this Update FAR (fallback reset path, forw=%u drop=%u).",
+          far_id, session->get_up_seid(),
+          existing_far->apply_action.forw ? 1U : 0U,
+          existing_far->apply_action.drop ? 1U : 0U);
+      left_buffering = true;
+      // simpleswitch parity: clear the per-PDR CP-notify latch as well.
+      pfcp::rearm_notified_cp(session->pdrs, far_id);
+    }
 
     // Log OHC IPv4/IPv6 changes for diagnostics
     if (update_far.update_forwarding_parameters.first) {
@@ -1586,6 +1616,18 @@ size_t SessionManager::HandleFarUpdates(
   // Update BPF maps
   if (updated_count > 0) {
     session_program_manager_->ModifyPipeline(session);
+
+    /*
+     * Clear the DDN one-shot AFTER ModifyPipeline(), never before:
+     * ModifyPipeline() is what pushes the new (FORW/DROP) apply action into
+     * far_config_map, and it also re-runs BARProgram::Setup() whose
+     * InitBarStateMap() is BPF_NOEXIST preserve-only. Resetting first would
+     * leave a window in which a DL packet still matches the old BUFF FAR and
+     * re-latches the entry we just cleared.
+     */
+    if (left_buffering && upf_cfg.enable_bar) {
+      ResetBarState(session->get_up_seid());
+    }
   }
 
   return updated_count;
