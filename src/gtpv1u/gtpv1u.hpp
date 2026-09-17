@@ -70,7 +70,8 @@ class gtpu_l4_stack : public udp_application {
 
   void send_g_pdu(
       const struct sockaddr_in& peer_addr, const teid_t teid,
-      const char* payload, const ssize_t payload_len, uint8_t qfi);
+      const char* payload, const ssize_t payload_len, uint8_t qfi,
+      uint8_t tos = 0);
   void send_g_pdu(
       const struct sockaddr_in6& peer_addr, const teid_t teid,
       const char* payload, const ssize_t payload_len);
@@ -81,7 +82,7 @@ class gtpu_l4_stack : public udp_application {
   /** @brief Bind the calling thread's GTP-U TX socket to pool slot @p idx,
    *  so downlink tun threads do not all transmit on the same socket. */
   /** @brief Coalesce this thread's GTP-U transmits until flush_tx_batch(). */
-  void begin_tx_batch() { udp_s.begin_tx_batch(); };
+  void begin_tx_batch(int idx = 0) { udp_s.begin_tx_batch(idx); };
   void flush_tx_batch() { udp_s.flush_tx_batch(); };
 };
 }  // namespace gtpv1u

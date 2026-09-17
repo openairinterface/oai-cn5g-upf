@@ -513,6 +513,7 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
       static_cast<uint16_t>(datapath_cfg.get_max_upf_interfaces());
   cfg.n3_rx_threads = static_cast<uint16_t>(datapath_cfg.get_n3_rx_threads());
   cfg.dl_rx_queues  = static_cast<uint16_t>(datapath_cfg.get_dl_rx_queues());
+  cfg.qos_burst_ms  = static_cast<uint16_t>(datapath_cfg.get_qos_burst_ms());
   cfg.max_upf_redirect_interfaces =
       static_cast<uint16_t>(datapath_cfg.get_max_upf_redirect_interfaces());
   cfg.max_pdrs_per_pdu_session =
@@ -544,9 +545,9 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
       .info(
           "Datapath configuration transferred: max_pdu_sessions=%u, "
           "max_upf_interfaces=%u, max_arp_entries=%u, n3_rx_threads=%u, "
-          "dl_rx_queues=%u",
+          "dl_rx_queues=%u, qos_burst_ms=%u",
           cfg.max_pdu_sessions, cfg.max_upf_interfaces, cfg.max_arp_entries,
-          cfg.n3_rx_threads, cfg.dl_rx_queues);
+          cfg.n3_rx_threads, cfg.dl_rx_queues, cfg.qos_burst_ms);
 
   auto snssai_upf_list = upf_local->get_upf_info().getSNssaiUpfInfoList();
   for (const auto& snssai : snssai_upf_list) {
@@ -766,6 +767,10 @@ upf_datapath_configuration::upf_datapath_configuration(
   m_n3_rx_threads.set_validation_interval(1, 16);
   m_dl_rx_queues = int_config_value(UPF_DL_RX_QUEUES, UPF_DEFAULT_DL_RX_QUEUES);
   m_dl_rx_queues.set_validation_interval(1, 16);
+  m_qos_burst_ms = int_config_value(UPF_QOS_BURST_MS, UPF_DEFAULT_QOS_BURST_MS);
+  // Below ~100 ms TCP cannot reach its MBR; well above ~400 ms the MBR
+  // itself starts to leak. Both ends measured; see qos_mbr.hpp.
+  m_qos_burst_ms.set_validation_interval(10, 5000);
 
   m_max_upf_redirect_interfaces = int_config_value(
       UPF_MAX_UPF_REDIRECT_INTERFACES, UPF_DEFAULT_MAX_UPF_REDIRECT_INTERFACES);
@@ -830,6 +835,9 @@ void upf_datapath_configuration::from_yaml(const YAML::Node& node) {
   }
   if (node[UPF_N3_RX_THREADS]) {
     m_n3_rx_threads.from_yaml(node[UPF_N3_RX_THREADS]);
+  }
+  if (node[UPF_QOS_BURST_MS]) {
+    m_qos_burst_ms.from_yaml(node[UPF_QOS_BURST_MS]);
   }
   if (node[UPF_DL_RX_QUEUES]) {
     m_dl_rx_queues.from_yaml(node[UPF_DL_RX_QUEUES]);
@@ -980,6 +988,10 @@ std::string upf_datapath_configuration::to_string(
       .append(fmt::format(
           BASE_FORMATTER, INNER_LIST_ELEM, UPF_DL_RX_QUEUES_LABEL, inner_width,
           m_dl_rx_queues.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_QOS_BURST_MS_LABEL, inner_width,
+          m_qos_burst_ms.to_string("")));
 
   // PFCP Session Limits
   out.append(inner_indent)
@@ -1277,6 +1289,10 @@ int upf_datapath_configuration::get_n3_rx_threads() const {
 }
 
 //------------------------------------------------------------------------------
+int upf_datapath_configuration::get_qos_burst_ms() const {
+  return m_qos_burst_ms.get_value();
+}
+
 int upf_datapath_configuration::get_dl_rx_queues() const {
   return m_dl_rx_queues.get_value();
 }

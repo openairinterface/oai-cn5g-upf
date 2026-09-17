@@ -6,6 +6,7 @@
 #define FILE_UDP_HPP_SEEN
 
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #include <inttypes.h>
 #include <stdint.h>
 #include <sys/socket.h>
@@ -41,12 +42,16 @@ class udp_server;
 
 class udp_server {
 #define UDP_RECV_BUFFER_SIZE 8192
-// datagrams pulled per recvmmsg() syscall
-#define UDP_RECV_VLEN 16
-// Max receive threads sharing the socket.
+// Datagrams pulled per recvmmsg() / coalesced per sendmmsg(). The syscall is
+// amortised over the batch, so the batch wants to be big enough that the
+// per-call cost stops mattering; Snabb, which is built around this idea, moves
+// ~100 packets per step. Past that the receive buffers stop fitting in L2 and
+// latency grows for no more throughput.
+#define UDP_RECV_VLEN 64
+// Max receive threads, one socket each (see sockets_).
 #define UDP_MAX_RX_THREADS 16
 // datagrams coalesced into one sendmmsg() on the transmit side
-#define UDP_TX_BATCH 16
+#define UDP_TX_BATCH 64
  public:
   udp_server(const struct in_addr& address, const uint16_t port_num)
       : app_(nullptr), port_(port_num) {
@@ -104,8 +109,11 @@ class udp_server {
     stop();
 
     // Closing a socket is not enough to stop a blocking call; shutdown() is,
-    // and it wakes every thread parked in recvmmsg() at once.
+    // and it wakes every thread parked in recvmmsg() at once. Every socket in
+    // the pool has a thread parked on it, so every one has to be woken.
     shutdown(socket_, SHUT_RDWR);
+    for (int sd : sockets_)
+      if (sd != socket_) shutdown(sd, SHUT_RDWR);
 
     // Join before closing: the fd must stay valid until the last thread has
     // left the call that is using it.
@@ -113,6 +121,10 @@ class udp_server {
       if (t.joinable()) t.join();
     }
     if (rthread_.joinable()) rthread_.join();
+
+    for (int sd : sockets_)
+      if (sd != socket_) close(sd);
+    sockets_.clear();
 
     res = close(socket_);
     if (res != 0) {
@@ -122,11 +134,15 @@ class udp_server {
     Logger::udp().info("Finished the udp_server destruction");
   }
 
-  void udp_read_loop(oai::utils::thread_sched_params thread_sched_params);
+  /** @brief Receive loop for one thread, reading its own socket @p fd. */
+  void udp_read_loop(
+      oai::utils::thread_sched_params thread_sched_params, int fd);
 
   /** @brief Start coalescing this thread's sends; flush_tx() issues them.
-   *  The buffers handed to async_send_to() must stay valid until the flush. */
-  void begin_tx_batch();
+   *  The buffers handed to async_send_to() must stay valid until the flush.
+   *  @param idx caller's queue number, which picks the socket to send on so
+   *             that transmitting threads do not share one. */
+  void begin_tx_batch(int idx = 0);
   /** @brief Send everything this thread has queued, in one sendmmsg(). */
   void flush_tx_batch();
 
@@ -142,11 +158,16 @@ class udp_server {
     }
   }
 
+  /// @param tos Transport Level Marking (§8.2.24) for the outer header, 0 for
+  /// none. The kernel builds that header, so it travels as a control message
+  /// rather than in the buffer. Only the batched path carries it -- that is
+  /// the one the downlink datapath uses; nothing else marks.
   void async_send_to(
       const char* send_buffer, const ssize_t num_bytes,
-      const struct sockaddr_in& r_endpoint) {
+      const struct sockaddr_in& r_endpoint, uint8_t tos = 0) {
     if (tx_batching_) {
-      queue_tx(send_buffer, num_bytes, &r_endpoint, sizeof(struct sockaddr_in));
+      queue_tx(
+          send_buffer, num_bytes, &r_endpoint, sizeof(struct sockaddr_in), tos);
       return;
     }
     ssize_t bytes_written = sendto(
@@ -188,15 +209,16 @@ class udp_server {
   /** @brief CPUs to run @p n datapath threads on, drawn from the allowed set
    *  minus control_cpu().
    *
-   *  Successive calls continue where the last left off, so the uplink and
-   *  downlink pools -- which call this independently -- get different cores
-   *  rather than the same list twice. Empty when nothing should be pinned. */
+   *  Every call returns the same list, so uplink thread i and downlink thread
+   *  i share a core: only one of the pair is on the path for a given
+   *  direction. Empty when nothing should be pinned. */
   static std::vector<int> datapath_cpus(int n);
   void stop(void);
 
  private:
   void queue_tx(
-      const char* buf, ssize_t len, const void* addr, socklen_t addrlen) {
+      const char* buf, ssize_t len, const void* addr, socklen_t addrlen,
+      uint8_t tos = 0) {
     struct iovec& iov = tx_iov_[tx_count_];
     iov.iov_base      = const_cast<char*>(buf);
     iov.iov_len       = (size_t) len;
@@ -207,11 +229,22 @@ class udp_server {
     m.msg_namelen = addrlen;
     m.msg_iov     = &iov;
     m.msg_iovlen  = 1;
+    if (tos) {
+      auto* c              = (struct cmsghdr*) tx_cmsg_[tx_count_];
+      c->cmsg_level        = IPPROTO_IP;
+      c->cmsg_type         = IP_TOS;
+      c->cmsg_len          = CMSG_LEN(sizeof(int));
+      *(int*) CMSG_DATA(c) = tos;
+      m.msg_control        = tx_cmsg_[tx_count_];
+      m.msg_controllen     = CMSG_SPACE(sizeof(int));
+    }
     if (++tx_count_ >= UDP_TX_BATCH) flush_tx_batch();
   }
 
  protected:
   int create_socket(const struct in_addr& address, const uint16_t port);
+  /// Another socket on the same address/port, joining the SO_REUSEPORT group.
+  int clone_socket();
   void apply_socket_options(int sd);
   int create_socket(const struct in6_addr& address, const uint16_t port);
   int create_socket(const char* address, const uint16_t port_num);
@@ -227,12 +260,21 @@ class udp_server {
   // Transmit batch, per thread. Off unless begin_tx_batch() was called.
   static thread_local bool tx_batching_;
   static thread_local int tx_count_;
+  /// Socket this thread transmits on; -1 until begin_tx_batch()/read loop.
+  static thread_local int tx_sock_;
   static thread_local struct mmsghdr tx_msgs_[UDP_TX_BATCH];
   static thread_local struct iovec tx_iov_[UDP_TX_BATCH];
   static thread_local struct sockaddr_storage tx_addr_[UDP_TX_BATCH];
+  static thread_local char tx_cmsg_[UDP_TX_BATCH][CMSG_SPACE(sizeof(int))];
   std::thread rthread_;
   std::atomic<bool> terminateRL_{false};
   int socket_;
+  /// One socket per receive thread; sockets_[0] is socket_. Empty until
+  /// start_receive() runs, so anything sending before then uses socket_.
+  std::vector<int> sockets_;
+  /// The endpoint socket_ is bound to, so clone_socket() can bind more there.
+  struct sockaddr_storage bind_addr_ {};
+  socklen_t bind_addrlen_{0};
   uint16_t port_;
   sa_family_t sa_family;
 };
