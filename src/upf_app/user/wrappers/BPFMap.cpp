@@ -20,3 +20,8 @@ BPFMap::~BPFMap() {
 std::string BPFMap::GetName() const {
   return name_;
 }
+
+//------------------------------------------------------------------------------
+int BPFMap::GetFd() const {
+  return bpf_map_ ? bpf_map__fd(bpf_map_) : -1;
+}

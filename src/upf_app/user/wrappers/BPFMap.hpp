@@ -170,6 +170,40 @@ class BPFMap {
   int Update(KeyType& key, ValueType& value, int flags);
 
   /**
+   * @brief Non-throwing variant of Update()
+   *
+   * Same wrapper for bpf_map_update_elem(), but it never throws and never
+   * logs: it reports the failure to the caller as a negative errno so that
+   * an EXPECTED failure (typically -EEXIST with BPF_NOEXIST, i.e. a
+   * create-if-absent that found the entry already there) can be handled
+   * inline instead of aborting the caller with an exception.
+   *
+   * @tparam KeyType Type of the key
+   * @tparam ValueType Type of the value
+   * @param key The key to update
+   * @param value The value to store
+   * @param flags Update behavior flags (BPF_ANY / BPF_NOEXIST / BPF_EXIST)
+   * @return 0 on success, negative errno on failure
+   *
+   * @note Never throws. Use Update() when any failure is fatal.
+   * @note The caller is responsible for logging: this function is silent so
+   *       that an expected -EEXIST does not pollute the error log.
+   *
+   * Usage:
+   * @code
+   * // Create only, keep any pre-existing value
+   * int ret = map.TryUpdate(seid, state, BPF_NOEXIST);
+   * if (ret == -EEXIST) {
+   *   Logger::upf_app().debug("Live state preserved");
+   * } else if (ret != 0) {
+   *   Logger::upf_app().error("Map update failed: ret=%d", ret);
+   * }
+   * @endcode
+   */
+  template<class KeyType, class ValueType>
+  int TryUpdate(KeyType& key, ValueType& value, int flags);
+
+  /**
    * @brief Remove an entry from the map
    *
    * Wrapper for bpf_map_delete_elem(). Deletes the entry with the
@@ -199,6 +233,30 @@ class BPFMap {
   int Remove(KeyType& key);
 
   /**
+   * @brief Non-throwing variant of Remove()
+   *
+   * Same wrapper for bpf_map_delete_elem(), but it never throws and never
+   * logs: it reports the failure to the caller as a negative errno so that
+   * an EXPECTED failure -- typically -ENOENT, i.e. "this session never had
+   * an entry in this map" -- can be handled inline.
+   *
+   * This matters on the session-teardown path, where a throwing delete of an
+   * absent entry aborts the REST of the cleanup (see
+   * SessionProgramManager::RemoveSession): a session with no URR must not be
+   * able to prevent the BAR state from being erased.
+   *
+   * @tparam KeyType Type of the key
+   * @param key The key to remove
+   * @return 0 on success, negative errno on failure (-ENOENT if absent)
+   *
+   * @note Never throws. Use Remove() when a missing entry is a real error.
+   * @note The caller is responsible for logging: this function is silent so
+   *       that an expected -ENOENT does not pollute the error log.
+   */
+  template<class KeyType>
+  int TryRemove(KeyType& key);
+
+  /**
    * @brief Get the name of the BPF map
    *
    * Returns the human-readable name assigned during construction.
@@ -207,6 +265,27 @@ class BPFMap {
    * @return std::string The map name
    */
   std::string GetName() const;
+
+  /**
+   * @brief Get the raw file descriptor of the underlying BPF map
+   *
+   * The CRUD helpers above hide the fd on purpose (they call bpf_map__fd()
+   * internally), but a few libbpf APIs are not element operations and take
+   * the fd directly -- notably ring_buffer__new(), which the DDN
+   * ring-buffer consumer uses on bar_ddn_ringbuf_map (UPF-T3). Those callers
+   * live outside this wrapper, hence a public accessor.
+   *
+   * @return the map fd, or -1 if this wrapper holds no map.
+   *
+   * @note Null-guarded: a BPFMap built over a nullptr bpf_map (e.g. from
+   *       BPFMaps::GetMap() for a name the skeleton does not have) returns
+   *       -1 instead of dereferencing.
+   * @note A NEGATIVE value is also what libbpf returns for a map that is not
+   *       loaded yet (bpf_map__fd() -> -EINVAL), so callers must test
+   *       `fd < 0`, not `fd == -1`.
+   * @note The fd is owned by the skeleton. Do NOT close it.
+   */
+  int GetFd() const;
 
  private:
   struct bpf_map* bpf_map_;  ///< Pointer to libbpf map structure
@@ -251,6 +330,23 @@ int BPFMap::Update(KeyType& key, ValueType& value, int flags) {
 }
 
 //------------------------------------------------------------------------------
+template<class KeyType, class ValueType>
+int BPFMap::TryUpdate(KeyType& key, ValueType& value, int flags) {
+  int map_fd = bpf_map__fd(bpf_map_);
+
+  errno   = 0;
+  int ret = bpf_map_update_elem(map_fd, &key, &value, flags);
+
+  if (ret == 0) return 0;
+
+  // libbpf >= 1.0 already returns -errno; the legacy ABI returns -1 and only
+  // sets errno. Normalise so callers can always test for -EEXIST / -ENOENT.
+  if (ret == -1 && errno != 0) ret = -errno;
+
+  return ret;
+}
+
+//------------------------------------------------------------------------------
 template<class KeyType>
 int BPFMap::Remove(KeyType& key) {
   int map_fd = bpf_map__fd(bpf_map_);
@@ -269,6 +365,23 @@ int BPFMap::Remove(KeyType& key) {
 
   Logger::upf_app().debug(
       "Remove value from Map '%s': [%s] -> *", name_.c_str(), key_str.c_str());
+  return ret;
+}
+
+//------------------------------------------------------------------------------
+template<class KeyType>
+int BPFMap::TryRemove(KeyType& key) {
+  int map_fd = bpf_map__fd(bpf_map_);
+
+  errno   = 0;
+  int ret = bpf_map_delete_elem(map_fd, &key);
+
+  if (ret == 0) return 0;
+
+  // libbpf >= 1.0 already returns -errno; the legacy ABI returns -1 and only
+  // sets errno. Normalise so callers can always test for -ENOENT.
+  if (ret == -1 && errno != 0) ret = -errno;
+
   return ret;
 }
 

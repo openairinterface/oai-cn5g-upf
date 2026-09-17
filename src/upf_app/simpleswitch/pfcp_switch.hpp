@@ -11,6 +11,7 @@
 #include <linux/ipv6.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <mutex>
 #include <thread>
 #include <unordered_map>
 #include <memory>
@@ -78,6 +79,16 @@ static_assert(
  *  (not lock-free); all modifications must be serialised via the ITTI
  *  N4 task thread.  up_seid2pfcp_sessions and the teid/ue-ip maps use
  *  upf_map, which is lock-free for concurrent reads (see upf_map.hpp).
+ *
+ *  Note that "lock-free for concurrent reads" covers the CONTAINER only.
+ *  The pfcp_session objects it hands out are NOT internally synchronised:
+ *  their rules are applied on TASK_UPF_APP (pfcp_session::update(),
+ *  cleanup()) with no lock; only the FAR list is published copy-on-write
+ *  for the datapath (pfcp_session::publish_fars() / find_far()). A thread
+ *  other than TASK_UPF_APP must therefore never walk a session's rule
+ *  vectors. get_cp_fseid_by_up_seid() is the one accessor built for
+ *  cross-thread use: it copies out a single field and takes
+ *  cp_fseid_mutex_ for it.
  */
 class pfcp_switch {
  private:
@@ -149,6 +160,14 @@ class pfcp_switch {
   std::atomic<bool> usage_report_stop_{false};
 
   oai::upf::upf_map<uint64_t, pfcp::pfcp_session> up_seid2pfcp_sessions;
+
+  /// Serialises the ONE post-publication write to pfcp_session::cp_fseid
+  /// (Session Modification carrying an F-SEID IE, §8.2.37) against the
+  /// cross-thread read in get_cp_fseid_by_up_seid(). The hash map itself
+  /// needs no lock -- see the thread-safety note on that accessor. Held for
+  /// a single struct copy only, never across a call, so it cannot deadlock
+  /// and does not touch any per-packet path.
+  mutable std::mutex cp_fseid_mutex_;
 
   /// GTP-U TEID → uplink PDR vector (N3 interface, §8.2.3)
   oai::upf::upf_map<teid_t, std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>
@@ -410,6 +429,17 @@ class pfcp_switch {
     return up_seid2pfcp_sessions.find(seid);
   }
   oai::upf::rcu_domain& rcu() const { return rcu_; }
+
+  //------------------------------------------------------------------------------
+  /** @brief Resolve an UP SEID to the peer CP F-SEID (§8.2.37).
+   *
+   *  @param up_seid       UP SEID taken from the datapath event.
+   *  @param cp_fseid_out  Set to the session's CP F-SEID on success;
+   *                       untouched on failure.
+   *  @return true if a session with this UP SEID is currently installed.
+   */
+  bool get_cp_fseid_by_up_seid(
+      const uint64_t up_seid, pfcp::fseid_t& cp_fseid_out) const;
 
   // ---- N4 session event handlers -------------------------------------------
 

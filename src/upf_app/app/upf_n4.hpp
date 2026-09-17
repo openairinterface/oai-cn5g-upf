@@ -21,6 +21,18 @@ namespace app {
 #define TASK_UPF_N4_TIMEOUT_HEARTBEAT_REQUEST (1)
 #define TASK_UPF_N4_TIMEOUT_ASSOCIATION_REQUEST (2)
 
+static_assert(
+    PFCP_TIMER_ARG1_MSG_RETRY != PFCP_TIMER_ARG1_PROC_CLEANUP &&
+        PFCP_TIMER_ARG1_MSG_RETRY != TASK_UPF_N4_TRIGGER_HEARTBEAT_REQUEST &&
+        PFCP_TIMER_ARG1_MSG_RETRY != TASK_UPF_N4_TIMEOUT_HEARTBEAT_REQUEST &&
+        PFCP_TIMER_ARG1_MSG_RETRY != TASK_UPF_N4_TIMEOUT_ASSOCIATION_REQUEST &&
+        PFCP_TIMER_ARG1_PROC_CLEANUP != TASK_UPF_N4_TRIGGER_HEARTBEAT_REQUEST &&
+        PFCP_TIMER_ARG1_PROC_CLEANUP != TASK_UPF_N4_TIMEOUT_HEARTBEAT_REQUEST &&
+        PFCP_TIMER_ARG1_PROC_CLEANUP != TASK_UPF_N4_TIMEOUT_ASSOCIATION_REQUEST,
+    "an arg1_user value is claimed by both a TASK_UPF_N4 trigger and the PFCP "
+    "transaction layer; upf_n4_task()'s TIME_OUT dispatch cannot tell them "
+    "apart and one handler becomes dead code");
+
 class upf_n4 : public pfcp::pfcp_l4_stack {
  private:
   std::thread::id thread_id;
@@ -51,6 +63,7 @@ class upf_n4 : public pfcp::pfcp_l4_stack {
   void handle_itti_msg(itti_n4_session_establishment_response& s);
   void handle_itti_msg(itti_n4_session_modification_response& s);
   void handle_itti_msg(itti_n4_session_deletion_response& s);
+  void handle_itti_msg(itti_n4_session_report_request& s);
   void handle_itti_msg(itti_n4_session_report_response& s){};
 
   void send_n4_msg(itti_n4_heartbeat_request& s){};
@@ -72,6 +85,10 @@ class upf_n4 : public pfcp::pfcp_l4_stack {
   void send_n4_msg(
       const pfcp::fseid_t& cp_fseid,
       const pfcp::pfcp_session_report_request& s);
+
+  static bool enqueue_session_report_request(
+      const pfcp::fseid_t& cp_fseid, const pfcp::pfcp_session_report_request& s,
+      bool& association_found);
 
   void send_heartbeat_request(std::shared_ptr<pfcp_association>& a);
   void send_heartbeat_response(

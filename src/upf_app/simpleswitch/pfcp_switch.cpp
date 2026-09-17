@@ -1141,6 +1141,43 @@ bool pfcp_switch::get_pfcp_session_by_up_seid(
 }
 
 //------------------------------------------------------------------------------
+// get_cp_fseid_by_up_seid — PUBLIC, cross-thread UP SEID -> CP F-SEID view.
+// Used by the eBPF DDN ring-buffer consumer, which runs on its own poll
+// thread. See the thread-safety contract on the declaration.
+//------------------------------------------------------------------------------
+bool pfcp_switch::get_cp_fseid_by_up_seid(
+    const uint64_t up_seid, pfcp::fseid_t& cp_fseid_out) const {
+  /*
+   * folly::AtomicHashMap reserves three key values (AtomicHashArray::Config:
+   * emptyKey=(KeyT)-1, lockedKey=(KeyT)-2, erasedKey=(KeyT)-3). findInternal()
+   * compares the probed cell against the lookup key BEFORE testing it against
+   * kEmptyKey_, so looking up (uint64_t)-1 reports a hit on the first empty
+   * cell and hands back an unconstructed shared_ptr. The SEID here comes from
+   * a datapath event, i.e. from outside this process' control, so reject the
+   * reserved keys instead of trusting them. Real UP SEIDs are handed out by
+   * seid_generator_ starting at 1 and never reach these values.
+   */
+  if (up_seid == static_cast<uint64_t>(-1) ||
+      up_seid == static_cast<uint64_t>(-2) ||
+      up_seid == static_cast<uint64_t>(-3)) {
+    Logger::pfcp_switch().warn(
+        "get_cp_fseid_by_up_seid: refusing reserved hash-map key " SEID_FMT,
+        up_seid);
+    return false;
+  }
+
+  std::shared_ptr<pfcp::pfcp_session> session = {};
+  if (not get_pfcp_session_by_up_seid(up_seid, session)) return false;
+  if (not session) return false;
+
+  // Copy out one field only; cp_fseid_mutex_ pairs with the F-SEID write in
+  // handle_pfcp_session_modification_request().
+  std::lock_guard<std::mutex> lock(cp_fseid_mutex_);
+  cp_fseid_out = session->cp_fseid;
+  return true;
+}
+
+//------------------------------------------------------------------------------
 bool pfcp_switch::get_pfcp_ul_pdrs_by_up_teid(
     const teid_t teid,
     std::shared_ptr<std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>& pdrs) const {
@@ -1967,6 +2004,10 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       Logger::pfcp_switch().warn(
           "TODO check carefully update fseid in "
           "PFCP_SESSION_MODIFICATION_REQUEST");
+      // The only write to cp_fseid after the session is published in
+      // up_seid2pfcp_sessions. get_cp_fseid_by_up_seid() reads it from the
+      // DDN poll thread, so the two are serialised.
+      std::lock_guard<std::mutex> lock(cp_fseid_mutex_);
       session->cp_fseid = fseid;
     }
     resp->seid = session->cp_fseid.seid;
@@ -2227,6 +2268,10 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     }
 
     // ---- Update PDRs / FARs / QERs ------------------------------------------
+    // Set when at least one FAR of this session LEFT buffering
+    // (BUFF -> !BUFF). Acted on after the datapath has been reprogrammed.
+    bool far_left_buffering = false;
+
     if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       for (auto it : req->pfcp_ies.update_pdrs) {
         update_pdr& pdr     = it;
@@ -2241,12 +2286,36 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       for (auto it : req->pfcp_ies.update_fars) {
         update_far& far     = it;
         uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
+
+        std::shared_ptr<pfcp::pfcp_far> upd_far = {};
+        const bool far_known = session->get(far.far_id.far_id, upd_far);
+        const bool leaves_buffering =
+            far_known && upd_far &&
+            pfcp::far_update_leaves_buffering(*upd_far, far);
+
         if (not session->update(far, cause_value)) {
           cause.cause_value            = cause_value;
           failed_rule_id_t failed_rule = {};
           failed_rule.rule_id_type     = FAILED_RULE_ID_TYPE_FAR;
           failed_rule.rule_id_value    = far.far_id.far_id;
           resp->pfcp_ies.set(failed_rule);
+        } else if (leaves_buffering) {
+          // Covers BOTH completion paths: BUFF->FORW (service request done,
+          // §7.5.4.3 with a refreshed Outer Header Creation) and BUFF->DROP
+          // (paging FAILURE, the SMF's stop-buffering Update FAR). Resetting
+          // only on FORW would leave the one-shot latched after a failed page
+          // and wedge the NEXT idle -> paging cycle.
+          Logger::pfcp_switch().info(
+              "FAR %u seid " SEID_FMT
+              ": Apply Action left BUFF (forw=%u drop=%u) — re-arming the DL "
+              "data notification one-shot",
+              far.far_id.far_id, session->get_up_seid(),
+              upd_far->apply_action.forw ? 1U : 0U,
+              upd_far->apply_action.drop ? 1U : 0U);
+          far_left_buffering = true;
+          // simpleswitch parity: pfcp_pdr::notified_cp is the simpleswitch
+          // equivalent of bar_state.notification_sent and was never reset.
+          pfcp::rearm_notified_cp(session->pdrs, far.far_id.far_id);
         }
       }
       // Both datapaths handle QERs -- see the Create QER block above.
@@ -2331,6 +2400,21 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     // establishment.
     resolve_pdr_qfis(s);
     apply_qos_mbr(s);
+
+    /*
+     * Clear the eBPF DDN one-shot latch (bar_state_map) for a FAR
+     * that left buffering. Deliberately AFTER call_datapath(): that call is
+     * what pushes the new FORW/DROP apply action into far_config_map. Doing
+     * it earlier would leave a window in which a DL packet still matches the
+     * old BUFF FAR and immediately re-latches the entry we just cleared.
+     *
+     * ResetBarState() only ever OVERWRITES an existing entry (BPF_EXIST), so
+     * it cannot resurrect a torn-down session's map slot.
+     */
+    if (far_left_buffering && isBpfAccelerationEnabled && upf_cfg.enable_bar &&
+        session_manager) {
+      session_manager->ResetBarState(session->get_up_seid());
+    }
   }
 
   resp->pfcp_ies.set(cause);

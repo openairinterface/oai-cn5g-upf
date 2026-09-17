@@ -109,6 +109,18 @@ class SessionProgramManager {
   void RemoveSession(uint64_t seid);
 
   /**
+   * @brief Clear the DDN one-shot latch (bar_state_map) of a session.
+   *
+   * Forwards to BARProgram::ResetBarState(): the entry is OVERWRITTEN with a
+   * zeroed bar_state when it exists and is NEVER created when it does not
+   * (BPF_EXIST), so a stale UP-SEID cannot resurrect a dead map entry.
+   *
+   * @param seid Session Endpoint Identifier
+   * @return true if an entry existed and was zeroed.
+   */
+  bool ResetBarState(uint64_t seid);
+
+  /**
    * @brief Remove all sessions and clean up all resources
    */
   void RemoveAllSessions();
