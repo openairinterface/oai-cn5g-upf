@@ -4,7 +4,12 @@
 
 #include "udp.hpp"
 
+#include <poll.h>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <mutex>
+#include <vector>
 
 #include "logger.hpp"
 
@@ -39,90 +44,148 @@ static std::string string_to_hex(const std::string& input) {
   return output;
 }
 //------------------------------------------------------------------------------
-void udp_server::udp_worker_loop(
-    const int id, const oai::utils::thread_sched_params& sched_params) {
-  uint64_t count              = 0;
-  udp_packet_q_item_t* worker = nullptr;
+thread_local bool udp_server::tx_batching_ = false;
+thread_local int udp_server::tx_count_     = 0;
+thread_local int udp_server::tx_sock_      = -1;
+thread_local struct mmsghdr udp_server::tx_msgs_[UDP_TX_BATCH];
+thread_local struct iovec udp_server::tx_iov_[UDP_TX_BATCH];
+thread_local struct sockaddr_storage udp_server::tx_addr_[UDP_TX_BATCH];
+thread_local char udp_server::tx_cmsg_[UDP_TX_BATCH][CMSG_SPACE(sizeof(int))];
 
-  sched_params.apply(TASK_NONE, Logger::udp());
-  tmp_thread   = pthread_self();
-  terminateWL_ = false;
+//------------------------------------------------------------------------------
+void udp_server::begin_tx_batch(int idx) {
+  tx_batching_ = true;
+  tx_count_    = 0;
+  // Send on this thread's own socket. Sharing one socket for transmit puts
+  // every downlink thread on the same sk_wmem_alloc, which is an atomic on one
+  // cache line that all of them write for every packet. idx is the caller's
+  // queue number, so downlink thread i and receive thread i land on the same
+  // socket and nothing is shared between threads at all.
+  tx_sock_ = sockets_.empty() ? socket_ : sockets_[idx % sockets_.size()];
+}
 
-  while (1) {
-    work_pool_->blockingRead(worker);
-    ++count;
-    if (terminateWL_) {
-      terminateWL_ = false;
-      return;
-    }
-    if (worker == nullptr) {
-      terminateWL_ = false;
-      return;
-    }
-    // exit thread
-    if (worker->buffer) {
-      app_->handle_receive(worker->buffer, worker->size, worker->r_endpoint);
-      free_pool_->write(worker);
-    } else {
-      free(worker);
-      while (work_pool_->readIfNotEmpty(worker)) {
-        free(worker);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-      }
-      Logger::udp().debug("exit udp_worker_loop after %d", count);
-      terminateWL_ = false;
-      return;
-    }
-    if (terminateWL_) {
-      terminateWL_ = false;
-      return;
-    }
-    worker = nullptr;
+//------------------------------------------------------------------------------
+// One sendmmsg() replaces up to UDP_TX_BATCH sendto() calls. The downlink used
+// to pay a syscall per packet on transmit; the uplink already batched receive.
+void udp_server::flush_tx_batch() {
+  if (tx_count_ <= 0) return;
+  int n     = tx_count_;
+  tx_count_ = 0;  // reset first: a short send must not be retried into itself
+  int sent  = sendmmsg(tx_sock_ >= 0 ? tx_sock_ : socket_, tx_msgs_, n, 0);
+  if (sent < n) {
+    Logger::udp().error(
+        "sendmmsg sent %d of %d (%s)", sent, n, strerror(errno));
   }
 }
 
 //------------------------------------------------------------------------------
 void udp_server::udp_read_loop(
-    const oai::utils::thread_sched_params& sched_params) {
-  uint64_t count              = 0;
-  udp_packet_q_item_t* worker = nullptr;
-
+    oai::utils::thread_sched_params sched_params, int fd) {
   sched_params.apply(TASK_NONE, Logger::udp());
-  terminateRL_ = false;
+
+  // One recvmmsg() collects up to UDP_RECV_VLEN datagrams per syscall and each
+  // is handed to the application on this same thread.  This thread owns `fd`:
+  // the sockets share an address through SO_REUSEPORT and the kernel hashes
+  // each flow to one of them, so the work spreads without anything having to
+  // decide where a packet goes, and no receive queue is touched by two threads.
+  // Transmit goes out of the same socket, so a flow uses one socket end to end.
+  tx_sock_ = fd;
+  std::vector<char> bufs(
+      static_cast<size_t>(UDP_RECV_VLEN) * UDP_RECV_BUFFER_SIZE);
+  struct mmsghdr msgs[UDP_RECV_VLEN];
+  struct iovec iovecs[UDP_RECV_VLEN];
+  struct sockaddr_storage addrs[UDP_RECV_VLEN];
+
+  for (int i = 0; i < UDP_RECV_VLEN; i++) {
+    iovecs[i].iov_base = &bufs[static_cast<size_t>(i) * UDP_RECV_BUFFER_SIZE];
+    iovecs[i].iov_len  = UDP_RECV_BUFFER_SIZE;
+  }
 
   while (1) {
-    free_pool_->blockingRead(worker);
-    ++count;
-    if (terminateRL_) {
-      terminateRL_ = false;
-      return;
+    for (int i = 0; i < UDP_RECV_VLEN; i++) {
+      memset(&msgs[i], 0, sizeof(msgs[i]));
+      msgs[i].msg_hdr.msg_iov     = &iovecs[i];
+      msgs[i].msg_hdr.msg_iovlen  = 1;
+      msgs[i].msg_hdr.msg_name    = &addrs[i];
+      msgs[i].msg_hdr.msg_namelen = sizeof(struct sockaddr_storage);
     }
-    if (worker->buffer == nullptr) {
-      free(worker);
-      while (work_pool_->readIfNotEmpty(worker)) {
-        free(worker);
-      }
-      Logger::udp().debug("exit udp_read_loop after %d", count);
-      terminateRL_ = false;
-      return;
-    }
-    worker->r_endpoint.addr_storage_len = sizeof(struct sockaddr_storage);
-    if ((worker->size = recvfrom(
-             socket_, worker->buffer, UDP_RECV_BUFFER_SIZE, 0,
-             (struct sockaddr*) &worker->r_endpoint.addr_storage,
-             &worker->r_endpoint.addr_storage_len)) > 0) {
-      work_pool_->write(worker);
+
+    // Nothing held: block, which is the whole of the fast path. Something
+    // held: wait only until its slot, then take whatever has arrived.
+    //
+    // ppoll() rather than recvmmsg()'s own timeout, which cannot be used for
+    // this: it is checked only after a datagram has been received, so on a
+    // silent socket the call blocks anyway and the held packets are stranded.
+    const int64_t wait_ns = app_->on_idle();
+    int nrecv;
+    if (wait_ns < 0) {
+      nrecv = recvmmsg(fd, msgs, UDP_RECV_VLEN, MSG_WAITFORONE, nullptr);
     } else {
-      Logger::udp().error("Recvfrom failed %s", strerror(errno));
-      free_pool_->write(worker);
+      struct timespec ts = {
+          (time_t) (wait_ns / 1000000000LL), (long) (wait_ns % 1000000000LL)};
+      struct pollfd pfd = {fd, POLLIN, 0};
+      ppoll(&pfd, 1, &ts, nullptr);
+      nrecv = recvmmsg(fd, msgs, UDP_RECV_VLEN, MSG_DONTWAIT, nullptr);
+      if (nrecv < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) continue;
     }
-    if (terminateRL_) {
-      terminateRL_ = false;
+
+    if (terminateRL_) return;
+    if (nrecv < 0) {
+      if (errno == EINTR) continue;
+      Logger::udp().error("recvmmsg failed %s", strerror(errno));
       return;
     }
-    worker = nullptr;
+    for (int i = 0; i < nrecv; i++) {
+      endpoint r_endpoint(addrs[i], msgs[i].msg_hdr.msg_namelen);
+      app_->handle_receive(
+          static_cast<char*>(iovecs[i].iov_base), msgs[i].msg_len, r_endpoint);
+    }
   }
 }
+
+//------------------------------------------------------------------------------
+// clone_socket -- another socket on the very same address and port.
+//
+// SO_REUSEPORT was already being set on the one socket this class created,
+// which did nothing: the kernel only hashes datagrams across a group, and a
+// group of one is just a socket. With a socket per receive thread the group is
+// real, and each thread then has its own receive queue, its own
+// sk_receive_queue lock and its own sk_rmem_alloc counter instead of every
+// thread contending for one set shared between them.
+int udp_server::clone_socket() {
+  if (bind_addrlen_ == 0) return -1;
+  int sd = socket(bind_addr_.ss_family, SOCK_DGRAM, IPPROTO_UDP);
+  if (sd < 0) {
+    Logger::udp().error("pool socket creation failed (%s)", strerror(errno));
+    return -1;
+  }
+  apply_socket_options(sd);  // must set SO_REUSEPORT before bind()
+  if (bind(sd, (struct sockaddr*) &bind_addr_, bind_addrlen_) < 0) {
+    Logger::udp().error("pool socket bind failed (%s)", strerror(errno));
+    close(sd);
+    return -1;
+  }
+  return sd;
+}
+
+//------------------------------------------------------------------------------
+void udp_server::apply_socket_options(int sd) {
+  int on = 1;
+  // Every socket in the pool must set SO_REUSEPORT before bind() so the
+  // kernel will hash incoming datagrams across them.
+  if (setsockopt(sd, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on)) < 0) {
+    Logger::udp().error(
+        "Socket option reuse port failed (%s)", strerror(errno));
+  }
+  int bufsz = 16 * 1024 * 1024;
+  if (setsockopt(sd, SOL_SOCKET, SO_RCVBUF, &bufsz, sizeof(bufsz)) < 0) {
+    Logger::udp().warn("Socket option SO_RCVBUF failed (%s)", strerror(errno));
+  }
+  if (setsockopt(sd, SOL_SOCKET, SO_SNDBUF, &bufsz, sizeof(bufsz)) < 0) {
+    Logger::udp().warn("Socket option SO_SNDBUF failed (%s)", strerror(errno));
+  }
+}
+
 //------------------------------------------------------------------------------
 int udp_server::create_socket(
     const struct in_addr& address, const uint16_t port) {
@@ -140,19 +203,13 @@ int udp_server::create_socket(
     return errno;
   }
 
-  int on = 1;
-  if (setsockopt(sd, SOL_SOCKET, SO_REUSEPORT, &on, sizeof(on)) < 0) {
-    /*
-     * Reuse port has failed...
-     */
-    Logger::udp().error(
-        "Socket option reuse port failed (%s)", strerror(errno));
-    return errno;
-  }
+  apply_socket_options(sd);
 
   addr.sin_family      = AF_INET;
   addr.sin_port        = htons(port);
   addr.sin_addr.s_addr = address.s_addr;
+
+  socklen_t unused_bind_len_ = sizeof(addr);
 
   std::string ipv4 = oai::utils::conv::toString(address);
   Logger::udp().debug(
@@ -170,6 +227,10 @@ int udp_server::create_socket(
     return errno;
   }
   sa_family = AF_INET;
+  // Remembered so clone_socket() can bind more sockets to this same address:
+  // SO_REUSEPORT only spreads traffic when several sockets share one endpoint.
+  memcpy(&bind_addr_, &addr, sizeof(addr));
+  bind_addrlen_ = sizeof(addr);
   return sd;
 }
 //------------------------------------------------------------------------------
@@ -193,6 +254,9 @@ int udp_server::create_socket(
   addr.sin6_port   = htons(port);
   addr.sin6_addr   = address;
 
+  apply_socket_options(sd);
+  socklen_t unused_bind_len_ = sizeof(addr);
+
   std::string ipv6 = oai::utils::conv::toString(address);
   Logger::udp().debug(
       "Creating new listen socket on address %s and port %" PRIu16 "\n",
@@ -209,6 +273,8 @@ int udp_server::create_socket(
     return errno;
   }
   sa_family = AF_INET6;
+  memcpy(&bind_addr_, &addr, sizeof(addr));
+  bind_addrlen_ = sizeof(addr);
   return sd;
 }
 //------------------------------------------------------------------------------
@@ -230,43 +296,152 @@ int udp_server::create_socket(const char* address, const uint16_t port_num) {
   }
 }
 //------------------------------------------------------------------------------
-void udp_server::start_receive(
-    udp_application* app, const oai::utils::thread_sched_params& sched_params) {
-  num_threads_   = sched_params.thread_pool_size;
-  int num_blocks = num_threads_ * 16;
-  app_           = app;
-  Logger::udp().trace("udp_server::start_receive");
-  free_pool_         = new folly::MPMCQueue<udp_packet_q_item_t*>(num_blocks);
-  work_pool_         = new folly::MPMCQueue<udp_packet_q_item_t*>(num_blocks);
-  recv_buffer_alloc_ = (char*) calloc(num_blocks, UDP_RECV_BUFFER_SIZE);
-  // udp_packet_q_item_alloc_ = (udp_packet_q_item_t*)calloc(1,
-  // sizeof(udp_packet_q_item_t)*num_blocks);
-  for (int i = 0; i < num_blocks; i++) {
-    udp_packet_q_item_t* p =
-        (udp_packet_q_item_t*) calloc(1, sizeof(udp_packet_q_item_t));
-    p->buffer = &recv_buffer_alloc_[i * UDP_RECV_BUFFER_SIZE];
-    free_pool_->blockingWrite(p);
-  }
-  for (int i = 0; i < num_threads_; i++) {
-    wthread_ = std::thread(&udp_server::udp_worker_loop, this, i, sched_params);
-  }
-  rthread_ = std::thread(&udp_server::udp_read_loop, this, sched_params);
+// cpu_max_khz -- the kernel's view of how fast a core is, 0 when it does not
+// say. On Intel hybrid parts P-cores and E-cores report different values
+// (5000000 vs 3700000 on an i7-1355U); on ARM big.LITTLE likewise. Uniform
+// machines report one value for every core, and the caller falls back to
+// picking the lowest-numbered CPU.
+//------------------------------------------------------------------------------
+static long cpu_max_khz(int cpu) {
+  char path[80];
+  snprintf(
+      path, sizeof(path),
+      "/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_max_freq", cpu);
+  FILE* f = fopen(path, "re");
+  if (!f) return 0;
+  long khz = 0;
+  if (fscanf(f, "%ld", &khz) != 1) khz = 0;
+  fclose(f);
+  return khz;
 }
+
+//------------------------------------------------------------------------------
+// A hybrid split is large -- Intel P vs E is about 26% (5.0 vs 3.7 GHz), ARM
+// big.LITTLE more. Per-core binning differences on a uniform machine are about
+// 1% (a GH200 reports 3384-3420 MHz across its cores). Anything under this
+// threshold is noise and must not decide which core to give up, or the choice
+// becomes arbitrary and changes between otherwise identical hosts.
+#define CPU_SLOW_TIER_NUM 85
+#define CPU_SLOW_TIER_DEN 100
+
+//------------------------------------------------------------------------------
+int udp_server::control_cpu() {
+  cpu_set_t allowed;
+  CPU_ZERO(&allowed);
+  if (sched_getaffinity(0, sizeof(allowed), &allowed) != 0) return -1;
+  if (CPU_COUNT(&allowed) < 2) return -1;  // nothing to spare
+
+  int lowest   = -1;
+  long fastest = 0;
+  for (int c = 0; c < CPU_SETSIZE; c++) {
+    if (!CPU_ISSET(c, &allowed)) continue;
+    if (lowest < 0) lowest = c;
+    const long khz = cpu_max_khz(c);
+    if (khz > fastest) fastest = khz;
+  }
+  if (fastest == 0) return lowest;  // kernel does not report speeds
+
+  // Lowest-numbered core of the slow tier, so the answer is deterministic;
+  // when there is no slow tier every core is equivalent and the lowest wins.
+  const long tier = fastest * CPU_SLOW_TIER_NUM / CPU_SLOW_TIER_DEN;
+  for (int c = 0; c < CPU_SETSIZE; c++) {
+    if (!CPU_ISSET(c, &allowed)) continue;
+    const long khz = cpu_max_khz(c);
+    if (khz > 0 && khz < tier) return c;
+  }
+  return lowest;
+}
+
+//------------------------------------------------------------------------------
+std::vector<int> udp_server::datapath_cpus(int n) {
+  // Both pools get the same list, so uplink thread i and downlink thread i
+  // share a core on purpose. A packet is carried end to end by one thread of
+  // one pool -- the tun thread encapsulates and transmits its own downlink,
+  // the N3 thread decapsulates and writes its own uplink -- so for a given
+  // direction only one of the pair is on the path at all. Measured: a downlink
+  // run with the pools on separate cores left every N3 core at 0% while the
+  // tun cores saturated. Sharing therefore costs nothing a unidirectional load
+  // can see, and asks for max(n3_rx_threads, dl_rx_queues) + 1 CPUs instead of
+  // the sum. A full-duplex load does put both on one core; give it more CPUs.
+  static std::mutex mu;
+  static std::vector<int> pool;
+  static bool warned = false;
+  std::lock_guard<std::mutex> lk(mu);
+
+  if (pool.empty()) {
+    cpu_set_t allowed;
+    CPU_ZERO(&allowed);
+    if (sched_getaffinity(0, sizeof(allowed), &allowed) != 0) return {};
+    if (CPU_COUNT(&allowed) < 2) return {};  // leave everything unpinned
+    const int control = control_cpu();
+    for (int c = 0; c < CPU_SETSIZE; c++)
+      if (CPU_ISSET(c, &allowed) && c != control) pool.push_back(c);
+    if (pool.empty()) return {};
+  }
+
+  std::vector<int> out;
+  for (int i = 0; i < n; i++) out.push_back(pool[(size_t) i % pool.size()]);
+
+  // More threads in one pool than there are cores: now two threads of the same
+  // direction share, which is the sharing that does cost throughput.
+  if (!warned && (size_t) n > pool.size()) {
+    warned = true;
+    Logger::udp().warn(
+        "%d datapath thread(s) of one direction on %zu CPU(s) after reserving "
+        "one for the control plane, so they share cores. Give the container "
+        "max(n3_rx_threads, dl_rx_queues) + 1 CPUs",
+        n, pool.size());
+  }
+  return out;
+}
+
+//------------------------------------------------------------------------------
+void udp_server::start_receive(
+    udp_application* app, const oai::utils::thread_sched_params& sched_params,
+    int n_rx) {
+  app_ = app;
+  Logger::udp().trace("udp_server::start_receive");
+
+  if (n_rx < 1) n_rx = 1;
+  if (n_rx > UDP_MAX_RX_THREADS) n_rx = UDP_MAX_RX_THREADS;
+
+  // One socket per receive thread. The first is the one the constructor made,
+  // so the control path keeps working through socket_ unchanged; the rest join
+  // its SO_REUSEPORT group. A socket that no thread reads would still be given
+  // datagrams by the hash and silently fill, so the pool is exactly as large
+  // as the number of readers -- never larger.
+  sockets_.clear();
+  sockets_.push_back(socket_);
+  for (int i = 1; i < n_rx; i++) {
+    const int sd = clone_socket();
+    if (sd < 0) {
+      Logger::udp().warn(
+          "port %d: only %zu of %d sockets; the rest share, which is slower "
+          "but correct",
+          port_, sockets_.size(), n_rx);
+      break;
+    }
+    sockets_.push_back(sd);
+  }
+
+  const std::vector<int> cpus =
+      n_rx > 1 ? datapath_cpus(n_rx) : std::vector<int>{};
+  std::string where;
+  for (int c : cpus)
+    where.append(where.empty() ? " on CPU " : ",").append(std::to_string(c));
+  Logger::udp().info(
+      "udp_server on port %d: %d receive thread(s), %zu socket(s)%s", port_,
+      n_rx, sockets_.size(), where.c_str());
+
+  for (int i = 0; i < n_rx; i++) {
+    oai::utils::thread_sched_params sp = sched_params;
+    if (!cpus.empty()) sp.cpu_id = cpus[i];
+    rthreads_.emplace_back(
+        &udp_server::udp_read_loop, this, sp, sockets_[i % sockets_.size()]);
+  }
+}
+
 //------------------------------------------------------------------------------
 void udp_server::stop(void) {
   terminateRL_ = true;
-  terminateWL_ = true;
-
-  for (int i = 0; i < num_threads_; i++) {
-    udp_packet_q_item_t* p = nullptr;
-    work_pool_->blockingWrite(p);
-  }
-  if (tmp_thread != 0) {
-    int res;
-    res = pthread_cancel(tmp_thread);
-    if (res != 0) {
-      Logger::udp().error("could not cancel thread");
-    }
-    tmp_thread = 0;
-  }
 }

@@ -12,6 +12,8 @@
 #include "endpoint.hpp"
 #include "msg_pfcp.hpp"  // must precede FramedRouting.hpp (pfcp::framed_route_s)
 #include "framed_routing/FramedRouting.hpp"
+#include "qos_mbr.hpp"
+#include "sdf_filter.hpp"
 
 namespace pfcp {
 
@@ -64,6 +66,20 @@ class pfcp_pdr {
   //   Tables 7.5.2.2-6, 7.5.4.2-1). Not in lib.
   // TODO §8.2.186 — RAT Type (O, N4 only, Table 7.5.4.2-1). Not in lib.
 
+  /// MBR meter for this PDR's QoS flow, null when nothing limits it.
+  /// Held here so the datapath finds it with the rule it already matched.
+  std::shared_ptr<oai::upf::qos_mbr> qos;
+
+  /// QFI for the PDU Session Container, resolved by
+  /// pfcp_switch::resolve_pdr_qfis(); -1 when this PDR names none. A downlink
+  /// PDR has no QFI in its PDI -- the linked QER carries it -- so it is
+  /// resolved on the control plane rather than per packet.
+  int16_t tx_qfi = -1;
+
+  /// pdi.sdf_filter's Flow Description (§8.2.5), compiled once when the PDI
+  /// is set: parsing it per packet would cost more than forwarding it.
+  oai::upf::sdf_rule sdf;
+
   bool notified_cp;  ///< true after a CP-Notify has been sent for this PDR
 
   //------------------------------------------------------------------------------
@@ -100,7 +116,9 @@ class pfcp_pdr {
         qer_id(c.qer_id),
         mar_id(),
         activate_predefined_rules(c.activate_predefined_rules),
-        notified_cp(false) {}
+        notified_cp(false) {
+    compile_sdf();
+  }
 
   //------------------------------------------------------------------------------
   /** @brief Copy constructor. */
@@ -114,6 +132,9 @@ class pfcp_pdr {
         qer_id(c.qer_id),
         mar_id(c.mar_id),
         activate_predefined_rules(c.activate_predefined_rules),
+        qos(c.qos),
+        tx_qfi(c.tx_qfi),
+        sdf(c.sdf),
         notified_cp(c.notified_cp) {
     local_seid = c.local_seid;
     pdr_id     = c.pdr_id;
@@ -137,6 +158,27 @@ class pfcp_pdr {
   void set(const pfcp::pdi& v) {
     pdi.first  = true;
     pdi.second = v;
+    compile_sdf();
+  }
+
+  //------------------------------------------------------------------------------
+  /** @brief UE IPv4 from the PDI, network byte order; 0 when absent.
+   *  This is what an IPFilterRule's "assigned" resolves to. */
+  uint32_t pdi_ue_ipv4() const {
+    return (pdi.first && pdi.second.ue_ip_address.first &&
+            pdi.second.ue_ip_address.second.v4) ?
+               pdi.second.ue_ip_address.second.ipv4_address.s_addr :
+               0;
+  }
+
+  //------------------------------------------------------------------------------
+  /** @brief Recompile the SDF rule. Every path that writes pdi must call it,
+   *  or the filter and the rule it is meant to enforce drift apart. */
+  void compile_sdf() {
+    sdf = (pdi.first && pdi.second.sdf_filter.first) ?
+              oai::upf::sdf_compile(
+                  pdi.second.sdf_filter.second.flow_description) :
+              oai::upf::sdf_rule();
   }
 
   //------------------------------------------------------------------------------

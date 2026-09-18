@@ -51,15 +51,15 @@ class gtpu_l4_stack : public udp_application {
   gtpu_l4_stack(
       const struct in_addr& address, const uint16_t port_num,
       const oai::utils::thread_sched_params& sched_params,
-      const bool send_ext_hdr);
+      const bool send_ext_hdr, int n_rx = 1);
   gtpu_l4_stack(
       const struct in6_addr& address, const uint16_t port_num,
       const oai::utils::thread_sched_params& sched_params,
-      const bool send_ext_hdr);
+      const bool send_ext_hdr, int n_rx = 1);
   gtpu_l4_stack(
       char* ip_address, const uint16_t port_num,
       const oai::utils::thread_sched_params& sched_params,
-      const bool send_ext_hdr);
+      const bool send_ext_hdr, int n_rx = 1);
   virtual void handle_receive(
       char* recv_buffer, const std::size_t bytes_transferred,
       const endpoint& r_endpoint);
@@ -70,7 +70,8 @@ class gtpu_l4_stack : public udp_application {
 
   void send_g_pdu(
       const struct sockaddr_in& peer_addr, const teid_t teid,
-      const char* payload, const ssize_t payload_len, uint8_t qfi);
+      const char* payload, const ssize_t payload_len, uint8_t qfi,
+      uint8_t tos = 0);
   void send_g_pdu(
       const struct sockaddr_in6& peer_addr, const teid_t teid,
       const char* payload, const ssize_t payload_len);
@@ -78,6 +79,11 @@ class gtpu_l4_stack : public udp_application {
   void send_response(const gtpv1u_echo_response& gtp_ies);
   void send_indication(const gtpv1u_error_indication& gtp_ies);
   void stop() { udp_s.stop(); };
+  /** @brief Bind the calling thread's GTP-U TX socket to pool slot @p idx,
+   *  so downlink tun threads do not all transmit on the same socket. */
+  /** @brief Coalesce this thread's GTP-U transmits until flush_tx_batch(). */
+  void begin_tx_batch(int idx = 0) { udp_s.begin_tx_batch(idx); };
+  void flush_tx_batch() { udp_s.flush_tx_batch(); };
 };
 }  // namespace gtpv1u
 
