@@ -110,6 +110,30 @@ add_executable(upf
   "${SRC_TOP_DIR}/itti/itti_msg.cpp"
   "${UPF_APP_DIR}/utils/startup_banner.cpp")
 
+# main.cpp includes <upf_xdp_user.h>, which pulls in xdp_n3_entry_skel.h and
+# friends. This is already implied by linking the static UPF_XDP (which depends
+# on upf_xdp_all), but stated explicitly so the requirement survives any future
+# change to how these libraries are linked.
+add_dependencies(upf upf_xdp_all)
+
+# Emit the binary at the top of the build tree, i.e. build/upf/build/upf.
+#
+# The legacy top-level list file pulled src/oai_upf/CMakeLists.txt in with
+# include(), so the `upf` target was created in build/upf's own scope and its
+# executable landed directly in the binary root. This file is now brought in
+# with add_subdirectory() (which is what makes CMAKE_CURRENT_SOURCE_DIR here
+# mean src/oai_upf rather than build/upf), and that gives the directory its own
+# binary subdirectory -- so without this the binary would appear at
+# build/upf/build/oai_upf/upf instead.
+#
+# build/scripts/build_upf hardcodes the old location in three places: the
+# `compilations upf upf $OPENAIRCN_DIR/build/upf/build/upf` success check
+# (:234), the chmod (:238), and the install cp (:239). Moving the artifact
+# makes the build report "upf compilation failed" after a completely successful
+# compile, and silently skips the install.
+set_target_properties(upf PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
 target_include_directories(upf PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}"
   "${SRC_TOP_DIR}/itti"
