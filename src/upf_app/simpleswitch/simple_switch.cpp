@@ -4,12 +4,14 @@
 
 #include "simple_switch.hpp"
 
+#include <atomic>
 #include <stdexcept>
 
 #include "3gpp_conversions.hpp"
 #include "common_defs.h"
 #include "conversions.hpp"
 #include "gtpu.h"
+#include "gtpu_walk.hpp"
 #include "itti.hpp"
 #include "logger.hpp"
 #include "pfcp_switch.hpp"
@@ -149,23 +151,24 @@ void upf_n3::handle_receive(
   if (gtpuh->version == 1) {
     // Do it fast, do not go throught handle_receive_gtpv1u_msg()
     if (gtpuh->message_type == GTPU_G_PDU) {
-      // Fast-path: compute inner-payload offset without full deserialisation
-      uint8_t gtp_flags = recv_buffer[GTPU_MESSAGE_FLAGS_POS_IN_UDP_PAYLOAD];
-      std::size_t gtp_payload_offset = GTPV1U_MSG_HEADER_MIN_SIZE;
-
-      // Optional fields: Sequence Number, N-PDU, Extension Header (§5.1)
-      if ((((gtp_flags & GTPU_MESSAGE_VERSION_MASK)) &&
-           (gtp_flags & GTPU_MESSAGE_PT_MASK)) &&
-          ((gtp_flags & GTPU_MESSAGE_EXT_HEADER_MASK) ||
-           (gtp_flags & GTPU_MESSAGE_SN_MASK) ||
-           (gtp_flags & GTPU_MESSAGE_PN_MASK)))
-        gtp_payload_offset += 4;
-
-      std::size_t gtp_payload_length = be16toh(gtpuh->message_length);
-      if (gtp_flags & 0x07) {
-        // Extension header(s) present — skip PDU Session Container (4 bytes)
-        gtp_payload_offset += 4;
-        gtp_payload_length -= 4;
+      // Fast-path: find the user packet without deserialising the header.
+      // The walk itself lives in gtpu_walk.hpp so it can be tested on its own;
+      // it has been wrong twice, in both directions, and neither time did
+      // anything say so -- the traffic simply stopped.
+      std::size_t gtp_payload_offset = 0, gtp_payload_length = 0;
+      if (!oai::upf::gtpu_inner(
+              (const uint8_t*) recv_buffer, bytes_transferred,
+              gtp_payload_offset, gtp_payload_length)) {
+        static std::atomic<uint64_t> dropped{0};
+        const uint64_t n = dropped.fetch_add(1, std::memory_order_relaxed);
+        if (!(n & (n - 1)))  // 1st, 2nd, 4th, 8th...: never one log per packet
+          Logger::upf_n3().warn(
+              "GTPU_G_PDU carried no user packet: flags 0x%02x, claims %u "
+              "bytes, %zu received (%lu so far)",
+              (unsigned) recv_buffer[GTPU_MESSAGE_FLAGS_POS_IN_UDP_PAYLOAD],
+              (unsigned) be16toh(gtpuh->message_length), bytes_transferred,
+              (unsigned long) (n + 1));
+        return;
       }
       uint32_t tunnel_id = be32toh(gtpuh->teid);
 
