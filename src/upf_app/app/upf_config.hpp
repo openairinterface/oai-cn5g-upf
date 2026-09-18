@@ -135,6 +135,8 @@ class upf_config {
   sbi_interface nrf_addr;
   interface_cfg_t sbi;
 
+  // Initialiser order follows the declaration order above
+  // (n3, n6, n4, itti, nsf, gateway, ... pdns, smfs, nrf_addr).
   upf_config()
       : m_rw_lock(),
         pid_dir(),
@@ -142,12 +144,12 @@ class upf_config {
         fqdn(),
         n3(),
         n6(),
-        gateway(),
         n4(),
         itti(),
+        nsf(),
+        gateway(),
         pdns(),
         smfs(),
-        nsf(),
         nrf_addr() {
     itti.itti_timer_sched_params.sched_priority = 85;
     itti.n3_sched_params.sched_priority         = 84;
