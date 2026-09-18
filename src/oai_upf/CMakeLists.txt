@@ -1,359 +1,280 @@
 # SPDX-License-Identifier: LicenseRef-CSSL-1.0
-
-
-cmake_minimum_required (VERSION 3.0.2)
-
-project (OpenAirInterface)
-
-###########################################
-# macros to define options as there is numerous options in oai
-################################################
-macro(add_option name val helpstr)
-  if(DEFINED ${name})
-    set(value ${${name}})
-  else(DEFINED ${name})
-    set(value ${val})
-  endif()
-  set(${name} ${value} CACHE STRING "${helpstr}")
-  add_definitions("-D${name}=${value}")
-endmacro(add_option)
-
-macro(add_boolean_option name val helpstr)
-  if(DEFINED ${name})
-    set(value ${${name}})
-  else(DEFINED ${name})
-    set(value ${val})
-  endif()
-  set(${name} ${value} CACHE STRING "${helpstr}")
-  set_property(CACHE ${name} PROPERTY TYPE BOOL)
-  if (${value})
-    add_definitions("-D${name}=1")
-  else (${value})
-    add_definitions("-D${name}=0")
-  endif (${value})
-endmacro(add_boolean_option)
-
-macro(add_integer_option name val helpstr)
-  if(DEFINED ${name})
-    set(value ${${name}})
-  else(DEFINED ${name})
-    set(value ${val})
-  endif()
-  set(${name} ${value} CACHE STRING "${helpstr}")
-  add_definitions("-D${name}=${value}")
-endmacro(add_integer_option)
-
-macro(add_list1_option name val helpstr)
-  if(DEFINED ${name})
-    set(value ${${name}})
-  else(DEFINED ${name})
-    set(value ${val})
-  endif()
-  set(${name} ${value} CACHE STRING "${helpstr}")
-  set_property(CACHE ${name} PROPERTY STRINGS ${ARGN})
-  if(NOT "${value}" STREQUAL "False")
-    add_definitions("-D${name}=${value}")
-  endif()
-endmacro(add_list1_option)
-
-macro(add_list2_option name val helpstr)
-  if(DEFINED ${name})
-    set(value ${${name}})
-  else(DEFINED ${name})
-    set(value ${val})
-  endif()
-  set(${name} ${value} CACHE STRING "${helpstr}")
-  set_property(CACHE ${name} PROPERTY STRINGS ${ARGN})
-  if(NOT "${value}" STREQUAL "False")
-    add_definitions("-D${value}=1")
-  endif()
-endmacro(add_list2_option)
-
-macro(add_list_string_option name val helpstr)
-  if(DEFINED ${name})
-    set(value ${${name}})
-  else(DEFINED ${name})
-    set(value ${val})
-  endif()
-  set(${name} ${value} CACHE STRING "${helpstr}")
-  set_property(CACHE ${name} PROPERTY STRINGS ${ARGN})
-  if(NOT "${value}" STREQUAL "False")
-    add_definitions("-D${name}=\"${value}\"")
-  endif()
-endmacro(add_list_string_option)
-################################################################
-# Compilation flags
-################################################################
-# And optionally
-#SET(CMAKE_VERBOSE_MAKEFILE ON)
-
-# determine, whether we want a static binary
-SET(STATIC_LINKING FALSE CACHE BOOL "Build a static binary?")
-
-# do we want static libraries?
-# When STATIC_LINKING is TRUE, than cmake looks for libraries ending
-# with .a. This is for linux only!
-IF(STATIC_LINKING)
-    SET(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-ENDIF(STATIC_LINKING)
-
-################################################################
-# Build type
-################################################################
-add_list_string_option(CMAKE_BUILD_TYPE "RelWithDebInfo" "Choose the type of build, options are: None(CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel." Debug Release
-RelWithDebInfo MinSizeRel)
-Message("Build type is ${CMAKE_BUILD_TYPE}")
-if (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-  add_boolean_option(LOG_OAI True         "Thread safe logging API")
-  add_boolean_option(LOG_OAI_MINIMAL True "Thread safe logging API, log only levels above NOTICE")
-endif()
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-  add_boolean_option(LOG_OAI True "Thread safe logging API")
-  SET(ASAN asan)
-endif()
-if (CMAKE_BUILD_TYPE STREQUAL "")
-   set(CMAKE_BUILD_TYPE "MinSizeRel")
-endif()
-# Currently the gcc-c++ version 12 is not compatible w/ libasan
-if ("$ENV{SANITIZE_OPTIONS}" STREQUAL "-fsanitize=address")
-  # Set it manually if needed: SET(ASAN asan)
-  SET(ASAN asan)
-endif()
-
-################################################################
-# Processor architecture
-################################################################
-
-Message("Architecture is ${CMAKE_SYSTEM_PROCESSOR}")
-if (CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7l")
-  set(C_FLAGS_PROCESSOR "-gdwarf-2 -mfloat-abi=hard -mfpu=neon -lgcc -lrt")
-else (CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7l")
-  set(C_FLAGS_PROCESSOR "-msse4.2")
-endif()
 #
-set(CMAKE_C_FLAGS
-  "${CMAKE_C_FLAGS} ${C_FLAGS_PROCESSOR} -std=gnu99 -Wall -Wstrict-prototypes -fno-strict-aliasing -rdynamic -funroll-loops -Wno-packed-bitfield-compat -fPIC ")
-# add autoTOOLS definitions that were maybe used!
-set(CMAKE_C_FLAGS
-  "${CMAKE_C_FLAGS} -DSTDC_HEADERS=1 -DHAVE_SYS_TYPES_H=1 -DHAVE_SYS_STAT_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_MEMORY_H=1 -DHAVE_STRINGS_H=1 -DHAVE_INTTYPES_H=1 -DHAVE_STDINT_H=1 -DHAVE_UNISTD_H=1 -DHAVE_FCNTL_H=1 -DHAVE_ARPA_INET_H=1 -DHAVE_SYS_TIME_H=1 -DHAVE_SYS_SOCKET_H=1 -DHAVE_STRERROR=1 -DHAVE_SOCKET=1 -DHAVE_MEMSET=1 -DHAVE_GETTIMEOFDAY=1 -DHAVE_STDLIB_H=1 -DHAVE_MALLOC=1 -DHAVE_LIBSCTP"
-)
-set(CMAKE_C_FLAGS "-Wno-unused-function -Wno-error -Wno-return-type -Wno-empty-body")
+# The `upf` executable, and the dependency/option plumbing for the whole tree.
+#
+# In the legacy build this file also carried project(), cmake_minimum_required()
+# and all global compile flags, because build/upf/CMakeLists.txt pulled it in
+# with include() rather than add_subdirectory(). Those now live in the top-level
+# list file where they belong; this file defines the executable and nothing that
+# leaks upward.
 
-# set a flag for changes in the source code
-# these changes are related to hardcoded path to include .h files
-add_definitions(-DCMAKER)
-add_definitions(-DBSTRLIB_CAN_USE_STL=1 -DBSTRLIB_CAN_USE_IOSTREAM=1 -DBSTRLIB_THROWS_EXCEPTIONS=1)
+# -----------------------------------------------------------------------------
+# Options
+#
+# The legacy tree carried six add_*_option macros (~70 lines). Only
+# add_boolean_option and add_list_string_option were ever called; add_option,
+# add_integer_option, add_list1_option and add_list2_option were dead.
+#
+# All four surviving call sites are replaced by option()/set(CACHE) plus
+# target_compile_definitions. The macros used add_definitions(), which applies
+# to every target in scope and below, so a flag meant for the logger reached the
+# BPF objects too.
+# -----------------------------------------------------------------------------
+option(DISPLAY_LICENCE_INFO "Show a module's licence banner at startup" OFF)
+option(USE_LTTNG            "Enable the LTTng tracer"                   OFF)
+option(LOG_OAI              "Thread-safe logging API"                   ON)
+option(LOG_OAI_MINIMAL      "Log only levels above NOTICE"              OFF)
 
-# CMAKE_C_FLAGS_DEBUG: -fsanitize=address not compatible with valgrind
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS} -g -fstack-protector-all -DMALLOC_CHECK_=3 -O0 -fno-omit-frame-pointer")
-set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS} -O2 -fno-omit-frame-pointer -s ")
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS} -g  -O1 ")
-set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS} -Os -s")
+# LOG_OAI/LOG_OAI_MINIMAL were set three times with conflicting values --
+# True at :107-108 and :111 depending on build type, then False again at
+# :229. Because add_boolean_option() writes to the CACHE, the first call wins
+# and the later one still emits a contradictory -DLOG_OAI=0. The intent was
+# "minimal logging in RelWithDebInfo", expressed directly:
+if(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo" AND NOT DEFINED CACHE{LOG_OAI_MINIMAL})
+  set(LOG_OAI_MINIMAL ON CACHE BOOL "" FORCE)
+endif()
 
-# CMAKE_CXX_FLAGS_DEBUG: -fsanitize=address not compatible with valgrind
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -std=c++17  -g -fstack-protector-all -DMALLOC_CHECK_=3 -O0 -fno-omit-frame-pointer")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -std=c++17  -O2 -fno-omit-frame-pointer -s ")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS} -std=c++17 -g -O1 ")
-set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS} -std=c++17 -Os -s")
+# -----------------------------------------------------------------------------
+# Dependencies
+#
+# Each is located once, here, and consumed through an imported target.
+# -----------------------------------------------------------------------------
+find_package(PkgConfig REQUIRED)
+pkg_search_module(CONFIGXX REQUIRED IMPORTED_TARGET libconfig++)
+
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+find_package(cpr     REQUIRED)
+find_package(fmt     REQUIRED)
+find_package(spdlog  REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 
-################################################################
-# Git Version
-################################################################
-set(GIT_BRANCH        "UNKNOWN")
-set(GIT_COMMIT_HASH   "UNKNOWN")
-set(GIT_COMMIT_DATE   "UNKNOWN")
+# These were linked by bare name with no search at all -- `gflags glog dl
+# double-conversion folly boost_system event curl`. A bare name is handed
+# straight to the linker, so a missing library surfaces as an unresolved symbol
+# at link time instead of a clear configure-time error.
+find_library(GFLAGS_LIBRARY   NAMES gflags            REQUIRED)
+find_library(GLOG_LIBRARY     NAMES glog              REQUIRED)
+find_library(DOUBLECONV_LIBRARY NAMES double-conversion REQUIRED)
+find_library(FOLLY_LIBRARY    NAMES folly             REQUIRED)
+find_library(EVENT_LIBRARY    NAMES event             REQUIRED)
+find_library(BOOST_SYSTEM_LIBRARY NAMES boost_system  REQUIRED)
+find_package(CURL REQUIRED)
 
-find_package(Git)
+# -----------------------------------------------------------------------------
+# Subsystems
+# -----------------------------------------------------------------------------
+add_subdirectory(${SRC_TOP_DIR}/common/utils        ${CMAKE_CURRENT_BINARY_DIR}/utils)
+add_subdirectory(${SRC_TOP_DIR}/udp                 ${CMAKE_CURRENT_BINARY_DIR}/udp)
+add_subdirectory(${SRC_TOP_DIR}/pfcp                ${CMAKE_CURRENT_BINARY_DIR}/pfcp)
+add_subdirectory(${SRC_TOP_DIR}/gtpv1u              ${CMAKE_CURRENT_BINARY_DIR}/gtpv1u)
+add_subdirectory(${SRC_TOP_DIR}/upf_app             ${CMAKE_CURRENT_BINARY_DIR}/upf_app)
+add_subdirectory(${SRC_TOP_DIR}/upf_app/app         ${CMAKE_CURRENT_BINARY_DIR}/app)
+add_subdirectory(${SRC_TOP_DIR}/upf_app/simpleswitch ${CMAKE_CURRENT_BINARY_DIR}/simpleswitch)
+
+# -----------------------------------------------------------------------------
+# Version stamp
+# -----------------------------------------------------------------------------
+set(GIT_BRANCH "UNKNOWN")
+set(GIT_COMMIT_HASH "UNKNOWN")
+set(GIT_COMMIT_DATE "UNKNOWN")
+
+find_package(Git QUIET)
 if(GIT_FOUND)
-  message("git found: ${GIT_EXECUTABLE}")
-  # Get the current working branch
-  execute_process(
-    COMMAND git rev-parse --abbrev-ref HEAD
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    OUTPUT_VARIABLE GIT_BRANCH
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
-
-  # Get the latest abbreviated commit hash of the working branch
-  execute_process(
-    COMMAND git log -1 --format=%h
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    OUTPUT_VARIABLE GIT_COMMIT_HASH
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
-
-  # Get the latest commit date of the working branch
-  execute_process(
-    COMMAND git log -1 --format=%cd
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    OUTPUT_VARIABLE GIT_COMMIT_DATE
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
+  foreach(pair "GIT_BRANCH;rev-parse;--abbrev-ref;HEAD"
+               "GIT_COMMIT_HASH;log;-1;--format=%h"
+               "GIT_COMMIT_DATE;log;-1;--format=%cd")
+    list(POP_FRONT pair _var)
+    execute_process(COMMAND ${GIT_EXECUTABLE} ${pair}
+      WORKING_DIRECTORY ${OPENAIRCN_DIR}
+      OUTPUT_VARIABLE   _out
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET)
+    if(_out)
+      set(${_var} "${_out}")
+    endif()
+  endforeach()
 endif()
 
 string(TIMESTAMP BUILD_DATE "%Y-%m-%d")
 string(TIMESTAMP BUILD_TIME "%H:%M:%S")
 
-add_definitions("-DPACKAGE_VERSION=\"Branch: ${GIT_BRANCH} Abrev. Hash: ${GIT_COMMIT_HASH} Date: ${GIT_COMMIT_DATE}\"")
-add_definitions("-DPACKAGE_BUGREPORT=\"openaircn-user@lists.eurecom.fr\"")
-add_definitions("-DBUILD_DATE=\"${BUILD_DATE}\"")
-add_definitions("-DBUILD_TIME=\"${BUILD_TIME}\"")
-
-###############################################################################
-# Include CMake modules to find other library
-###############################################################################
-
-set(CMAKE_MODULE_PATH "${OPENAIRCN_DIR}/build/cmake_modules" "${CMAKE_MODULE_PATH}")
-include(FindPkgConfig)
-
-###############################################################################
-# Include Check library for unit tests
-###############################################################################
-
-include(CheckCSourceCompiles)
-include(CheckCSourceRuns)
-include(CheckFunctionExists)
-include(CheckIncludeFile)
-include(CheckIncludeFiles)
-include(CheckLibraryExists)
-include(CheckSymbolExists)
-include(CheckTypeSize)
-
-
-###############################################################################
-# Debug and build related options
-###############################################################################
-
-add_boolean_option( DISPLAY_LICENCE_INFO            False    "If a module has a licence banner to show")
-add_boolean_option( LOG_OAI                         False    "Thread safe logging utility")
-
-
-# System packages that are required
-# We use either the cmake buildin, in ubuntu are in: /usr/share/cmake*/Modules/
-# or cmake provide a generic interface to pkg-config that widely used
-###################################
-
-pkg_search_module(CONFIG REQUIRED libconfig++)
-include_directories(${CONFIG_INCLUDE_DIRS})
-
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
-
-#CPR
-find_package(cpr REQUIRED)
-
-
-set(CMAKE_MODULE_PATH "${SRC_TOP_DIR}/upf_app/cmake" "${CMAKE_MODULE_PATH}")
-include(FindPkgConfig)
-find_package (LibNL REQUIRED)
-include(${SRC_TOP_DIR}/upf_app/cmake/FindLibNL.cmake)
-
-
-
-
-################################################################
-# Add sub modules
-################################################################
-if(STATIC_LINKING)
-    SET(BUILD_SHARED_LIBS OFF)
-else(STATIC_LINKING)
-    SET(BUILD_SHARED_LIBS ON)
-endif(STATIC_LINKING)
-
-ADD_SUBDIRECTORY(${SRC_TOP_DIR}/common/utils ${CMAKE_CURRENT_BINARY_DIR}/utils)
-ADD_SUBDIRECTORY(${SRC_TOP_DIR}/pfcp ${CMAKE_CURRENT_BINARY_DIR}/pfcp)
-ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app ${CMAKE_CURRENT_BINARY_DIR}/upf_app)
-ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/app ${CMAKE_CURRENT_BINARY_DIR}/app)
-ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/simpleswitch ${CMAKE_CURRENT_BINARY_DIR}/simpleswitch)
-ADD_SUBDIRECTORY(${SRC_TOP_DIR}/gtpv1u ${CMAKE_CURRENT_BINARY_DIR}/gtpv1u)
-ADD_SUBDIRECTORY(${SRC_TOP_DIR}/udp ${CMAKE_CURRENT_BINARY_DIR}/udp)
-
-################################################################################
-# Specific part for oai_upf folder
-
-add_definitions("-DPACKAGE_NAME=\"UPF\"")
-
-include_directories(${SRC_TOP_DIR}/oai_upf)
-include_directories(${SRC_TOP_DIR}/common)
-include_directories(${SRC_TOP_DIR}/common/msg)
-include_directories(${SRC_TOP_DIR}/common/utils)
-include_directories(${SRC_TOP_DIR}/gtpv1u)
-include_directories(${SRC_TOP_DIR}/itti)
-include_directories(${SRC_TOP_DIR}/pfcp)
-include_directories(${SRC_TOP_DIR}/udp)
-include_directories(${SRC_TOP_DIR}/upf_app)
-include_directories(${SRC_TOP_DIR}/upf_app/kernel)
-include_directories(${SRC_TOP_DIR}/upf_app/kernel/pfcp)
-include_directories(${SRC_TOP_DIR}/upf_app/kernel/xdp)
-include_directories(${SRC_TOP_DIR}/upf_app/kernel/include)
-include_directories(${SRC_TOP_DIR}/upf_app/app)
-include_directories(${SRC_TOP_DIR}/upf_app/utils)
-include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
-include_directories(${SRC_TOP_DIR}/upf_app/framed_routing)
-include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)
-include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/common)
-include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model)
-include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/nas)
-include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/nas/common)
-include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/nas/utils)
-include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/pfcp)
-include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
-include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/bstr)
-
-
-# libbpf headers (bpf/*.h), installed by build_helper.upf (make install_headers)
-include_directories(${SRC_TOP_DIR}/../build/ext/libbpf/root/usr/include)
-link_directories(${SRC_TOP_DIR}/../build/ext/libbpf/src)
-
+# -----------------------------------------------------------------------------
+# upf executable
+# -----------------------------------------------------------------------------
 add_executable(upf
-  ${SRC_TOP_DIR}/oai_upf/main.cpp
-  ${SRC_TOP_DIR}/upf_app/utils/startup_banner.cpp
-  ${SRC_TOP_DIR}/oai_upf/options.cpp
-  ${SRC_TOP_DIR}/itti/itti.cpp
-  ${SRC_TOP_DIR}/itti/itti_msg.cpp
-  )
+  main.cpp
+  options.cpp
+  "${SRC_TOP_DIR}/itti/itti.cpp"
+  "${SRC_TOP_DIR}/itti/itti_msg.cpp"
+  "${UPF_APP_DIR}/utils/startup_banner.cpp")
 
-IF(STATIC_LINKING)
-  SET(CMAKE_EXE_LINKER_FLAGS "-static")
-  SET_TARGET_PROPERTIES(spgwc PROPERTIES LINK_SEARCH_END_STATIC 1)
-  # asan do not support static linking
-  SET(ASAN asan)
-ENDIF(STATIC_LINKING)
+# main.cpp includes <upf_xdp_user.h>, which pulls in xdp_n3_entry_skel.h and
+# friends. This is already implied by linking the static UPF_XDP (which depends
+# on upf_xdp_all), but stated explicitly so the requirement survives any future
+# change to how these libraries are linked.
+add_dependencies(upf upf_xdp_all)
 
+# Emit the binary at the top of the build tree, i.e. build/upf/build/upf.
+#
+# The legacy top-level list file pulled src/oai_upf/CMakeLists.txt in with
+# include(), so the `upf` target was created in build/upf's own scope and its
+# executable landed directly in the binary root. This file is now brought in
+# with add_subdirectory() (which is what makes CMAKE_CURRENT_SOURCE_DIR here
+# mean src/oai_upf rather than build/upf), and that gives the directory its own
+# binary subdirectory -- so without this the binary would appear at
+# build/upf/build/oai_upf/upf instead.
+#
+# build/scripts/build_upf hardcodes the old location in three places: the
+# `compilations upf upf $OPENAIRCN_DIR/build/upf/build/upf` success check
+# (:234), the chmod (:238), and the install cp (:239). Moving the artifact
+# makes the build report "upf compilation failed" after a completely successful
+# compile, and silently skips the install.
+set_target_properties(upf PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
-## Common modules
-include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/config/config.cmake)
-include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/http/http.cmake)
-include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger/logger.cmake)
-include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf_model.cmake)
-include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/common_model.cmake)
-include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
+target_include_directories(upf PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${SRC_TOP_DIR}/itti"
+  "${UPF_APP_DIR}/utils"
+  "${COMMON_SRC_DIR}/nas"
+  "${COMMON_SRC_DIR}/nas/common"
+  "${COMMON_SRC_DIR}/nas/utils")
 
+# add_definitions() put every one of these on every target in the directory and
+# below, including the BPF objects. As target properties they reach `upf` alone.
+target_compile_definitions(upf PRIVATE
+  CMAKER
+  PACKAGE_NAME="UPF"
+  PACKAGE_BUGREPORT="openaircn-user@lists.eurecom.fr"
+  PACKAGE_VERSION="Branch: ${GIT_BRANCH} Abrev. Hash: ${GIT_COMMIT_HASH} Date: ${GIT_COMMIT_DATE}"
+  BUILD_DATE="${BUILD_DATE}"
+  BUILD_TIME="${BUILD_TIME}"
+  BSTRLIB_CAN_USE_STL=1
+  BSTRLIB_CAN_USE_IOSTREAM=1
+  BSTRLIB_THROWS_EXCEPTIONS=1
+  $<$<BOOL:${LOG_OAI}>:LOG_OAI=1>
+  $<$<BOOL:${LOG_OAI_MINIMAL}>:LOG_OAI_MINIMAL=1>
+  $<$<BOOL:${DISPLAY_LICENCE_INFO}>:DISPLAY_LICENCE_INFO=1>
+  $<$<BOOL:${USE_LTTNG}>:LOGGER_CAN_USE_LTTNG>)
 
-# folly glog dl double-conversion for FB folly library
-target_link_libraries (upf 
-  ${ASAN}  -Wl,--start-group CN_UTILS
-  ${SRC_TOP_DIR}/../build/ext/libbpf/src/libbpf.so
-  APP
-  SIMPLE_SWITCH
-  UDP
-  GTPV1U
-  PFCP
-  upf_xdp
-  qer_tc
-  eth_broadcast_tc
-  UPF_XDP
-  UPF_TC
-  gflags glog dl double-conversion folly fmt spdlog -Wl,--end-group
-  pthread m rt config++
-  event boost_system curl yaml-cpp cpr::cpr
-)
+# -----------------------------------------------------------------------------
+# common-src modules
+#
+# These are NOT find-modules: each one appends its own .cpp files to the target
+# named by NF_TARGET via target_sources(), guarded by `if(TARGET ${NF_TARGET})`.
+# So they MUST be included after add_executable(upf) -- included earlier the
+# guard is false, they silently contribute nothing, and the link fails with
+# undefined references such as
+#   oai::logger::logger_registry::get_logger(std::string const&)
+#
+# They also call directory-scoped include_directories(), which is why the paths
+# they add are not repeated in the target_include_directories() call above.
+#
+# Order matters: http.cmake itself includes logger.cmake and common.cmake, and
+# common_model.cmake consumes USED_COMMON_MODEL_SRC_FILES, which the model
+# modules populate. This is the legacy order, preserved deliberately.
+# -----------------------------------------------------------------------------
+include(${COMMON_SRC_DIR}/config/config.cmake)
+include(${COMMON_SRC_DIR}/http/http.cmake)
+include(${COMMON_SRC_DIR}/logger/logger.cmake)
+include(${COMMON_SRC_DIR}/model/nrf_model.cmake)
+include(${COMMON_SRC_DIR}/model/common_model.cmake)
+include(${COMMON_SRC_DIR}/utils/utils.cmake)
 
+# Host warning flags. The legacy CMAKE_C_FLAGS accumulated -Wall, -msse4.2,
+# -std=gnu99, -fPIC, -fno-strict-aliasing and a long -DHAVE_* block over lines
+# 134-139 -- and line 140 then did a plain set() that threw all of it away. Only
+# the four -Wno-* suppressions on that last line ever reached the compiler.
+target_compile_options(upf PRIVATE
+  -Wall
+  -Wno-unused-function
+  -Wno-return-type
+  -Wno-empty-body
+  $<$<STREQUAL:${CMAKE_SYSTEM_PROCESSOR},x86_64>:-msse4.2>
+  $<$<STREQUAL:${CMAKE_SYSTEM_PROCESSOR},armv7l>:-mfloat-abi=hard>
+  $<$<STREQUAL:${CMAKE_SYSTEM_PROCESSOR},armv7l>:-mfpu=neon>)
 
-add_boolean_option(USE_LTTNG  False "Activate the LTTNG tracer, a debugging/monitoring framework" ON)
-if (USE_LTTNG)
-    message("Using the lttng build variant")
-    add_definitions("-DLOGGER_CAN_USE_LTTNG")
-    target_link_libraries(upf -ldl lttng-ust)
-endif ()
+# --start-group is needed: APP, SIMPLE_SWITCH and the datapath libraries have
+# circular references between them. Fixing that is a source-level change and is
+# out of scope here, so the group is kept and made explicit.
+target_link_libraries(upf PRIVATE
+  -Wl,--start-group
+    APP
+    CN_UTILS
+    GTPV1U
+    PFCP
+    SIMPLE_SWITCH
+    UDP
+    UPF_TC
+    UPF_XDP
+  -Wl,--end-group
+  libbpf::bpf
+  PkgConfig::CONFIGXX
+  Threads::Threads
+  CURL::libcurl
+  cpr::cpr
+  fmt::fmt
+  # header-only, NOT spdlog::spdlog -- see note below
+  spdlog::spdlog_header_only
+  yaml-cpp
+  ${FOLLY_LIBRARY}
+  ${GLOG_LIBRARY}
+  ${GFLAGS_LIBRARY}
+  ${DOUBLECONV_LIBRARY}
+  ${EVENT_LIBRARY}
+  ${BOOST_SYSTEM_LIBRARY}
+  ${CMAKE_DL_LIBS}
+  m
+  rt)
+
+# -----------------------------------------------------------------------------
+# spdlog: header-only, deliberately.
+#
+# The legacy build passed the bare name `spdlog` to the linker and defined none
+# of the SPDLOG_* macros, so every translation unit compiled spdlog inline --
+# header-only mode -- while also linking the compiled library. Inconsistent, but
+# that is the behaviour the sources were written against.
+#
+# spdlog::spdlog defines SPDLOG_COMPILED_LIB, which stops spdlog pulling in its
+# details/os-inl.h. That header is the only reason <unistd.h> ever reached
+# src/upf_app/utils/startup_banner.cpp, which calls sleep(5) at line 1168
+# without including <unistd.h> itself. Switching to the compiled library
+# therefore breaks that file with "'sleep' was not declared in this scope".
+#
+# spdlog::spdlog_header_only reproduces the legacy behaviour exactly, so this
+# CMake change stays behaviour-preserving.
+#
+# Follow-up, as a source change: add <unistd.h> to startup_banner.cpp (and audit
+# for the same pattern elsewhere), then switch to spdlog::spdlog to stop
+# recompiling spdlog in every translation unit.
+# -----------------------------------------------------------------------------
+
+if(USE_LTTNG)
+  message(STATUS "LTTng tracing enabled")
+  target_link_libraries(upf PRIVATE lttng-ust)
+endif()
+
+# Address sanitizer, previously spelled as a bare `${ASAN}` entry in the link
+# line and set from three different places (Debug build type, the
+# SANITIZE_OPTIONS environment variable, and the STATIC_LINKING branch -- which
+# enabled it precisely where it cannot work).
+option(ENABLE_ASAN "Build with AddressSanitizer" OFF)
+if(ENABLE_ASAN AND NOT STATIC_LINKING)
+  target_compile_options(upf PRIVATE -fsanitize=address -fno-omit-frame-pointer)
+  target_link_options(upf    PRIVATE -fsanitize=address)
+elseif(ENABLE_ASAN AND STATIC_LINKING)
+  message(WARNING "ENABLE_ASAN ignored: ASan does not support -static.")
+endif()
+
+if(STATIC_LINKING)
+  # Legacy read: SET_TARGET_PROPERTIES(spgwc PROPERTIES LINK_SEARCH_END_STATIC 1)
+  # `spgwc` is the SPGW-C binary -- no such target exists in this project, so
+  # configuring with STATIC_LINKING=ON failed outright. The target is `upf`.
+  set_target_properties(upf PROPERTIES LINK_SEARCH_END_STATIC 1)
+  target_link_options(upf PRIVATE -static)
+endif()
+
+include(GNUInstallDirs)
+install(TARGETS upf RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")

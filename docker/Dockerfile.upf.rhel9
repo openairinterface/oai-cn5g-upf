@@ -84,7 +84,6 @@ RUN rm -f /etc/rhsm-host && \
       libicu \
       boost \
       libevent \
-      libnl3 \
       #libasan \
       findutils \
       libconfig && \

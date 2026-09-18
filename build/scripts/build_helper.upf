@@ -149,16 +149,6 @@ check_enable_qos() {
 }
 
 
-#-------------------------------------------------------------------------------
-install_netlink_libraries() {
-  echo ""
-  echo "Install Netlink libraries:"
-  if [[ $OS_DISTRO == "ubuntu" ]]; then
-    $SUDO $INSTALLER install -y libnl-3-dev libnl-genl-3-dev libnl-route-3-dev libnl-nf-3-dev
-  elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
-    $SUDO $INSTALLER install -y libnl3-devel libnl3-cli
-  fi
-}
 
 
 #-------------------------------------------------------------------------------
@@ -356,7 +346,7 @@ check_install_upf_deps() {
 
   echo -e "$YELLOW WARNINGS: "
   echo -e "           1. Even when "BPF Datapath" and/or "QoS Feature" are/is disabled"
-  echo -e "              we still build and install BPF and Netlinks libraries."
+  echo -e "              we still build and install the BPF libraries."
   echo -e "              The purpose is to have one-time UPF build process with all these libs"
   echo -e "              built and linked to the project. Thie difference would be on the"
   echo -e "              execution path, which depends on enabling or disabling these features."
@@ -372,9 +362,6 @@ check_install_upf_deps() {
   install_bpftool_from_git $1 $2
   ret=$?;[[ $ret -ne 0 ]] && return $ret
   echo ""
-  install_netlink_libraries $1 $2
-  ret=$?;[[ $ret -ne 0 ]] && return $ret
-
   install_fb_folly_from_source $1 $2
   ret=$?;[[ $ret -ne 0 ]] && return $ret
 

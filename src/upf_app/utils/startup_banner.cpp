@@ -900,8 +900,9 @@ void DisplayDataPathArchitecture(const PipelineFeatureFlags& flags) {
     E(sp(PL) + AR + "└" + dsh(PF - PL - 1) + "┐" + R);
     E(sp(PF) + AR + "▼" + R);
   };
-  auto connFF = [&](const std::string& lbl = "",
-                    int indent             = 2) {  // full → full
+  // full -> full connector; not currently drawn (see mkMAR note below).
+  [[maybe_unused]] auto connFF = [&](const std::string& lbl = "",
+                                     int indent = 2) {
     E(lbl_line(lbl, PF, indent));
     E(sp(PF) + AR + "▼" + R);
   };
@@ -938,7 +939,10 @@ void DisplayDataPathArchitecture(const PipelineFeatureFlags& flags) {
         "  " + ACT + "Buffering state tracking" + R + sp(4),   // 2+24+4  = 30
     };
   };
-  auto mkMAR = [&]() -> Lines {
+  // Not currently drawn: the banner has no MAR/ATSSS box even though MAR
+  // steering is a supported feature (see UserPlaneComponent::BuildFeatureFlags).
+  // Kept rather than deleted so the layout is ready if the box is added.
+  [[maybe_unused]] auto mkMAR = [&]() -> Lines {
     return {
         " " + MAC + "MARProgram" + R + sp(19),
         "  " + TS2 + "[rule-apply   XDP]" + R + sp(10),

@@ -88,8 +88,6 @@ RUN apt-get update && \
     ethtool \
     arping \
     libllvm14 \
-    libnl-3-200 \
-    libnl-route-3-200 \
     sudo \
     iptables \
     netbase \

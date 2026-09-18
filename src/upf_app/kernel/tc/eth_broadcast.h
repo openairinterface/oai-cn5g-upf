@@ -85,6 +85,18 @@ struct callback_ctx {
  * @param value  Pointer to the current value (struct eth_session_id).
  * @param ctx    Per-call dedup + skb context.
  */
+/* Forward declaration so `struct bpf_map` names a file-scope type.
+ *
+ * Without it, the first mention of the type is inside the parameter list of
+ * broadcast_callback_fn() below, which makes it a function-prototype-scope
+ * type incompatible with every other `struct bpf_map*` in the program:
+ *   "declaration of 'struct bpf_map' will not be visible outside of this
+ *    function [-Wvisibility]"
+ * bpf_for_each_map_elem() requires the callback's first parameter to be the
+ * same `struct bpf_map*` the helper uses, so the type must be declared here.
+ * It stays opaque -- only the pointer is ever passed around. */
+struct bpf_map;
+
 static long broadcast_callback_fn(
     struct bpf_map* map, void* key, void* value, struct callback_ctx* ctx) {
   struct eth_session_id* pdu_session = (struct eth_session_id*) value;

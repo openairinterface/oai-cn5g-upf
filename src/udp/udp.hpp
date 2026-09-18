@@ -49,12 +49,14 @@ typedef struct udp_packet_q_item_s {
 class udp_server {
 #define UDP_RECV_BUFFER_SIZE 8192
  public:
+  // Initialiser order follows the declaration order below
+  // (free_pool_, work_pool_, num_threads_, ... app_, ... port_).
   udp_server(const struct in_addr& address, const uint16_t port_num)
-      : app_(nullptr),
-        port_(port_num),
+      : free_pool_(nullptr),
+        work_pool_(nullptr),
         num_threads_(1),
-        free_pool_(nullptr),
-        work_pool_(nullptr) {
+        app_(nullptr),
+        port_(port_num) {
     socket_ = create_socket(address, port_);
     if (socket_ > 0) {
       Logger::udp().debug(
@@ -72,10 +74,10 @@ class udp_server {
   }
 
   udp_server(const struct in6_addr& address, const uint16_t port_num)
-      : app_(nullptr),
-        port_(port_num),
-        free_pool_(nullptr),
-        work_pool_(nullptr) {
+      : free_pool_(nullptr),
+        work_pool_(nullptr),
+        app_(nullptr),
+        port_(port_num) {
     socket_      = create_socket(address, port_);
     terminateRL_ = false;
     terminateWL_ = false;
@@ -95,10 +97,10 @@ class udp_server {
   }
 
   udp_server(const char* address, const uint16_t port_num)
-      : app_(nullptr),
-        port_(port_num),
-        free_pool_(nullptr),
-        work_pool_(nullptr) {
+      : free_pool_(nullptr),
+        work_pool_(nullptr),
+        app_(nullptr),
+        port_(port_num) {
     socket_      = create_socket(address, port_);
     terminateRL_ = false;
     terminateWL_ = false;
