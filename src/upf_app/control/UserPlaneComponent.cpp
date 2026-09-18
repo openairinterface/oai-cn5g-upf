@@ -66,7 +66,11 @@ PipelineFeatureFlags UserPlaneComponent::BuildFeatureFlags() const {
   // Multi-Access Rules (ATSSS steering)
   flags.enable_mar = bpf && upf::IsMarEnabled();
 
-  // Framed Routing support
+  // Framed Routing support (RFC 2865 Framed-Route / TS 29.061).
+  // Control-plane feature — no dedicated XDP program. In the BPF datapath it
+  // drives the framed_routing_flag + m_framed_route_mapping fallback inside the
+  // existing session-lookup program; in the simpleswitch datapath it installs
+  // host routes + SNAT. Honored in BOTH datapaths, so it is NOT gated on `bpf`.
   flags.enable_framed_routing = bpf && upf::IsFramedRoutingEnabled();
 
   // PDU session type: select IP or ETH entry programs
@@ -189,6 +193,9 @@ void UserPlaneComponent::Setup(
       "  ├─ BAR Buffering     :  %s", flags.enable_bar ? "✓ on" : "✗ off");
   Logger::upf_app().info(
       "  ├─ MAR Steering      :  %s", flags.enable_mar ? "✓ on" : "✗ off");
+  Logger::upf_app().info(
+      "  ├─ Framed Routing    :  %s",
+      flags.enable_framed_routing ? "✓ on" : "✗ off");
   Logger::upf_app().info("  └─ Pipeline slots    :  %d", feature_count);
   Logger::upf_app().info("");
 

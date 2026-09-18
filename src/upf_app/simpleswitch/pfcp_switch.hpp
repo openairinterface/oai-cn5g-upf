@@ -17,8 +17,8 @@
 #include <variant>
 #include <vector>
 
-#include "framed_routing/FramedRouting.hpp"
-#include "framed_routing/LocalRouting.hpp"
+#include "FramedRouting.hpp"
+#include "LocalRouting.hpp"
 //#include "concurrentqueue.h"
 #include "itti.hpp"
 #include "itti_msg_n4.hpp"

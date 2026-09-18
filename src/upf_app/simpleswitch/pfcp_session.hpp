@@ -6,8 +6,7 @@
 #define FILE_PFCP_SESSION_HPP_SEEN
 
 #include "3gpp_29.244.h"
-#include "msg_pfcp.hpp"  // must precede FramedRouting.hpp (pfcp::framed_route_s)
-#include "framed_routing/FramedRouting.hpp"
+#include "msg_pfcp.hpp"
 #include "pfcp_bar.hpp"
 #include "pfcp_far.hpp"
 #include "pfcp_mar.hpp"
