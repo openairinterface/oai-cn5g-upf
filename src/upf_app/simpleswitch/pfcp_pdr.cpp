@@ -37,10 +37,16 @@ bool pfcp_pdr::look_up_pack_in_access(
   }
 
   if (pdi.first) {
-    // Source Interface must be ACCESS (§8.2.3)
+    // Source Interface must be ACCESS (§8.2.2), or CORE for a downlink N9
+    // tunnel terminated by an intermediate UPF (e.g. the V-UPF of a
+    // home-routed PDU session, 3GPP TS 23.501 §4.2.4).
+    bool from_core = false;
     if (pdi.second.source_interface.first) {
+      from_core = pdi.second.source_interface.second.interface_value ==
+                  INTERFACE_VALUE_CORE;
       if (pdi.second.source_interface.second.interface_value !=
-          INTERFACE_VALUE_ACCESS) {
+              INTERFACE_VALUE_ACCESS &&
+          !from_core) {
         return false;
       }
     }
@@ -50,19 +56,22 @@ bool pfcp_pdr::look_up_pack_in_access(
         return false;
       }
     }
-    // UE IP Address (§8.2.62) — source address check for uplink
+    // UE IP Address (§8.2.62) — source address for uplink, destination
+    // address for downlink received over N9
     if (pdi.second.ue_ip_address.first) {
       if (!pdi.second.ue_ip_address.second.v4) {
         return false;
       }
-      if (pdi.second.ue_ip_address.second.ipv4_address.s_addr != iph->saddr) {
+      if (pdi.second.ue_ip_address.second.ipv4_address.s_addr !=
+          (from_core ? iph->daddr : iph->saddr)) {
         return false;
       }
     }
     // SDF Filter (§8.2.5). Without this every PDR of the session matched
     // every packet, so per-flow rules -- the whole point of a packet filter --
-    // could not be told apart.
-    return oai::upf::sdf_match(sdf, iph, num_bytes, true, pdi_ue_ipv4());
+    // could not be told apart. A downlink received over N9 travels towards
+    // the UE, so its filter is matched in the downlink direction.
+    return oai::upf::sdf_match(sdf, iph, num_bytes, !from_core, pdi_ue_ipv4());
   } else {
     return false;  // PDI is mandatory per spec
   }

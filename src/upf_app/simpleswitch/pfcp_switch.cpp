@@ -1457,7 +1457,11 @@ void pfcp_switch::remove_pdr_from_lookup(
     return;
   const auto& pdi = pdr->pdi.second;
 
-  if (pdi.source_interface.second.interface_value == INTERFACE_VALUE_ACCESS &&
+  // Matched by TEID: an N3 uplink PDR, or an N9 downlink PDR (Source
+  // Interface CORE with a local F-TEID) of an intermediate UPF such as the
+  // V-UPF of a home-routed PDU session (3GPP TS 23.501 clause 4.2.4)
+  if ((pdi.source_interface.second.interface_value == INTERFACE_VALUE_ACCESS ||
+       pdi.source_interface.second.interface_value == INTERFACE_VALUE_CORE) &&
       pdi.local_fteid.first) {
     const teid_t teid = pdi.local_fteid.second.teid;
     auto fresh =
@@ -1517,7 +1521,10 @@ void pfcp_switch::replace_pdr_in_lookup(
     ue_ip = 0;
     if (!p->pdi.first || !p->pdi.second.source_interface.first) return false;
     const auto& pdi = p->pdi.second;
-    if (pdi.source_interface.second.interface_value == INTERFACE_VALUE_ACCESS &&
+    // N3 uplink and N9 downlink PDRs are both keyed by TEID
+    if ((pdi.source_interface.second.interface_value ==
+             INTERFACE_VALUE_ACCESS ||
+         pdi.source_interface.second.interface_value == INTERFACE_VALUE_CORE) &&
         pdi.local_fteid.first) {
       is_ul = true;
       teid  = pdi.local_fteid.second.teid;
@@ -2394,9 +2401,17 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
               if ((*it_pdr)->get(far_id)) {
                 const auto sfar = ssession->find_far(far_id.far_id);
                 if (sfar) {
-                  // Maintain uplink QFI in session
                   uint8_t qfi = (*it_pdr)->pdi.second.qfi.second.qfi;
-                  ssession->qfi.store(qfi, std::memory_order_relaxed);
+                  // Downlink received over N9 (home-routed V-UPF, 3GPP TS
+                  // 23.501 §4.2.4): the tunnel's PDR detects from CORE
+                  // (Source Interface, 3GPP TS 29.244 §8.2.2)
+                  const bool n9_downlink =
+                      (*it_pdr)
+                          ->pdi.second.source_interface.second
+                          .interface_value == INTERFACE_VALUE_CORE;
+                  // Maintain uplink QFI in session
+                  if (!n9_downlink)
+                    ssession->qfi.store(qfi, std::memory_order_relaxed);
                   // Over its MBR: dropped before it is counted, so the
                   // usage report holds what was forwarded (§8.2.8, §8.2.44).
                   // Volume is the decapsulated packet, i.e. what the UE sent.
@@ -2407,8 +2422,16 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
                           *qos, (const char*) iph, num_bytes, tunnel_id,
                           &r_endpoint))
                     return;
-                  ssession->add_ul(num_bytes);
-                  sfar->apply_forwarding_rules(iph, num_bytes, nocp, buff, 0);
+                  if (n9_downlink) {
+                    ssession->add_dl(num_bytes);
+                    // Keep the QFI towards the gNB (PDU Session Container,
+                    // 3GPP TS 38.415)
+                    sfar->apply_forwarding_rules(
+                        iph, num_bytes, nocp, buff, qfi);
+                  } else {
+                    ssession->add_ul(num_bytes);
+                    sfar->apply_forwarding_rules(iph, num_bytes, nocp, buff, 0);
+                  }
                 }
               }
             }
