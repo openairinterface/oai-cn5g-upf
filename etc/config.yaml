@@ -632,7 +632,7 @@ dnns:
     ipv4_subnet: "12.1.1.0/26"
   - dnn: "ims"
     pdu_session_type: "IPV4V6"
-    ipv4_subnet: "14.1.1.2/24"
+    ipv4_subnet: "14.1.1.0/24"
 
 pcf:
   local_policy:
