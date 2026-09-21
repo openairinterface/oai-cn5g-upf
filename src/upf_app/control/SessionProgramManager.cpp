@@ -30,6 +30,7 @@
 #include "pfcp_urr.hpp"
 #include "pfcp_bar.hpp"
 #include "pfcp_mar.hpp"
+#include "FramedRouting.hpp"  // fr::FramedRouting::toBpfKeys (framed routing)
 #include <pfcp_pdr.h>  // BPF PDR structure
 #include <pfcp_far.h>  // BPF FAR structure
 #include <pfcp_qer.h>  // BPF QER structure
@@ -152,6 +153,13 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
     if (bar_st_map) bar_st_map->Remove(seid);
     auto mar_map = upf_xdp_program->GetMapByName("mar_rules_map");
     if (mar_map) mar_map->Remove(seid);
+
+    // Clean up Framed-Route (RFC 2865) entries installed for this session
+    auto fr_it = session_framed_keys_.find(seid);
+    if (fr_it != session_framed_keys_.end()) {
+      for (auto& key : fr_it->second) upf_xdp_program->RemoveFramedRoute(key);
+      session_framed_keys_.erase(fr_it);
+    }
   }
 
   // Clean up ARP caches
@@ -312,6 +320,39 @@ void SessionProgramManager::StorePduSessionInMap(
 
   } catch (const std::exception& e) {
     Logger::upf_app().error("StorePduSessionInMap failed: %s", e.what());
+  }
+}
+
+//------------------------------------------------------------------------------
+void SessionProgramManager::InstallFramedRoutes(
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
+    uint32_t ue_ip_s_addr, const std::shared_ptr<pfcp::pfcp_pdr>& pdr) {
+  if (!upf_xdp_program || !pdr) return;
+
+  pfcp::pdi pdi;
+  if (!pdr->get(pdi)) return;
+
+  std::vector<pfcp::framed_route_t> routes;
+  if (!pdi.get(routes) || routes.empty()) return;
+
+  // A framed route resolves to the owning UE's session via session_by_ue_ip;
+  // without a UE IP there is nothing to map it to (TS 29.244 §5.16 NOTE 3).
+  if (ue_ip_s_addr == 0) return;
+
+  // Host-order numeric UE IP: the same normalization StorePduSessionInMap
+  // applies to the session_by_ue_ip_map key, and the byte order the XDP
+  // fallback (pctx->ue_ip = bpf_ntohl(daddr)) expects.
+  const uint32_t ue_ip =
+      likely(IsLittleEndian()) ? htonl(ue_ip_s_addr) : ue_ip_s_addr;
+
+  for (const auto& route : routes) {
+    for (const auto& key : fr::FramedRouting::toBpfKeys(route)) {
+      upf_xdp_program->UpdateFramedRouteMappingMap(ue_ip, key);
+      session_framed_keys_[seid].push_back(key);
+      Logger::upf_app().debug(
+          "[eBPF] Framed route '%s' -> UE 0x%x installed (SEID " SEID_FMT ")",
+          route.framed_route, ue_ip, seid);
+    }
   }
 }
 
@@ -685,6 +726,15 @@ void SessionProgramManager::CreatePipeline(
         StorePduSessionInMap(
             upf_xdp_program, ue_ip_address.ipv4_address.s_addr, fteid.teid, 0,
             seid);
+
+        // Framed routing (RFC 2865): downlink (CORE) PDRs may carry
+        // Framed-Routes for subnets behind the UE — map them to this UE IP so
+        // the XDP session-lookup fallback can resolve traffic addressed there.
+        if (upf::IsFramedRoutingEnabled() &&
+            source_interface.interface_value == INTERFACE_VALUE_CORE) {
+          InstallFramedRoutes(
+              upf_xdp_program, seid, ue_ip_address.ipv4_address.s_addr, pdr);
+        }
       }
 
       // Retrieve associated FAR

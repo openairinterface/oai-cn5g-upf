@@ -13,6 +13,8 @@
 #include <vector>
 #include <set>
 
+#include "framed_routing_bpf.h"  // FramedRoutingKeyBPF
+
 // Forward declarations
 namespace pfcp {
 class pfcp_session;
@@ -151,6 +153,19 @@ class SessionProgramManager {
   void StorePduSessionInMap(
       std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t ue_ip,
       uint32_t teid_dl, uint32_t teid_ul, uint64_t seid);
+
+  /**
+   * @brief Install a downlink PDR's Framed-Routes into the BPF datapath.
+   *
+   * Maps each framed prefix carried by the PDR's PDI to the owning UE IP in
+   * m_framed_route_mapping, so the XDP session-lookup fallback can resolve
+   * downlink traffic addressed *behind* the UE. Records the installed keys
+   * under `seid` for teardown in RemoveSession(). No-op when the PDR carries
+   * no Framed-Route. (RFC 2865 Framed-Route / TS 29.061.)
+   */
+  void InstallFramedRoutes(
+      std::shared_ptr<UPF_XDPProgram> xdp_program, uint64_t seid,
+      uint32_t ue_ip_s_addr, const std::shared_ptr<pfcp::pfcp_pdr>& pdr);
 
   /**
    * @brief Store ETH PDU session information in BPF map
@@ -750,6 +765,8 @@ class SessionProgramManager {
   std::map<uint64_t, std::set<uint32_t>> session_n3_arp_cache_;
   /// Track PDU session type per SEID for cleanup and map routing
   std::map<uint64_t, PduSessionType> session_pdu_type_map_;
+  /// Framed-Route (RFC 2865) BPF keys installed per SEID, for teardown.
+  std::map<uint64_t, std::vector<FramedRoutingKeyBPF>> session_framed_keys_;
 };
 
 #endif  // SESSION_PROGRAM_MANAGER_H_
