@@ -89,7 +89,8 @@ std::pair<uint32_t, uint32_t> FramedRouting::extractIPCidr(
 std::vector<FramedRoutingKeyBPF> FramedRouting::toBpfKeys(
     const pfcp::framed_route_s& framed_route_s) {
   // One Framed-Route IE == one route (TS 29.244 §8.2.109); return its single
-  // BPF key. host-order numeric prefix + CIDR — identical math to the XDP helper.
+  // BPF key. host-order numeric prefix + CIDR — identical math to the XDP
+  // helper.
   std::vector<FramedRoutingKeyBPF> keys;
   const std::pair<uint32_t, uint32_t> ipCidr =
       parseFramedRouteDest(framed_route_s);

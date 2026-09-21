@@ -343,7 +343,8 @@ static __always_inline struct pfcp_pdr* match_pdr_n6(
     /* UE IP Address must match for DL.
      * Framed-Route destinations (RFC 2865) are handled upstream in
      * session_lookup_ip, which rewrites pctx->ue_ip to the owning UE's IP
-     * before this stage — so an exact match here is correct in that case too. */
+     * before this stage — so an exact match here is correct in that case too.
+     */
     if (ipaddr != pkt_ue_ip) continue;
 
     /* Source Interface must be CORE (N6) */
