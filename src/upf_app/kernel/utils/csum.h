@@ -51,7 +51,7 @@
 #define CSUM_MANGLED_0 ((__sum16) 0xffff)
 // #define CSUM_MANGLED_0 ((__force __sum16)0xffff)
 
-static void pcn_update_csum(struct iphdr* iph) {
+static __attribute__((unused)) void pcn_update_csum(struct iphdr* iph) {
   u16* next_iph_u16;
   u32 csum = 0;
   int i;
@@ -65,35 +65,37 @@ static void pcn_update_csum(struct iphdr* iph) {
 }
 
 /* checksum related stuff */
-static __sum16 pcn_csum_fold(__wsum csum) {
+static __attribute__((unused)) __sum16 pcn_csum_fold(__wsum csum) {
   u32 sum = (u32) csum;
   sum     = (sum & 0xffff) + (sum >> 16);
   sum     = (sum & 0xffff) + (sum >> 16);
   return (__sum16) ~sum;
 }
 
-static __sum16 pcn_csum16_add(__sum16 csum, __be16 addend) {
+static __attribute__((unused)) __sum16
+pcn_csum16_add(__sum16 csum, __be16 addend) {
   u16 res = (u16) csum;
 
   res += (u16) addend;
   return (__sum16) (res + (res < (u16) addend));
 }
 
-static __wsum pcn_csum_unfold(__sum16 n) {
+static __attribute__((unused)) __wsum pcn_csum_unfold(__sum16 n) {
   return (__wsum) n;
 }
 
-static __wsum pcn_csum_add(__wsum csum, __wsum addend) {
+static __attribute__((unused)) __wsum pcn_csum_add(__wsum csum, __wsum addend) {
   u32 res = (u32) csum;
   res += (u32) addend;
   return (__wsum) (res + (res < (u32) addend));
 }
 
-static void pcn_csum_replace_by_diff(__sum16* sum, __wsum diff) {
+static __attribute__((unused)) void pcn_csum_replace_by_diff(
+    __sum16* sum, __wsum diff) {
   *sum = pcn_csum_fold(pcn_csum_add(diff, ~pcn_csum_unfold(*sum)));
 }
 
-static __wsum pcn_csum_diff(
+static __attribute__((unused)) __wsum pcn_csum_diff(
     __be32* from, u32 from_size, __be32* to, u32 to_size, __wsum seed) {
 // FIXME: sometimes the LINUX_VERSION_CODE is not aligned with the kernel.
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
@@ -109,7 +111,7 @@ static __wsum pcn_csum_diff(
 #endif
 }
 
-static int pcn_l3_csum_replace(
+static __attribute__((unused)) int pcn_l3_csum_replace(
     struct xdp_md* ctx, u32 csum_offset, u32 old_value, u32 new_value,
     u32 flags) {
   __sum16* ptr;
@@ -141,7 +143,7 @@ static int pcn_l3_csum_replace(
   return 0;
 }
 
-static int pcn_l4_csum_replace(
+static __attribute__((unused)) int pcn_l4_csum_replace(
     struct xdp_md* ctx, u32 csum_offset, u32 old_value, u32 new_value,
     u32 flags) {
   // bool is_pseudo = flags & BPF_F_PSEUDO_HDR;

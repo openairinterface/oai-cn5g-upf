@@ -113,17 +113,20 @@ class pfcp_session {
 
   //------------------------------------------------------------------------------
   /** @brief Copy constructor (deep-copies all rule vectors). */
+  // Initialiser order follows the declaration order above:
+  // cp_fseid, seid, pdn_type, ... pdrs, fars, qers, urrs, bars, mars,
+  // ... teid_uplink.
   pfcp_session(const pfcp_session& c)
       : cp_fseid(c.cp_fseid),
         seid(c.seid),
+        pdn_type(c.pdn_type),
         pdrs(c.pdrs),
         fars(c.fars),
         qers(c.qers),
         urrs(c.urrs),
         bars(c.bars),
         mars(c.mars),
-        teid_uplink(c.teid_uplink),
-        pdn_type(c.pdn_type) {}
+        teid_uplink(c.teid_uplink) {}
 
   //------------------------------------------------------------------------------
   virtual ~pfcp_session() {

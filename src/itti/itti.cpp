@@ -60,7 +60,9 @@ void itti_mw::timer_manager_task(
               itti_inst->current_timer.arg2_user);
           std::shared_ptr<itti_msg_timeout> msgsh =
               std::make_shared<itti_msg_timeout>(mto);
-          int ret = itti_inst->send_msg(msgsh);
+          // Return value deliberately discarded, matching the existing
+          // behaviour. TODO: a failed timeout delivery is currently silent.
+          (void) itti_inst->send_msg(msgsh);
         } else {
           // other timer required ?
           itti_inst->m_timers.lock();
@@ -85,15 +87,17 @@ void itti_mw::timer_manager_task(
   }
 }
 //------------------------------------------------------------------------------
+// Initialiser order follows the declaration order in itti.hpp
+// (msg_number, timer_id, m_timer_id, ... current_timer, m_timers, m_timeout).
 itti_mw::itti_mw()
-    : timer_id(0),
-      msg_number(0),
+    : msg_number(0),
+      timer_id(0),
+      m_timer_id(),
       created_tasks(0),
       ready_tasks(0),
-      m_timers(),
       current_timer(null_timer),
+      m_timers(),
       m_timeout(),
-      m_timer_id(),
       terminate(false) {
   std::fill(itti_task_ctxts, itti_task_ctxts + TASK_MAX, nullptr);
 }

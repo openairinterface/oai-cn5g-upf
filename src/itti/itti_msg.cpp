@@ -7,22 +7,24 @@
 
 extern itti_mw* itti_inst;
 
+// Initialiser order follows the declaration order in itti_msg.hpp
+// (msg_num, origin, destination, msg_type).
 itti_msg::itti_msg()
-    : msg_type(ITTI_MSG_TYPE_NONE), origin(TASK_NONE), destination(TASK_NONE) {
+    : origin(TASK_NONE), destination(TASK_NONE), msg_type(ITTI_MSG_TYPE_NONE) {
   msg_num = itti_inst->increment_message_number();
 };
 
 itti_msg::itti_msg(
     const itti_msg_type_t msg_type, task_id_t origin, task_id_t destination)
-    : msg_type(msg_type), origin(origin), destination(destination) {
+    : origin(origin), destination(destination), msg_type(msg_type) {
   msg_num = itti_inst->increment_message_number();
 };
 
 itti_msg::itti_msg(const itti_msg& i)
-    : msg_type(i.msg_type),
-      msg_num(i.msg_num),
+    : msg_num(i.msg_num),
       origin(i.origin),
-      destination(i.destination){};
+      destination(i.destination),
+      msg_type(i.msg_type){};
 
 const char* itti_msg::get_msg_name() {
   return "UNINITIALIZED";
