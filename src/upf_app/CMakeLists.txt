@@ -82,9 +82,19 @@ target_link_libraries(upf_datapath_common PUBLIC
   UDP
   upf::kernel_headers
   libbpf::bpf          # carries LIBBPF_INCLUDE_DIR and the elf/z system deps
-  upf_xdp              # carries UPF_SKEL_DIR and orders skeleton generation
+  upf_xdp              # carries -I${UPF_SKEL_DIR} (include path only)
   qer_tc
   eth_broadcast_tc)
+
+# Build-order dependency on the generated skeleton headers.
+#
+# Required in addition to the target_link_libraries() above: upf_xdp, qer_tc and
+# eth_broadcast_tc are INTERFACE libraries, and add_dependencies() on an
+# INTERFACE library does not reach targets that link it. Without this, a clean
+# build races skeleton generation against the first compile that #includes one,
+# failing with "xdp_bar_apply_skel.h: No such file or directory". An incremental
+# build masks it, because the headers survive from the previous run.
+add_dependencies(upf_datapath_common upf_xdp_all)
 
 # The legacy file did `set(CMAKE_C_FLAGS "-Wno-gnu-variable-sized-type-not-at-end")`
 # -- an assignment, not an append, discarding everything set upstream. The
@@ -104,6 +114,7 @@ add_library(UPF_XDP STATIC
   user/upf_xdp_user.cpp)
 
 target_link_libraries(UPF_XDP PUBLIC upf_datapath_common)
+add_dependencies(UPF_XDP upf_xdp_all)
 
 # -----------------------------------------------------------------------------
 # UPF_TC -- TC-BPF QoS enforcement
@@ -127,6 +138,7 @@ add_library(UPF_TC STATIC
   user/qer_tc_user.cpp)
 
 target_link_libraries(UPF_TC PUBLIC upf_datapath_common)
+add_dependencies(UPF_TC upf_xdp_all)
 
 # -----------------------------------------------------------------------------
 # Notes on what was removed
@@ -142,7 +154,14 @@ target_link_libraries(UPF_TC PUBLIC upf_datapath_common)
 #   libbpf::bpf links the static archive only.
 #
 # * add_dependencies(UPF_TC upf_xdp_all) appeared twice, verbatim (:203, :205).
-#   The dependency is now implicit in target_link_libraries(upf_xdp …).
+#   One of the two was redundant -- but the dependency itself was NOT. Every
+#   target that compiles a .cpp including a *_skel.h needs its own
+#   add_dependencies(<target> upf_xdp_all): linking an INTERFACE library does
+#   not inherit its add_dependencies(), and linking the OBJECT library does not
+#   transfer the ordering either. Omitting it builds fine whenever make happens
+#   to schedule skeleton generation first, and fails with
+#   "xdp_n3_entry_skel.h: No such file or directory" when it does not -- a race
+#   that only shows up on clean parallel builds.
 #
 # * set(GTP_INTERFACE $ENV{GTP_INTERFACE}), and the same for UDP_INTERFACE and
 #   SOCKET_BUFFER_ENABLED (:119-121), were read from the environment and never

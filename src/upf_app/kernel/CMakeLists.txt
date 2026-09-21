@@ -100,11 +100,11 @@ function(upf_bpf_skeleton name src skel)
   # generated struct to xdp_n3_entry_bpf and every consumer fails to compile.
   # Keep the source basename verbatim and append .o.
   get_filename_component(_src_name "${src}" NAME)
-  set(_obj "${CMAKE_CURRENT_BINARY_DIR}/bpf/${_src_name}.o")
+  set(_obj "${UPF_BPF_OBJ_DIR}/${_src_name}.o")
 
   add_custom_command(
     OUTPUT  "${_obj}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/bpf"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${UPF_BPF_OBJ_DIR}"
     COMMAND ${UPF_BPF_CLANG} ${UPF_BPF_CFLAGS} ${UPF_BPF_INCLUDE_FLAGS}
             -c "${src}" -o "${_obj}"
     DEPENDS "${src}" ${UPF_BPF_SHARED_HEADERS} ${ARGN}
@@ -153,10 +153,14 @@ foreach(stem IN LISTS UPF_XDP_PROGRAMS)
   list(APPEND _xdp_skeletons "${_skel}")
 endforeach()
 
-# INTERFACE library: a linkable name that carries the skeleton headers as a
-# usage requirement. Consumers link upf_xdp and get both the include directory
-# and the guarantee that the headers exist before they compile -- the legacy
-# build needed a separate add_dependencies(... upf_xdp_all) for that.
+# INTERFACE library carrying the skeleton directory as a usage requirement, so
+# consumers get -I${UPF_SKEL_DIR} by linking it.
+#
+# It does NOT order the generation. add_dependencies() on an INTERFACE library
+# is not propagated to targets that merely link it, so a consumer still needs an
+# explicit add_dependencies(<consumer> upf_xdp_all) or it will race the skeleton
+# generation and fail with "xdp_*_skel.h: No such file or directory" on a clean
+# build. (Incremental builds hide this: once the headers exist they stay.)
 add_custom_target(upf_xdp_skeletons DEPENDS ${_xdp_skeletons})
 add_library(upf_xdp INTERFACE)
 target_include_directories(upf_xdp INTERFACE "${UPF_SKEL_DIR}")

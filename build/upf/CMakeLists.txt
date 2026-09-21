@@ -94,4 +94,9 @@ list(APPEND CMAKE_MODULE_PATH "${UPF_CMAKE_DIR}")
 # instead of src/oai_upf. add_subdirectory() gives it its own scope and makes
 # relative paths mean what they look like they mean.
 # -----------------------------------------------------------------------------
-add_subdirectory(${SRC_TOP_DIR}/oai_upf ${CMAKE_CURRENT_BINARY_DIR}/oai_upf)
+# Binary directory is deliberately NOT named "oai_upf": all three Dockerfiles do
+#   mv /openair-upf/build/upf/build/upf /openair-upf/build/upf/build/oai_upf
+# to rename the executable. If a directory of that name already exists there,
+# mv silently moves the binary *into* it and the later COPY grabs a directory
+# instead of the executable -- a broken image with no error at build time.
+add_subdirectory(${SRC_TOP_DIR}/oai_upf ${CMAKE_CURRENT_BINARY_DIR}/src_oai_upf)

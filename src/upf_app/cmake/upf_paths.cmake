@@ -51,8 +51,31 @@ set(LIBBPF_LIB_DIR     "${LIBBPF_ROOT}/src"                     CACHE INTERNAL "
 
 # --- Generated BPF skeleton headers ------------------------------------------
 # `bpftool gen skeleton` output, consumed by the user/*_user.cpp wrappers.
-set(UPF_SKEL_DIR "${BUILD_TOP_DIR}/upf/build/skel" CACHE INTERNAL
+#
+# Lives in the BUILD tree, not the source tree. Legacy hardcoded
+# ${OPENAIRCN_DIR}/build/upf/build/skel, which is the binary directory of the
+# standard build_upf invocation -- fine for that one case, but it means any
+# other build directory still writes its generated headers back into the repo.
+# Two build trees then share one skel/ and overwrite each other's output, and a
+# build directory owned by another user (a previous sudo build, say) fails with
+#   /bin/sh: cannot create .../skel/xdp_bar_apply_skel.h: Permission denied
+# CMAKE_BINARY_DIR resolves to exactly the same path for the normal build_upf
+# flow, so nothing changes there -- it just stops out-of-source builds from
+# reaching into the source tree.
+set(UPF_SKEL_DIR "${CMAKE_BINARY_DIR}/skel" CACHE INTERNAL
     "Generated libbpf skeleton headers")
+
+# --- Compiled BPF objects ----------------------------------------------------
+# Kept at a fixed, predictable location rather than buried in a per-directory
+# CMakeFiles/<target>.dir/ path. qer_tc_kern.c.o is a *runtime* artifact: the TC
+# datapath loads it with `tc filter add ... bpf obj <file>`, so it is shipped in
+# the container image and docker/Dockerfile.upf.ubuntu copies it out of the
+# builder stage by path. The legacy location
+#   build/upf/build/upf_app/kernel/CMakeFiles/qer_tc.dir/tc/qer_tc_kern.c.o
+# was an artefact of add_library() and moved as soon as the BPF objects stopped
+# going through CMake's compiler driver.
+set(UPF_BPF_OBJ_DIR "${CMAKE_BINARY_DIR}/bpf" CACHE INTERNAL
+    "Compiled BPF object files")
 
 # --- upf_app subsystem roots -------------------------------------------------
 set(UPF_APP_DIR    "${SRC_TOP_DIR}/upf_app"        CACHE INTERNAL "")
@@ -69,6 +92,25 @@ set(UPF_CMAKE_DIR  "${UPF_APP_DIR}/cmake"          CACHE INTERNAL "")
 # directory and the system deps (elf, z) as usage requirements so no consumer
 # has to repeat them.
 # -----------------------------------------------------------------------------
+# Fail early and legibly if libbpf has not been built yet.
+#
+# An IMPORTED target whose INTERFACE_INCLUDE_DIRECTORIES points at a missing
+# directory makes CMake abort at GENERATE time with
+#   "Imported target libbpf::bpf includes non-existent path ..."
+# which says nothing about how to fix it. libbpf is an out-of-tree dependency
+# built by build/scripts/build_helper.upf, and a `build_upf` run that
+# re-installs external dependencies re-clones it -- leaving the headers absent
+# until the build step finishes.
+if(NOT EXISTS "${LIBBPF_INCLUDE_DIR}" OR NOT EXISTS "${LIBBPF_LIB_DIR}/libbpf.a")
+  message(FATAL_ERROR
+    "libbpf is not built.\n"
+    "  expected headers : ${LIBBPF_INCLUDE_DIR}\n"
+    "  expected archive : ${LIBBPF_LIB_DIR}/libbpf.a\n"
+    "Build it first with:  ./build/scripts/build_upf --install-deps\n"
+    "(build_helper.upf clones libbpf into ${LIBBPF_ROOT}, runs make, then\n"
+    " `make install_headers DESTDIR=${LIBBPF_ROOT}/root PREFIX=/usr`.)")
+endif()
+
 if(NOT TARGET libbpf::bpf)
   add_library(libbpf::bpf STATIC IMPORTED GLOBAL)
   set_target_properties(libbpf::bpf PROPERTIES
