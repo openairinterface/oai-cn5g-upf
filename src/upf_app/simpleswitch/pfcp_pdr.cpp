@@ -37,10 +37,16 @@ bool pfcp_pdr::look_up_pack_in_access(
   }
 
   if (pdi.first) {
-    // Source Interface must be ACCESS (§8.2.3)
+    // Source Interface must be ACCESS (§8.2.3), or CORE for a downlink N9
+    // tunnel terminated by an intermediate UPF (e.g. the V-UPF of a
+    // home-routed PDU session).
+    bool from_core = false;
     if (pdi.second.source_interface.first) {
+      from_core = pdi.second.source_interface.second.interface_value ==
+                  INTERFACE_VALUE_CORE;
       if (pdi.second.source_interface.second.interface_value !=
-          INTERFACE_VALUE_ACCESS) {
+              INTERFACE_VALUE_ACCESS &&
+          !from_core) {
         return false;
       }
     }
@@ -50,12 +56,14 @@ bool pfcp_pdr::look_up_pack_in_access(
         return false;
       }
     }
-    // UE IP Address (§8.2.62) — source address check for uplink
+    // UE IP Address (§8.2.62) — source address for uplink, destination
+    // address for downlink received over N9
     if (pdi.second.ue_ip_address.first) {
       if (!pdi.second.ue_ip_address.second.v4) {
         return false;
       }
-      if (pdi.second.ue_ip_address.second.ipv4_address.s_addr != iph->saddr) {
+      if (pdi.second.ue_ip_address.second.ipv4_address.s_addr !=
+          (from_core ? iph->daddr : iph->saddr)) {
         return false;
       }
     }

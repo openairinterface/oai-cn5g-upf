@@ -65,6 +65,19 @@ void pfcp_far::apply_forwarding_rules(
           }
         } else if (
             rule.destination_interface.second.interface_value ==
+                INTERFACE_VALUE_CORE &&
+            rule.outer_header_creation.first &&
+            rule.outer_header_creation.second
+                    .outer_header_creation_description ==
+                OUTER_HEADER_CREATION_GTPU_UDP_IPV4) {
+          // Uplink over N9 towards the next UPF (e.g. from the V-UPF to the
+          // H-UPF of a home-routed PDU session), TS 23.501 §5.8.2.3.
+          upf_n3_inst->send_g_pdu(
+              rule.outer_header_creation.second.ipv4_address, upf_cfg.n3.port,
+              rule.outer_header_creation.second.teid,
+              reinterpret_cast<const char*>(iph), num_bytes, qfi);
+        } else if (
+            rule.destination_interface.second.interface_value ==
                 INTERFACE_VALUE_CORE ||
             rule.destination_interface.second.interface_value ==
                 INTERFACE_VALUE_CP_FUNCTION) {

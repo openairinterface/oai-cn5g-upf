@@ -1797,6 +1797,31 @@ bool pfcp_session::create(
       return false;
     }
   } else if (
+      pdi.source_interface.second.interface_value == INTERFACE_VALUE_CORE &&
+      pdi.local_fteid.first && cr_pdr.outer_header_removal.first) {
+    // Downlink over N9 (TS 23.501 §5.8.2.3): an intermediate UPF, e.g. the
+    // V-UPF of a home-routed PDU session, terminates the GTP-U tunnel from
+    // the next UPF. Match it by TEID like N3, not by UE IP.
+    const pfcp::fteid_t& local_fteid = pdi.local_fteid.second;
+    allocated_fteid                  = local_fteid.ch ?
+                                           pfcp_switch_inst->generate_fteid_n3() :
+                                           local_fteid;
+    Logger::upf_n4().info(
+        "N9 downlink PDR, TEID " TEID_FMT " (%s)", allocated_fteid.teid,
+        local_fteid.ch ? "allocated by UP" : "received from CP");
+    pfcp_pdr* pdr = new pfcp_pdr(cr_pdr);
+    if (local_fteid.ch) {
+      pdr->pdi.second.set(allocated_fteid);
+    }
+    std::shared_ptr<pfcp_pdr> spdr = std::shared_ptr<pfcp_pdr>(pdr);
+    if (!pfcp_switch_inst->create_packet_in_access(
+            spdr, allocated_fteid, cause.cause_value)) {
+      cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
+      return false;
+    }
+    pdr->set(get_up_seid());
+    add(spdr);
+  } else if (
       pdi.source_interface.second.interface_value == INTERFACE_VALUE_CORE) {
     // Downlink — register by UE IP for core-to-UE forwarding
     pfcp_pdr* pdr                  = new pfcp_pdr(cr_pdr);
@@ -1978,7 +2003,12 @@ void pfcp_session::cleanup() {
       } else if (
           (*it)->pdi.second.source_interface.second.interface_value ==
           INTERFACE_VALUE_CORE) {
-        if (((*it)->pdi.second.ue_ip_address.first) &&
+        if ((*it)->pdi.second.local_fteid.first) {
+          // N9 downlink PDR, registered by TEID
+          pfcp_switch_inst->remove_pfcp_ul_pdrs_by_up_teid(
+              (*it)->pdi.second.local_fteid.second.teid);
+        } else if (
+            ((*it)->pdi.second.ue_ip_address.first) &&
             ((*it)->pdi.second.ue_ip_address.second.v4)) {
           pfcp_switch_inst->remove_pfcp_dl_pdrs_by_ue_ip(be32toh(
               (*it)->pdi.second.ue_ip_address.second.ipv4_address.s_addr));

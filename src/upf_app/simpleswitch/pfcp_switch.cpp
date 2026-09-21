@@ -1401,10 +1401,18 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
               if ((*it_pdr)->get(far_id)) {
                 std::shared_ptr<pfcp::pfcp_far> sfar = {};
                 if (ssession->get(far_id.far_id, sfar)) {
-                  // Maintain uplink QFI in session
-                  uint8_t qfi   = (*it_pdr)->pdi.second.qfi.second.qfi;
-                  ssession->qfi = qfi;
-                  sfar->apply_forwarding_rules(iph, num_bytes, nocp, buff, 0);
+                  uint8_t qfi = (*it_pdr)->pdi.second.qfi.second.qfi;
+                  if ((*it_pdr)->pdi.second.source_interface.second
+                          .interface_value == INTERFACE_VALUE_CORE) {
+                    // Downlink received over N9: keep the QFI towards the gNB
+                    sfar->apply_forwarding_rules(
+                        iph, num_bytes, nocp, buff, qfi);
+                  } else {
+                    // Maintain uplink QFI in session
+                    ssession->qfi = qfi;
+                    sfar->apply_forwarding_rules(
+                        iph, num_bytes, nocp, buff, 0);
+                  }
                 }
               }
             }
