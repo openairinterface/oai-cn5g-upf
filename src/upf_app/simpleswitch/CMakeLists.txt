@@ -11,7 +11,7 @@ include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 include_directories(${SRC_TOP_DIR}/upf_app/control)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel)
-#include_directories(${SRC_TOP_DIR}/upf_app/kernel/include)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel/include)
 #include_directories(${SRC_TOP_DIR}/upf_app/include)
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/udp) 
@@ -23,7 +23,6 @@ include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/pfcp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/bstr)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model)
-include_directories(${SRC_TOP_DIR}/upf_app/framed_routing)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf_model.cmake)
 
 add_library (SIMPLE_SWITCH STATIC
@@ -36,7 +35,7 @@ add_library (SIMPLE_SWITCH STATIC
   pfcp_session.cpp
   pfcp_switch.cpp
   simple_switch.cpp
-  ${SRC_TOP_DIR}/upf_app/framed_routing/FramedRouting.cpp
-  ${SRC_TOP_DIR}/upf_app/framed_routing/LocalRouting.cpp
+  FramedRouting.cpp
+  LocalRouting.cpp
 )
   

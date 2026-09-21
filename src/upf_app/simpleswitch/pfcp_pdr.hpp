@@ -10,8 +10,7 @@
 #include <memory>
 #include <mutex>
 #include "endpoint.hpp"
-#include "msg_pfcp.hpp"  // must precede FramedRouting.hpp (pfcp::framed_route_s)
-#include "framed_routing/FramedRouting.hpp"
+#include "msg_pfcp.hpp"
 
 namespace pfcp {
 
