@@ -688,8 +688,8 @@ void UPF_XDPProgram::UpdateFramedRouteMappingMap(
     uint32_t ue_ip, FramedRoutingKeyBPF key) {
   auto m = GetFramedRouteMappingMap();
   if (m) {
-    uint32_t k = hash_framed_routing_key(&key);
-    m->Update(k, ue_ip, BPF_ANY);
+    // Keyed by the exact (network, mask) struct — no hashing, no collisions.
+    m->Update(key, ue_ip, BPF_ANY);
   }
 }
 
@@ -697,9 +697,8 @@ void UPF_XDPProgram::UpdateFramedRouteMappingMap(
 void UPF_XDPProgram::RemoveFramedRoute(FramedRoutingKeyBPF key) {
   auto m = GetFramedRouteMappingMap();
   if (m) {
-    uint32_t k = hash_framed_routing_key(&key);
     uint32_t v;
-    if (m->Lookup(k, &v) == 0) m->Remove(k);
+    if (m->Lookup(key, &v) == 0) m->Remove(key);
   }
 }
 

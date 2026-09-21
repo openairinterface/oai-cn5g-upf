@@ -41,7 +41,6 @@ include_directories(${SRC_TOP_DIR}/upf_app/control)
 include_directories(${SRC_TOP_DIR}/upf_app/helpers)        # CmdRunner, SdfFilterParser, GetNicInformation, NextHopFinder
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/upf_app/user)           # BPFProgram, *_xdp_user, qer_tc_user, pdr_match_user
-include_directories(${SRC_TOP_DIR}/upf_app/framed_routing) # framed_routing_bpf.h, FramedRouting.hpp
 
 # libbpf headers (bpf/*.h), installed by build_helper.upf (make install_headers)
 include_directories(${SRC_TOP_DIR}/../build/ext/libbpf/root/usr/include)

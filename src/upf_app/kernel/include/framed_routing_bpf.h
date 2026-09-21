@@ -13,6 +13,7 @@ struct FramedRoutingKeyBPF {
   u32 subnet;
 };
 
+/*
 static __always_inline u32
 hash_framed_routing_key(struct FramedRoutingKeyBPF* key) {
   u32 hash = 17;
@@ -20,6 +21,7 @@ hash_framed_routing_key(struct FramedRoutingKeyBPF* key) {
   hash     = hash ^ key->subnet;
   return hash;
 }
+*/
 
 static __always_inline struct FramedRoutingKeyBPF
 framed_routing_key_for_ip_cidr(u32 ip, u32 cidr) {
