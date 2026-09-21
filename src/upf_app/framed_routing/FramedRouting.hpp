@@ -36,7 +36,7 @@ class FramedRouting {
     uint32_t result      = 0;
     int shift_counter    = 24;
     std::string ip_temp;
-    for (auto i = 0; i < ip.length(); ++i) {
+    for (std::string::size_type i = 0; i < ip.length(); ++i) {
       ip_temp += ip.at(i);
       if (ip.at(i) == delimeter || i == ip.length() - 1) {
         result  = result | (std::stoi(ip_temp) << shift_counter);
