@@ -767,9 +767,9 @@ void DisplayDataPathArchitecture(const PipelineFeatureFlags& flags) {
   const bool eth = (flags.pdu_type == PduSessionType::Ethernet);
 
   // ── ANSI colour codes (256-colour palette, 1 = bold)
-  const std::string R  = "\033[0m";
-  const std::string BX = "\033[38;5;238m";  // dark grey  – borders
-  const std::string AR = "\033[38;5;60m";  // slate      – arrows / connectors
+  const std::string R    = "\033[0m";
+  const std::string BX   = "\033[38;5;238m";  // dark grey  – borders
+  const std::string AR   = "\033[38;5;60m";  // slate      – arrows / connectors
   const std::string ACT  = "\033[38;5;241m";    // muted      – action text
   const std::string MAP  = "\033[38;5;61m";     // slate-blue – map refs
   const std::string COND = "\033[38;5;239m";    // dim grey   – conditions
@@ -902,7 +902,7 @@ void DisplayDataPathArchitecture(const PipelineFeatureFlags& flags) {
   };
   // full -> full connector; not currently drawn (see mkMAR note below).
   [[maybe_unused]] auto connFF = [&](const std::string& lbl = "",
-                                     int indent = 2) {
+                                     int indent             = 2) {
     E(lbl_line(lbl, PF, indent));
     E(sp(PF) + AR + "▼" + R);
   };
@@ -940,8 +940,9 @@ void DisplayDataPathArchitecture(const PipelineFeatureFlags& flags) {
     };
   };
   // Not currently drawn: the banner has no MAR/ATSSS box even though MAR
-  // steering is a supported feature (see UserPlaneComponent::BuildFeatureFlags).
-  // Kept rather than deleted so the layout is ready if the box is added.
+  // steering is a supported feature (see
+  // UserPlaneComponent::BuildFeatureFlags). Kept rather than deleted so the
+  // layout is ready if the box is added.
   [[maybe_unused]] auto mkMAR = [&]() -> Lines {
     return {
         " " + MAC + "MARProgram" + R + sp(19),

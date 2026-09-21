@@ -72,7 +72,8 @@ static __attribute__((unused)) __sum16 pcn_csum_fold(__wsum csum) {
   return (__sum16) ~sum;
 }
 
-static __attribute__((unused)) __sum16 pcn_csum16_add(__sum16 csum, __be16 addend) {
+static __attribute__((unused)) __sum16
+pcn_csum16_add(__sum16 csum, __be16 addend) {
   u16 res = (u16) csum;
 
   res += (u16) addend;
@@ -89,7 +90,8 @@ static __attribute__((unused)) __wsum pcn_csum_add(__wsum csum, __wsum addend) {
   return (__wsum) (res + (res < (u32) addend));
 }
 
-static __attribute__((unused)) void pcn_csum_replace_by_diff(__sum16* sum, __wsum diff) {
+static __attribute__((unused)) void pcn_csum_replace_by_diff(
+    __sum16* sum, __wsum diff) {
   *sum = pcn_csum_fold(pcn_csum_add(diff, ~pcn_csum_unfold(*sum)));
 }
 
