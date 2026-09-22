@@ -71,6 +71,7 @@ set(UPF_CONTROL_SOURCES
   control/SessionProgramManager.cpp
   control/SessionManager.cpp
   control/SessionPrograms.cpp
+  control/RuleConverter.cpp
 )
 
 set(UPF_HELPER_SOURCES
