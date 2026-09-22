@@ -38,7 +38,7 @@ try:
 except ImportError:  # pragma: no cover
     sys.exit(
         "PyYAML is required to generate the test config:\n"
-        "    pip install -r requirements-dev.txt"
+        '    pip install -e ".[dev]"'
     )
 
 REPO_CONFIG = Path(__file__).resolve().parents[3] / "etc" / "config.yaml"

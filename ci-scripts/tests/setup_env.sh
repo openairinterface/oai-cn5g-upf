@@ -93,7 +93,7 @@ check_host() {
 
   command -v python3 >/dev/null || die "python3 is required to generate the config"
   python3 -c 'import yaml' 2>/dev/null \
-    || die "PyYAML is required: pip install -r ${SCRIPT_DIR}/requirements-dev.txt"
+    || die "PyYAML is required: pip install -e \"${SCRIPT_DIR}[dev]\""
   ok "python3 with PyYAML available"
 }
 
