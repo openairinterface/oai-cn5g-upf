@@ -10,6 +10,7 @@
 #include <bpf/libbpf.h>
 #include <net/if.h>
 #include <stdexcept>
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include <unordered_map>
@@ -479,6 +480,19 @@ void UPF_XDPProgram::VerifySharedMapIdentity() const {
        eth_broadcast_tc_ ? eth_broadcast_tc_->GetBpfObject() : nullptr},
   };
 
+  /* eth_pdu_maps.h is included by pdr_/far_'s kernel objects unconditionally
+   * (they carry the ETH dispatch code paths), but those maps are only ever
+   * unified across programs via Step 4a' -- and Step 4a' only runs when
+   * sl_eth_ exists, i.e. when the active session is an Ethernet PDU session.
+   * In IP-only mode pdr_/far_ legitimately keep their own private, unused
+   * placeholder copies of these maps (the ETH code paths are unreachable),
+   * so they must not be cross-checked here. */
+  static constexpr const char* kEthOnlySessionMaps[] = {
+      "session_by_mac_map",     "eth_session_mapping_map",
+      "eth_session_pdrs_map",   "eth_rules_match_pdr_map",
+      "eth_egress_ifindex_map", "mac_pdu_session_map"};
+  const bool eth_pipeline_active = (sl_eth_ != nullptr);
+
   struct Instance {
     const char* label;
     __u32 id;
@@ -503,6 +517,13 @@ void UPF_XDPProgram::VerifySharedMapIdentity() const {
 
       const char* name = bpf_map__name(map);
       if (!name) continue;
+      if (!eth_pipeline_active &&
+          std::find_if(
+              std::begin(kEthOnlySessionMaps), std::end(kEthOnlySessionMaps),
+              [name](const char* eth_name) {
+                return std::strcmp(name, eth_name) == 0;
+              }) != std::end(kEthOnlySessionMaps))
+        continue;
       int fd = bpf_map__fd(map);
       if (fd < 0) continue;
 
