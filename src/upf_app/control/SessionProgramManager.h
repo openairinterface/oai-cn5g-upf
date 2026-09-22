@@ -717,6 +717,42 @@ class SessionProgramManager {
    */
   int32_t GetEmptySlot();
 
+  /**
+   * @brief Instantiate/refresh per-session QER-TC, URR, BAR, and MAR
+   *        enforcement programs
+   *
+   * Shared by CreatePipeline() and ModifyPipeline() so establishment and
+   * modification cannot diverge again. Safe to call repeatedly for the
+   * same seid — each rule type is (re)installed based on rules_flags
+   * and the current session content.
+   *
+   * @param session PFCP session (uses qers_downlink/pdrs_downlink for
+   *        QER-TC, and urrs/bars/mars for the corresponding stage programs)
+   * @param upf_xdp_program XDP program owning the URR/BAR/MAR stage programs
+   * @param rules_flags Bitmask from ComputeRulesEnabledFlags()
+   */
+  void SetupSessionEnforcementPrograms(
+      std::shared_ptr<pfcp::pfcp_session> session,
+      std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t rules_flags);
+
+  /**
+   * @brief Parse a PDR's SDF filter and store it in the sdf_filters map
+   *
+   * Shared by CreatePipeline() and ModifyPipeline(). Extracts the flow
+   * description from the PDR's PDI, resolves the QFI from the associated
+   * QER, injects the QFI back into the PDR's PDI for downstream BPF
+   * matching, and stores the parsed filter keyed by (seid, qfi). No-op if
+   * the PDR has no QER reference.
+   *
+   * @param upf_xdp_program XDP program owning the sdf_filters map
+   * @param seid Session Endpoint Identifier
+   * @param pdr PDR to parse (its PDI may be updated with the QFI)
+   * @param qer QER associated with pdr, or nullptr if none
+   */
+  void ParseAndStoreSdfFilter(
+      std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
+      std::shared_ptr<pfcp::pfcp_pdr> pdr, std::shared_ptr<pfcp::pfcp_qer> qer);
+
   // ==========================================================================
   // Member Variables
   // ==========================================================================
