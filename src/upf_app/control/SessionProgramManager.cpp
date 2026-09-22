@@ -100,6 +100,7 @@ void SessionProgramManager::CreateSession(uint64_t seid) {
  * - bar_config_map, bar_state_map (buffering state)
  * - mar_rules_map (ATSSS steering)
  * - QER TC-BPF program (if instantiated)
+ * - session_by_ue_ip_map (only if this SEID still owns the entry)
  * - ARP caches for N3/N6 endpoints
  *
  * @param seid Session Endpoint Identifier
@@ -152,6 +153,23 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
     if (bar_st_map) bar_st_map->Remove(seid);
     auto mar_map = upf_xdp_program->GetMapByName("mar_rules_map");
     if (mar_map) mar_map->Remove(seid);
+
+    // Clean up session_by_ue_ip_map so a UE that re-attaches with the same
+    // static IP isn't attributed to this now-deleted session.
+    // Only clear it if it still names this SEID -- a newer session may have
+    // already reclaimed the address if this cleanup ran late.
+    auto ue_ip_it = session_ue_ip_key_map_.find(seid);
+    if (ue_ip_it != session_ue_ip_key_map_.end()) {
+      auto session_map = upf_xdp_program->GetSessionMappingMap();
+      if (session_map) {
+        struct session_id existing = {0};
+        if (session_map->Lookup(ue_ip_it->second, &existing) == 0 &&
+            existing.seid == seid) {
+          session_map->Remove(ue_ip_it->second);
+        }
+      }
+      session_ue_ip_key_map_.erase(ue_ip_it);
+    }
   }
 
   // Clean up ARP caches
@@ -233,9 +251,11 @@ void SessionProgramManager::SetArpTableMap(std::shared_ptr<BpfMap> map) {
  * @brief Store IP PDU session information in BPF map
  *
  * Updates the session_by_ue_ip_map with UE IP -> session_id mapping.
- * If an entry already exists for this UE IP, missing TEIDs are filled
- * in (supports split Create/Modify where UL and DL TEIDs arrive in
- * separate PFCP messages).
+ * If an entry already exists for this UE IP *and* the same SEID, missing
+ * TEIDs are filled in (supports split Create/Modify where UL and DL TEIDs
+ * arrive in separate PFCP messages). An entry for a different SEID is fully
+ * overwritten -- that means the previous owner was deleted and this session
+ * is reclaiming the address.
  *
  * @param upf_xdp_program XDP program containing the maps
  * @param ue_ip UE IP address (map key)
@@ -276,8 +296,12 @@ void SessionProgramManager::StorePduSessionInMap(
 
     // Lookup session entry for UE IP
     const bool exists = (session_map->Lookup(ue_ip, &session) == 0);
-    // If the session exists, update the relevant fields
-    if (exists) {
+    // Backfilling missing TEIDs is only correct when the existing entry
+    // belongs to *this* session (split UL/DL delivery across separate PFCP
+    // messages). An entry for a different SEID means that session has since
+    // been deleted and this one is reclaiming the address, so it must fully
+    // overwrite rather than keep the stale SEID (issue #12).
+    if (exists && session.seid == seid) {
       // Only fill missing TEIDs
       if (session.teid_ul == 0) {
         session.teid_ul = (teid_ul != 0 ? teid_ul : teid_dl);
@@ -287,7 +311,7 @@ void SessionProgramManager::StorePduSessionInMap(
       }
       // Keep existing SEID
     } else {
-      // Create new mapping entry
+      // Create new mapping entry, or take over one left by a deleted session
       session.teid_ul = teid_ul;
       session.teid_dl = teid_dl;
       session.seid    = seid;
@@ -303,6 +327,12 @@ void SessionProgramManager::StorePduSessionInMap(
           "Failed to update session_by_ue_ip_map for UE_IP=%s (ret=%d)",
           ue_ip_str, ret);
       return;
+    }
+
+    // Track this session's map key so RemoveSession() can clear it later.
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      session_ue_ip_key_map_[seid] = ue_ip;
     }
     // Logger::upf_app().debug(
     //     "Stored PDU session: (ue_ip, seid, teid_ul, teid_dl) : (%s, "

@@ -102,6 +102,7 @@ class SessionProgramManager {
    * - bar_config_map, bar_state_map (buffering state)
    * - mar_rules_map (ATSSS steering)
    * - QER TC-BPF program (if instantiated)
+   * - session_by_ue_ip_map (only if this SEID still owns the entry)
    * - ARP caches for N3/N6 endpoints
    *
    * @param seid Session Endpoint Identifier
@@ -136,9 +137,11 @@ class SessionProgramManager {
    * Updates the session_by_ue_ip_map with UE IP, TEIDs, and SEID.
    * For IP PDU sessions only — ETH PDU uses StoreEthPduSessionInMap().
    *
-   * If an entry already exists for this UE IP, missing TEIDs are
-   * filled in (supports split Create/Modify where UL and DL TEIDs
-   * arrive in separate PFCP messages).
+   * If an entry already exists for this UE IP *and* the same SEID, missing
+   * TEIDs are filled in (supports split Create/Modify where UL and DL TEIDs
+   * arrive in separate PFCP messages). An entry for a different SEID is
+   * fully overwritten -- that means the previous owner was deleted and this
+   * session is reclaiming the address.
    *
    * @param xdp_program XDP program containing the maps
    * @param ue_ip UE IP address
@@ -750,6 +753,10 @@ class SessionProgramManager {
   std::map<uint64_t, std::set<uint32_t>> session_n3_arp_cache_;
   /// Track PDU session type per SEID for cleanup and map routing
   std::map<uint64_t, PduSessionType> session_pdu_type_map_;
+  /// Track the session_by_ue_ip_map key (UE IP, in map-key byte order) per
+  /// SEID, so RemoveSession() can clear it without leaving a deleted
+  /// session's IP attribution behind for a re-attaching UE (issue #12).
+  std::map<uint64_t, uint32_t> session_ue_ip_key_map_;
 };
 
 #endif  // SESSION_PROGRAM_MANAGER_H_
