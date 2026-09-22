@@ -2140,10 +2140,11 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           offending_ie.offending_ie = PFCP_IE_FAR_ID;
           break;
         }
-        // create pdr after create far
-        pfcp::create_far cr_far = {};
-        if (not req->pfcp_ies.get(far_id, cr_far)) {
-          // should be caught in lower layer
+        // A PDR may reference a FAR created earlier in this same session
+        std::shared_ptr<pfcp::pfcp_far> existing_far;
+        if (not session->get(far_id.far_id, existing_far)) {
+          // Neither a Create FAR IE in this request nor an existing FAR in
+          // the session provides far_id.
           cause.cause_value         = CAUSE_VALUE_MANDATORY_IE_MISSING;
           offending_ie.offending_ie = PFCP_IE_CREATE_FAR;
           break;
