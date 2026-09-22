@@ -213,7 +213,7 @@ class rcu_guard {
  public:
   explicit rcu_guard(rcu_domain& d) noexcept : d_(d) { d_.read_lock(); }
   ~rcu_guard() { d_.read_unlock(); }
-  rcu_guard(const rcu_guard&) = delete;
+  rcu_guard(const rcu_guard&)            = delete;
   rcu_guard& operator=(const rcu_guard&) = delete;
 
  private:

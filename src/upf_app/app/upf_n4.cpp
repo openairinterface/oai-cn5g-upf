@@ -654,7 +654,7 @@ void upf_n4::send_n4_msg(
 void upf_n4::send_heartbeat_request(std::shared_ptr<pfcp_association>& a) {
   pfcp::pfcp_heartbeat_request h = {};
   pfcp::recovery_time_stamp_t r  = {
-      .recovery_time_stamp = (uint32_t) recovery_time_stamp};
+       .recovery_time_stamp = (uint32_t) recovery_time_stamp};
   h.set(r);
 
   pfcp::node_id_t& node_id = a->node_id;
@@ -676,7 +676,7 @@ void upf_n4::send_heartbeat_response(
     const endpoint& r_endpoint, const uint64_t trxn_id) {
   pfcp::pfcp_heartbeat_response h = {};
   pfcp::recovery_time_stamp_t r   = {
-      .recovery_time_stamp = (uint32_t) recovery_time_stamp};
+        .recovery_time_stamp = (uint32_t) recovery_time_stamp};
   h.set(r);
   send_response(r_endpoint, h, trxn_id);
 }

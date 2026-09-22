@@ -109,7 +109,9 @@ void FARProgram::InitializeMaps() {
   };
   /* interfaces_maps.h -- owned */
   upf_interface_map_ = get("upf_interface_map");
-  { struct bpf_map* _m = skeleton_->maps.upf_interface_map; }
+  {
+    struct bpf_map* _m = skeleton_->maps.upf_interface_map;
+  }
   redirect_interfaces_map_ = get("redirect_interfaces_map");
   /* arp_maps.h -- owned */
   arp_table_map_ = get("arp_table_map");

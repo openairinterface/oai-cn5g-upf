@@ -32,7 +32,7 @@ struct pfcp_far {
       forwarding_parameters;  ///< Forwarding instructions (§7.5.2.4)
   struct duplicating_parameters
       duplicating_parameters;  ///< Duplication instructions (§7.5.2.4)
-  __u8 bar_id;  ///< Buffering Action Rule ID (§8.2.57); 0 = none
+  __u8 bar_id;                 ///< Buffering Action Rule ID (§8.2.57); 0 = none
   /* V17.10.0 — no current XDP implementation:
    * struct redundant_transmission_parameters redundant_transmission_parameters;
    * §8.2.109

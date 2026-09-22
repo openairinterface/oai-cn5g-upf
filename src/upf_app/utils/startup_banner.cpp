@@ -767,9 +767,9 @@ void DisplayDataPathArchitecture(const PipelineFeatureFlags& flags) {
   const bool eth = (flags.pdu_type == PduSessionType::Ethernet);
 
   // ── ANSI colour codes (256-colour palette, 1 = bold)
-  const std::string R  = "\033[0m";
-  const std::string BX = "\033[38;5;238m";  // dark grey  – borders
-  const std::string AR = "\033[38;5;60m";  // slate      – arrows / connectors
+  const std::string R    = "\033[0m";
+  const std::string BX   = "\033[38;5;238m";  // dark grey  – borders
+  const std::string AR   = "\033[38;5;60m";  // slate      – arrows / connectors
   const std::string ACT  = "\033[38;5;241m";    // muted      – action text
   const std::string MAP  = "\033[38;5;61m";     // slate-blue – map refs
   const std::string COND = "\033[38;5;239m";    // dim grey   – conditions

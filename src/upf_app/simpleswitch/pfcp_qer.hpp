@@ -27,8 +27,8 @@ class pfcp_qer {
       qer_correlation_id;                        ///< §8.2.10  — Sxb+N4
   std::pair<bool, pfcp::mbr_t> maximum_bitrate;  ///< §8.2.8   — Sxb+Sxc+N4+N4mb
   std::pair<bool, pfcp::gbr_t>
-      guaranteed_bitrate;                    ///< §8.2.9   — Sxb+Sxc+N4+N4mb
-  std::pair<bool, pfcp::qfi_t> qos_flow_id;  ///< §8.2.89  — N4+N4mb
+      guaranteed_bitrate;                       ///< §8.2.9   — Sxb+Sxc+N4+N4mb
+  std::pair<bool, pfcp::qfi_t> qos_flow_id;     ///< §8.2.89  — N4+N4mb
   std::pair<bool, pfcp::rqi_t> reflective_qos;  ///< §8.2.88  — N4 only
   std::pair<bool, pfcp::paging_policy_indicator_t>
       paging_policy_indicator;  ///< §8.2.116 — N4 only

@@ -100,8 +100,8 @@ static long broadcast_callback_fn(
   }
 
   struct gtpuhdr* gtpuh =
-      (struct
-       gtpuhdr*) ((void*) data + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct udphdr));
+      (struct gtpuhdr*) ((void*) data + sizeof(struct ethhdr) +
+                         sizeof(struct iphdr) + sizeof(struct udphdr));
   if ((void*) gtpuh + sizeof(*gtpuh) > data_end) {
     bpf_debug("eth_broadcast: invalid GTP-U header");
     return RET_SUCCESS; /* continue to next */

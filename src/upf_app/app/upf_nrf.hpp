@@ -33,7 +33,7 @@ class upf_nrf {
 
  public:
   upf_nrf();
-  upf_nrf(upf_nrf const&) = delete;
+  upf_nrf(upf_nrf const&)        = delete;
   void operator=(upf_nrf const&) = delete;
 
   /*

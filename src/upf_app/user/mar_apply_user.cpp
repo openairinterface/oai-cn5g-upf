@@ -174,7 +174,7 @@ void MARProgram::PopulateMarRulesMap(
 //------------------------------------------------------------------------------
 void MARProgram::InitMarAccessStateMap(uint64_t seid, uint32_t mar_id) {
   mar_map_key key = MakeKey(seid, mar_id);
-  struct mar_access_state state {};
+  struct mar_access_state state{};
   if (!mar_access_state_map_) return;
   mar_access_state_map_->Update(key, state, BPF_NOEXIST);
 }
