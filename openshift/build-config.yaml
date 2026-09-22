@@ -10,13 +10,9 @@ spec:
     runPolicy: "Serial"
     source:
         type: "Binary"
-        secrets:
-          - secret:
-              name: etc-pki-entitlement
-            destinationDir: etc-pki-entitlement
     strategy:
         dockerStrategy:
-            dockerfilePath: "docker/Dockerfile.upf.rhel9"
+            dockerfilePath: "docker/Dockerfile.upf.centos"
     output:
         to:
             kind: "ImageStreamTag"

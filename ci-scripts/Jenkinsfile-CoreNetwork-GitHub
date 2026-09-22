@@ -11,7 +11,6 @@ import groovy.transform.Field
 @Field def rhelResource                         // RHEL build lock
 @Field def rhelOcCredentials                    // OpenShift login creds
 @Field def server                               // OpenShift server URL
-@Field def EpelPackage                          // EPEL package URL
 @Field def cppcheckNode                         // cppcheck node
 @Field def cppcheckResource                     // cppcheck lock
 @Field def formatCheckNode                      // clang-format node
@@ -88,7 +87,6 @@ pipeline {
           rhelResource        = params.RhelBuildResource
           rhelOcCredentials   = params.RhelOcCredentials
           server              = params.openshiftServer
-          EpelPackage         = params.EpelPackageUrl
           cppcheckNode        = params.CppCheckNode
           cppcheckResource    = params.CppCheckResource
           formatCheckNode     = params.FormatCheckNode
@@ -425,7 +423,7 @@ pipeline {
           }
         }
 
-        stage('RHEL-Cluster-Image-Builder') {
+        stage('CentOS Cluster Image Builder') {
           when {
             expression { return buildRhel }
           }
@@ -442,19 +440,12 @@ pipeline {
                 }
                 sh "oc project ${Namespace}"
                 sh "oc delete istag oai-${nf}:${nf_tag} -n ${Namespace} || true"
-                sh "./ci-scripts/common/python/recreate_entitlement.py"
                 sh "oc delete -f openshift/build-config.yaml || true"
                 sh "sed -i -e 's@oai-${nf}:latest@oai-${nf}:${nf_tag}@g' openshift/build-config.yaml"
-                sh """
-    sed -i '/^[[:space:]]*dockerfilePath:/a\\
-            buildArgs:\\
-              - name: EPEL_URL\\
-                value: "${EpelPackage}"' openshift/build-config.yaml
-    """
                 sh "oc create -f openshift/build-config.yaml"
                 sh "oc start-build ${nf}-build-cfg --from-dir=./ --exclude=''"
-                sh "./ci-scripts/common/python/check_build_pod_status.py --pod-name ${nf}-build-cfg-1-build --log-file archives/${nf}_rhel_image_build.log"
-                sh "oc describe istag oai-${nf}:${nf_tag} -n ${Namespace} | grep 'Image Size:' >> archives/${nf}_rhel_image_build.log"
+                sh "./ci-scripts/common/python/check_build_pod_status.py --pod-name ${nf}-build-cfg-1-build --log-file archives/${nf}_centos_image_build.log"
+                sh "oc describe istag oai-${nf}:${nf_tag} -n ${Namespace} | grep 'Image Size:' >> archives/${nf}_centos_image_build.log"
               }
             }
           }
@@ -463,19 +454,19 @@ pipeline {
               script {
                 notifyStageStatus('SUCCESS', 'Passed')
               }
-              sh "echo 'RHEL-Cluster-Image-Builder for OAI-${NF} status is SUCCESS' >> archives/${nf}_rhel_image_build.log"
+              sh "echo 'CentOS Cluster Image Builder for OAI-${NF} status is SUCCESS' >> archives/${nf}_centos_image_build.log"
             }
             failure {
               script {
                 recordFailure(nfReportLink())
               }
-              sh "echo 'RHEL-Cluster-Image-Builder for OAI-${NF} status is FAILURE' >> archives/${nf}_rhel_image_build.log"
+              sh "echo 'CentOS Cluster Image Builder for OAI-${NF} status is FAILURE' >> archives/${nf}_centos_image_build.log"
             }
             cleanup {
               script {
                 sh "oc delete bc ${nf}-build-cfg -n ${Namespace} || true"
                 sh "oc logout || true"
-                stash allowEmpty: true, includes: "archives/${nf}_rhel_image_build.log", name: 'rhelBuildLog'
+                stash allowEmpty: true, includes: "archives/${nf}_centos_image_build.log", name: 'centosBuildLog'
               }
             }
           }
@@ -518,13 +509,13 @@ pipeline {
         }
       }
       post {
-        // The RHEL image builds on its own agent. Restore its stashed log here so
+        // The CentOS image builds on its own agent. Restore its stashed log here so
         // the final report/zip step can include it; it exists only if that ran.
         always {
           script {
             if (buildRhel) {
-              try { unstash 'rhelBuildLog' }
-              catch (e) { echo "No 'rhelBuildLog' stash to restore" }
+              try { unstash 'centosBuildLog' }
+              catch (e) { echo "No 'centosBuildLog' stash to restore" }
             }
           }
         }

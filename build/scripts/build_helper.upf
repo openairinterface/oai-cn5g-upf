@@ -4,7 +4,7 @@
 # Install the build and runtime dependencies of the OAI UPF: distribution
 # packages, the eBPF toolchain (libbpf, bpftool, netlink) and the libraries
 # that are built from source.
-# Ubuntu 24.04 and the RHEL/Rocky 9 family are the supported distributions.
+# Ubuntu 24.04 and CentOS Stream 10 are the supported distributions.
 # -------------------------------------------------------------------------------
 
 GREEN='\033[0;32m'   # ANSI color code for green
@@ -102,7 +102,8 @@ install_libbpf_from_git() {
         libpfm-devel \
         elfutils-devel \
         libpcap \
-        zlib-devel \
+        libcap-devel \
+        zlib-ng-compat-devel \
         llvm \
         python3"
     fi
@@ -242,7 +243,7 @@ check_install_upf_deps() {
     # build-essential pulls in gcc, g++ and make
     PACKAGE_LIST="$PACKAGE_LIST build-essential"
   elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
-    PACKAGE_LIST="$PACKAGE_LIST gcc-c++ gcc-toolset-12 make"
+    PACKAGE_LIST="$PACKAGE_LIST gcc-c++ make"
   else
     echo_fatal "$OS_DISTRO is not a supported distribution."
   fi
@@ -281,8 +282,7 @@ check_install_upf_deps() {
       nettle-devel \
       libcurl-devel \
       glibc-devel \
-      glibc-devel.i686 \
-      pkgconfig \
+      pkgconf-pkg-config \
       libasan"
   else
     echo_fatal "$OS_DISTRO is not a supported distribution."
@@ -309,16 +309,6 @@ check_install_upf_deps() {
   for lib in fmt spdlog nlohmann cpr libyaml_cpp; do
     install_${lib}_from_git $1 $2 || return $?
   done
-
-  if [[ $IS_CONTAINER -eq 1 ]] && [[ "$OS_BASEDISTRO" == "fedora" ]]; then
-    echo "Changing gcc/g++ version to 12"
-    mv /usr/bin/g++ /usr/bin/g++-11
-    mv /usr/bin/gcc /usr/bin/gcc-11
-    mv /usr/bin/c++ /usr/bin/c++-11
-    update-alternatives --install /usr/bin/gcc gcc /opt/rh/gcc-toolset-12/root/bin/gcc 20
-    update-alternatives --install /usr/bin/g++ g++ /opt/rh/gcc-toolset-12/root/bin/g++ 20
-    update-alternatives --install /usr/bin/c++ c++ /opt/rh/gcc-toolset-12/root/bin/c++ 20
-  fi
 
   $SUDO ldconfig
 
@@ -359,13 +349,11 @@ check_install_upf_min_deps() {
 
   # Networking. iproute2 carries tc, which both datapaths use to install the
   # QER rate limiters.
-  PACKAGE_LIST="\
-    ethtool \
-    iptables"
+  PACKAGE_LIST="ethtool"
   if [[ $OS_DISTRO == "ubuntu" ]]; then
-    PACKAGE_LIST="$PACKAGE_LIST iproute2 vlan"
+    PACKAGE_LIST="$PACKAGE_LIST iproute2 iptables vlan"
   elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
-    PACKAGE_LIST="$PACKAGE_LIST iproute vconfig"
+    PACKAGE_LIST="$PACKAGE_LIST iproute iptables-nft"
   else
     echo_fatal "$OS_DISTRO is not a supported distribution."
   fi
