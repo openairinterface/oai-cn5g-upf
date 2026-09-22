@@ -64,8 +64,9 @@ struct PfcpProgramInfo {
 
 // PduSessionType is defined in include/upf_pipeline_config.h
 #include "upf_pipeline_config.h"
+#include "IDatapathBackend.h"
 
-class SessionProgramManager {
+class SessionProgramManager : public IDatapathBackend {
  public:
   /**
    * @brief Destructor - cleans up all programs and sessions
@@ -266,7 +267,7 @@ class SessionProgramManager {
    *         IEs are missing
    * @see 3GPP TS 29.244 Section 5.2 - PFCP Session procedures
    */
-  void CreatePipeline(std::shared_ptr<pfcp::pfcp_session> session);
+  void CreatePipeline(std::shared_ptr<pfcp::pfcp_session> session) override;
 
   /**
    * @brief Modify existing BPF pipeline for a session
@@ -275,23 +276,20 @@ class SessionProgramManager {
    * Recomputes rules_enabled flags and updates all relevant maps
    * including URR/BAR/MAR dedicated config maps.
    *
-   * @param session Updated session object
-   * @param teid_ul DEPRECATED - ignored (TEIDs extracted from PDRs/FARs)
-   * @param teid_dl DEPRECATED - ignored (TEIDs extracted from PDRs/FARs)
+   * @param session Updated session object (TEIDs are extracted from its
+   *        PDRs/FARs)
    *
    * @throws std::runtime_error if PDR count exceeds limits or mandatory
    *         IEs are missing
    * @see 3GPP TS 29.244 Section 7.5.4 - PFCP Session Modification
    */
-  void ModifyPipeline(
-      std::shared_ptr<pfcp::pfcp_session> session, uint32_t teid_ul = 0,
-      uint32_t teid_dl = 0);
+  void ModifyPipeline(std::shared_ptr<pfcp::pfcp_session> session) override;
 
   /**
    * @brief Remove BPF pipeline for a session
    * @param seid Session Endpoint Identifier
    */
-  void RemovePipeline(uint64_t seid);
+  void RemovePipeline(uint64_t seid) override;
 
   // ==========================================================================
   // PFCP IE to BPF Conversion

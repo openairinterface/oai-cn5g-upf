@@ -3,11 +3,10 @@
  */
 
 #include "SessionManager.h"
-#include "SessionProgramManager.h"
-#include <upf_xdp_user.h>
+#include "IDatapathBackend.h"
+#include <arpa/inet.h>
 #include <algorithm>
 #include <inttypes.h>
-#include <wrappers/BPFMaps.h>
 #include "logger.hpp"
 #include "upf_config.hpp"
 #include "pfcp_session.hpp"
@@ -33,11 +32,11 @@ SessionManager::SessionManager() {}
 
 //------------------------------------------------------------------------------
 SessionManager::SessionManager(
-    std::shared_ptr<SessionProgramManager> session_program_manager)
-    : session_program_manager_(session_program_manager) {
-  if (!session_program_manager) {
+    std::shared_ptr<IDatapathBackend> datapath_backend)
+    : datapath_backend_(datapath_backend) {
+  if (!datapath_backend) {
     throw std::invalid_argument(
-        "Session Manager: program_manager cannot be null");
+        "Session Manager: datapath_backend cannot be null");
   }
 
   Logger::upf_app().debug("Session Manager initialized");
@@ -151,7 +150,7 @@ SessionOperationResult SessionManager::CreateSession(
     }
 
     // Create BPF pipeline
-    session_program_manager_->CreatePipeline(session);
+    datapath_backend_->CreatePipeline(session);
 
     Logger::upf_app().info(
         "[N4] Create Session: seid 0x%lx - eBPF data-path pipeline created "
@@ -246,7 +245,7 @@ SessionOperationResult SessionManager::UpdateSession(
     }
 
     // Modify BPF pipeline (pass the entire session, not individual TEIDs)
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
 
     Logger::upf_app().info(
         "[N4] Update Session: seid " SEID_FMT
@@ -320,7 +319,7 @@ SessionOperationResult SessionManager::DeleteSession(uint64_t seid) {
         "[eBPF] Remove Pipeline - Cleaning up pipeline for session " SEID_FMT,
         seid);
 
-    session_program_manager_->RemovePipeline(seid);
+    datapath_backend_->RemovePipeline(seid);
 
     Logger::upf_app().info(
         "[N4] Delete Session: seid " SEID_FMT
@@ -389,8 +388,8 @@ SessionOperationResult SessionManager::EstablishSession(
     itti_n4_session_modification_request* mod_req,
     itti_n4_session_deletion_request* del_req) {
   // Logger::upf_app().error(
-  //     "EstablishSession START: this=%p, session_program_manager_=%p,
-  //     xdp_program_=%p", (void*) this, (void*) session_program_manager_.get(),
+  //     "EstablishSession START: this=%p, datapath_backend_=%p,
+  //     xdp_program_=%p", (void*) this, (void*) datapath_backend_.get(),
   //     (void*) xdp_program_.get());
   uint64_t seid = session->get_up_seid();
   Logger::upf_app().debug("Establish Session seid " SEID_FMT, seid);
@@ -581,7 +580,7 @@ bool SessionManager::AddPdr(
     SortPdrs(session->pdrs_downlink);
 
     // Update BPF maps
-    session_program_manager_->CreatePipeline(session);
+    datapath_backend_->CreatePipeline(session);
 
     Logger::upf_app().info(
         "Added PDR %u to session " SEID_FMT, pdr->pdr_id.rule_id, seid);
@@ -634,7 +633,7 @@ bool SessionManager::UpdatePdr(
     CategorizePdrs(session);
     SortPdrs(session->pdrs_uplink);
     SortPdrs(session->pdrs_downlink);
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
 
     Logger::upf_app().info("Updated PDR %u in session " SEID_FMT, pdr_id, seid);
     return true;
@@ -681,7 +680,7 @@ bool SessionManager::RemovePdrUnlocked(uint64_t seid, uint16_t pdr_id) {
     // Update BPF maps
     SortPdrs(session->pdrs_uplink);
     SortPdrs(session->pdrs_downlink);
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
 
     Logger::upf_app().info(
         "Removed PDR %u from session " SEID_FMT, pdr_id, seid);
@@ -719,7 +718,7 @@ bool SessionManager::AddFar(
     session->fars.push_back(far);
 
     // Update BPF maps
-    session_program_manager_->CreatePipeline(session);
+    datapath_backend_->CreatePipeline(session);
 
     Logger::upf_app().info(
         "Added FAR %u to session " SEID_FMT, far->far_id.far_id, seid);
@@ -769,7 +768,7 @@ bool SessionManager::UpdateFar(
     }
 
     // Update BPF maps
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
 
     Logger::upf_app().info("Updated FAR %u in session " SEID_FMT, far_id, seid);
     return true;
@@ -807,7 +806,7 @@ bool SessionManager::RemoveFarUnlocked(uint64_t seid, uint32_t far_id) {
         session->fars.end());
 
     // Update BPF maps
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
 
     Logger::upf_app().info(
         "Removed FAR %u from session " SEID_FMT, far_id, seid);
@@ -848,7 +847,7 @@ bool SessionManager::AddQer(
     CategorizePdrs(session);
 
     // Update BPF maps
-    session_program_manager_->CreatePipeline(session);
+    datapath_backend_->CreatePipeline(session);
 
     Logger::upf_app().info(
         "Added QER %u to session " SEID_FMT, qer->qer_id.second.qer_id, seid);
@@ -899,7 +898,7 @@ bool SessionManager::UpdateQer(
 
     // Re-categorize and update BPF maps
     CategorizePdrs(session);
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
 
     Logger::upf_app().info("Updated QER %u in session " SEID_FMT, qer_id, seid);
     return true;
@@ -945,7 +944,7 @@ bool SessionManager::RemoveQerUnlocked(uint64_t seid, uint32_t qer_id) {
     remove_from(session->qers_downlink);
 
     // Update BPF maps
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
 
     Logger::upf_app().info(
         "Removed QER %u from session " SEID_FMT, qer_id, seid);
@@ -1136,9 +1135,9 @@ void SessionManager::CategorizePdrs(
         }
         break;
       }
-      case INTERFACE_VALUE_SGI_LAN_N6_LAN:
-      case INTERFACE_VALUE_CP_FUNCTION:
-      case INTERFACE_VALUE_LI_FUNCTION:
+      case pfcp::INTERFACE_VALUE_SGI_LAN_N6_LAN:
+      case pfcp::INTERFACE_VALUE_CP_FUNCTION:
+      case pfcp::INTERFACE_VALUE_LI_FUNCTION:
         Logger::upf_n4().info(
             "Unhandled source interface for PDR: " +
             std::to_string(pdr->pdr_id.rule_id));
@@ -1415,7 +1414,7 @@ size_t SessionManager::HandlePdrUpdates(
     CategorizePdrs(session);
     SortPdrs(session->pdrs_uplink);
     SortPdrs(session->pdrs_downlink);
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
   }
 
   return updated_count;
@@ -1585,7 +1584,7 @@ size_t SessionManager::HandleFarUpdates(
 
   // Update BPF maps
   if (updated_count > 0) {
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
   }
 
   return updated_count;
@@ -1648,7 +1647,7 @@ size_t SessionManager::HandleQerUpdates(
   // Re-categorize and update BPF maps
   if (updated_count > 0) {
     CategorizePdrs(session);
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
   }
 
   return updated_count;
@@ -1676,7 +1675,7 @@ bool SessionManager::AddUrr(
     }
 
     session->urrs.push_back(urr);
-    session_program_manager_->CreatePipeline(session);
+    datapath_backend_->CreatePipeline(session);
 
     Logger::upf_app().info(
         "Added URR %u to session " SEID_FMT, urr->urr_id.second.urr_id, seid);
@@ -1725,7 +1724,7 @@ bool SessionManager::UpdateUrr(
 
     // ModifyPipeline repopulates urr_config_map (BPF_ANY) while preserving
     // urr_volume_counters_map counters (BPF_NOEXIST in PopulateUrrConfigMap)
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
 
     Logger::upf_app().info("Updated URR %u in session " SEID_FMT, urr_id, seid);
     return true;
@@ -1763,7 +1762,7 @@ bool SessionManager::RemoveUrrUnlocked(uint64_t seid, uint32_t urr_id) {
             }),
         session->urrs.end());
 
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
 
     Logger::upf_app().info(
         "Removed URR %u from session " SEID_FMT, urr_id, seid);
@@ -1797,7 +1796,7 @@ bool SessionManager::AddBar(
     }
 
     session->bars.push_back(bar);
-    session_program_manager_->CreatePipeline(session);
+    datapath_backend_->CreatePipeline(session);
 
     Logger::upf_app().info(
         "Added BAR %u to session " SEID_FMT, bar->bar_id.second.bar_id, seid);
@@ -1846,7 +1845,7 @@ bool SessionManager::UpdateBar(
 
     // ModifyPipeline repopulates bar_config_map while preserving
     // bar_state_map (DDN tracking state, BPF_NOEXIST in PopulateBarConfigMap)
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
 
     Logger::upf_app().info("Updated BAR %u in session " SEID_FMT, bar_id, seid);
     return true;
@@ -1884,7 +1883,7 @@ bool SessionManager::RemoveBarUnlocked(uint64_t seid, uint32_t bar_id) {
             }),
         session->bars.end());
 
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
 
     Logger::upf_app().info(
         "Removed BAR %u from session " SEID_FMT, bar_id, seid);
@@ -1919,7 +1918,7 @@ bool SessionManager::AddMar(
     }
 
     session->mars.push_back(mar);
-    session_program_manager_->CreatePipeline(session);
+    datapath_backend_->CreatePipeline(session);
 
     Logger::upf_app().info(
         "Added MAR %u to session " SEID_FMT, mar->mar_id.second.mar_id, seid);
@@ -1967,7 +1966,7 @@ bool SessionManager::UpdateMar(
     }
 
     // ModifyPipeline repopulates mar_rules_map in BPF
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
 
     Logger::upf_app().info("Updated MAR %u in session " SEID_FMT, mar_id, seid);
     return true;
@@ -1998,7 +1997,7 @@ bool SessionManager::RemoveMar(uint64_t seid, uint32_t mar_id) {
             }),
         session->mars.end());
 
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
 
     Logger::upf_app().info(
         "Removed MAR %u from session " SEID_FMT, mar_id, seid);
@@ -2152,7 +2151,7 @@ size_t SessionManager::HandleUrrUpdates(
 
   // Update BPF urr_config_map (volume counters preserved via BPF_NOEXIST)
   if (updated_count > 0) {
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
   }
 
   return updated_count;
@@ -2215,7 +2214,7 @@ size_t SessionManager::HandleBarUpdates(
 
   // Update BPF bar_config_map (bar_state_map preserved via BPF_NOEXIST)
   if (updated_count > 0) {
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
   }
 
   return updated_count;
@@ -2339,7 +2338,7 @@ size_t SessionManager::HandleMarUpdates(
 
   // Update BPF mar_rules_map
   if (updated_count > 0) {
-    session_program_manager_->ModifyPipeline(session);
+    datapath_backend_->ModifyPipeline(session);
   }
 
   return updated_count;

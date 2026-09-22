@@ -24,6 +24,7 @@
 #include "itti_msg_n4.hpp"
 #include "msg_pfcp.hpp"
 #include "pfcp_session.hpp"
+#include "session/ISessionRegistry.h"
 #include "thread_sched.hpp"
 #include "uint_generator.hpp"
 
@@ -54,7 +55,7 @@ typedef struct iovec_q_item_s {
  *  N4 task thread.  up_seid2pfcp_sessions and the teid/ue-ip maps use
  *  folly::AtomicHashMap which is lock-free for concurrent reads.
  */
-class pfcp_switch {
+class pfcp_switch : public ISessionRegistry {
  private:
   // Very unoptimized
 #define PFCP_SWITCH_RECV_BUFFER_SIZE 2048
@@ -356,6 +357,31 @@ class pfcp_switch {
   //------------------------------------------------------------------------------
   /** @brief Render all active sessions as formatted ASCII tables. */
   std::string to_string() const;
+
+  // ---- ISessionRegistry (simple-switch / eBPF flavours) --------------------
+  // Thin adaptors over the lookup tables above, so pfcp::pfcp_session does not
+  // depend on this class.
+
+  pfcp::fteid_t AllocateN3Fteid() override { return generate_fteid_n3(); }
+
+  bool RegisterUplinkPdr(
+      std::shared_ptr<pfcp::pfcp_pdr>& pdr, const pfcp::fteid_t& fteid,
+      uint8_t& cause) override {
+    return create_packet_in_access(pdr, fteid, cause);
+  }
+
+  void RegisterDownlinkPdr(
+      uint32_t ue_ipv4_hbo, std::shared_ptr<pfcp::pfcp_pdr>& pdr) override {
+    add_pfcp_dl_pdr_by_ue_ip(ue_ipv4_hbo, pdr);
+  }
+
+  void UnregisterUplinkPdr(uint32_t teid) override {
+    remove_pfcp_ul_pdrs_by_up_teid(teid);
+  }
+
+  void UnregisterDownlinkPdr(uint32_t ue_ipv4_hbo) override {
+    remove_pfcp_dl_pdrs_by_ue_ip(ue_ipv4_hbo);
+  }
 };
 }  // namespace app
 }  // namespace upf

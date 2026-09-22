@@ -19,6 +19,8 @@
 #include <map>
 #include <set>
 
+#include "session/IUpfDatapath.h"
+
 namespace oai {
 namespace upf {
 namespace app {
@@ -28,7 +30,14 @@ class upf_app {
   std::thread::id thread_id;
   std::thread thread;
 
+  /// The datapath flavour selected by configuration: DPDK, or the legacy
+  /// pfcp_switch adaptor used by simple-switch and eBPF.
+  std::unique_ptr<IUpfDatapath> datapath_;
+
  public:
+  /// The active datapath flavour. Every N4 session operation goes through it.
+  IUpfDatapath& datapath() { return *datapath_; }
+
   explicit upf_app(const std::string& config_file);
   ~upf_app();
   upf_app(upf_app const&) = delete;

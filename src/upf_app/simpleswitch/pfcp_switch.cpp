@@ -751,7 +751,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
     bool exist            = get_pfcp_session_by_cp_fseid(fseid, s);
     pfcp_session* session = nullptr;
     if (not exist) {
-      session = new pfcp_session(fseid, generate_seid());
+      session = new pfcp_session(fseid, generate_seid(), this);
 
       // ---- Create FARs first (PDR create_far look-up requires them) --------
       for (auto it : req->pfcp_ies.create_fars) {

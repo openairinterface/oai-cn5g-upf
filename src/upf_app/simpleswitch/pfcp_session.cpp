@@ -1721,6 +1721,15 @@ bool pfcp_session::create(
     offending_ie      = PFCP_IE_PRECEDENCE;
     return false;
   }
+  if (registry_ == nullptr) {
+    // Detached snapshot: it carries rules for a datapath backend to read and
+    // must never install lookup entries.
+    cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
+    Logger::upf_n4().error(
+        "pfcp_session::create(pdr) called on a session without a datapath "
+        "registry");
+    return false;
+  }
   const pdi& pdi = cr_pdr.pdi.second;
   if (not pdi.source_interface.first) {
     // should be caught in lower layer
@@ -1757,7 +1766,7 @@ bool pfcp_session::create(
     allocated_fteid                  = {};
     if (local_fteid.ch) {
       // TODO if (local_fteid.choose_id) {
-      allocated_fteid = pfcp_switch_inst->generate_fteid_n3();
+      allocated_fteid = registry_->AllocateN3Fteid();
     } else {
       // cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
       allocated_fteid = pdi.local_fteid.second;
@@ -1785,7 +1794,7 @@ bool pfcp_session::create(
     }
 
     std::shared_ptr<pfcp_pdr> spdr = std::shared_ptr<pfcp_pdr>(pdr);
-    if (pfcp_switch_inst->create_packet_in_access(
+    if (registry_->RegisterUplinkPdr(
             spdr, allocated_fteid, cause.cause_value)) {
       pdr->set(get_up_seid());
       add(spdr);
@@ -1803,7 +1812,7 @@ bool pfcp_session::create(
     std::shared_ptr<pfcp_pdr> spdr = std::shared_ptr<pfcp_pdr>(pdr);
     pdr->set(get_up_seid());
     if ((pdi.ue_ip_address.first) && (pdi.ue_ip_address.second.v4)) {
-      pfcp_switch_inst->add_pfcp_dl_pdr_by_ue_ip(
+      registry_->RegisterDownlinkPdr(
           be32toh(pdi.ue_ip_address.second.ipv4_address.s_addr), spdr);
     } else if (pdi.ethernet_pdu_session_information.first) {
       Logger::upf_n4().info(
@@ -1962,17 +1971,18 @@ bool pfcp_session::create(
 // =============================================================================
 
 //------------------------------------------------------------------------------
-// cleanup — remove all tun/teid mappings from pfcp_switch lookup tables then
+// cleanup — drop the registry lookup entries of this session, then
 // clear all rule vectors.
 
 //------------------------------------------------------------------------------
 void pfcp_session::cleanup() {
-  for (auto it = pdrs.begin(); it != pdrs.end(); ++it) {
+  // A detached copy owns no lookup entries — only drop its rule vectors.
+  for (auto it = pdrs.begin(); registry_ != nullptr && it != pdrs.end(); ++it) {
     if (((*it)->pdi.first) && ((*it)->pdi.second.source_interface.first)) {
       if ((*it)->pdi.second.source_interface.second.interface_value ==
           INTERFACE_VALUE_ACCESS) {
         if ((*it)->pdi.second.local_fteid.first) {
-          pfcp_switch_inst->remove_pfcp_ul_pdrs_by_up_teid(
+          registry_->UnregisterUplinkPdr(
               (*it)->pdi.second.local_fteid.second.teid);
         }
       } else if (
@@ -1980,7 +1990,7 @@ void pfcp_session::cleanup() {
           INTERFACE_VALUE_CORE) {
         if (((*it)->pdi.second.ue_ip_address.first) &&
             ((*it)->pdi.second.ue_ip_address.second.v4)) {
-          pfcp_switch_inst->remove_pfcp_dl_pdrs_by_ue_ip(be32toh(
+          registry_->UnregisterDownlinkPdr(be32toh(
               (*it)->pdi.second.ue_ip_address.second.ipv4_address.s_addr));
         }
       }

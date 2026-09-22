@@ -23,9 +23,7 @@ class pfcp_bar;
 class pfcp_mar;
 }  // namespace pfcp
 
-class BpfMap;
-class SessionProgramManager;
-class UPF_XDPProgram;
+class IDatapathBackend;
 struct itti_n4_session_establishment_request;
 struct itti_n4_session_modification_request;
 struct itti_n4_session_deletion_request;
@@ -80,8 +78,7 @@ struct SessionOperationResult {
 class SessionManager {
  public:
   SessionManager();
-  explicit SessionManager(
-      std::shared_ptr<SessionProgramManager> session_program_manager);
+  explicit SessionManager(std::shared_ptr<IDatapathBackend> datapath_backend);
 
   /**
    * @brief Destructor - cleans up all sessions
@@ -776,7 +773,7 @@ class SessionManager {
   // ==========================================================================
 
   /// Session program manager for BPF program lifecycle
-  std::shared_ptr<SessionProgramManager> session_program_manager_;
+  std::shared_ptr<IDatapathBackend> datapath_backend_;
 
   /// XDP program interface
   // std::shared_ptr<UPF_XDPProgram> xdp_program_;

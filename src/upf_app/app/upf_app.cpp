@@ -9,6 +9,10 @@
 #include "upf_app.hpp"
 #include "upf_config.hpp"
 #include "simple_switch.hpp"
+#include "LegacySwitchDatapath.hpp"
+#if WITH_DPDK
+#include "DpdkDatapath.h"
+#endif
 #include "upf_n4.hpp"
 #include "upf_nrf.hpp"
 
@@ -126,19 +130,36 @@ upf_app::upf_app(const std::string& config_file) {
     Logger::upf_app().error("Cannot create UPF_N4: %s", e.what());
     throw;
   }
-  if (not upf_cfg.enable_bpf_datapath) {
+  // Build the configured datapath flavour. Only the legacy flavours own a
+  // pfcp_switch; the DPDK flavour owns its own session handling.
+#if WITH_DPDK
+  if (upf_cfg.enable_dpdk_datapath) {
     try {
-      upf_n3_inst = new upf_n3();
+      auto dpdk_datapath = std::make_unique<DpdkDatapath>();
+      dpdk_datapath->Setup();
+      datapath_ = std::move(dpdk_datapath);
     } catch (std::exception& e) {
-      Logger::upf_app().error("Cannot create UPF_N3: %s", e.what());
+      Logger::upf_app().error("Cannot create DPDK datapath: %s", e.what());
       throw;
     }
   }
-  try {
-    pfcp_switch_inst = new pfcp_switch();
-  } catch (std::exception& e) {
-    Logger::upf_app().error("Cannot create PFCP_SWITCH: %s", e.what());
-    throw;
+#endif
+  if (!datapath_) {
+    if (not upf_cfg.enable_bpf_datapath) {
+      try {
+        upf_n3_inst = new upf_n3();
+      } catch (std::exception& e) {
+        Logger::upf_app().error("Cannot create UPF_N3: %s", e.what());
+        throw;
+      }
+    }
+    try {
+      pfcp_switch_inst = new pfcp_switch();
+      datapath_        = std::make_unique<LegacySwitchDatapath>(pfcp_switch_inst);
+    } catch (std::exception& e) {
+      Logger::upf_app().error("Cannot create PFCP_SWITCH: %s", e.what());
+      throw;
+    }
   }
   try {
     if (upf_cfg.enable_5g_features and upf_cfg.register_nrf)
@@ -161,8 +182,11 @@ upf_app::~upf_app() {
   if (upf_nrf_inst) {
     delete upf_nrf_inst;
   }
+  // Release the flavour before the pfcp_switch the legacy adaptor points at.
+  datapath_.reset();
   if (pfcp_switch_inst) {
     delete pfcp_switch_inst;
+    pfcp_switch_inst = nullptr;
   }
 }
 
@@ -219,7 +243,7 @@ void upf_app::handle_itti_msg(
 
   itti_n4_session_establishment_response* n4_resp =
       new itti_n4_session_establishment_response(TASK_UPF_APP, TASK_UPF_N4);
-  pfcp_switch_inst->handle_pfcp_session_establishment_request(m, n4_resp);
+  datapath().HandleSessionEstablishment(m, n4_resp);
 
   pfcp::node_id_t node_id = {};
   upf_cfg.get_pfcp_node_id(node_id);
@@ -264,7 +288,7 @@ void upf_app::handle_itti_msg(
 
   itti_n4_session_modification_response* n4_resp =
       new itti_n4_session_modification_response(TASK_UPF_APP, TASK_UPF_N4);
-  pfcp_switch_inst->handle_pfcp_session_modification_request(m, n4_resp);
+  datapath().HandleSessionModification(m, n4_resp);
 
   n4_resp->trxn_id    = m->trxn_id;
   n4_resp->r_endpoint = m->r_endpoint;
@@ -302,7 +326,7 @@ void upf_app::handle_itti_msg(
   //     "──────┘");
   itti_n4_session_deletion_response* n4_resp =
       new itti_n4_session_deletion_response(TASK_UPF_APP, TASK_UPF_N4);
-  pfcp_switch_inst->handle_pfcp_session_deletion_request(m, n4_resp);
+  datapath().HandleSessionDeletion(m, n4_resp);
 
   n4_resp->trxn_id    = m->trxn_id;
   n4_resp->r_endpoint = m->r_endpoint;

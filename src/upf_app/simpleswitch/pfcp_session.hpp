@@ -6,6 +6,7 @@
 #define FILE_PFCP_SESSION_HPP_SEEN
 
 #include "3gpp_29.244.h"
+#include "session/ISessionRegistry.h"
 #include "msg_pfcp.hpp"  // must precede FramedRouting.hpp (pfcp::framed_route_s)
 #include "framed_routing/FramedRouting.hpp"
 #include "pfcp_bar.hpp"
@@ -47,6 +48,11 @@ class pfcp_session {
   void set(const pfcp::fteid_t& fteid);
 
   //------------------------------------------------------------------------------
+  /// Datapath flavour this session registers its PDRs with. Null on a
+  /// detached copy (a snapshot passed to a datapath backend): such a copy
+  /// registers nothing and unregisters nothing when destroyed.
+  ISessionRegistry* registry_ = nullptr;
+
   std::mutex pdn_type_mutex;  ///< Guards pdn_type read/write
   /** @brief Set the PDN type for this session (§8.2.79, thread-safe). */
   void set(pfcp::pdn_type_value_e type);
@@ -105,14 +111,28 @@ class pfcp_session {
   }
 
   //------------------------------------------------------------------------------
-  /** @brief Construct with CP F-SEID and UP SEID. */
-  pfcp_session(pfcp::fseid_t& cp, uint64_t up_seid) : pfcp_session() {
-    cp_fseid = cp;
-    seid     = up_seid;
+  /**
+   * @brief Construct with CP F-SEID, UP SEID and the owning datapath.
+   * @param registry Datapath the session registers its PDRs with. Passing
+   *        nullptr yields a session that keeps its rules but installs no
+   *        lookup entries (Create PDR is then rejected).
+   */
+  pfcp_session(
+      pfcp::fseid_t& cp, uint64_t up_seid, ISessionRegistry* registry)
+      : pfcp_session() {
+    cp_fseid  = cp;
+    seid      = up_seid;
+    registry_ = registry;
   }
 
   //------------------------------------------------------------------------------
-  /** @brief Copy constructor (deep-copies all rule vectors). */
+  /**
+   * @brief Copy constructor — produces a DETACHED snapshot.
+   *
+   * The copy deliberately carries no registry: it is handed to a datapath
+   * backend to be read, and destroying it must not touch the lookup entries
+   * that still belong to the live session.
+   */
   pfcp_session(const pfcp_session& c)
       : cp_fseid(c.cp_fseid),
         seid(c.seid),
@@ -133,7 +153,7 @@ class pfcp_session {
   };
 
   //------------------------------------------------------------------------------
-  /** @brief Remove all rules and release tun/teid mappings via pfcp_switch. */
+  /** @brief Remove all rules and release the registry lookup entries. */
   void cleanup();
 
   //------------------------------------------------------------------------------

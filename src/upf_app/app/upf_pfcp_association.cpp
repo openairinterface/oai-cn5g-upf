@@ -4,7 +4,7 @@
 
 #include "common_defs.h"
 #include "logger.hpp"
-#include "pfcp_switch.hpp"
+#include "upf_app.hpp"
 #include "upf_pfcp_association.hpp"
 #include "upf_n4.hpp"
 
@@ -13,7 +13,7 @@ using namespace oai::upf::app;
 using namespace std;
 
 extern itti_mw* itti_inst;
-extern pfcp_switch* pfcp_switch_inst;
+extern upf_app* upf_app_inst;
 extern upf_n4* upf_n4_inst;
 
 //------------------------------------------------------------------------------
@@ -41,7 +41,7 @@ void pfcp_association::del_sessions() {
   std::unique_lock<std::mutex> l(m_sessions);
   for (std::set<pfcp::fseid_t>::iterator it = sessions.begin();
        it != sessions.end();) {
-    pfcp_switch_inst->remove_pfcp_session(*it);
+    upf_app_inst->datapath().RemoveSession(*it);
     sessions.erase(it++);
   }
 }
