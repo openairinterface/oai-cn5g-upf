@@ -24,6 +24,49 @@ constexpr auto UPF_CONFIG_DATAPATH_CONFIGURATION_LABEL =
 //           Support Features
 //------------------------------------------------------
 constexpr auto UPF_ENABLE_BPF     = "enable_bpf_datapath";
+constexpr auto UPF_ENABLE_DPDK    = "enable_dpdk_datapath";
+
+//------------------------------------------------------
+//           DPDK datapath
+//------------------------------------------------------
+constexpr auto UPF_CONFIG_DPDK       = "dpdk";
+constexpr auto UPF_DPDK_LCORES       = "lcores";
+constexpr auto UPF_DPDK_MAIN_LCORE   = "main_lcore";
+constexpr auto UPF_DPDK_MEM_CHANNELS = "memory_channels";
+constexpr auto UPF_DPDK_SOCKET_MEM   = "socket_mem";
+constexpr auto UPF_DPDK_FILE_PREFIX  = "file_prefix";
+constexpr auto UPF_DPDK_EXTRA_EAL    = "extra_eal_args";
+constexpr auto UPF_DPDK_NUM_MBUFS    = "num_mbufs";
+constexpr auto UPF_DPDK_MBUF_CACHE   = "mbuf_cache_size";
+constexpr auto UPF_DPDK_RX_DESC      = "rx_descriptors";
+constexpr auto UPF_DPDK_TX_DESC      = "tx_descriptors";
+constexpr auto UPF_DPDK_PROMISCUOUS  = "promiscuous";
+constexpr auto UPF_DPDK_N3_PORT      = "n3";
+constexpr auto UPF_DPDK_N6_PORT      = "n6";
+constexpr auto UPF_DPDK_PCI_ADDRESS  = "pci_address";
+constexpr auto UPF_DPDK_RX_QUEUES    = "rx_queues";
+constexpr auto UPF_DPDK_TX_QUEUES    = "tx_queues";
+constexpr auto UPF_DPDK_NEXT_HOP_MAC = "next_hop_mac";
+
+constexpr auto UPF_DPDK_LABEL           = "DPDK Datapath";
+constexpr auto UPF_DPDK_LCORES_LABEL    = "EAL lcores";
+constexpr auto UPF_DPDK_MAIN_LCORE_LBL  = "EAL main lcore";
+constexpr auto UPF_DPDK_MEM_CHAN_LABEL  = "Memory channels";
+constexpr auto UPF_DPDK_MBUFS_LABEL     = "Mbufs per port";
+constexpr auto UPF_DPDK_MODE_LABEL      = "Port mode";
+constexpr auto UPF_DPDK_PCI_LABEL       = "PCI address";
+constexpr auto UPF_DPDK_RX_QUEUES_LABEL = "RX queues";
+constexpr auto UPF_DPDK_TX_QUEUES_LABEL = "TX queues";
+constexpr auto UPF_DPDK_LCORE_LIST_LBL  = "Poll lcores";
+constexpr auto UPF_DPDK_NEXT_HOP_LABEL  = "Next-hop MAC";
+
+constexpr uint32_t UPF_DPDK_DEFAULT_MAIN_LCORE   = 0;
+constexpr uint32_t UPF_DPDK_DEFAULT_MEM_CHANNELS = 4;
+constexpr uint32_t UPF_DPDK_DEFAULT_NUM_MBUFS    = 16384;
+constexpr uint32_t UPF_DPDK_DEFAULT_MBUF_CACHE   = 256;
+constexpr uint32_t UPF_DPDK_DEFAULT_RX_DESC      = 1024;
+constexpr uint32_t UPF_DPDK_DEFAULT_TX_DESC      = 1024;
+constexpr uint32_t UPF_DPDK_DEFAULT_QUEUES       = 1;
 constexpr auto UPF_ENABLE_QOS     = "enable_qos";
 constexpr auto UPF_ENABLE_URR     = "enable_urr";
 constexpr auto UPF_ENABLE_BAR     = "enable_bar";
@@ -33,6 +76,7 @@ constexpr auto UPF_ENABLE_FR      = "enable_fr";
 constexpr auto UPF_ENABLE_ETH_PDU = "enable_eth_pdu";
 
 constexpr auto UPF_ENABLE_BPF_LABEL     = "Enable BPF Datapath";
+constexpr auto UPF_ENABLE_DPDK_LABEL    = "Enable DPDK Datapath";
 constexpr auto UPF_ENABLE_QOS_LABEL     = "Enable QoS Enforcement  (QER)";
 constexpr auto UPF_ENABLE_URR_LABEL     = "Enable Usage Reporting  (URR)";
 constexpr auto UPF_ENABLE_BAR_LABEL     = "Enable Buffering Action (BAR)";
@@ -200,6 +244,22 @@ class upf_support_features : public config_type {
    *       - Appropriate kernel capabilities (CAP_BPF, CAP_NET_ADMIN)
    */
   option_config_value m_enable_bpf_datapath{};
+
+  /**
+   * @brief Enable DPDK-based datapath
+   *
+   * When enabled, the UPF owns the N3/N6 NICs through DPDK poll-mode drivers
+   * and processes packets on dedicated lcores.
+   *
+   * Default: false
+   *
+   * @note Mutually exclusive with enable_bpf_datapath (rejected at startup).
+   * @note DPDK datapath requires:
+   *       - UPF built with -DWITH_DPDK=ON
+   *       - Hugepages configured
+   *       - N3/N6 NICs bound to vfio-pci
+   */
+  option_config_value m_enable_dpdk_datapath{};
 
   /**
    * @brief Enable QoS enforcement (QER rules)
@@ -378,6 +438,12 @@ class upf_support_features : public config_type {
   [[nodiscard]] bool get_option_enable_bpf_datapath() const;
 
   /**
+   * @brief Check if DPDK datapath is enabled
+   * @return true if DPDK datapath is enabled, false otherwise
+   */
+  [[nodiscard]] bool get_option_enable_dpdk_datapath() const;
+
+  /**
    * @brief Check if QoS enforcement is enabled
    * @return true if QER rules are processed, false otherwise
    */
@@ -464,6 +530,141 @@ class upf_support_features : public config_type {
  * @version 1.0
  * @since Rel-16
  */
+
+/**
+ * @class upf_dpdk_port_configuration
+ * @brief One DPDK port: which device it is, how many queues, which lcores poll
+ *        it, and the next hop to send to.
+ *
+ * N3 and N6 each have one of these. Giving them the same PCI address selects
+ * single-port mode: one device carries both, and the fast path tells uplink
+ * from downlink by classifying the packet instead of by port.
+ */
+class upf_dpdk_port_configuration : public config_type {
+ private:
+  /// PCI address of the device, e.g. "0000:3b:00.0" (bound to vfio-pci).
+  string_config_value m_pci_address{};
+  /// RX queues; one per polling lcore.
+  int_config_value m_rx_queues{};
+  /// TX queues; at least one per lcore that transmits on this port.
+  int_config_value m_tx_queues{};
+  /// Lcores polling this port, EAL corelist syntax, e.g. "1,2" or "1-3".
+  string_config_value m_lcores{};
+  /// Next-hop MAC (gNB on N3, DN gateway on N6). With the NIC bound to
+  /// vfio-pci there is no kernel neighbour table to learn it from, so it is
+  /// configured until ARP/ND is implemented in the fast path.
+  string_config_value m_next_hop_mac{};
+
+ public:
+  explicit upf_dpdk_port_configuration(const std::string& name);
+  upf_dpdk_port_configuration() = default;
+
+  void from_yaml(const YAML::Node& node) override;
+  [[nodiscard]] std::string to_string(const std::string& indent) const override;
+  void validate() override;
+
+  [[nodiscard]] std::string get_pci_address() const {
+    return m_pci_address.get_value();
+  }
+  [[nodiscard]] uint16_t get_rx_queues() const {
+    return static_cast<uint16_t>(m_rx_queues.get_value());
+  }
+  [[nodiscard]] uint16_t get_tx_queues() const {
+    return static_cast<uint16_t>(m_tx_queues.get_value());
+  }
+  [[nodiscard]] std::string get_lcores() const { return m_lcores.get_value(); }
+  [[nodiscard]] std::string get_next_hop_mac() const {
+    return m_next_hop_mac.get_value();
+  }
+};
+
+/**
+ * @class upf_dpdk_configuration
+ * @brief The `dpdk:` section: EAL parameters, mbuf pool sizing and the two
+ *        ports.
+ *
+ * Only read when support_features.enable_dpdk_datapath is set.
+ */
+class upf_dpdk_configuration : public config_type {
+ private:
+  // ---- EAL ----------------------------------------------------------------
+  /// Lcores EAL may use, corelist syntax (EAL -l), e.g. "0-3".
+  string_config_value m_lcores{};
+  /// Lcore running the control plane (EAL --main-lcore).
+  int_config_value m_main_lcore{};
+  /// Memory channels per socket (EAL -n).
+  int_config_value m_memory_channels{};
+  /// Per-socket hugepage memory, e.g. "1024,0" (EAL --socket-mem). Optional.
+  string_config_value m_socket_mem{};
+  /// Hugepage file prefix (EAL --file-prefix); lets two UPFs share a host.
+  string_config_value m_file_prefix{};
+  /// Escape hatch appended verbatim to the EAL argv.
+  string_config_value m_extra_eal_args{};
+
+  // ---- Packet buffers -----------------------------------------------------
+  int_config_value m_num_mbufs{};
+  int_config_value m_mbuf_cache_size{};
+  int_config_value m_rx_descriptors{};
+  int_config_value m_tx_descriptors{};
+  option_config_value m_promiscuous{};
+
+  // ---- Ports --------------------------------------------------------------
+  upf_dpdk_port_configuration m_n3_port{};
+  upf_dpdk_port_configuration m_n6_port{};
+
+ public:
+  explicit upf_dpdk_configuration(const std::string& name);
+  upf_dpdk_configuration() = default;
+
+  void from_yaml(const YAML::Node& node) override;
+  [[nodiscard]] std::string to_string(const std::string& indent) const override;
+  /// Range checks only; presence is enforced by upf::validate() when the DPDK
+  /// datapath is enabled.
+  void validate() override;
+
+  [[nodiscard]] std::string get_lcores() const { return m_lcores.get_value(); }
+  [[nodiscard]] uint32_t get_main_lcore() const {
+    return m_main_lcore.get_value();
+  }
+  [[nodiscard]] uint32_t get_memory_channels() const {
+    return m_memory_channels.get_value();
+  }
+  [[nodiscard]] std::string get_socket_mem() const {
+    return m_socket_mem.get_value();
+  }
+  [[nodiscard]] std::string get_file_prefix() const {
+    return m_file_prefix.get_value();
+  }
+  [[nodiscard]] std::string get_extra_eal_args() const {
+    return m_extra_eal_args.get_value();
+  }
+  [[nodiscard]] uint32_t get_num_mbufs() const {
+    return m_num_mbufs.get_value();
+  }
+  [[nodiscard]] uint32_t get_mbuf_cache_size() const {
+    return m_mbuf_cache_size.get_value();
+  }
+  [[nodiscard]] uint32_t get_rx_descriptors() const {
+    return m_rx_descriptors.get_value();
+  }
+  [[nodiscard]] uint32_t get_tx_descriptors() const {
+    return m_tx_descriptors.get_value();
+  }
+  [[nodiscard]] bool get_promiscuous() const {
+    return m_promiscuous.get_value();
+  }
+  [[nodiscard]] const upf_dpdk_port_configuration& get_n3_port() const {
+    return m_n3_port;
+  }
+  [[nodiscard]] const upf_dpdk_port_configuration& get_n6_port() const {
+    return m_n6_port;
+  }
+  /// True when N3 and N6 name the same device (single-port deployment).
+  [[nodiscard]] bool is_single_port() const {
+    return !m_n3_port.get_pci_address().empty() &&
+           m_n3_port.get_pci_address() == m_n6_port.get_pci_address();
+  }
+};
 
 class upf_datapath_configuration : public config_type {
  private:
@@ -1419,6 +1620,7 @@ class upf : public nf {
    * @see upf_datapath_configuration For detailed parameter descriptions
    */
   upf_datapath_configuration m_upf_datapath_configuration;
+  upf_dpdk_configuration m_upf_dpdk_configuration;
 
   /**
    * @brief UPF information for NRF registration
@@ -1605,6 +1807,9 @@ class upf : public nf {
    * @brief Get datapath configuration
    * @return Reference to datapath BPF map configuration
    */
+  /// The `dpdk:` section (only meaningful when the DPDK datapath is enabled).
+  [[nodiscard]] const upf_dpdk_configuration& get_dpdk_configuration() const;
+
   [[nodiscard]] const upf_datapath_configuration& get_datapath_configuration()
       const;
 

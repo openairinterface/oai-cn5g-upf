@@ -49,6 +49,9 @@ struct NetworkConfig {
   /// eBPF/XDP datapath acceleration — upf_cfg.enable_bpf_datapath
   bool bpf_datapath = false;
 
+  /// DPDK poll-mode datapath — upf_cfg.enable_dpdk_datapath
+  bool dpdk_datapath = false;
+
   /// TC-BPF QoS enforcement (QER) — upf_cfg.enable_qer
   bool qos = false;
 
@@ -181,6 +184,11 @@ inline uint16_t GetN4Port() {
 /** @return true if eBPF/XDP datapath acceleration is enabled */
 inline bool IsBpfDatapathEnabled() {
   return g_net_cfg.bpf_datapath;
+}
+
+/** @return true if the DPDK poll-mode datapath is enabled */
+inline bool IsDpdkDatapathEnabled() {
+  return g_net_cfg.dpdk_datapath;
 }
 
 /** @return true if TC-BPF QoS enforcement (QER) is enabled */

@@ -227,6 +227,7 @@ include(CheckTypeSize)
 
 add_boolean_option( DISPLAY_LICENCE_INFO            False    "If a module has a licence banner to show")
 add_boolean_option( LOG_OAI                         False    "Thread safe logging utility")
+add_boolean_option( WITH_DPDK                       False    "Build the DPDK datapath flavour (needs libdpdk)")
 
 
 # System packages that are required
@@ -266,6 +267,9 @@ ADD_SUBDIRECTORY(${SRC_TOP_DIR}/pfcp ${CMAKE_CURRENT_BINARY_DIR}/pfcp)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app ${CMAKE_CURRENT_BINARY_DIR}/upf_app)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/app ${CMAKE_CURRENT_BINARY_DIR}/app)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/simpleswitch ${CMAKE_CURRENT_BINARY_DIR}/simpleswitch)
+if (WITH_DPDK)
+  ADD_SUBDIRECTORY(${SRC_TOP_DIR}/upf_app/dpdk ${CMAKE_CURRENT_BINARY_DIR}/dpdk)
+endif (WITH_DPDK)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/gtpv1u ${CMAKE_CURRENT_BINARY_DIR}/gtpv1u)
 ADD_SUBDIRECTORY(${SRC_TOP_DIR}/udp ${CMAKE_CURRENT_BINARY_DIR}/udp)
 
@@ -349,6 +353,11 @@ target_link_libraries (upf
   pthread m rt config++
   event boost_system curl yaml-cpp cpr::cpr
 )
+
+if (WITH_DPDK)
+  include_directories(${SRC_TOP_DIR}/upf_app/dpdk)
+  target_link_libraries(upf -Wl,--start-group UPF_DPDK UPF_XDP -Wl,--end-group)
+endif (WITH_DPDK)
 
 
 add_boolean_option(USE_LTTNG  False "Activate the LTTNG tracer, a debugging/monitoring framework" ON)

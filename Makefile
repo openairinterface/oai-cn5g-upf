@@ -24,7 +24,7 @@ BUILD_SCRIPT := build/scripts/build_upf
 
 .PHONY: help setup build rebuild \
         clean clean-xdp clean-build \
-        build-release build-debug \
+        build-release build-debug build-dpdk \
         build-xdp list-targets xdp
 
 ##############################################################################
@@ -44,6 +44,7 @@ help: ## Show this help message
 	@printf "  \033[36m%-20s\033[0m %s\n" "build"         "cmake configure + full compile (Debug)"
 	@printf "  \033[36m%-20s\033[0m %s\n" "build-release" "cmake configure + full compile (Release)"
 	@printf "  \033[36m%-20s\033[0m %s\n" "build-debug"   "cmake configure + full compile (Debug + verbose)"
+	@printf "  \033[36m%-20s\033[0m %s\n" "build-dpdk"    "cmake configure + full compile (Debug) with DPDK flavour"
 	@printf "  \033[36m%-20s\033[0m %s\n" "rebuild"       "[FASTEST] Incremental recompile only, no cmake"
 	@printf "\n"
 	@printf "\033[1;33mBPF KERNEL PROGRAMS\033[0m\n"
@@ -81,6 +82,9 @@ build-release: ## cmake configure + full compile (Release)
 
 build-debug: ## cmake configure + full compile (Debug + verbose)
 	$(BUILD_SCRIPT) -j -v -b Debug
+
+build-dpdk: ## cmake configure + full compile (Debug) including the DPDK flavour
+	$(BUILD_SCRIPT) -j -V -b Debug --dpdk
 
 ##############################################################################
 # Incremental recompile -- FASTEST

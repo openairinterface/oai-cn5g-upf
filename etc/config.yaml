@@ -216,6 +216,12 @@ upf:
     # Recommendation: Always enable for production (10x+ better performance)
     enable_bpf_datapath: yes
 
+    # DPDK Data Plane: poll-mode datapath owning the N3/N6 NICs
+    # Mutually exclusive with enable_bpf_datapath
+    # Requires: UPF built with --dpdk, hugepages, NICs bound to vfio-pci
+    # Status: In progress (PFCP wiring only, no packet forwarding yet)
+    enable_dpdk_datapath: no
+
     # -------------------------------------------------------------------------
     # PFCP RULE ENFORCEMENT (3GPP TS 29.244)
     # -------------------------------------------------------------------------
@@ -281,6 +287,77 @@ upf:
     # - Ethernet-based services
     # Status: Implemented
     enable_eth_pdu: no
+
+  # ===========================================================================
+  # DPDK DATAPATH
+  # ===========================================================================
+  # Only read when support_features.enable_dpdk_datapath is yes.
+  # The UPF takes the NICs over from the kernel: bind them to vfio-pci and
+  # reserve hugepages before starting.
+  #
+  # Two deployment modes, chosen by the PCI addresses below:
+  #   - Separate N3 / N6 devices (recommended): each port has its own queues
+  #     and its own polling lcores, so uplink and downlink never share a poll
+  #     loop. Best throughput and latency.
+  #   - One shared device: give n3 and n6 the SAME pci_address. The UPF then
+  #     runs one port and tells uplink from downlink by classifying each packet
+  #     (GTP-U to the N3 address = uplink) instead of by port.
+  # ===========================================================================
+  dpdk:
+    # ---- EAL ----------------------------------------------------------------
+    # Lcores EAL may use (EAL -l). Must include main_lcore and every lcore
+    # listed under the ports below. Keep them off the cores the OS uses.
+    lcores: "0-4"
+    # Lcore kept for the control plane (PFCP, NRF); no packet polling runs here.
+    main_lcore: 0
+    # Memory channels per socket (EAL -n); check your board.
+    memory_channels: 4
+    # Hugepage memory per NUMA socket, e.g. "1024,0". Empty = let EAL decide.
+    socket_mem: ""
+    # Hugepage file prefix (EAL --file-prefix): change it to run two UPFs on
+    # one host.
+    file_prefix: "upf"
+    # Appended verbatim to the EAL arguments, e.g. "--log-level=pmd,8"
+    extra_eal_args: ""
+
+    # ---- Packet buffers -----------------------------------------------------
+    # Mbufs per port. Roughly: (rx_descriptors + tx_descriptors) x queues,
+    # plus headroom for packets in flight.
+    num_mbufs: 16384
+    # Per-lcore mbuf cache; must not exceed half of num_mbufs.
+    mbuf_cache_size: 256
+    rx_descriptors: 1024
+    tx_descriptors: 1024
+    # Needed unless the NIC is set to receive the UPF's own MAC only.
+    promiscuous: yes
+
+    # ---- N3 port (GTP-U towards the gNB) ------------------------------------
+    n3:
+      # PCI address of the device, as shown by "dpdk-devbind.py --status"
+      pci_address: "0000:3b:00.0"
+      # One RX queue per polling lcore of THIS port.
+      rx_queues: 1
+      # TX queues are created for every polling lcore of BOTH ports, so that
+      # no two lcores share a queue; this value is informational and the UPF
+      # creates as many as it needs.
+      tx_queues: 1
+      # Lcores polling this port; each one must be in the lcores list above
+      # and must not be main_lcore.
+      lcores: "1"
+      # MAC of the next hop (the gNB or the router towards it). With the NIC
+      # bound to vfio-pci the kernel has no neighbour entry to learn from, so
+      # it is configured here until ARP/ND runs in the fast path.
+      next_hop_mac: ""
+
+    # ---- N6 port (towards the Data Network) ---------------------------------
+    n6:
+      # Same pci_address as n3 selects the single-port mode described above.
+      pci_address: "0000:3b:00.1"
+      rx_queues: 1
+      tx_queues: 1
+      lcores: "2"
+      # MAC of the data network gateway (see remote_n6_gw below).
+      next_hop_mac: ""
 
   # ===========================================================================
   # Remote N6 gateway (Data Network gateway)

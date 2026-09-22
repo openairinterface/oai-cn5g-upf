@@ -25,6 +25,7 @@ upf_support_features::upf_support_features(
   // Performance
   m_enable_bpf_datapath =
       option_config_value(UPF_ENABLE_BPF_LABEL, enable_bpf_datapath);
+  m_enable_dpdk_datapath = option_config_value(UPF_ENABLE_DPDK_LABEL, false);
   m_enable_eth_pdu =
       option_config_value(UPF_ENABLE_ETH_PDU_LABEL, enable_eth_pdu);
   m_enable_fr   = option_config_value(UPF_ENABLE_FR_LABEL, enable_fr);
@@ -40,6 +41,9 @@ void upf_support_features::from_yaml(const YAML::Node& node) {
   // Performance
   if (node[UPF_ENABLE_BPF]) {
     m_enable_bpf_datapath.from_yaml(node[UPF_ENABLE_BPF]);
+  }
+  if (node[UPF_ENABLE_DPDK]) {
+    m_enable_dpdk_datapath.from_yaml(node[UPF_ENABLE_DPDK]);
   }
 
   // Ethernet PDU Sessions
@@ -99,6 +103,13 @@ std::string upf_support_features::to_string(const std::string& indent) const {
   out.append(indent).append(fmt::format(
       BASE_FORMATTER, INNER_LIST_ELEM, UPF_ENABLE_BPF_LABEL, inner_width,
       enable_bpf_datapath));
+
+  std::string enable_dpdk_datapath = m_enable_dpdk_datapath.get_value() ?
+                                         UPF_CONFIG_OPTION_YES_STR :
+                                         UPF_CONFIG_OPTION_NO_STR;
+  out.append(indent).append(fmt::format(
+      BASE_FORMATTER, INNER_LIST_ELEM, UPF_ENABLE_DPDK_LABEL, inner_width,
+      enable_dpdk_datapath));
 
   // PFCP Rules - QoS (QER)
   std::string enable_qos = m_enable_qos.get_value() ?
@@ -164,6 +175,11 @@ bool upf_support_features::get_option_enable_bpf_datapath() const {
 }
 
 //------------------------------------------------------------------------------
+bool upf_support_features::get_option_enable_dpdk_datapath() const {
+  return m_enable_dpdk_datapath.get_value();
+}
+
+//------------------------------------------------------------------------------
 bool upf_support_features::get_option_enable_qos() const {
   return m_enable_qos.get_value();
 }
@@ -213,6 +229,7 @@ upf::upf(
       m_upf_support_features(
           false, false, false, false, false, false, false, false),
       m_upf_datapath_configuration(),
+      m_upf_dpdk_configuration(UPF_DPDK_LABEL),
       m_interfaces(interfaces) {
   oai::_3gpp::model::SnssaiUpfInfoItem item;
   item.setSNssai(DEFAULT_SNSSAI);
@@ -245,6 +262,10 @@ void upf::from_yaml(const YAML::Node& node) {
 
     if (key == UPF_CONFIG_DATAPATH_CONFIGURATION) {
       m_upf_datapath_configuration.from_yaml(elem.second);
+    }
+
+    if (key == UPF_CONFIG_DPDK) {
+      m_upf_dpdk_configuration.from_yaml(elem.second);
     }
 
     if (key == UPF_CONFIG_REMOTE_N6_GW) {
@@ -340,11 +361,42 @@ void upf::create_or_update_interface(
 void upf::validate() {
   nf::validate();
   m_upf_support_features.validate();
+  if (m_upf_support_features.get_option_enable_bpf_datapath() &&
+      m_upf_support_features.get_option_enable_dpdk_datapath()) {
+    throw std::runtime_error(fmt::format(
+        "{} and {} are mutually exclusive, enable only one datapath",
+        UPF_ENABLE_BPF, UPF_ENABLE_DPDK));
+  }
+#if !WITH_DPDK
+  if (m_upf_support_features.get_option_enable_dpdk_datapath()) {
+    throw std::runtime_error(fmt::format(
+        "{} is set but this UPF was built without DPDK support "
+        "(rebuild with -DWITH_DPDK=ON)",
+        UPF_ENABLE_DPDK));
+  }
+#endif
   for (auto& iface : m_interfaces) {
     iface.second.validate();
   }
   m_upf_info.validate();
   m_upf_datapath_configuration.validate();
+  m_upf_dpdk_configuration.validate();
+
+  if (m_upf_support_features.get_option_enable_dpdk_datapath()) {
+    // Without a device per interface EAL has nothing to attach to.
+    if (m_upf_dpdk_configuration.get_n3_port().get_pci_address().empty() ||
+        m_upf_dpdk_configuration.get_n6_port().get_pci_address().empty()) {
+      throw std::runtime_error(fmt::format(
+          "{} requires upf.{}.{}.{} and upf.{}.{}.{}", UPF_ENABLE_DPDK,
+          UPF_CONFIG_DPDK, UPF_DPDK_N3_PORT, UPF_DPDK_PCI_ADDRESS,
+          UPF_CONFIG_DPDK, UPF_DPDK_N6_PORT, UPF_DPDK_PCI_ADDRESS));
+    }
+    if (m_upf_dpdk_configuration.get_lcores().empty()) {
+      throw std::runtime_error(fmt::format(
+          "{} requires upf.{}.{}", UPF_ENABLE_DPDK, UPF_CONFIG_DPDK,
+          UPF_DPDK_LCORES));
+    }
+  }
 }
 
 //------------------------------------------------------------------------------
@@ -486,6 +538,37 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   // Feature flags - Performance
   cfg.enable_bpf_datapath =
       upf_local->get_support_features().get_option_enable_bpf_datapath();
+  cfg.enable_dpdk_datapath =
+      upf_local->get_support_features().get_option_enable_dpdk_datapath();
+
+  if (cfg.enable_dpdk_datapath) {
+    const auto& dpdk       = upf_local->get_dpdk_configuration();
+    cfg.dpdk.lcores          = dpdk.get_lcores();
+    cfg.dpdk.main_lcore      = dpdk.get_main_lcore();
+    cfg.dpdk.memory_channels = dpdk.get_memory_channels();
+    cfg.dpdk.socket_mem      = dpdk.get_socket_mem();
+    cfg.dpdk.file_prefix     = dpdk.get_file_prefix();
+    cfg.dpdk.extra_eal_args  = dpdk.get_extra_eal_args();
+    cfg.dpdk.num_mbufs       = dpdk.get_num_mbufs();
+    cfg.dpdk.mbuf_cache_size = dpdk.get_mbuf_cache_size();
+    cfg.dpdk.rx_descriptors  = dpdk.get_rx_descriptors();
+    cfg.dpdk.tx_descriptors  = dpdk.get_tx_descriptors();
+    cfg.dpdk.promiscuous     = dpdk.get_promiscuous();
+
+    const auto& n3            = dpdk.get_n3_port();
+    cfg.dpdk.n3.pci_address   = n3.get_pci_address();
+    cfg.dpdk.n3.rx_queues     = n3.get_rx_queues();
+    cfg.dpdk.n3.tx_queues     = n3.get_tx_queues();
+    cfg.dpdk.n3.lcores        = n3.get_lcores();
+    cfg.dpdk.n3.next_hop_mac  = n3.get_next_hop_mac();
+
+    const auto& n6            = dpdk.get_n6_port();
+    cfg.dpdk.n6.pci_address   = n6.get_pci_address();
+    cfg.dpdk.n6.rx_queues     = n6.get_rx_queues();
+    cfg.dpdk.n6.tx_queues     = n6.get_tx_queues();
+    cfg.dpdk.n6.lcores        = n6.get_lcores();
+    cfg.dpdk.n6.next_hop_mac  = n6.get_next_hop_mac();
+  }
 
   // Feature flags - PFCP Rules
   cfg.enable_qos = upf_local->get_support_features().get_option_enable_qos();
@@ -681,6 +764,210 @@ interface_cfg_t upf_interface_config::to_interface_config() const {
   cfg.if_name = get_if_name();
 
   return cfg;
+}
+
+//==============================================================================
+// DPDK datapath configuration
+//==============================================================================
+
+//------------------------------------------------------------------------------
+upf_dpdk_port_configuration::upf_dpdk_port_configuration(
+    const std::string& name) {
+  m_config_name = name;
+  m_set         = false;
+
+  m_pci_address = string_config_value(UPF_DPDK_PCI_LABEL, "");
+  m_rx_queues =
+      int_config_value(UPF_DPDK_RX_QUEUES_LABEL, UPF_DPDK_DEFAULT_QUEUES);
+  m_rx_queues.set_validation_interval(1, 64);
+  m_tx_queues =
+      int_config_value(UPF_DPDK_TX_QUEUES_LABEL, UPF_DPDK_DEFAULT_QUEUES);
+  m_tx_queues.set_validation_interval(1, 64);
+  m_lcores       = string_config_value(UPF_DPDK_LCORE_LIST_LBL, "");
+  m_next_hop_mac = string_config_value(UPF_DPDK_NEXT_HOP_LABEL, "");
+}
+
+//------------------------------------------------------------------------------
+void upf_dpdk_port_configuration::from_yaml(const YAML::Node& node) {
+  if (node[UPF_DPDK_PCI_ADDRESS]) {
+    m_pci_address.from_yaml(node[UPF_DPDK_PCI_ADDRESS]);
+  }
+  if (node[UPF_DPDK_RX_QUEUES]) {
+    m_rx_queues.from_yaml(node[UPF_DPDK_RX_QUEUES]);
+  }
+  if (node[UPF_DPDK_TX_QUEUES]) {
+    m_tx_queues.from_yaml(node[UPF_DPDK_TX_QUEUES]);
+  }
+  if (node[UPF_DPDK_LCORES]) {
+    m_lcores.from_yaml(node[UPF_DPDK_LCORES]);
+  }
+  if (node[UPF_DPDK_NEXT_HOP_MAC]) {
+    m_next_hop_mac.from_yaml(node[UPF_DPDK_NEXT_HOP_MAC]);
+  }
+  m_set = true;
+}
+
+//------------------------------------------------------------------------------
+void upf_dpdk_port_configuration::validate() {
+  if (!m_set) return;
+  m_rx_queues.validate();
+  m_tx_queues.validate();
+}
+
+//------------------------------------------------------------------------------
+std::string upf_dpdk_port_configuration::to_string(
+    const std::string& indent) const {
+  std::string out;
+  std::string inner_indent = add_indent(indent);
+  unsigned int inner_width = get_inner_width(inner_indent.length());
+
+  out.append(indent).append(
+      fmt::format("{} {}:\n", OUTER_LIST_ELEM, m_config_name));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_DPDK_PCI_LABEL, inner_width,
+          m_pci_address.get_value()));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_DPDK_RX_QUEUES_LABEL,
+          inner_width, m_rx_queues.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_DPDK_TX_QUEUES_LABEL,
+          inner_width, m_tx_queues.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_DPDK_LCORE_LIST_LBL, inner_width,
+          m_lcores.get_value()));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_DPDK_NEXT_HOP_LABEL, inner_width,
+          m_next_hop_mac.get_value()));
+  return out;
+}
+
+//------------------------------------------------------------------------------
+upf_dpdk_configuration::upf_dpdk_configuration(const std::string& name)
+    : m_n3_port(UPF_CONFIG_N3_LABEL), m_n6_port(UPF_CONFIG_N6_LABEL) {
+  m_config_name = name;
+  m_set         = false;
+
+  m_lcores     = string_config_value(UPF_DPDK_LCORES_LABEL, "");
+  m_main_lcore = int_config_value(
+      UPF_DPDK_MAIN_LCORE_LBL, UPF_DPDK_DEFAULT_MAIN_LCORE);
+  m_main_lcore.set_validation_interval(0, 255);
+  m_memory_channels = int_config_value(
+      UPF_DPDK_MEM_CHAN_LABEL, UPF_DPDK_DEFAULT_MEM_CHANNELS);
+  m_memory_channels.set_validation_interval(1, 8);
+  m_socket_mem     = string_config_value(UPF_DPDK_SOCKET_MEM, "");
+  m_file_prefix    = string_config_value(UPF_DPDK_FILE_PREFIX, "upf");
+  m_extra_eal_args = string_config_value(UPF_DPDK_EXTRA_EAL, "");
+
+  m_num_mbufs =
+      int_config_value(UPF_DPDK_MBUFS_LABEL, UPF_DPDK_DEFAULT_NUM_MBUFS);
+  m_num_mbufs.set_validation_interval(1024, 1048576);
+  m_mbuf_cache_size =
+      int_config_value(UPF_DPDK_MBUF_CACHE, UPF_DPDK_DEFAULT_MBUF_CACHE);
+  m_mbuf_cache_size.set_validation_interval(0, 512);
+  m_rx_descriptors =
+      int_config_value(UPF_DPDK_RX_DESC, UPF_DPDK_DEFAULT_RX_DESC);
+  m_rx_descriptors.set_validation_interval(64, 16384);
+  m_tx_descriptors =
+      int_config_value(UPF_DPDK_TX_DESC, UPF_DPDK_DEFAULT_TX_DESC);
+  m_tx_descriptors.set_validation_interval(64, 16384);
+  m_promiscuous = option_config_value(UPF_DPDK_PROMISCUOUS, true);
+}
+
+//------------------------------------------------------------------------------
+void upf_dpdk_configuration::from_yaml(const YAML::Node& node) {
+  if (node[UPF_DPDK_LCORES]) m_lcores.from_yaml(node[UPF_DPDK_LCORES]);
+  if (node[UPF_DPDK_MAIN_LCORE])
+    m_main_lcore.from_yaml(node[UPF_DPDK_MAIN_LCORE]);
+  if (node[UPF_DPDK_MEM_CHANNELS])
+    m_memory_channels.from_yaml(node[UPF_DPDK_MEM_CHANNELS]);
+  if (node[UPF_DPDK_SOCKET_MEM])
+    m_socket_mem.from_yaml(node[UPF_DPDK_SOCKET_MEM]);
+  if (node[UPF_DPDK_FILE_PREFIX])
+    m_file_prefix.from_yaml(node[UPF_DPDK_FILE_PREFIX]);
+  if (node[UPF_DPDK_EXTRA_EAL])
+    m_extra_eal_args.from_yaml(node[UPF_DPDK_EXTRA_EAL]);
+
+  if (node[UPF_DPDK_NUM_MBUFS]) m_num_mbufs.from_yaml(node[UPF_DPDK_NUM_MBUFS]);
+  if (node[UPF_DPDK_MBUF_CACHE])
+    m_mbuf_cache_size.from_yaml(node[UPF_DPDK_MBUF_CACHE]);
+  if (node[UPF_DPDK_RX_DESC])
+    m_rx_descriptors.from_yaml(node[UPF_DPDK_RX_DESC]);
+  if (node[UPF_DPDK_TX_DESC])
+    m_tx_descriptors.from_yaml(node[UPF_DPDK_TX_DESC]);
+  if (node[UPF_DPDK_PROMISCUOUS])
+    m_promiscuous.from_yaml(node[UPF_DPDK_PROMISCUOUS]);
+
+  if (node[UPF_DPDK_N3_PORT]) m_n3_port.from_yaml(node[UPF_DPDK_N3_PORT]);
+  if (node[UPF_DPDK_N6_PORT]) m_n6_port.from_yaml(node[UPF_DPDK_N6_PORT]);
+
+  m_set = true;
+}
+
+//------------------------------------------------------------------------------
+void upf_dpdk_configuration::validate() {
+  if (!m_set) return;
+
+  m_main_lcore.validate();
+  m_memory_channels.validate();
+  m_num_mbufs.validate();
+  m_mbuf_cache_size.validate();
+  m_rx_descriptors.validate();
+  m_tx_descriptors.validate();
+  m_n3_port.validate();
+  m_n6_port.validate();
+
+  // A cache larger than half the pool starves the shared pool (DPDK rule).
+  if (m_mbuf_cache_size.get_value() * 2 > m_num_mbufs.get_value()) {
+    throw std::runtime_error(fmt::format(
+        "dpdk.{} ({}) must not exceed half of dpdk.{} ({})", UPF_DPDK_MBUF_CACHE,
+        m_mbuf_cache_size.get_value(), UPF_DPDK_NUM_MBUFS,
+        m_num_mbufs.get_value()));
+  }
+}
+
+//------------------------------------------------------------------------------
+std::string upf_dpdk_configuration::to_string(const std::string& indent) const {
+  if (!m_set) return "";
+
+  std::string out;
+  std::string inner_indent = add_indent(indent);
+  unsigned int inner_width = get_inner_width(inner_indent.length());
+
+  out.append(indent).append(
+      fmt::format("{} {}:\n", OUTER_LIST_ELEM, UPF_DPDK_LABEL));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_DPDK_LCORES_LABEL, inner_width,
+          m_lcores.get_value()));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_DPDK_MAIN_LCORE_LBL, inner_width,
+          m_main_lcore.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_DPDK_MEM_CHAN_LABEL, inner_width,
+          m_memory_channels.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_DPDK_MBUFS_LABEL, inner_width,
+          m_num_mbufs.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_DPDK_MODE_LABEL, inner_width,
+          is_single_port() ? "single port (N3+N6)" : "separate N3 / N6 ports"));
+  out.append(m_n3_port.to_string(inner_indent));
+  out.append(m_n6_port.to_string(inner_indent));
+  return out;
+}
+
+//------------------------------------------------------------------------------
+const upf_dpdk_configuration& upf::get_dpdk_configuration() const {
+  return m_upf_dpdk_configuration;
 }
 
 //==============================================================================

@@ -45,6 +45,7 @@ function help()
   echo_error "  -v, --verbose                             Build process verbose."
   echo_error "  -V, --Verbose                             CMake only build process verbose, display compilation warnings and errors."
   echo_error "  -l, --lttng                               Build variant that will also include LTTNG"
+  echo_error "      --dpdk                                Also build the DPDK datapath flavour (needs libdpdk-dev)"
   echo_error " "
 }
 
@@ -116,6 +117,11 @@ function main()
         cmake_args="$cmake_args -DCMAKE_VERBOSE_MAKEFILE=ON -k"
         make_args="VERBOSE=1 $make_args"
         verbose=1
+        shift;
+        ;;
+      --dpdk)
+        echo "DPDK datapath flavour enabled"
+        cmake_args="$cmake_args -DWITH_DPDK=ON"
         shift;
         ;;
       --bpf-debug)

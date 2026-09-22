@@ -87,6 +87,7 @@ void Configuration::BuildNetworkConfig() {
 
   // --- Feature flags ---
   upf::g_net_cfg.bpf_datapath   = upf_cfg.enable_bpf_datapath;
+  upf::g_net_cfg.dpdk_datapath  = upf_cfg.enable_dpdk_datapath;
   upf::g_net_cfg.qos            = upf_cfg.enable_qos;
   upf::g_net_cfg.urr            = upf_cfg.enable_urr;
   upf::g_net_cfg.bar            = upf_cfg.enable_bar;

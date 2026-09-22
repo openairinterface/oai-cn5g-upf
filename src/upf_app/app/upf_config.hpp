@@ -67,6 +67,43 @@ typedef struct itti_cfg_s {
 typedef struct nsf_cfg_s {
   bool bypass_ul_pfcp_rules;
 } nsf_cfg_t;
+/// One DPDK port as the runtime sees it (see the `dpdk:` config section).
+struct dpdk_port_cfg_t {
+  std::string pci_address;    ///< e.g. "0000:3b:00.0", bound to vfio-pci
+  uint16_t rx_queues = 1;     ///< one per polling lcore
+  uint16_t tx_queues = 1;     ///< at least one per transmitting lcore
+  std::string lcores;         ///< EAL corelist of the polling lcores
+  std::string next_hop_mac;   ///< gNB (N3) / DN gateway (N6), until ARP lands
+};
+
+/// DPDK datapath runtime configuration.
+struct dpdk_cfg_t {
+  // EAL
+  std::string lcores;
+  uint32_t main_lcore      = 0;
+  uint32_t memory_channels = 4;
+  std::string socket_mem;
+  std::string file_prefix;
+  std::string extra_eal_args;
+
+  // Packet buffers
+  uint32_t num_mbufs       = 16384;
+  uint32_t mbuf_cache_size = 256;
+  uint32_t rx_descriptors  = 1024;
+  uint32_t tx_descriptors  = 1024;
+  bool promiscuous         = true;
+
+  // Ports
+  dpdk_port_cfg_t n3;
+  dpdk_port_cfg_t n6;
+
+  /// True when N3 and N6 are the same device: one port carries both, and the
+  /// fast path separates uplink from downlink by classifying the packet.
+  bool is_single_port() const {
+    return !n3.pci_address.empty() && n3.pci_address == n6.pci_address;
+  }
+};
+
 class upf_config {
  public:
   /* Reader/writer lock for this configuration */
@@ -95,6 +132,7 @@ class upf_config {
 
   bool enable_5g_features;
   bool enable_bpf_datapath;
+  bool enable_dpdk_datapath;
   bool enable_eth_pdu;  // Ethernet PDU Sessions (3GPP TS 29.244)
   bool enable_fr;
   bool enable_qos;
@@ -123,6 +161,9 @@ class upf_config {
   u_int16_t max_traffic_endpoints_per_session;
   u_int16_t max_ethernet_packet_filters_per_session;
   u_int16_t max_redundant_transmission_params_per_session;
+
+  /// Only meaningful when enable_dpdk_datapath is set.
+  dpdk_cfg_t dpdk;
 
   bool register_nrf;
   struct in_addr remote_n6;
@@ -164,7 +205,8 @@ class upf_config {
     n4.port                                  = pfcp::default_port;
 
     enable_5g_features  = true;
-    enable_bpf_datapath = false;
+    enable_bpf_datapath  = false;
+    enable_dpdk_datapath = false;
     enable_fr           = false;
     enable_eth_pdu      = false;
     enable_qos          = false;
