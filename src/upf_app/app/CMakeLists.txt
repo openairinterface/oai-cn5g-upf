@@ -29,6 +29,10 @@ include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model/nrf_model.cmake)
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/http/http.cmake)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model)
 
+if (WITH_DPDK)
+  include_directories(${SRC_TOP_DIR}/upf_app/dpdk)   # DpdkDatapath.h
+endif (WITH_DPDK)
+
 add_definitions("-DPACKAGE_NAME=\"UPF\"")
 
 add_library (APP STATIC

@@ -32,6 +32,9 @@
 #include <SessionManager.h>
 #include <SessionProgramManager.h>
 #include <UserPlaneComponent.h>
+#if WITH_DPDK
+#include <DpdkEal.h>
+#endif
 
 #include "helpers/ConfigLoader.hpp"
 #include "upf_banner.hpp"
@@ -90,6 +93,10 @@ void my_app_signal_handler(int s) {
     itti_inst = nullptr;
     Logger::system().debug("ITTI memory done.");
   }
+
+#if WITH_DPDK
+  DpdkEal::Cleanup();
+#endif
 
   Logger::system().info("Freeing Allocated memory done.");
   auto elapsed = std::chrono::system_clock::now() - shutdown_start;
@@ -171,6 +178,20 @@ int main(int argc, char** argv) {
   http_client_inst = oai::http::http_client::create_instance(
       Logger::upf_app(), upf_cfg.http_request_timeout, upf_cfg.sbi.if_name,
       upf_cfg.http_version);
+
+#if WITH_DPDK
+  // EAL must come up before any thread is created: rte_eal_init() pins the
+  // calling thread to the main lcore, and every thread spawned afterwards
+  // inherits that affinity.
+  if (upf_cfg.enable_dpdk_datapath) {
+    try {
+      DpdkEal::Init(upf_cfg.dpdk);
+    } catch (const std::exception& e) {
+      Logger::upf_app().error("DPDK initialisation failed: %s", e.what());
+      return 1;
+    }
+  }
+#endif
 
   // Inter task Interface
   itti_inst = new itti_mw();
