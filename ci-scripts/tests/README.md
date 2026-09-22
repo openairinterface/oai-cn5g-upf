@@ -6,7 +6,7 @@ Drives the UPF over N4/PFCP and asserts on the result.
 Built on [**pfcpkit**](https://github.com/openairinterface/pfcp-kit) — the UPF-agnostic
 machinery: PFCP transport and codec, session models, presets, report, scenario base and
 registry, capability protocols, generic `bpftool`/`tc`/log inspectors. It ships no
-scenarios and is an ordinary dependency of this suite (see `requirements.txt`), not a
+scenarios and is an ordinary dependency of this suite (see `pyproject.toml`), not a
 package in this repo.
 
 Everything in *this* repo is `upf_test`: the BPF map catalogue and key layouts, HTB
@@ -82,7 +82,7 @@ seen it.
 cd ci-scripts/tests
 
 python3 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/pip install -e ".[dev]"
 
 # Bring up the UPF, generate its config, run the preflight checks.
 # The first run compiles the UPF image and takes several minutes; afterwards

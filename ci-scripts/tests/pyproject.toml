@@ -4,9 +4,11 @@ name = "oai-upf-tests"
 version = "0.1.0"
 description = "PFCP/N4 test suite for the OAI CN5G UPF, on the reusable pfcpkit library"
 requires-python = ">=3.10"
-# pfcpkit is not on PyPI -- see requirements.txt for the rationale behind pinning
-# to a branch and using git+ssh (the repo is currently private) for now. Keep
-# this direct reference in sync with that file.
+# pfcpkit is not on PyPI, hence the direct reference. Pinned to a branch until
+# pfcp-kit cuts its first tagged release; swap the ref for a tag at that point
+# (e.g. `@v0.1.0`) so this suite stops moving with pfcp-kit's default branch.
+# git+ssh, not git+https: the repo is currently private, so pip needs your SSH
+# key rather than a token. Switch back to git+https once the repo is public.
 dependencies = [
     "scapy>=2.7.0",
     "pfcpkit @ git+ssh://git@github.com/openairinterface/pfcp-kit.git@feat-initial-import",
