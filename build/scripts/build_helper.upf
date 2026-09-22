@@ -1,23 +1,29 @@
 # SPDX-License-Identifier: LicenseRef-CSSL-1.0
 
+# -------------------------------------------------------------------------------
+# Install the build and runtime dependencies of the OAI UPF: distribution
+# packages, the eBPF toolchain (libbpf, bpftool, netlink) and the libraries
+# that are built from source.
+# Ubuntu 24.04 and the RHEL/Rocky 9 family are the supported distributions.
+# -------------------------------------------------------------------------------
+
 GREEN='\033[0;32m'   # ANSI color code for green
 RED='\033[0;31m'     # ANSI color code for red
 YELLOW='\033[1;93m'  # ANSI color code for brighten yellow
 NC='\033[0m'         # ANSI color code to reset to default
 
+# -------------------------------------------------------------------------------
+# Include the shared helper functions.
+# -------------------------------------------------------------------------------
 
-
-################################
-# include helper functions
-################################
 SCRIPT=$(readlink -f ${BASH_SOURCE})
 THIS_SCRIPT_PATH=`dirname $SCRIPT`
-source $THIS_SCRIPT_PATH/../common-build/installation/build_helper
-source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.fmt
-source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.spdlog
-source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.yamlcpp
-source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.nlohmann
-source $THIS_SCRIPT_PATH/../common-build/installation/build_helper.cpr
+COMMON_BUILD_PATH=$THIS_SCRIPT_PATH/../common-build/installation
+
+source $COMMON_BUILD_PATH/build_helper
+for helper in fmt spdlog yamlcpp nlohmann cpr; do
+  source $COMMON_BUILD_PATH/build_helper.$helper
+done
 
 CONFIG_FILE=$THIS_SCRIPT_PATH/../../etc/config.yaml
 # Get the kernel version
@@ -196,35 +202,30 @@ install_bpftool_from_git() {
 }
 
 
-#-------------------------------------------------------------------------------
-#arg1 is force (0 or 1) (no interactive script)
-#arg2 is debug (0 or 1) (install debug libraries)
+# -------------------------------------------------------------------------------
+# Install everything needed to build the UPF: the distribution packages, the
+# eBPF toolchain, then the libraries that are built from source.
+# -------------------------------------------------------------------------------
+
+# arg1 is force (0 or 1) (no interactive script)
+# arg2 is debug (0 or 1) (install debug libraries)
+
 check_install_upf_deps() {
 
-  if [ $1 -gt 0 ]; then
-    OPTION="-y"
-  else
-    OPTION=""
-  fi
-  if [ $2 -eq 0 ]; then
-    debug=0
-  else
-    debug=1
-  fi
+  OPTION=""
+  [ $1 -gt 0 ] && OPTION="-y"
+  debug=0
+  [ $2 -ne 0 ] && debug=1
 
   echo "Check supported distribution"
-  check_supported_distribution
-  [[ $? -ne 0 ]] && return $?
+  check_supported_distribution || {
+    echo_error "$(get_distribution_release) is not a supported distribution"
+    return 1
+  }
 
   # prevent lock on /var/lib/dpkg/lock
-  if [[ $OS_DISTRO == "ubuntu" ]]; then
-    #$SUDO systemctl mask apt-daily.service
-    #$SUDO systemctl mask apt-daily.timer
-    #$SUDO systemctl mask apt-daily-upgrade.service
-    #$SUDO systemctl mask apt-daily-upgrade.timer
-    if [ $IS_CONTAINER -eq 0 ]; then
-      $SUDO sed -i 's/1/0/g' /etc/apt/apt.conf.d/10periodic
-    fi
+  if [[ $OS_DISTRO == "ubuntu" ]] && [ $IS_CONTAINER -eq 0 ]; then
+    $SUDO sed -i 's/1/0/g' /etc/apt/apt.conf.d/10periodic
   fi
 
   update_package_db
@@ -232,79 +233,62 @@ check_install_upf_deps() {
   check_enable_epel_repos
 
   # Compilers, generators, ...
+  PACKAGE_LIST="\
+    autoconf \
+    automake \
+    $CMAKE \
+    git"
   if [[ $OS_DISTRO == "ubuntu" ]]; then
-    PACKAGE_LIST="\
-      autoconf \
-      automake \
-      build-essential \
-      $CMAKE \
-      git"
+    # build-essential pulls in gcc, g++ and make
+    PACKAGE_LIST="$PACKAGE_LIST build-essential"
   elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
-    PACKAGE_LIST="\
-      autoconf \
-      automake \
-      gcc-c++ \
-      gcc-toolset-12 \
-      $CMAKE \
-      make \
-      git"
+    PACKAGE_LIST="$PACKAGE_LIST gcc-c++ gcc-toolset-12 make"
   else
     echo_fatal "$OS_DISTRO is not a supported distribution."
   fi
   echo "Install build tools"
-  $SUDO $INSTALLER install $OPTION $PACKAGE_LIST
-  ret=$?;[[ $ret -ne 0 ]] && return $ret
+  $SUDO $INSTALLER install $OPTION $PACKAGE_LIST || return $?
 
   # Libraries
+  PACKAGE_LIST="\
+    libtool \
+    openssl \
+    ninja-build"
   if [[ $OS_DISTRO == "ubuntu" ]]; then
-    case "$(get_distribution_release)" in
-      "ubuntu20.04")
-        specific_packages="libconfig++-dev libasio-dev libboost-all-dev libasan5"
-        ;;
-      *)
-        specific_packages="libconfig++-dev libasio-dev libboost-all-dev libasan?"
-        ;;
-    esac
-    # removed libspdlog-dev
-    PACKAGE_LIST="\
-      $specific_packages \
-      libcurl4 \
+    PACKAGE_LIST="$PACKAGE_LIST \
+      libasio-dev \
+      libboost-all-dev \
+      libasan8 \
+      libconfig++-dev \
+      libcurl4t64 \
       libcurl4-gnutls-dev \
       libgmp-dev \
-      libhogweed? \
-      libidn2-0-dev \
-      libidn11-dev \
+      libidn-dev \
+      libidn2-dev \
       libssl-dev \
-      libtool \
-      openssl \
       nettle-dev \
       net-tools \
-      pkg-config \
-      ninja-build"
+      pkg-config"
   elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
-    PACKAGE_LIST="\
+    PACKAGE_LIST="$PACKAGE_LIST \
       boost-devel \
       libconfig-devel \
       libgcrypt-devel \
       gmp-devel \
       libidn-devel \
       openssl-devel \
-      libtool \
-      openssl \
       check \
       nettle-devel \
       libcurl-devel \
       glibc-devel \
       glibc-devel.i686 \
       pkgconfig \
-      ninja-build \
       libasan"
   else
     echo_fatal "$OS_DISTRO is not a supported distribution."
   fi
   echo "Install distro libs"
-  $SUDO $INSTALLER install $OPTION $PACKAGE_LIST
-  ret=$?;[[ $ret -ne 0 ]] && return $ret
+  $SUDO $INSTALLER install $OPTION $PACKAGE_LIST || return $?
 
   echo_info "distro libs installation complete"
 
@@ -316,48 +300,15 @@ check_install_upf_deps() {
   echo -e "       switch uses tc u32 with action police. $NC"
   echo ""
 
-  install_libbpf_from_git $1 $2
-  ret=$?;[[ $ret -ne 0 ]] && return $ret
+  install_libbpf_from_git $1 $2 || return $?
   echo ""
-  install_bpftool_from_git $1 $2
-  ret=$?;[[ $ret -ne 0 ]] && return $ret
+  install_bpftool_from_git $1 $2 || return $?
   echo ""
-  install_netlink_libraries $1 $2
-  ret=$?;[[ $ret -ne 0 ]] && return $ret
+  install_netlink_libraries $1 $2 || return $?
 
-  install_fmt_from_git $1 $2
-  ret=$?;[[ $ret -ne 0 ]] && return $ret
-  install_spdlog_from_git $1 $2
-  ret=$?;[[ $ret -ne 0 ]] && return $ret
-
-  install_nlohmann_from_git $1 $2
-  ret=$?;[[ $ret -ne 0 ]] && return $ret
-
-  install_cpr_from_git $1 $2
-  ret=$?;[[ $ret -ne 0 ]] && return $ret
-
-  # latest usage of yaml-cpp suggests that we should be using 0.7+ version
-  # To be sure, let's install from source all the time for the moment
-  if [[ $OS_DISTRO == "ubuntu" ]]; then
-    case "$(get_distribution_release)" in
-      "ubuntu20.04")
-        # definitely, 0.6.2 as PPA installed is not enough
-        install_libyaml_cpp_from_git $1 $2
-        ret=$?;[[ $ret -ne 0 ]] && return $ret
-        ;;
-      "ubuntu22.04")
-        # not sure about 0.7.0
-        #$SUDO $INSTALLER install $OPTION libyaml-cpp0.7 libyaml-cpp-dev
-        install_libyaml_cpp_from_git $1 $2
-        ret=$?;[[ $ret -ne 0 ]] && return $ret
-        ;;
-    esac
-  elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
-    # definitely, 0.6.2 as PPA installed is not enough
-    # $SUDO $INSTALLER install $OPTION yaml-cpp yaml-cpp-devel
-    install_libyaml_cpp_from_git $1 $2
-    ret=$?;[[ $ret -ne 0 ]] && return $ret
-  fi
+  for lib in fmt spdlog nlohmann cpr libyaml_cpp; do
+    install_${lib}_from_git $1 $2 || return $?
+  done
 
   if [[ $IS_CONTAINER -eq 1 ]] && [[ "$OS_BASEDISTRO" == "fedora" ]]; then
     echo "Changing gcc/g++ version to 12"
@@ -373,27 +324,28 @@ check_install_upf_deps() {
 
   return 0
 }
-#-------------------------------------------------------------------------------
-#arg1 is force (0 or 1) (no interactive script)
-#arg2 is debug (0 or 1) (install debug libraries)
+
+# -------------------------------------------------------------------------------
+# Install the minimal set of packages, for a host that only has to run and
+# debug an already built UPF.
+# -------------------------------------------------------------------------------
+
+# arg1 is force (0 or 1) (no interactive script)
+# arg2 is debug (0 or 1) (install debug libraries)
+
 check_install_upf_min_deps() {
 
-  if [ $1 -gt 0 ]; then
-    OPTION="-y"
-  else
-    OPTION=""
-  fi
+  OPTION=""
+  [ $1 -gt 0 ] && OPTION="-y"
 
   echo "Check supported distribution"
-  check_supported_distribution
-  [[ $? -ne 0 ]] && return $?
+  check_supported_distribution || {
+    echo_error "$(get_distribution_release) is not a supported distribution"
+    return 1
+  }
 
   # prevent lock on /var/lib/dpkg/lock
-  if [[ $OS_DISTRO == "ubuntu" ]]; then
-    #$SUDO systemctl mask apt-daily.service
-    #$SUDO systemctl mask apt-daily.timer
-    #$SUDO systemctl mask apt-daily-upgrade.service
-    #$SUDO systemctl mask apt-daily-upgrade.timer
+  if [[ $OS_DISTRO == "ubuntu" ]] && [ $IS_CONTAINER -eq 0 ]; then
     $SUDO sed -i 's/1/0/g' /etc/apt/apt.conf.d/10periodic
   fi
 
@@ -402,50 +354,35 @@ check_install_upf_min_deps() {
   check_enable_epel_repos
 
   # Compilers, generators, ...
-  if [[ $OS_DISTRO == "ubuntu" ]]; then
-    PACKAGE_LIST="\
-      gdb "
-  elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
-    PACKAGE_LIST="\
-      gdb "
-  else
-    echo_fatal "$OS_DISTRO is not a supported distribution."
-  fi
   echo "Install build tools"
-  $SUDO $INSTALLER install $OPTION $PACKAGE_LIST
-  ret=$?;[[ $ret -ne 0 ]] && return $ret
+  $SUDO $INSTALLER install $OPTION gdb || return $?
 
-
-  # Networking
+  # Networking. iproute2 carries tc, which both datapaths use to install the
+  # QER rate limiters.
+  PACKAGE_LIST="\
+    ethtool \
+    iptables"
   if [[ $OS_DISTRO == "ubuntu" ]]; then
-    case "$(get_distribution_release)" in
-  "ubuntu18.04")
-      specific_packages="iproute2"
-      ;;
-    esac
-    PACKAGE_LIST="\
-      $specific_packages \
-      ethtool \
-      iptables \
-      vlan"
+    PACKAGE_LIST="$PACKAGE_LIST iproute2 vlan"
   elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
-    PACKAGE_LIST="\
-      ethtool \
-      iproute \
-      vconfig"
+    PACKAGE_LIST="$PACKAGE_LIST iproute vconfig"
   else
     echo_fatal "$OS_DISTRO is not a supported distribution."
   fi
   echo "Install networking tools"
-  $SUDO $INSTALLER install $OPTION $PACKAGE_LIST
-  ret=$?;[[ $ret -ne 0 ]] && return $ret
+  $SUDO $INSTALLER install $OPTION $PACKAGE_LIST || return $?
 
   return 0
 }
 
+# -------------------------------------------------------------------------------
+# Distribution detection.
+# -------------------------------------------------------------------------------
+
 OS_DISTRO=$(grep "^ID=" /etc/os-release | sed "s/ID=//" | sed "s/\"//g")
 OS_RELEASE=$(grep "^VERSION_ID=" /etc/os-release | sed "s/VERSION_ID=//" | sed "s/\"//g")
 
+# Echoes the distribution and its release joined, e.g. ubuntu24.04.
 get_distribution_release() {
     if [[ ! -z "$OS_DISTRO$OS_RELEASE" ]]; then
         echo "$OS_DISTRO$OS_RELEASE"
@@ -454,9 +391,10 @@ get_distribution_release() {
     fi
 }
 
+# Returns 1 where LTTNG is supported: build_upf adds -DUSE_LTTNG=ON on 1.
 check_platform_for_lttng() {
   local distribution=$(get_distribution_release)
-  if [[ "$distribution" == "ubuntu18.04" || "$distribution" == "ubuntu20.04" || "$distribution" == "ubuntu22.04" ]]; then
+  if [[ "$distribution" == "ubuntu24.04" ]]; then
       return 1
   fi
   return 0
