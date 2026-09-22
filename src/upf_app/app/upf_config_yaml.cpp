@@ -511,6 +511,12 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
       static_cast<uint32_t>(datapath_cfg.get_max_pdu_sessions());
   cfg.max_upf_interfaces =
       static_cast<uint16_t>(datapath_cfg.get_max_upf_interfaces());
+  cfg.n3_rx_threads = static_cast<uint16_t>(datapath_cfg.get_n3_rx_threads());
+  cfg.dl_rx_queues  = static_cast<uint16_t>(datapath_cfg.get_dl_rx_queues());
+  cfg.qos_burst_ms  = static_cast<uint16_t>(datapath_cfg.get_qos_burst_ms());
+  cfg.qos_shape_ms  = static_cast<uint16_t>(datapath_cfg.get_qos_shape_ms());
+  cfg.qos_shape_ul_ms =
+      static_cast<uint16_t>(datapath_cfg.get_qos_shape_ul_ms());
   cfg.max_upf_redirect_interfaces =
       static_cast<uint16_t>(datapath_cfg.get_max_upf_redirect_interfaces());
   cfg.max_pdrs_per_pdu_session =
@@ -541,8 +547,12 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
   logger::logger_registry::get_logger(LOGGER_NAME)
       .info(
           "Datapath configuration transferred: max_pdu_sessions=%u, "
-          "max_upf_interfaces=%u, max_arp_entries=%u",
-          cfg.max_pdu_sessions, cfg.max_upf_interfaces, cfg.max_arp_entries);
+          "max_upf_interfaces=%u, max_arp_entries=%u, n3_rx_threads=%u, "
+          "dl_rx_queues=%u, qos_burst_ms=%u, qos_shape_ms=%u, "
+          "qos_shape_ul_ms=%u",
+          cfg.max_pdu_sessions, cfg.max_upf_interfaces, cfg.max_arp_entries,
+          cfg.n3_rx_threads, cfg.dl_rx_queues, cfg.qos_burst_ms,
+          cfg.qos_shape_ms, cfg.qos_shape_ul_ms);
 
   auto snssai_upf_list = upf_local->get_upf_info().getSNssaiUpfInfoList();
   for (const auto& snssai : snssai_upf_list) {
@@ -591,6 +601,15 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
     cfg.upf_info.interface_upf_info_list.push_back(
         iface.second.to_upf_info_item());
   }
+
+  // to_interface_config() returns a fresh interface_cfg_t, so it resets
+  // thread_rd_sched_params to its default -- and that default is cpu_id 0,
+  // i.e. "pin every datapath thread to CPU 0". Which CPUs are usable is the
+  // operator's decision, expressed through the container cpuset; the UPF must
+  // not pin to a core number it invented. cpu_id < 0 leaves affinity alone.
+  cfg.n3.thread_rd_sched_params.cpu_id = -1;
+  cfg.n4.thread_rd_sched_params.cpu_id = -1;
+  cfg.n6.thread_rd_sched_params.cpu_id = -1;
 
   if (get_nf(oai::config::SMF_CONFIG_NAME)) {
     cfg.smf_addr.api_version = get_nf("smf")->get_sbi().get_api_version();
@@ -747,6 +766,24 @@ upf_datapath_configuration::upf_datapath_configuration(
       int_config_value(UPF_MAX_UPF_INTERFACES, UPF_DEFAULT_MAX_UPF_INTERFACES);
   m_max_upf_interfaces.set_validation_interval(2, 16);
 
+  // Datapath fan-out
+  m_n3_rx_threads =
+      int_config_value(UPF_N3_RX_THREADS, UPF_DEFAULT_N3_RX_THREADS);
+  m_n3_rx_threads.set_validation_interval(1, 16);
+  m_dl_rx_queues = int_config_value(UPF_DL_RX_QUEUES, UPF_DEFAULT_DL_RX_QUEUES);
+  m_dl_rx_queues.set_validation_interval(1, 16);
+  m_qos_burst_ms = int_config_value(UPF_QOS_BURST_MS, UPF_DEFAULT_QOS_BURST_MS);
+  m_qos_shape_ms = int_config_value(UPF_QOS_SHAPE_MS, UPF_DEFAULT_QOS_SHAPE_MS);
+  // 0 disables shaping; above that it is how long a packet may wait for its
+  // slot, which is also how much memory a queue can hold.
+  m_qos_shape_ms.set_validation_interval(0, 1000);
+  m_qos_shape_ul_ms =
+      int_config_value(UPF_QOS_SHAPE_UL_MS, UPF_DEFAULT_QOS_SHAPE_UL_MS);
+  m_qos_shape_ul_ms.set_validation_interval(0, 1000);
+  // Below ~100 ms TCP cannot reach its MBR; well above ~400 ms the MBR
+  // itself starts to leak. Both ends measured; see qos_mbr.hpp.
+  m_qos_burst_ms.set_validation_interval(10, 5000);
+
   m_max_upf_redirect_interfaces = int_config_value(
       UPF_MAX_UPF_REDIRECT_INTERFACES, UPF_DEFAULT_MAX_UPF_REDIRECT_INTERFACES);
   m_max_upf_redirect_interfaces.set_validation_interval(1, 16);
@@ -807,6 +844,21 @@ void upf_datapath_configuration::from_yaml(const YAML::Node& node) {
   }
   if (node[UPF_MAX_UPF_INTERFACES]) {
     m_max_upf_interfaces.from_yaml(node[UPF_MAX_UPF_INTERFACES]);
+  }
+  if (node[UPF_N3_RX_THREADS]) {
+    m_n3_rx_threads.from_yaml(node[UPF_N3_RX_THREADS]);
+  }
+  if (node[UPF_QOS_BURST_MS]) {
+    m_qos_burst_ms.from_yaml(node[UPF_QOS_BURST_MS]);
+  }
+  if (node[UPF_QOS_SHAPE_MS]) {
+    m_qos_shape_ms.from_yaml(node[UPF_QOS_SHAPE_MS]);
+  }
+  if (node[UPF_QOS_SHAPE_UL_MS]) {
+    m_qos_shape_ul_ms.from_yaml(node[UPF_QOS_SHAPE_UL_MS]);
+  }
+  if (node[UPF_DL_RX_QUEUES]) {
+    m_dl_rx_queues.from_yaml(node[UPF_DL_RX_QUEUES]);
   }
   if (node[UPF_MAX_UPF_REDIRECT_INTERFACES]) {
     m_max_upf_redirect_interfaces.from_yaml(
@@ -944,6 +996,28 @@ std::string upf_datapath_configuration::to_string(
 
   out.append(indent).append(
       fmt::format("{} {}:\n", OUTER_LIST_ELEM, "Datapath Configuration"));
+
+  // Datapath fan-out
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_N3_RX_THREADS_LABEL, inner_width,
+          m_n3_rx_threads.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_DL_RX_QUEUES_LABEL, inner_width,
+          m_dl_rx_queues.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_QOS_BURST_MS_LABEL, inner_width,
+          m_qos_burst_ms.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_QOS_SHAPE_MS_LABEL, inner_width,
+          m_qos_shape_ms.to_string("")));
+  out.append(inner_indent)
+      .append(fmt::format(
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_QOS_SHAPE_UL_MS_LABEL,
+          inner_width, m_qos_shape_ul_ms.to_string("")));
 
   // PFCP Session Limits
   out.append(inner_indent)
@@ -1236,6 +1310,30 @@ int upf_datapath_configuration::get_max_sdf_filter_string_length() const {
   return m_max_sdf_filter_string_length.get_value();
 }
 
+int upf_datapath_configuration::get_n3_rx_threads() const {
+  return m_n3_rx_threads.get_value();
+}
+
+//------------------------------------------------------------------------------
+int upf_datapath_configuration::get_qos_shape_ms() const {
+  return m_qos_shape_ms.get_value();
+}
+
+//------------------------------------------------------------------------------
+int upf_datapath_configuration::get_qos_shape_ul_ms() const {
+  return m_qos_shape_ul_ms.get_value();
+}
+
+//------------------------------------------------------------------------------
+int upf_datapath_configuration::get_qos_burst_ms() const {
+  return m_qos_burst_ms.get_value();
+}
+
+int upf_datapath_configuration::get_dl_rx_queues() const {
+  return m_dl_rx_queues.get_value();
+}
+
+//------------------------------------------------------------------------------
 int upf_datapath_configuration::get_max_upf_interfaces() const {
   return m_max_upf_interfaces.get_value();
 }

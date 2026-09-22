@@ -38,7 +38,7 @@ void pfcp_far::apply_forwarding_rules(
   // far_id.far_id);
   if (apply_action.forw) {
     if (forwarding_parameters.first) {
-      auto rule = forwarding_parameters.second;
+      const auto& rule = forwarding_parameters.second;
       if (rule.destination_interface.first) {
         if (rule.destination_interface.second.interface_value ==
             INTERFACE_VALUE_ACCESS) {
@@ -46,10 +46,19 @@ void pfcp_far::apply_forwarding_rules(
             switch (rule.outer_header_creation.second
                         .outer_header_creation_description) {
               case OUTER_HEADER_CREATION_GTPU_UDP_IPV4:
+                // Transport Level Marking (§8.2.24): first octet is the
+                // ToS/Traffic Class for the outer header this is about to
+                // build. Absent for most SMFs, hence 0 = leave it alone.
                 upf_n3_inst->send_g_pdu(
                     rule.outer_header_creation.second.ipv4_address,
                     upf_cfg.n3.port, rule.outer_header_creation.second.teid,
-                    reinterpret_cast<const char*>(iph), num_bytes, qfi);
+                    reinterpret_cast<const char*>(iph), num_bytes, qfi,
+                    rule.transport_level_marking.first &&
+                            !rule.transport_level_marking.second
+                                 .transport_level_marking.empty() ?
+                        (uint8_t) rule.transport_level_marking.second
+                            .transport_level_marking[0] :
+                        0);
 
                 break;
               case OUTER_HEADER_CREATION_GTPU_UDP_IPV6:

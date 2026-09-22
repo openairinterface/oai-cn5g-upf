@@ -6,7 +6,6 @@
 #include "conversions.hpp"
 #include "gtpu.h"
 #include "gtpv1u.hpp"
-
 #include <cstdlib>
 #include <sched.h>
 
@@ -43,7 +42,7 @@ extern itti_mw* itti_inst;
 gtpu_l4_stack::gtpu_l4_stack(
     const struct in_addr& address, const uint16_t port_num,
     const oai::utils::thread_sched_params& sched_params,
-    const bool send_ext_hdr)
+    const bool send_ext_hdr, int n_rx)
     : udp_s(udp_server(address, port_num)), send_ext_hdr(send_ext_hdr) {
   Logger::gtpv1_u().info(
       "gtpu_l4_stack created listening to %s:%d",
@@ -53,13 +52,13 @@ gtpu_l4_stack::gtpu_l4_stack(
   srand(time(NULL));
   seq_num         = rand() & 0x7FFFFFFF;
   restart_counter = 0;
-  udp_s.start_receive(this, sched_params);
+  udp_s.start_receive(this, sched_params, n_rx);
 }
 //------------------------------------------------------------------------------
 gtpu_l4_stack::gtpu_l4_stack(
     const struct in6_addr& address, const uint16_t port_num,
     const oai::utils::thread_sched_params& sched_params,
-    const bool send_ext_hdr)
+    const bool send_ext_hdr, int n_rx)
     : udp_s(udp_server(address, port_num)), send_ext_hdr(send_ext_hdr) {
   Logger::gtpv1_u().info(
       "gtpu_l4_stack created listening to %s:%d",
@@ -69,13 +68,13 @@ gtpu_l4_stack::gtpu_l4_stack(
   srand(time(NULL));
   seq_num         = rand() & 0x7FFFFFFF;
   restart_counter = 0;
-  udp_s.start_receive(this, sched_params);
+  udp_s.start_receive(this, sched_params, n_rx);
 }
 //------------------------------------------------------------------------------
 gtpu_l4_stack::gtpu_l4_stack(
     char* address, const uint16_t port_num,
     const oai::utils::thread_sched_params& sched_params,
-    const bool send_ext_hdr)
+    const bool send_ext_hdr, int n_rx)
     : udp_s(udp_server(address, port_num)), send_ext_hdr(send_ext_hdr) {
   Logger::gtpv1_u().info(
       "gtpu_l4_stack created listening to %s:%d", address, port_num);
@@ -84,7 +83,7 @@ gtpu_l4_stack::gtpu_l4_stack(
   srand(time(NULL));
   seq_num         = rand() & 0x7FFFFFFF;
   restart_counter = 0;
-  udp_s.start_receive(this, sched_params);
+  udp_s.start_receive(this, sched_params, n_rx);
 }
 
 //------------------------------------------------------------------------------
@@ -140,7 +139,7 @@ void gtpu_l4_stack::handle_receive_message_cb(
 //------------------------------------------------------------------------------
 void gtpu_l4_stack::send_g_pdu(
     const struct sockaddr_in& peer_addr, const teid_t teid, const char* payload,
-    const ssize_t payload_len, uint8_t qfi) {
+    const ssize_t payload_len, uint8_t qfi, uint8_t tos) {
   if (!send_ext_hdr) {
     struct gtpuhdr* gtpuhdr = reinterpret_cast<struct gtpuhdr*>(
         reinterpret_cast<uintptr_t>(payload) -
@@ -159,7 +158,7 @@ void gtpu_l4_stack::send_g_pdu(
     // gtpuhdr->next_ext_type  = GTPU_NO_MORE_EXTENSION_HEADER;
     udp_s.async_send_to(
         reinterpret_cast<const char*>(gtpuhdr),
-        payload_len + sizeof(struct gtpuhdr) - 4, peer_addr);
+        payload_len + sizeof(struct gtpuhdr) - 4, peer_addr, tos);
   } else {
     struct gtpuhdr* gtpuhdr = reinterpret_cast<struct gtpuhdr*>(
         reinterpret_cast<uintptr_t>(payload) -
@@ -193,7 +192,7 @@ void gtpu_l4_stack::send_g_pdu(
         reinterpret_cast<const char*>(gtpuhdr),
         payload_len + sizeof(struct gtpuhdr) +
             sizeof(struct gtpu_extn_pdu_session_container),
-        peer_addr);
+        peer_addr, tos);
   }
 }
 //------------------------------------------------------------------------------

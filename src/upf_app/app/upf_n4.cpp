@@ -310,6 +310,8 @@ void upf_n4::handle_receive_association_setup_response(
           msg_ies_container.node_id.second,
           msg_ies_container.recovery_time_stamp.second);
     }
+    pfcp_associations::get_instance().set_peer_addr(
+        msg_ies_container.node_id.second, remote_endpoint);
   }
   // else ignore ?
 }
@@ -350,6 +352,8 @@ void upf_n4::handle_receive_association_setup_request(
           msg_ies_container.node_id.second,
           msg_ies_container.recovery_time_stamp.second);
     }
+    pfcp_associations::get_instance().set_peer_addr(
+        msg_ies_container.node_id.second, remote_endpoint);
 
     // always yes (for the time being)
     itti_n4_association_setup_response a(TASK_UPF_N4, TASK_UPF_N4);
@@ -627,13 +631,18 @@ void upf_n4::send_n4_msg(
   if (pfcp_associations::get_instance().get_association(cp_fseid, sa)) {
     const pfcp::node_id_t& peer_node_id = sa->peer_node_id();
     if (peer_node_id.node_id_type == pfcp::NODE_ID_TYPE_IPV4_ADDRESS) {
-      // a.l_endpoint =
-      // endpoint(boost::asio::ip::address_v4(upf_cfg.n4.addr4), 0);
       isrr.r_endpoint =
           endpoint(peer_node_id.u1.ipv4_address, pfcp::default_port);
       send_n4_msg(isrr);
+    } else if (sa->has_peer_addr) {
+      // FQDN Node ID: send to the address the association came from.
+      isrr.r_endpoint = endpoint(sa->peer_addr, pfcp::default_port);
+      send_n4_msg(isrr);
     } else {
-      Logger::upf_n4().warn("TODO start_association() node_id IPV6, FQDN!");
+      Logger::upf_n4().warn(
+          "Could not send PFCP_SESSION_REPORT_REQUEST, no address known for "
+          "peer %s",
+          peer_node_id.toString().c_str());
     }
   } else {
     Logger::upf_n4().warn(
