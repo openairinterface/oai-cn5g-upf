@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: MIT
+#
+# Development / CI extras. Not needed by run_scenarios.py, which is stdlib+scapy only.
+-r requirements.txt
+
+pytest>=7.4          # optional test-runner adapter (conftest.py, test_scenarios.py)
+PyYAML>=6.0          # conf/make_test_config.py
+ruff>=0.5            # lint
+mypy>=1.10           # type check

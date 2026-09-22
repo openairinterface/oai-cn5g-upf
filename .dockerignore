@@ -1,2 +1,9 @@
 archives/
 *.html
+
+# The integration test harness is not part of any image: it runs from the host
+# (or its own container, which uses ci-scripts/tests as its build context and so
+# is unaffected by this file). Excluding it matters for build time -- the UPF
+# Dockerfile does `COPY . /openair-upf` and then compiles, so without this any
+# edit to a test file invalidates that layer and triggers a full recompile.
+ci-scripts/tests/
