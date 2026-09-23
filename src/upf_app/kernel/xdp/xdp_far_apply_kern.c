@@ -42,7 +42,6 @@
 #include "pipeline_maps.h"
 #include "interfaces_maps.h"
 #include "arp_maps.h"
-#include "eth_pdu_maps.h"
 #include "tail_call_dispatcher.h"
 #include "stats_maps.h"
 #include "stats_types.h"
@@ -538,12 +537,9 @@ int far_apply(struct xdp_md* ctx) {
   __attribute__((unused)) u64 seid = pctx->seid;
   __u32 flags                      = pctx->rules_enabled;
 
-  struct rules_match_pdr* rules;
-
-  if (IS_ETH_PDU(pctx->session_type))
-    rules = bpf_map_lookup_elem(&eth_rules_match_pdr_map, &pdr_key);
-  else
-    rules = bpf_map_lookup_elem(&rules_match_pdr_map, &pdr_key);
+  /* IP and ETH PDU sessions share rules_match_pdr_map */
+  struct rules_match_pdr* rules =
+      bpf_map_lookup_elem(&rules_match_pdr_map, &pdr_key);
 
   if (!rules) {
     bpf_debug("FAR: No rules for PDR (SEID = %llu)", seid);

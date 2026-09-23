@@ -217,8 +217,7 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
     sl_eth_->GetLifeCycle()->load();
 
     const std::initializer_list<const char*> eth_session_owned = {
-        "session_by_mac_map",     "eth_session_mapping_map",
-        "eth_session_pdrs_map",   "eth_rules_match_pdr_map",
+        "session_by_mac_map", "eth_session_mapping_map",
         "eth_egress_ifindex_map", "mac_pdu_session_map"};
     struct bpf_object* sl_eth_obj = sl_eth_->GetBpfObject();
     if (n6_eth_)
@@ -226,8 +225,6 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
     if (eth_broadcast_tc_)
       ShareMapsOwned(
           sl_eth_obj, eth_broadcast_tc_->GetBpfObject(), eth_session_owned);
-    ShareMapsOwned(sl_eth_obj, pdr_->GetBpfObject(), eth_session_owned);
-    ShareMapsOwned(sl_eth_obj, far_->GetBpfObject(), eth_session_owned);
   }
 
   /* ── Step 4: Load far_ now that its n3_-owned symbols point at n3_'s maps
@@ -480,16 +477,8 @@ void UPF_XDPProgram::VerifySharedMapIdentity() const {
        eth_broadcast_tc_ ? eth_broadcast_tc_->GetBpfObject() : nullptr},
   };
 
-  /* eth_pdu_maps.h is included by pdr_/far_'s kernel objects unconditionally
-   * (they carry the ETH dispatch code paths), but those maps are only ever
-   * unified across programs via Step 4a' -- and Step 4a' only runs when
-   * sl_eth_ exists, i.e. when the active session is an Ethernet PDU session.
-   * In IP-only mode pdr_/far_ legitimately keep their own private, unused
-   * placeholder copies of these maps (the ETH code paths are unreachable),
-   * so they must not be cross-checked here. */
   static constexpr const char* kEthOnlySessionMaps[] = {
-      "session_by_mac_map",     "eth_session_mapping_map",
-      "eth_session_pdrs_map",   "eth_rules_match_pdr_map",
+      "session_by_mac_map", "eth_session_mapping_map",
       "eth_egress_ifindex_map", "mac_pdu_session_map"};
   const bool eth_pipeline_active = (sl_eth_ != nullptr);
 
@@ -795,10 +784,6 @@ std::shared_ptr<BPFMap> UPF_XDPProgram::GetMapByName(const std::string& n) {
     return sl_eth_ ? sl_eth_->GetMacPduSessionMap() : nullptr;
   if (n == "eth_session_mapping_map")
     return sl_eth_ ? sl_eth_->GetEthSessionMappingMap() : nullptr;
-  if (n == "eth_session_pdrs_map")
-    return sl_eth_ ? sl_eth_->GetEthSessionPdrsMap() : nullptr;
-  if (n == "eth_rules_match_pdr_map")
-    return sl_eth_ ? sl_eth_->GetEthRulesMatchPdrMap() : nullptr;
   if (n == "eth_egress_ifindex_map")
     return sl_eth_ ? sl_eth_->GetEthEgressIfindexMap() : nullptr;
 

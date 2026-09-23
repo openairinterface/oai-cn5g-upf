@@ -135,7 +135,7 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
       if (pdu_type_it->second == PduSessionType::Ethernet) {
         Logger::upf_app().debug(
             "Cleaning up ETH PDU maps for seid " SEID_FMT, seid);
-        auto eth_pdrs = upf_xdp_program->GetMapByName("eth_session_pdrs_map");
+        auto eth_pdrs = upf_xdp_program->GetMapByName("pdrs_per_session_map");
         if (eth_pdrs) eth_pdrs->Remove(seid);
       }
       session_pdu_type_map_.erase(pdu_type_it);
@@ -503,8 +503,10 @@ void SessionProgramManager::UpdateRulesEnabledMap(
  *
  * Determines BPF map routing based on PDU session type:
  * - IP PDU: session_by_ue_ip_map, pdrs_per_session_map, rules_match_pdr_map
- * - ETH PDU: eth_session_mapping_map, eth_session_pdrs_map,
- *            eth_rules_match_pdr_map
+ * - ETH PDU: eth_session_mapping_map, plus the same pdrs_per_session_map /
+ *            rules_match_pdr_map as IP PDU (both session types share these
+ *            two maps, keyed by SEID -- unique per PFCP session, so they
+ *            cannot collide)
  *
  * Detection heuristic:
  *   1. If any PDR contains a UE IP Address IE -> IP PDU
@@ -559,8 +561,8 @@ PduSessionType SessionProgramManager::DetectPduSessionType(
  *   - URR (Usage Reporting Rules, Section 8.2.5)
  *   - BAR (Buffering Action Rules, Section 8.2.6, via FAR -> bar_id)
  *   - MAR (Multi-Access Rules, Section 8.2.7, ATSSS only)
- * - Storing complete rule set in rules_match_pdr_map (IP PDU) or
- *   eth_rules_match_pdr_map (ETH PDU)
+ * - Storing complete rule set in rules_match_pdr_map (shared by IP and
+ *   ETH PDU sessions -- both keyed by SEID)
  * - Populating dedicated config maps (urr_config_map, bar_config_map,
  *   mar_rules_map) and initializing runtime state (urr_volume_counters_map,
  *   bar_state_map) with BPF_NOEXIST to avoid overwriting active state
@@ -766,9 +768,11 @@ void SessionProgramManager::CreatePipeline(
       pdr_key.pdr_id                  = pdr_id;
       pdr_key.seid                    = seid;
 
-      const char* rules_map_name =
-          is_eth_pdu ? "eth_rules_match_pdr_map" : "rules_match_pdr_map";
-      auto rules_map = upf_xdp_program->GetMapByName(rules_map_name);
+      /* rules_match_pdr_map is shared by IP and ETH PDU sessions -- both
+       * keyed by SEID, which PFCP guarantees unique, so there is no
+       * collision risk. eth_rules_match_pdr_map used to be a byte-for-byte
+       * identical mirror of this map; it has been merged away. */
+      auto rules_map = upf_xdp_program->GetMapByName("rules_match_pdr_map");
       if (rules_map) {
         rules_map->Update(pdr_key, rules, BPF_ANY);
       }
@@ -839,9 +843,11 @@ void SessionProgramManager::CreatePipeline(
     }
 
     // Store all PDRs in correct session PDR map
-    const char* pdrs_map_name =
-        is_eth_pdu ? "eth_session_pdrs_map" : "pdrs_per_session_map";
-    auto session_pdrs_map = upf_xdp_program->GetMapByName(pdrs_map_name);
+    // shared by IP and ETH PDU sessions -- both keyed by SEID (unique per
+    // PFCP session, so no collision risk). eth_session_pdrs_map used to be
+    // a byte-for-byte identical mirror of this map; merged away.
+    auto session_pdrs_map =
+        upf_xdp_program->GetMapByName("pdrs_per_session_map");
     if (session_pdrs_map) {
       session_pdrs_map->Update(seid, pdrs, BPF_ANY);
     }
@@ -1167,10 +1173,11 @@ void SessionProgramManager::ModifyPipeline(
       pdr_key.pdr_id                  = pdr_id;
       pdr_key.seid                    = seid;
 
-      // Use correct rules_match_pdr map based on session type
-      const char* rules_map_name =
-          is_eth_pdu ? "eth_rules_match_pdr_map" : "rules_match_pdr_map";
-      auto rules_map = upf_xdp_program->GetMapByName(rules_map_name);
+      // rules_match_pdr_map is shared by IP and ETH PDU sessions -- both
+      // keyed by SEID (unique per PFCP session, so no collision risk).
+      // eth_rules_match_pdr_map used to be a byte-for-byte identical
+      // mirror of this map; it has been merged away.
+      auto rules_map = upf_xdp_program->GetMapByName("rules_match_pdr_map");
       if (rules_map) {
         rules_map->Update(pdr_key, rules, BPF_ANY);
       }
@@ -1282,9 +1289,11 @@ void SessionProgramManager::ModifyPipeline(
 
     // Store all PDRs in session map (batch update)
     // Store all PDRs in correct session PDR map
-    const char* pdrs_map_name =
-        is_eth_pdu ? "eth_session_pdrs_map" : "pdrs_per_session_map";
-    auto session_pdrs_map = upf_xdp_program->GetMapByName(pdrs_map_name);
+    // shared by IP and ETH PDU sessions -- both keyed by SEID (unique per
+    // PFCP session, so no collision risk). eth_session_pdrs_map used to be
+    // a byte-for-byte identical mirror of this map; merged away.
+    auto session_pdrs_map =
+        upf_xdp_program->GetMapByName("pdrs_per_session_map");
     if (session_pdrs_map) {
       session_pdrs_map->Update(seid, pdrs, BPF_ANY);
     }

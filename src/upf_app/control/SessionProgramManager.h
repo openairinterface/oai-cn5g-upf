@@ -254,8 +254,8 @@ class SessionProgramManager {
    *
    * For each PDR:
    * - Converts all associated rules (FAR/QER/URR/BAR/MAR) to BPF structs
-   * - Stores complete rule set in rules_match_pdr_map or
-   *   eth_rules_match_pdr_map
+   * - Stores complete rule set in rules_match_pdr_map (shared by IP and
+   *   ETH PDU sessions, both keyed by SEID)
    * - Populates dedicated config maps (urr_config_map, bar_config_map,
    *   mar_rules_map) and initializes runtime state maps
    * - Launches async ARP resolution for N3/N6 endpoints
