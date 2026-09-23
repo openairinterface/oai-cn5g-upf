@@ -41,18 +41,18 @@ void PdrMatchProgram::ConfigureMaps(struct xdp_pdr_match_kern_c* skel) {
     throw std::runtime_error("PdrMatchProgram map configuration failed");
   }
 
-  /* rodata: 8 fields.
+  /* rodata: 7 fields.
    * xdp_pdr_match_kern.c includes pipeline_maps.h to declare the shared maps
    * (pdrs_per_session_map, rules_match_pdr_map). pipeline_maps.h declares all
    * 7 rodata fields and is a superset of sdf_maps.h rodata.
-   * eth_pdu_maps.h adds MAX_PDRS_PER_ETH_PDU_SESSION */
+   * MAX_PDRS_PER_PDU_SESSION also bounds match_pdr_eth_n3()'s loop in
+   * xdp_pdr_match_kern.c */
   if (skel->rodata) {
     skel->rodata->MAX_UPF_INTERFACES = upf::GetMaxUpfInterfaces();
     skel->rodata->MAX_UPF_REDIRECT_INTERFACES =
         upf::GetMaxUpfRedirectInterfaces();
-    skel->rodata->MAX_PDU_SESSIONS             = upf::GetMaxPduSessions();
-    skel->rodata->MAX_PDRS_PER_PDU_SESSION     = upf::GetMaxPdrsPerSession();
-    skel->rodata->MAX_PDRS_PER_ETH_PDU_SESSION = upf::GetMaxPdrsPerSession();
+    skel->rodata->MAX_PDU_SESSIONS         = upf::GetMaxPduSessions();
+    skel->rodata->MAX_PDRS_PER_PDU_SESSION = upf::GetMaxPdrsPerSession();
     skel->rodata->MAX_SDF_FILTERS_PER_PDU_SESSION =
         upf::GetMaxSdfFiltersPerSession();
     skel->rodata->MAX_ARP_ENTRIES  = upf::GetMaxArpEntries();

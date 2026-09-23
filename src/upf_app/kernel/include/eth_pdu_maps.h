@@ -8,10 +8,7 @@
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
 #include "eth_pdu_types.h"
-#include "pipeline_types.h"
 #include "upf_xdp_limits.h"
-#include "pfcp/pfcp_pdr.h"
-#include "pfcp/pfcp_far.h"
 #include "upf_map_limits.h"
 
 /* ==========================================================================
@@ -59,56 +56,6 @@ struct {
   __type(key, u32);
   __type(value, struct eth_session_id);
 } eth_session_mapping_map SEC(".maps");
-
-/* ==========================================================================
- * eth_session_pdrs_map
- * ========================================================================== */
-
-/**
- * @brief Per-session PDR array for Ethernet PDU sessions.
- *
- * Key:   u64                                   SEID
- * Value: struct pfcp_pdr[MAX_PDRS_PER_ETH_PDU_SESSION_LIMIT]  PDR array,
- *        sorted by precedence
- * Size:  MAX_PDU_SESSIONS
- *
- * ETH-PDU-path mirror of pdrs_per_session_map.
- * Kept separate because this is compiled as a distinct BPF object.
- * Read by match_pdr_eth_n3() (xdp_pdr_match_kern.c) to find the
- * highest-precedence match.
- *
- * NOTE: Map size = number of sessions, NOT total PDR count.
- */
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, 1); /* Runtime: MAX_PDU_SESSIONS */
-  __type(key, u64);
-  __type(value, struct pfcp_pdr[MAX_PDRS_PER_ETH_PDU_SESSION_LIMIT]);
-} eth_session_pdrs_map SEC(".maps");
-
-/* ==========================================================================
- * eth_rules_match_pdr_map
- * ========================================================================== */
-
-/**
- * @brief PDR -> full rule set for Ethernet PDU sessions.
- *
- * Key:   struct pdrs_per_session  {pdr_id, seid}
- * Value: struct rules_match_pdr   {far, qer, urr, bar, mar}
- * Size:  MAX_PDU_SESSIONS x MAX_PDRS_PER_PDU_SESSION
- *
- * ETH-PDU-path mirror of rules_match_pdr_map.
- * Populated by SessionProgramManager for sessions with Ethernet PDU type.
- * Read by the ETH pipeline stages to apply the matched rule set.
- */
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(
-      max_entries,
-      1); /* Runtime: MAX_PDU_SESSIONS x MAX_PDRS_PER_PDU_SESSION */
-  __type(key, struct pdrs_per_session);
-  __type(value, struct rules_match_pdr);
-} eth_rules_match_pdr_map SEC(".maps");
 
 /* ==========================================================================
  * eth_egress_ifindex_map
