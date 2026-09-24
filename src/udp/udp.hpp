@@ -278,7 +278,7 @@ class udp_server {
   /// start_receive() runs, so anything sending before then uses socket_.
   std::vector<int> sockets_;
   /// The endpoint socket_ is bound to, so clone_socket() can bind more there.
-  struct sockaddr_storage bind_addr_ {};
+  struct sockaddr_storage bind_addr_{};
   socklen_t bind_addrlen_{0};
   uint16_t port_;
   sa_family_t sa_family;

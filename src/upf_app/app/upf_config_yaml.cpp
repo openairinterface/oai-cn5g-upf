@@ -645,7 +645,7 @@ upf_interface_config upf_config_yaml::get_default_n6_interface() {
 upf_interface_config::upf_interface_config(
     const std::string& name, const std::string& host, uint16_t port,
     const std::string& if_name, const std::string& if_type)
-    : upf_interface_config(name, host, port, if_name, if_type, ""){};
+    : upf_interface_config(name, host, port, if_name, if_type, "") {};
 
 upf_interface_config::upf_interface_config(
     const std::string& name, const std::string& host, uint16_t port,

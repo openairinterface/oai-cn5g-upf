@@ -121,7 +121,7 @@ class pfcp_associations {
   }
 
   pfcp_associations(pfcp_associations const&) = delete;
-  void operator=(pfcp_associations const&) = delete;
+  void operator=(pfcp_associations const&)    = delete;
 
   // Records where the peer talks from, so an FQDN Node ID is still reachable.
   void set_peer_addr(const pfcp::node_id_t& node_id, const endpoint& e);

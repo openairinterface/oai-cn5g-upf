@@ -47,7 +47,7 @@ class pfcp_urr {
       volume_threshold;  ///< §8.2.13 — Sxa+Sxb+Sxc+N4
   std::pair<bool, pfcp::volume_quota_t> volume_quota;  ///< §8.2.50 — Sxb+Sxc+N4
   std::pair<bool, pfcp::time_threshold_t>
-      time_threshold;  ///< §8.2.14 — Sxa+Sxb+Sxc+N4
+      time_threshold;                              ///< §8.2.14 — Sxa+Sxb+Sxc+N4
   std::pair<bool, pfcp::time_quota_t> time_quota;  ///< §8.2.51 — Sxb+Sxc+N4
   std::pair<bool, pfcp::quota_holding_time_t>
       quota_holding_time;  ///< §8.2.48 — Sxb+Sxc+N4

@@ -29,7 +29,7 @@ class async_shell_cmd {
   explicit async_shell_cmd(oai::utils::thread_sched_params& sched_params);
   ~async_shell_cmd() {}
   async_shell_cmd(async_shell_cmd const&) = delete;
-  void operator=(async_shell_cmd const&) = delete;
+  void operator=(async_shell_cmd const&)  = delete;
 
   int run_command(
       const task_id_t sender_itti_task, const bool is_abort_on_error,

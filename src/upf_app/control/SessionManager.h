@@ -89,10 +89,10 @@ class SessionManager {
   ~SessionManager();
 
   // Disable copy and move
-  SessionManager(const SessionManager&) = delete;
+  SessionManager(const SessionManager&)            = delete;
   SessionManager& operator=(const SessionManager&) = delete;
   SessionManager(SessionManager&&)                 = delete;
-  SessionManager& operator=(SessionManager&&) = delete;
+  SessionManager& operator=(SessionManager&&)      = delete;
 
   // ==========================================================================
   // Session Lifecycle Management

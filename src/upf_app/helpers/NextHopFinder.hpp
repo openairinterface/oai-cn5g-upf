@@ -6,7 +6,7 @@
 #define NEXT_HOP_FINDER_HPP
 
 #include <string>
-//#include <memory>
+// #include <memory>
 #include <netinet/ether.h>
 
 class NextHopFinder {

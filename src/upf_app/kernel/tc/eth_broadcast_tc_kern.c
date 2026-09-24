@@ -127,9 +127,8 @@ int handle_broadcast(struct __sk_buff* skb) {
   /* ---------------------------------------------------------- */
   /*  Inner Ethernet (immediately after the GTP-U stack)        */
   /* ---------------------------------------------------------- */
-  eth =
-      (struct
-       ethhdr*) ((void*) data + sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE);
+  eth = (struct ethhdr*) ((void*) data + sizeof(struct ethhdr) +
+                          GTP_ENCAPSULATED_SIZE);
   if ((void*) (eth + 1) > data_end) {
     bpf_debug("eth_broadcast_tc: malformed inner Ethernet");
     goto out;

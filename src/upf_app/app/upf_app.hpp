@@ -31,7 +31,7 @@ class upf_app {
  public:
   explicit upf_app(const std::string& config_file);
   ~upf_app();
-  upf_app(upf_app const&) = delete;
+  upf_app(upf_app const&)        = delete;
   void operator=(upf_app const&) = delete;
 
   void stop();

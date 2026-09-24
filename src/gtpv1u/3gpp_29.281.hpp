@@ -8,7 +8,7 @@
 #include <arpa/inet.h>
 #include <cstring>
 #include <exception>
-//#include <fmt/format.h> conflicts with spdlog
+// #include <fmt/format.h> conflicts with spdlog
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -73,7 +73,7 @@ class gtpv1u_ie : public stream_serializable {
 
   explicit gtpv1u_ie(const uint8_t tlv_type) : tlv() { tlv.type = tlv_type; }
 
-  virtual ~gtpv1u_ie(){};
+  virtual ~gtpv1u_ie() {};
 
   virtual void to_core_type(gtpv1u_ies_container& s) {
     throw gtpu_msg_illegal_ie_exception(s.msg_id, tlv.type);

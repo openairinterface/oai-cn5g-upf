@@ -22,7 +22,7 @@ itti_msg::itti_msg(const itti_msg& i)
     : msg_type(i.msg_type),
       msg_num(i.msg_num),
       origin(i.origin),
-      destination(i.destination){};
+      destination(i.destination) {};
 
 const char* itti_msg::get_msg_name() {
   return "UNINITIALIZED";

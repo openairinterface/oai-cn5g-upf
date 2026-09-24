@@ -250,7 +250,7 @@ class itti_msg_timeout : public itti_msg {
         timer_id(i.timer_id),
         arg1_user(i.arg1_user),
         arg2_user(i.arg2_user) {}
-  virtual ~itti_msg_timeout(){};
+  virtual ~itti_msg_timeout() {};
   static const char* get_msg_name() { return "TIME_OUT"; };
   uint32_t timer_id;
   uint64_t arg1_user;
@@ -263,7 +263,7 @@ class itti_msg_ping : public itti_msg {
       const task_id_t origin, const task_id_t destination, uint32_t seq)
       : itti_msg(HEALTH_PING, origin, destination), seq(seq) {}
   itti_msg_ping(const itti_msg_ping& i) : itti_msg(i), seq(i.seq) {}
-  virtual ~itti_msg_ping(){};
+  virtual ~itti_msg_ping() {};
   static const char* get_msg_name() { return "HEALTH_PING"; };
   uint32_t seq;
 };
@@ -273,7 +273,7 @@ class itti_msg_terminate : public itti_msg {
   itti_msg_terminate(const task_id_t origin, const task_id_t destination)
       : itti_msg(TERMINATE, origin, destination) {}
   itti_msg_terminate(const itti_msg_terminate& i) : itti_msg(i) {}
-  virtual ~itti_msg_terminate(){};
+  virtual ~itti_msg_terminate() {};
   static const char* get_msg_name() { return "TERMINATE"; };
 };
 

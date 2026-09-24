@@ -8,7 +8,7 @@
 #include <linux/types.h>
 #include <stdbool.h>
 
-//#pragma once
+// #pragma once
 typedef unsigned __int128 __u128;
 
 typedef __u128 u128;
@@ -45,7 +45,7 @@ enum FlowDirection {
     type_key key;                                                              \
     type_val value;                                                            \
   };                                                                           \
-  struct ____btf_map_##name __attribute__((section(".maps." #name), used))     \
-  ____btf_map_##name = {}
+  struct ____btf_map_##name                                                    \
+      __attribute__((section(".maps." #name), used)) ____btf_map_##name = {}
 
 #endif  // CUSTOM_TYPES_H

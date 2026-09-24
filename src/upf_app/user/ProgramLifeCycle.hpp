@@ -718,11 +718,11 @@ class ProgramLifeCycle {
   ProgramState getState() const { return state_; }
 
   // Delete copy constructor and assignment operator (non-copyable)
-  ProgramLifeCycle(const ProgramLifeCycle&) = delete;
+  ProgramLifeCycle(const ProgramLifeCycle&)            = delete;
   ProgramLifeCycle& operator=(const ProgramLifeCycle&) = delete;
 
   // Allow move semantics for storing in containers
-  ProgramLifeCycle(ProgramLifeCycle&&) = default;
+  ProgramLifeCycle(ProgramLifeCycle&&)            = default;
   ProgramLifeCycle& operator=(ProgramLifeCycle&&) = default;
 
  private:

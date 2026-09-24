@@ -51,7 +51,7 @@ class upf_n3 : public gtpv1u::gtpu_l4_stack {
    *  and start the TASK_UPF_N3 ITTI task loop.
    */
   upf_n3();
-  upf_n3(upf_n3 const&) = delete;
+  upf_n3(upf_n3 const&)         = delete;
   void operator=(upf_n3 const&) = delete;
 
   //------------------------------------------------------------------------------

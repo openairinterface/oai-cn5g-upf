@@ -19,7 +19,7 @@
 
 #include "framed_routing/FramedRouting.hpp"
 #include "framed_routing/LocalRouting.hpp"
-//#include "concurrentqueue.h"
+// #include "concurrentqueue.h"
 #include "itti.hpp"
 #include "itti_msg_n4.hpp"
 #include "msg_pfcp.hpp"
@@ -288,7 +288,7 @@ class pfcp_switch {
  public:
   //------------------------------------------------------------------------------
   pfcp_switch();
-  pfcp_switch(pfcp_switch const&) = delete;
+  pfcp_switch(pfcp_switch const&)    = delete;
   void operator=(pfcp_switch const&) = delete;
   ~pfcp_switch();
 
@@ -331,10 +331,10 @@ class pfcp_switch {
   /** @brief No-op overloads for raw-IP (no GTP) uplink path. */
   void pfcp_session_look_up_pack_in_access(
       struct iphdr* const iph, const std::size_t num_bytes,
-      const endpoint& r_endpoint){};
+      const endpoint& r_endpoint) {};
   void pfcp_session_look_up_pack_in_access(
       struct ipv6hdr* const iph, const std::size_t num_bytes,
-      const endpoint& r_endpoint){};
+      const endpoint& r_endpoint) {};
 
   //------------------------------------------------------------------------------
   /** @brief Match and forward a downlink packet read from tun0 (N6).

@@ -7,7 +7,7 @@
 #include <string>
 
 #include "logger.hpp"
-#include "upf_config.hpp"  // upf_config — intentionally local to this TU
+#include "upf_config.hpp"        // upf_config — intentionally local to this TU
 #include "upf_network_config.h"  // upf::NetworkConfig, upf::g_net_cfg
 
 using namespace oai::config;

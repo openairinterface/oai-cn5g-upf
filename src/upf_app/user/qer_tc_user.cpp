@@ -14,7 +14,7 @@
 #include "utils/net_utils.hpp"
 #include "utils/bpf_utils.hpp"
 #include "UserPlaneComponent.h"
-//#include "sdf_filter.h"
+// #include "sdf_filter.h"
 #include "sdf_types.h"
 #include "startup_banner.hpp"
 #include "number_utils.hpp"
@@ -293,7 +293,7 @@ void QERTCProgram::Setup(
         uint32_t default_quantum = default_rate_bytes / GetR2qRoot();
         cmd                      = fmt::format(
             "tc class add dev {} parent 1:{:x} classid 1:{:x} htb rate {}kbit "
-            "ceil {}kbit quantum {}",
+                                 "ceil {}kbit quantum {}",
             gtp_iface, casted_seid, default_minor, GetDefaultClassRate(),
             GetDefaultClassCeil(), default_quantum);
 

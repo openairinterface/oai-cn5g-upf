@@ -55,7 +55,7 @@ class upf_map {
     }
   }
 
-  upf_map(const upf_map&) = delete;
+  upf_map(const upf_map&)            = delete;
   upf_map& operator=(const upf_map&) = delete;
 
   /**

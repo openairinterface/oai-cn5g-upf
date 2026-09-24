@@ -996,7 +996,7 @@ bool pfcp_session::update(
             }
             if (afai.weight.first) {
               dst.weight.weight_value = afai.weight.second.weight_value;
-              dst.weight_present = true;  // §8.2.126 — Load Balancing mode
+              dst.weight_present      = true;  // §8.2.126 — Load Balancing mode
             }
             if (afai.priority.first) {
               dst.priority.priority_value = afai.priority.second.priority_value;

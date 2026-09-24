@@ -97,7 +97,7 @@ class BPFMaps {
   size_t GetMapCount() const { return maps_.size(); }
 
   // Delete copy constructor and assignment (non-copyable)
-  BPFMaps(const BPFMaps&) = delete;
+  BPFMaps(const BPFMaps&)            = delete;
   BPFMaps& operator=(const BPFMaps&) = delete;
 
  private:
