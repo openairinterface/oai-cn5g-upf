@@ -6,6 +6,7 @@
 
 #include <arpa/inet.h>
 
+#include <cinttypes>
 #include <sstream>
 
 #include "logger.hpp"
@@ -996,7 +997,7 @@ bool pfcp_session::update(
             }
             if (afai.weight.first) {
               dst.weight.weight_value = afai.weight.second.weight_value;
-              dst.weight_present = true;  // §8.2.126 — Load Balancing mode
+              dst.weight_present      = true;  // §8.2.126 — Load Balancing mode
             }
             if (afai.priority.first) {
               dst.priority.priority_value = afai.priority.second.priority_value;
@@ -1093,6 +1094,11 @@ bool pfcp_session::update(
       // the packet threads and leaves the rule filed under its old key.
       const std::shared_ptr<pfcp::pfcp_pdr> old_pdr = slot;
       auto existing_pdr = std::make_shared<pfcp::pfcp_pdr>(*old_pdr);
+      // The copy is a new rule to the DL buffer (fresh rule_uid), so packets
+      // held under the old one no longer match it.
+      Logger::upf_n4().debug(
+          "     • rule_uid: %" PRIu64 " → %" PRIu64, old_pdr->rule_uid,
+          existing_pdr->rule_uid);
 
       // Track what changed
       bool has_changes = false;

@@ -32,6 +32,9 @@ void BARProgram::ConfigureMaps(struct xdp_bar_apply_kern_c* skel) {
 
   /* bar_ddn_ringbuf_map: fixed size (64 KB) -- no runtime configuration. */
 
+  /* xskmap: fixed cap, one slot per N6 RX queue (XskConsumer). */
+  ok &= ConfigureMapMaxEntries(skel->maps.xskmap, "xskmap", kXskMapMaxEntries);
+
   if (!ok) {
     Logger::upf_app().error(
         "One or more map configurations failed for BARProgram.");
@@ -93,6 +96,7 @@ void BARProgram::InitializeMaps() {
   bar_config_map_      = get("bar_config_map");
   bar_state_map_       = get("bar_state_map");
   bar_ddn_ringbuf_map_ = get("bar_ddn_ringbuf_map");
+  bar_xskmap_          = get("xskmap");
 }
 
 //------------------------------------------------------------------------------
@@ -131,6 +135,11 @@ std::shared_ptr<BPFMap> BARProgram::GetBarDdnRingbuf() const {
 }
 
 //------------------------------------------------------------------------------
+std::shared_ptr<BPFMap> BARProgram::GetXskMap() const {
+  return bar_xskmap_;
+}
+
+//------------------------------------------------------------------------------
 /*
  * TODO(fmessaoudi): See TODO in n3_entry_user.cpp -- GetMapCount() ownership.
  */
@@ -142,10 +151,10 @@ size_t BARProgram::GetMapCount() const {
 bool BARProgram::DeriveNotifyCp(
     uint32_t bar_id, const std::vector<std::shared_ptr<pfcp::pfcp_far>>& fars) {
   /*
-   * §8.2.26 bit 3 (NOCP) lives on the FAR, not on the BAR: the CP asks to be
+   * NOCP (§8.2.26 bit 3) is set on the FAR, not on the BAR: the CP asks to be
    * notified by setting Apply Action NOCP on the FAR that also carries BUFF
-   * and references the BAR. Join FAR -> BAR by BAR ID (§8.2.57) and report
-   * whether ANY referencing FAR asked for the notification.
+   * and references the BAR. Match FARs to the BAR by BAR ID (§8.2.57) and
+   * report whether any of them asked for the notification.
    */
   for (const auto& far : fars) {
     if (!far) continue;
@@ -166,17 +175,17 @@ void BARProgram::ConvertBar(
         bar.suggested_buffering_packets_count.second.packet_count;
   /*
    * DL Data Notification Delay (§8.2.28) is encoded in units of 50 ms.
-   * Copy it verbatim -- converting to seconds would round every sub-second
-   * delay (e.g. 1 = 50 ms) down to 0.
+   * Copy it as is: converting to seconds would round every sub-second delay
+   * (e.g. 1 = 50 ms) down to 0.
    */
   if (bar.downlink_data_notification_delay.first)
     cfg.dl_notification_delay_50ms =
         bar.downlink_data_notification_delay.second.delay_value;
   /*
-   * NOCP (§8.2.26 bit 3) is carried by the FAR, not by the BAR IE, so it is
-   * joined in by the caller (DeriveNotifyCp) and only stored here. The XDP
-   * BAR program refuses to emit a DDN when this is 0, i.e. a BUFF-without-
-   * NOCP FAR buffers silently.
+   * NOCP (§8.2.26 bit 3) is carried by the FAR, not by the BAR IE, so the
+   * caller derives it (DeriveNotifyCp) and it is only stored here. The XDP
+   * BAR program emits no DDN when this is 0, so a FAR with BUFF but without
+   * NOCP buffers silently.
    */
   cfg.notify_cp = notify_cp ? 1 : 0;
 }
@@ -203,19 +212,9 @@ void BARProgram::InitBarStateMap(uint64_t seid, uint32_t bar_id) {
   bar_state_t state{};
   if (!bar_state_map_) return;
   /*
-   * Plain u64 SEID key; BPF_NOEXIST keeps any live buffering state intact.
-   *
-   * -EEXIST is the EXPECTED outcome, not an error: Setup() re-runs on every
-   * Session Modification that carries a BAR, and the XDP datapath itself
-   * creates the entry (also with BPF_NOEXIST) on its missing-state path, so
-   * "already there" is a normal race. Preserving the live latch is exactly
-   * what BPF_NOEXIST is for -- log it at debug and carry on.
-   *
-   * TryUpdate() (not Update()) on purpose: Update() throws on ANY non-zero
-   * result, which would propagate out of BARProgram::Setup() into
-   * SessionProgramManager::ModifyPipeline() -- which re-throws -- aborting
-   * the modification BEFORE the PDR/FAR programming loop that carries the
-   * BUFFER->FORWARD paging release.
+   * BPF_NOEXIST keeps the live buffering state, so -EEXIST is normal: Setup()
+   * runs on every Session Modification with a BAR. TryUpdate() because
+   * Update() throws, which would abort the whole Session Modification.
    */
   int ret = bar_state_map_->TryUpdate(seid, state, BPF_NOEXIST);
   if (ret == -EEXIST) {
@@ -234,20 +233,10 @@ void BARProgram::InitBarStateMap(uint64_t seid, uint32_t bar_id) {
 bool BARProgram::ResetBarState(uint64_t seid) {
   if (!bar_state_map_) return false;
   /*
-   * The counterpart of InitBarStateMap(): that one is BPF_NOEXIST and can
-   * therefore never clear a latched notification, this one overwrites the
-   * live entry with a zeroed bar_state -- notify_epoch_ns back to
-   * NOTIFY_FREE, notification_sent mirror cleared, counter reset -- so the
-   * next idle burst notifies again.
-   *
-   * BPF_EXIST, not BPF_ANY: a reset must never CREATE an entry. The UPF-T4
-   * consumer re-arms by UP-SEID and may be holding a SEID whose session is
-   * already gone; creating it there would leak a map slot that nothing
-   * deletes again. -ENOENT simply means there is no latch to clear.
-   *
-   * TryUpdate() (not Update()) for the same reason as in InitBarStateMap():
-   * Update() throws on any non-zero result, and this runs on the Session
-   * Modification path that carries the BUFFER->FORWARD paging release.
+   * Zero the entry so that the next idle period notifies again. BPF_EXIST,
+   * not BPF_ANY: the session may already be gone, and creating its entry
+   * would leak a map slot. -ENOENT means there is no latch to clear.
+   * TryUpdate() for the same reason as in InitBarStateMap().
    */
   bar_state_t zeroed{};
   int ret = bar_state_map_->TryUpdate(seid, zeroed, BPF_EXIST);
@@ -275,11 +264,11 @@ void BARProgram::Setup(
     uint64_t seid, const std::vector<std::shared_ptr<pfcp::pfcp_bar>>& bars,
     const std::vector<std::shared_ptr<pfcp::pfcp_far>>& fars) {
   /*
-   * Phase 1 supports exactly ONE BAR per UP-SEID: bar_config_map and
-   * bar_state_map are keyed by the plain u64 SEID and xdp_bar_apply looks the
-   * config up by SEID alone, so a second BAR would silently overwrite the
-   * first (wrong bar_id / notify_cp on the wire). Arm the first BAR and
-   * reject the rest loudly instead of collapsing them.
+   * Only one BAR per UP SEID is supported: bar_config_map and bar_state_map
+   * are keyed by the plain u64 SEID, and xdp_bar_apply looks the config up
+   * by SEID alone, so a second BAR would silently overwrite the first (wrong
+   * bar_id / notify_cp). Arm the first BAR and reject the others with an
+   * error instead.
    */
   bool armed = false;
   for (const auto& bar : bars) {
@@ -293,7 +282,7 @@ void BARProgram::Setup(
           seid, bars.size(), bar_id);
       continue;
     }
-    /* FAR -> BAR NOCP join: the BAR IE has no Apply Action of its own. */
+    /* NOCP comes from the FARs: the BAR IE has no Apply Action of its own. */
     const bool notify_cp = DeriveNotifyCp(bar_id, fars);
     Logger::upf_app().debug(
         "BARProgram: SEID=%" PRIu64
@@ -304,6 +293,34 @@ void BARProgram::Setup(
     InitBarStateMap(seid, bar_id);
     armed = true;
   }
+}
+
+//------------------------------------------------------------------------------
+void BARProgram::SetupWithoutBar(
+    uint64_t seid, const std::vector<std::shared_ptr<pfcp::pfcp_far>>& fars) {
+  if (!bar_config_map_) return;
+  bool notify_cp = false;
+  for (const auto& far : fars) {
+    if (far && far->apply_action.buff && far->apply_action.nocp) {
+      notify_cp = true;
+      break;
+    }
+  }
+  /* bar_id 0, no count limit, no delay: only the NOCP gate is configured. */
+  struct bar_config cfg = {};
+  cfg.notify_cp         = notify_cp ? 1 : 0;
+  /* TryUpdate(), not Update(), for the same reason as InitBarStateMap(). */
+  int ret = bar_config_map_->TryUpdate(seid, cfg, BPF_ANY);
+  if (ret != 0) {
+    Logger::upf_app().error(
+        "BARProgram: default config map update failed SEID=%" PRIu64 " ret=%d",
+        seid, ret);
+    return;
+  }
+  Logger::upf_app().debug(
+      "BARProgram: SEID=%" PRIu64 " has no BAR, default config notify_cp=%u",
+      seid, notify_cp ? 1U : 0U);
+  InitBarStateMap(seid, 0);
 }
 
 //------------------------------------------------------------------------------

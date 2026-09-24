@@ -51,7 +51,15 @@ class upf_n3 : public gtpv1u::gtpu_l4_stack {
    *  and start the TASK_UPF_N3 ITTI task loop.
    */
   upf_n3();
-  upf_n3(upf_n3 const&) = delete;
+  /// Tag type that selects the transmit-only constructor.
+  struct tx_only_t {};
+  /** @brief Transmit-only N3 sender: an ephemeral UDP port on the N3 IPv4
+   *  address, no receive thread and no TASK_UPF_N3 task. Used on the eBPF
+   *  datapath to replay buffered DL packets (XDP owns 2152 there).
+   *  @param tx_only Tag; only its type matters.
+   */
+  explicit upf_n3(tx_only_t tx_only);
+  upf_n3(upf_n3 const&)         = delete;
   void operator=(upf_n3 const&) = delete;
 
   //------------------------------------------------------------------------------

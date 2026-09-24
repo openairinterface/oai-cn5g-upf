@@ -9,6 +9,7 @@
 #include "upf_pfcp_association.hpp"
 #include "upf_n4.hpp"
 
+#include <cinttypes>
 #include <chrono>
 #include <ctime>
 #include <stdexcept>
@@ -261,6 +262,9 @@ void upf_n4::handle_receive_heartbeat_request(
       return;
     }
     Logger::upf_n4().info("Received SX HEARTBEAT REQUEST");
+    // Runs on the UDP receive thread. send_response() takes trx_mutex_ itself,
+    // which is safe: handle_receive_message_cb() has already returned and
+    // released it, so the two locks are taken one after the other, not nested.
     send_heartbeat_response(remote_endpoint, trxn_id);
   }
 }
@@ -381,6 +385,9 @@ void upf_n4::handle_receive_association_setup_request(
       a.pfcp_ies.set(enterprise_specific);
       if (node_id.node_id_type != pfcp::NODE_ID_TYPE_IPV6_ADDRESS) {
         a.r_endpoint = remote_endpoint;
+        // Runs on the UDP receive thread. send_n4_msg() -> send_response()
+        // takes trx_mutex_ itself, after handle_receive_message_cb() has
+        // returned and released it, so the locks are not nested.
         send_n4_msg(a);
       } else {
         Logger::upf_n4().warn(
@@ -487,6 +494,19 @@ void upf_n4::handle_receive_session_report_response(
 
   handle_receive_message_cb(msg, remote_endpoint, TASK_UPF_N4, error, trxn_id);
   if (!error) {
+    // The report was answered, so there is no latch to re-arm. trx_mutex_ is
+    // already released here, and dldr_mutex_ is never nested inside it.
+    size_t pending = 0;
+    bool was_dldr  = false;
+    {
+      std::lock_guard<std::mutex> lk(dldr_mutex_);
+      was_dldr = dldr_trxn_.erase(trxn_id) > 0;
+      pending  = dldr_trxn_.size();
+    }
+    if (was_dldr)
+      Logger::upf_n4().debug(
+          "DLDR trxn %" PRIu64 " answered, %zu DLDR(s) pending", trxn_id,
+          pending);
     itti_n4_session_report_response* itti_msg =
         new itti_n4_session_report_response(TASK_UPF_N4, TASK_UPF_APP);
     itti_msg->pfcp_ies   = msg_ies_container;
@@ -584,7 +604,50 @@ void upf_n4::handle_itti_msg(itti_n4_session_deletion_response& msg) {
 }
 //------------------------------------------------------------------------------
 void upf_n4::handle_itti_msg(itti_n4_session_report_request& msg) {
+  if (msg.has_dldr_meta) {
+    // Record the transaction before sending, so that a fast response always
+    // finds it.
+    {
+      std::lock_guard<std::mutex> lk(dldr_mutex_);
+      dldr_trxn_[msg.trxn_id] = std::make_pair(msg.up_seid, msg.dl_pdr_id);
+    }
+    Logger::upf_n4().info(
+        "Sending SESSION REPORT REQUEST (DLDR) seid " SEID_FMT " pdr %u",
+        msg.up_seid, msg.dl_pdr_id);
+  }
   send_n4_msg(msg);
+}
+//------------------------------------------------------------------------------
+// notify_ul_error -- the peer never answered a request we sent. Runs on
+// TASK_UPF_N4, with trx_mutex_ released.
+//
+// For a Downlink Data Report, the PDR's notification latch is still held, so
+// no new DL packet would report and the UE would not be paged again. Ask
+// TASK_UPF_APP, which owns the rules, to release the latch. A late response
+// only causes one extra report, which the SMF ignores.
+//------------------------------------------------------------------------------
+void upf_n4::notify_ul_error(
+    const pfcp::pfcp_procedure& p, const ::cause_value_e cause) {
+  pfcp_l4_stack::notify_ul_error(p, cause);
+  std::pair<uint64_t, uint16_t> dldr = {};
+  {
+    std::lock_guard<std::mutex> lk(dldr_mutex_);
+    auto it = dldr_trxn_.find(p.trxn_id);
+    if (it == dldr_trxn_.end()) return;
+    dldr = it->second;
+    dldr_trxn_.erase(it);
+  }
+  Logger::upf_n4().warn(
+      "DLDR trxn %" PRIu64 " seid " SEID_FMT ": peer not responding, re-arming",
+      p.trxn_id, dldr.first);
+  auto m = std::make_shared<itti_n4_dl_notify_rearm>(TASK_UPF_N4, TASK_UPF_APP);
+  m->up_seid = dldr.first;
+  m->pdr_id  = dldr.second;
+  if (itti_inst->send_msg(m) != RETURNok) {
+    Logger::upf_n4().error(
+        "Could not send ITTI message %s to task TASK_UPF_APP",
+        m->get_msg_name());
+  }
 }
 //------------------------------------------------------------------------------
 void upf_n4::send_n4_msg(itti_n4_association_setup_request& i) {
@@ -635,40 +698,19 @@ void upf_n4::start_association(const pfcp::node_id_t& node_id) {
   }
 }
 //------------------------------------------------------------------------------
-void upf_n4::send_n4_msg(
-    const pfcp::fseid_t& cp_fseid, const pfcp::pfcp_session_report_request& s) {
-  itti_n4_session_report_request isrr(TASK_UPF_N4, TASK_UPF_N4);
-  isrr.trxn_id  = generate_trxn_id();
-  isrr.pfcp_ies = s;
-  isrr.seid     = cp_fseid.seid;
-
-  std::shared_ptr<pfcp_association> sa = {};
-  if (pfcp_associations::get_instance().get_association(cp_fseid, sa)) {
-    const pfcp::node_id_t& peer_node_id = sa->peer_node_id();
-    if (peer_node_id.node_id_type == pfcp::NODE_ID_TYPE_IPV4_ADDRESS) {
-      isrr.r_endpoint =
-          endpoint(peer_node_id.u1.ipv4_address, pfcp::default_port);
-      send_n4_msg(isrr);
-    } else if (sa->has_peer_addr) {
-      // FQDN Node ID: send to the address the association came from.
-      isrr.r_endpoint = endpoint(sa->peer_addr, pfcp::default_port);
-      send_n4_msg(isrr);
-    } else {
-      Logger::upf_n4().warn(
-          "Could not send PFCP_SESSION_REPORT_REQUEST, no address known for "
-          "peer %s",
-          peer_node_id.toString().c_str());
-    }
-  } else {
-    Logger::upf_n4().warn(
-        "Could not send PFCP_SESSION_REPORT_REQUEST, cause association not "
-        "found for cp_fseid");
-  }
+bool upf_n4::send_n4_msg(
+    const pfcp::fseid_t& cp_fseid, const pfcp::pfcp_session_report_request& s,
+    std::optional<std::pair<uint64_t, uint16_t>> dldr) {
+  // Callers run on DL datapath, usage-report and TASK_UPF_APP threads, so the
+  // request goes through TASK_UPF_N4 instead of calling send_request() here.
+  bool association_found = false;
+  return enqueue_session_report_request(cp_fseid, s, association_found, dldr);
 }
 //------------------------------------------------------------------------------
 bool upf_n4::enqueue_session_report_request(
     const pfcp::fseid_t& cp_fseid, const pfcp::pfcp_session_report_request& s,
-    bool& association_found) {
+    bool& association_found,
+    std::optional<std::pair<uint64_t, uint16_t>> dldr) {
   association_found = false;
 
   std::shared_ptr<pfcp_association> sa = {};
@@ -680,12 +722,19 @@ bool upf_n4::enqueue_session_report_request(
     return false;
   }
 
+  // An IPv4 Node ID is its own address. Any other Node ID (an FQDN) cannot go
+  // in a sockaddr, so use the address the association came from.
   const pfcp::node_id_t& peer_node_id = sa->peer_node_id();
-  if (peer_node_id.node_id_type != pfcp::NODE_ID_TYPE_IPV4_ADDRESS) {
+  endpoint r_endpoint                 = {};
+  if (peer_node_id.node_id_type == pfcp::NODE_ID_TYPE_IPV4_ADDRESS) {
+    r_endpoint = endpoint(peer_node_id.u1.ipv4_address, pfcp::default_port);
+  } else if (sa->has_peer_addr) {
+    r_endpoint = endpoint(sa->peer_addr, pfcp::default_port);
+  } else {
     Logger::upf_n4().warn(
         "Could not enqueue PFCP_SESSION_REPORT_REQUEST for cp_fseid " SEID_FMT
-        ", TODO node_id IPV6, FQDN!",
-        cp_fseid.seid);
+        ", no address known for peer %s",
+        cp_fseid.seid, peer_node_id.toString().c_str());
     return false;
   }
   association_found = true;
@@ -703,19 +752,24 @@ bool upf_n4::enqueue_session_report_request(
   isrr->trxn_id    = generate_trxn_id();
   isrr->pfcp_ies   = s;
   isrr->seid       = cp_fseid.seid;
-  isrr->r_endpoint = endpoint(peer_node_id.u1.ipv4_address, pfcp::default_port);
+  isrr->r_endpoint = r_endpoint;
+  if (dldr) {
+    isrr->has_dldr_meta = true;
+    isrr->up_seid       = dldr->first;
+    isrr->dl_pdr_id     = dldr->second;
+  }
 
   if (itti_inst->send_msg(isrr) != RETURNok) {
     Logger::upf_n4().error(
         "Could not enqueue PFCP_SESSION_REPORT_REQUEST to TASK_UPF_N4 for "
-        "cp_fseid " SEID_FMT " (trxn_id %lu)",
+        "cp_fseid " SEID_FMT " (trxn_id %" PRIu64 ")",
         cp_fseid.seid, isrr->trxn_id);
     return false;
   }
 
   Logger::upf_n4().debug(
       "Queued PFCP_SESSION_REPORT_REQUEST on TASK_UPF_N4, seid " SEID_FMT
-      " (CP F-SEID) trxn_id %lu",
+      " (CP F-SEID) trxn_id %" PRIu64,
       isrr->seid, isrr->trxn_id);
   return true;
 }
@@ -723,7 +777,7 @@ bool upf_n4::enqueue_session_report_request(
 void upf_n4::send_heartbeat_request(std::shared_ptr<pfcp_association>& a) {
   pfcp::pfcp_heartbeat_request h = {};
   pfcp::recovery_time_stamp_t r  = {
-      .recovery_time_stamp = (uint32_t) recovery_time_stamp};
+       .recovery_time_stamp = (uint32_t) recovery_time_stamp};
   h.set(r);
 
   pfcp::node_id_t& node_id = a->node_id;
@@ -745,7 +799,7 @@ void upf_n4::send_heartbeat_response(
     const endpoint& r_endpoint, const uint64_t trxn_id) {
   pfcp::pfcp_heartbeat_response h = {};
   pfcp::recovery_time_stamp_t r   = {
-      .recovery_time_stamp = (uint32_t) recovery_time_stamp};
+        .recovery_time_stamp = (uint32_t) recovery_time_stamp};
   h.set(r);
   send_response(r_endpoint, h, trxn_id);
 }

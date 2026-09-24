@@ -536,19 +536,31 @@ class itti_n4_session_report_request : public itti_n4_msg {
       : itti_n4_msg(N4_SESSION_REPORT_REQUEST, origin, destination) {}
   itti_n4_session_report_request(const itti_n4_session_report_request& i)
       : itti_n4_msg(i) {
-    pfcp_ies = i.pfcp_ies;
+    pfcp_ies      = i.pfcp_ies;
+    has_dldr_meta = i.has_dldr_meta;
+    up_seid       = i.up_seid;
+    dl_pdr_id     = i.dl_pdr_id;
   }
   itti_n4_session_report_request(
       const itti_n4_session_report_request& i, const task_id_t orig,
       const task_id_t dest)
       : itti_n4_msg(i, orig, dest) {
-    pfcp_ies = i.pfcp_ies;
+    pfcp_ies      = i.pfcp_ies;
+    has_dldr_meta = i.has_dldr_meta;
+    up_seid       = i.up_seid;
+    dl_pdr_id     = i.dl_pdr_id;
   }
   const char* get_msg_name() {
     return typeid(itti_n4_session_deletion_request).name();
   };
 
   pfcp::pfcp_session_report_request pfcp_ies;
+  // Set for a Downlink Data Report only: the UP SEID and DL PDR that raised
+  // it, so TASK_UPF_N4 can map the transaction back to the latch it holds.
+  // A flag rather than a 0 sentinel, since a PDR ID can be 0.
+  bool has_dldr_meta = false;
+  uint64_t up_seid   = 0;
+  uint16_t dl_pdr_id = 0;
 };
 //-----------------------------------------------------------------------------
 class itti_n4_session_report_response : public itti_n4_msg {
@@ -571,6 +583,26 @@ class itti_n4_session_report_response : public itti_n4_msg {
   };
 
   pfcp::pfcp_session_report_response pfcp_ies;
+};
+
+//------------------------------------------------------------------------------
+// UPF-internal, TASK_UPF_N4 -> TASK_UPF_APP: the SMF never answered the
+// Downlink Data Report sent for (up_seid, pdr_id), so release that PDR's DL
+// notification latch; the next DL packet then reports again. No PFCP message.
+class itti_n4_dl_notify_rearm : public itti_n4_msg {
+ public:
+  itti_n4_dl_notify_rearm(const task_id_t origin, const task_id_t destination)
+      : itti_n4_msg(N4_DL_NOTIFY_REARM, origin, destination) {}
+  itti_n4_dl_notify_rearm(const itti_n4_dl_notify_rearm& i)
+      : itti_n4_msg(i), up_seid(i.up_seid), pdr_id(i.pdr_id) {}
+  itti_n4_dl_notify_rearm(
+      const itti_n4_dl_notify_rearm& i, const task_id_t orig,
+      const task_id_t dest)
+      : itti_n4_msg(i, orig, dest), up_seid(i.up_seid), pdr_id(i.pdr_id) {}
+  const char* get_msg_name() { return typeid(itti_n4_dl_notify_rearm).name(); };
+
+  uint64_t up_seid = 0;
+  uint16_t pdr_id  = 0;
 };
 
 #endif /* ITTI_MSG_N4_HPP_INCLUDED_ */

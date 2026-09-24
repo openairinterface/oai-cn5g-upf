@@ -138,12 +138,10 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
     /*
      * TryRemove(), not Remove(): teardown deletes per-session entries from
      * maps this session may never have used (a session with no URR has no
-     * urr_config_map entry, a session with no BAR has no bar_state entry).
-     * Remove() THROWS on -ENOENT, and a throw here used to abort every
-     * remaining cleanup line below it -- in particular it could skip the
-     * bar_state_map erase, leaving a latched notification_sent behind for a
-     * re-established SEID to inherit. Deleting an absent entry is
-     * a normal, expected outcome on this path, not an error.
+     * urr_config_map entry, one with no BAR has no bar_state entry), so an
+     * absent entry is normal here. Remove() throws on -ENOENT, which would
+     * skip the rest of this cleanup, including the bar_state_map erase, and
+     * leave a latched notification_sent for a re-established SEID to inherit.
      */
     auto rules_en_map =
         upf_xdp_program->GetMapByName("session_rules_enabled_map");
@@ -164,8 +162,9 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
     }
 
     // Clean up URR/BAR/MAR dedicated config + runtime state maps.
-    // BAR first: erasing bar_config_map/bar_state_map is what guarantees a
-    // re-established SEID starts with a clear DDN one-shot latch.
+    // BAR first: erasing bar_config_map and bar_state_map is what makes a
+    // re-established SEID start with a clear DDN (Downlink Data Notification)
+    // latch.
     auto bar_prog = upf_xdp_program->GetBarProgram();
     if (bar_prog) {
       /* Owns both BAR maps; non-throwing (BARProgram::Remove). */
@@ -204,13 +203,13 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
 
 //------------------------------------------------------------------------------
 /**
- * @brief Clear the DDN one-shot latch of a session.
+ * @brief Clear the one-shot DDN latch of a session.
  *
  * @param seid Session Endpoint Identifier
  * @return true if a bar_state entry existed and was zeroed.
  *
- * @see BARProgram::ResetBarState -- overwrite-if-present (BPF_EXIST), never
- *      creates an entry for an unknown/stale SEID.
+ * @see BARProgram::ResetBarState -- overwrites an existing entry only
+ *      (BPF_EXIST), never creates one for an unknown or stale SEID.
  */
 bool SessionProgramManager::ResetBarState(uint64_t seid) {
   auto upf_xdp_program = UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
@@ -433,7 +432,7 @@ void SessionProgramManager::StoreEthPduSessionInMap(
  * downstream tail call programs should be active for this session:
  *   - QER referenced by any PDR -> RULE_QER_ENABLED
  *   - URR referenced by any PDR -> RULE_URR_ENABLED
- *   - BAR associated with any FAR -> RULE_BAR_ENABLED
+ *   - BAR associated with any FAR, or any BUFF FAR -> RULE_BAR_ENABLED
  *   - MAR referenced by any PDR -> RULE_MAR_ENABLED
  *
  * The bitmask is stored in session_rules_enabled_map and cached in
@@ -466,8 +465,11 @@ uint32_t SessionProgramManager::ComputeRulesEnabledFlags(
       break;
     }
   }
+  // A BUFF FAR needs the BAR stage even when the session has no BAR: the SMF
+  // may send BUFF|NOCP (buffer, notify the CP) with no Create BAR, and
+  // BARProgram::SetupWithoutBar() then writes a default bar_config.
   for (const auto& far : session->fars) {
-    if (far->bar_id.first) {
+    if (far->bar_id.first || far->apply_action.buff) {
       flags |= RULE_BAR_ENABLED;
       break;
     }
@@ -1053,15 +1055,19 @@ void SessionProgramManager::ModifyPipeline(
     }
 
     // BAR: populate bar_config_map + initialise bar_state_map.
-    // session->fars is passed for the FAR->BAR NOCP join: the BAR IE carries
-    // no Apply Action, so bar_config.notify_cp (which gates DDN emission in
-    // the XDP BAR program, TS 29.244 Section 8.2.26) is derived from the FARs
-    // that reference the BAR ID and have apply_action.nocp set.
-    if ((rules_flags & RULE_BAR_ENABLED) && !session->bars.empty()) {
+    // session->fars is passed because the BAR IE carries no Apply Action:
+    // bar_config.notify_cp, which gates DDN emission in the XDP BAR program,
+    // is derived from the FARs that reference the BAR ID and have
+    // apply_action.nocp set (NOCP, TS 29.244 Section 8.2.26).
+    // A session with a BUFF FAR but no BAR gets a default bar_config instead.
+    if (rules_flags & RULE_BAR_ENABLED) {
       auto bar = upf_xdp_program->GetBarProgram();
       if (bar) {
         logger.debug("Setup BARProgram for SEID=" SEID_FMT, seid);
-        bar->Setup(seid, session->bars, session->fars);
+        if (!session->bars.empty())
+          bar->Setup(seid, session->bars, session->fars);
+        else
+          bar->SetupWithoutBar(seid, session->fars);
       }
     }
 

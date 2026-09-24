@@ -122,8 +122,13 @@ deletion.
 | `qos_burst_ms` | burst forgiven before the policer drops, in ms of rate | 400 |
 | `qos_shape_ms` | 0 polices the downlink; above 0 shapes it, holding a packet at most this long | 0 |
 | `qos_shape_ul_ms` | the same for the uplink | 0 |
+| `enable_dl_buffering` | hold downlink packets for an idle UE and replay them after paging | `no` |
 
 Start with one thread per direction and raise both together.
+
+Downlink buffering while a UE is paged, and its limits, are described in
+[Downlink Buffering and Paging](PAGING.md). The simple switch needs no
+`enable_bar` for it.
 
 ## 6. Host setup
 

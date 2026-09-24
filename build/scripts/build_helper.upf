@@ -86,6 +86,8 @@ install_libbpf_from_git() {
         libpcap-dev \
         zlib1g-dev \
         llvm \
+        m4 \
+        pkg-config \
         python3-docutils"
     elif [[ "$OS_BASEDISTRO" == "fedora" ]]; then
       PACKAGE_LIST="\
@@ -96,8 +98,11 @@ install_libbpf_from_git() {
         libpfm-devel \
         elfutils-devel \
         libpcap \
+        libpcap-devel \
         zlib-devel \
         llvm \
+        m4 \
+        pkgconfig \
         python3"
     fi
     $SUDO $INSTALLER install -y $PACKAGE_LIST
@@ -120,6 +125,72 @@ install_libbpf_from_git() {
     popd
   fi
   echo "libbpf installation complete"
+  return 0
+}
+
+
+#-------------------------------------------------------------------------------
+# libxdp (AF_XDP sockets for DL buffering on the eBPF datapath), from
+# xdp-tools. It is built against the libbpf checkout above, never a distro
+# libbpf, and linked to its libbpf.so.1, so the UPF process holds one libbpf.
+# v1.5.8 is the first 1.5.x tag whose configure honours LDFLAGS in its libbpf
+# probes; its lib/libbpf submodule is libbpf v1.5.0 exactly.
+# Needs install_libbpf_from_git first (it uses the same package list).
+install_libxdp_from_git() {
+  echo "Install libxdp from source"
+  echo ""
+  if [ $1 -eq 0 ]; then
+    read -p "Do you want to install libxdp ? <y/N> " prompt
+    OPTION=""
+  else
+    prompt='y'
+    OPTION="-y"
+  fi
+
+  if [[ $prompt =~ [yY](es)* ]]
+  then
+    GIT_URL=https://github.com/xdp-project/xdp-tools.git
+    GIT_TAG=v1.5.8
+    LIBBPF_DIR=$OPENAIRCN_DIR/build/ext/libbpf
+    echo "Install libxdp from xdp-tools $GIT_TAG ($GIT_URL)"
+    pushd $OPENAIRCN_DIR/build/ext
+    $SUDO rm -rf xdp-tools
+    # No --depth, for the same reason as install_libbpf_from_git. The
+    # lib/libbpf submodule is not needed: LIBBPF_DIR points at our libbpf.
+    git clone --branch $GIT_TAG $GIT_URL
+    ret=$?
+    if [[ $ret -ne 0 ]]; then
+      echo_error "libxdp: git clone $GIT_URL failed (rc=$ret)"
+      popd && return $ret
+    fi
+    cd xdp-tools
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    git log -n1
+    # The libbpf probes link -l:libbpf.a alone, so libelf and zlib must come
+    # after it (LDFLAGS is appended to the probe command line).
+    LIBBPF_DIR=$LIBBPF_DIR \
+      LIBBPF_INCLUDE_DIR=$LIBBPF_DIR/root/usr/include \
+      LIBBPF_LIB_DIR=$LIBBPF_DIR/src \
+      LDFLAGS="-lelf -lz" ./configure
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    # Link libxdp.so to libbpf.so.1 instead of embedding a second libbpf.a.
+    sed -i 's/^LDLIBS += -l:libbpf\.a$/LDLIBS += -lbpf/' config.mk
+    grep -q '^LDLIBS += -lbpf$' config.mk
+    ret=$?
+    if [[ $ret -ne 0 ]]; then
+      echo_error "libxdp: cannot switch config.mk to the shared libbpf"
+      popd && return 1
+    fi
+    LDFLAGS="-Wl,-rpath,$LIBBPF_DIR/src" make -j $(nproc) -C lib libxdp
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    # Headers and libraries go under xdp-tools/root, where CMake looks for
+    # them. Not installed system-wide: the docker images copy libxdp.so.*.
+    LDFLAGS="-Wl,-rpath,$LIBBPF_DIR/src" make -C lib/libxdp install \
+      DESTDIR=$OPENAIRCN_DIR/build/ext/xdp-tools/root PREFIX=/usr
+    ret=$?;[[ $ret -ne 0 ]] && popd && return $ret
+    popd
+  fi
+  echo "libxdp installation complete"
   return 0
 }
 
@@ -317,6 +388,9 @@ check_install_upf_deps() {
   echo ""
 
   install_libbpf_from_git $1 $2
+  ret=$?;[[ $ret -ne 0 ]] && return $ret
+  echo ""
+  install_libxdp_from_git $1 $2
   ret=$?;[[ $ret -ne 0 ]] && return $ret
   echo ""
   install_bpftool_from_git $1 $2

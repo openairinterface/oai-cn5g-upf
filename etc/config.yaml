@@ -243,7 +243,11 @@ upf:
     # - Buffer DL packets when UE is idle/unreachable
     # - Notification procedures
     # - Power saving support
-    # Status: Not implemented (forced to false)
+    # Status: eBPF datapath only, where it switches the BAR program on or off.
+    # With no, packets that hit a BUFF (buffer) FAR are dropped and XDP sends
+    # no DL Data Report.
+    # The simple switch needs no BAR: it notifies the SMF regardless, and holds
+    # packets only with datapath_configuration.enable_dl_buffering.
     enable_bar: no
     
     # Multi-Access Rules (MAR): Multi-Access
@@ -487,6 +491,37 @@ upf:
     # Range: 1-16
     n3_rx_threads: 1
     dl_rx_queues: 1
+
+    # ---------------------------------------------------------------------------
+    # DL BUFFERING WHILE THE UE IS IDLE (paging, 3GPP TS 29.244 BUFF FAR)
+    # ---------------------------------------------------------------------------
+
+    # no: packets hitting a BUFF FAR are dropped (the SMF is still notified).
+    # yes: they are held per session and replayed on N3 once the SMF installs
+    # the new DL rules. Every bound below is finite; 0 is rejected.
+    enable_dl_buffering: no
+    # Range: 1-1024
+    dl_buffer_max_pkts_per_session: 64
+    # Charged by allocated size, not payload. Range: 4-4096
+    dl_buffer_max_kib_per_session: 128
+    # Across all sessions. Range: 64-262144
+    dl_buffer_max_pkts_total: 16384
+    # Across all sessions (32 MiB). Range: 256-524288
+    dl_buffer_max_kib_total: 32768
+    # How long packets are held before they are discarded and the SMF can be
+    # notified again. Range: 1000-120000
+    default_buffering_duration_ms: 20000
+    # eBPF datapath only (enable_bpf_datapath, enable_bar and
+    # enable_dl_buffering all yes): XDP hands the held packets to userspace
+    # through one AF_XDP socket and one UMEM (the packet memory it shares with
+    # the kernel) per N6 RX queue.
+    # Bytes per frame. 2048 or 4096
+    xsk_frame_size: 4096
+    # Frames (and ring slots) per N6 RX queue. Power of two, range: 512-16384
+    xsk_frames_per_queue: 2048
+    # Cap on all UMEMs together, checked at start (queues x frames x size).
+    # With the defaults (8 MiB per queue) that is 32 RX queues. Range: 8-1024
+    xsk_umem_max_mib_total: 256
 
     # Maximum interfaces for traffic redirection (egress interfaces)
     # Used in FARs for forwarding packets to specific destinations

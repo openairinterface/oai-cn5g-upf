@@ -131,6 +131,22 @@ class upf_config {
   /// packet reaches the UPF the radio has already been spent, so holding it
   /// relieves nothing and only hides the loss from the sender.
   u_int16_t qos_shape_ul_ms;
+  /// DL buffering while the UE is idle (paging). When off, packets that hit a
+  /// BUFF (buffer) FAR are dropped. The bounds are finite and validated (0 is
+  /// rejected).
+  bool enable_dl_buffering;
+  uint32_t dl_buffer_max_pkts_per_session;
+  uint32_t dl_buffer_max_kib_per_session;
+  uint32_t dl_buffer_max_pkts_total;
+  uint32_t dl_buffer_max_kib_total;
+  uint32_t default_buffering_duration_ms;  ///< T_guard: max hold time
+  /// AF_XDP capture of buffered DL packets (eBPF datapath): one UMEM (the
+  /// packet memory shared with the kernel) of xsk_frames_per_queue x
+  /// xsk_frame_size per N6 RX queue, all of them together at most
+  /// xsk_umem_max_mib_total.
+  uint32_t xsk_frame_size;
+  uint32_t xsk_frames_per_queue;
+  uint32_t xsk_umem_max_mib_total;
   u_int16_t max_upf_redirect_interfaces;
   u_int16_t max_pdrs_per_pdu_session;
   u_int16_t max_fars_per_pdu_session;
@@ -222,6 +238,15 @@ class upf_config {
     qos_burst_ms                                  = 400;
     qos_shape_ms                                  = 0;
     qos_shape_ul_ms                               = 0;
+    enable_dl_buffering                           = false;
+    dl_buffer_max_pkts_per_session                = 64;
+    dl_buffer_max_kib_per_session                 = 128;
+    dl_buffer_max_pkts_total                      = 16384;
+    dl_buffer_max_kib_total                       = 32768;
+    default_buffering_duration_ms                 = 20000;
+    xsk_frame_size                                = 4096;
+    xsk_frames_per_queue                          = 2048;
+    xsk_umem_max_mib_total                        = 256;
     max_upf_redirect_interfaces                   = 2;
     max_pdu_sessions                              = 1000;
     max_pdrs_per_pdu_session                      = 8;

@@ -5,6 +5,7 @@
 #ifndef SRC_OAI_ITTI_ITTI_HPP_INCLUDED_
 #define SRC_OAI_ITTI_ITTI_HPP_INCLUDED_
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <iostream>
@@ -120,14 +121,15 @@ class itti_mw {
   std::mutex m_timeout;
   std::condition_variable c_timeout;
 
-  bool terminate;
+  // Written by send_terminate_msg()/~itti_mw() and read by the timer thread.
+  std::atomic<bool> terminate;
 
   static void timer_manager_task(
       const oai::utils::thread_sched_params& sched_params);
 
  public:
   itti_mw();
-  itti_mw(itti_mw const&) = delete;
+  itti_mw(itti_mw const&)        = delete;
   void operator=(itti_mw const&) = delete;
   ~itti_mw();
 

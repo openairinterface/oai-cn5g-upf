@@ -43,9 +43,9 @@
  * @param cfg BAR configuration
  * @param pctx Packet context (for pdr_id, ue_ip)
  * @param now_ns Current timestamp
- * @return true iff the record was reserved AND submitted to the ring buffer;
- *         false when the ring is full (nothing was produced, so the caller
- *         must NOT commit the notification latch).
+ * @return true iff the record was reserved and submitted to the ring buffer;
+ *         false when the ring is full. Nothing was produced then, so the
+ *         caller must not commit the notification latch.
  */
 static __always_inline bool bar_submit_ddn(
     __u64 seid, struct bar_config* cfg, struct packet_context* pctx,
@@ -68,8 +68,8 @@ static __always_inline bool bar_submit_ddn(
   evt->ue_ip        = pctx->ue_ip;
   evt->pad          = 0;
 
-  /* bpf_ringbuf_submit() is void and cannot fail once the reservation
-   * succeeded — reserve() + submit() is therefore the whole success test. */
+  /* bpf_ringbuf_submit() returns void and cannot fail once the reservation
+   * succeeded, so a successful reserve() is the whole success test. */
   bpf_ringbuf_submit(evt, 0);
 
   bpf_debug(
@@ -81,38 +81,15 @@ static __always_inline bool bar_submit_ddn(
 }
 
 /**
- * @brief DDN delivery state machine — single-winner 64-bit atomic claim.
+ * @brief Send a DDN (Downlink Data Notification) if one is due. This is the
+ *        only place a DDN is produced.
  *
- * This is the ONLY place a DDN is produced. It replaces the old
- * "bar_should_notify() then submit then unconditionally latch" pair, whose
- * control gate was the derived @c notification_sent byte: @c notify_epoch_ns
- * is now the single source of truth and @c notification_sent is only its
- * readback mirror (bar_types.h).
- *
- * Protocol (per notification window — the first DDN of an idle burst AND
- * every reopened DL-Data-Notification-Delay window):
- *   1. NOCP gate (§8.2.26 bit 3): @c cfg->notify_cp == 0 means the FAR(s)
- *      referencing this BAR did not ask the CP to be notified — buffer
- *      silently, never produce a DDN.
- *   2. Pick the expected value @p from of the claim word:
- *        NOTIFY_FREE            -> first DDN of the idle burst;
- *        a committed epoch      -> only if a delay is configured and the
- *                                  window has expired (§8.2.28, 50 ms units);
- *        NOTIFY_CLAIMED / other -> suppress (delivered already, or a submit
- *                                  is in flight on another CPU).
- *   3. 64-bit __sync_val_compare_and_swap(from -> NOTIFY_CLAIMED). Exactly
- *      one CPU can win a given @p from value, so concurrent DL packets on any
- *      number of CPUs cannot both submit for the same window. The operand is
- *      the naturally 8-byte-aligned @c notify_epoch_ns at offset 0 of the map
- *      value (an 8/32-bit __sync_* does not compile for the BPF target).
- *   4. Commit @c now_ns (high bit cleared, so a committed epoch can never be
- *      mistaken for NOTIFY_CLAIMED) ONLY on a successful submit; on a full
- *      ring restore @p from so the next DL packet retries — a transient ring
- *      overflow delays a DDN, it never permanently suppresses it.
- *
- * The claim owner is the only writer of the word between the CAS and the
- * final store (every other CPU's CAS fails against NOTIFY_CLAIMED), so the
- * commit/restore store and the mirror update need no further atomicity.
+ *   1. No DDN if no FAR asked to notify the CP (NOCP, §8.2.26).
+ *   2. A DDN is due if none was sent yet, or if the DL Data Notification
+ *      Delay (§8.2.28) has passed since the last one.
+ *   3. A compare-and-swap to NOTIFY_CLAIMED lets exactly one CPU send it.
+ *   4. On success the send time is stored. If the ring is full, the old
+ *      value is restored so that the next packet tries again.
  *
  * @param seid   PFCP session ID
  * @param cfg    BAR configuration (map value)
@@ -209,9 +186,10 @@ int bar_apply(struct xdp_md* ctx) {
 
   if (!cfg) {
     /*
-     * FAR said BUFFER but no BAR configured — cannot buffer.
-     * Drop packet. Control plane should always create BAR when
-     * creating a FAR with BUFF action.
+     * FAR said BUFFER but there is no bar_config for the session — cannot
+     * buffer. Drop the packet. The control plane writes one for every BUFF
+     * FAR (Setup, or SetupWithoutBar for a BAR-less one), so this is reached
+     * only before that has run, e.g. for BUFF in the Establishment Request.
      */
     bpf_debug(
         "BAR: No BAR config for SEID=%llu — "
@@ -233,10 +211,10 @@ int bar_apply(struct xdp_md* ctx) {
   if (!state) {
     /*
      * No state entry — the control plane should have pre-created it
-     * (BARProgram::InitBarStateMap). Create a zeroed entry here rather than
-     * emitting an unlatched DDN per packet: without a state entry the claim
-     * word does not exist, so every DL packet of the burst would report.
-     * BPF_NOEXIST keeps a racing CPU's entry (and any live latch) intact.
+     * (BARProgram::InitBarStateMap). Create a zeroed entry here: without one
+     * there is no claim word, and every DL packet of the burst would send its
+     * own DDN. BPF_NOEXIST keeps an entry that another CPU created meanwhile,
+     * and any latch it holds, intact.
      */
     struct bar_state fresh = {};
 
@@ -245,10 +223,10 @@ int bar_apply(struct xdp_md* ctx) {
 
     if (!state) {
       /*
-       * FAIL CLOSED: state could not be established (bar_state_map full or
-       * the update was rejected). Drop and count the packet under
-       * XDP_ABORTED in mc_stats_map so userspace can reconcile the session
-       * — never fall back to an unlatched per-packet DDN.
+       * Fail closed: the state entry could not be created (bar_state_map
+       * full, or the update was rejected). Drop the packet and count it
+       * under XDP_ABORTED in mc_stats_map so userspace can notice. Never fall
+       * back to one DDN per packet.
        */
       bpf_debug(
           "BAR: Cannot establish state for SEID=%llu — "
@@ -308,33 +286,23 @@ int bar_apply(struct xdp_md* ctx) {
   }
 
   /* ---------------------------------------------------------------- */
-  /*  Step 5: Terminal action — Phase 1 drops the buffered packet    */
+  /*  Step 5: Terminal action — hand the packet to userspace          */
   /* ---------------------------------------------------------------- */
   /*
-   * Phase 1 is notify-only: there is NO buffer-capture path yet, so the DL
-   * packet is intentionally dropped once it has been counted and (if due)
-   * has produced a DDN. XDP_PASS must NOT be used here — it would inject a
-   * subscriber-bound packet into the host network stack, where it could be
-   * locally consumed or forwarded (data leak / operational hazard).
+   * Redirect the packet (still Ethernet + IPv4) to the AF_XDP socket of its
+   * RX queue. Userspace holds it until the SMF ends buffering, then sends it
+   * on the new rules.
    *
-   * Phase 2 replaces this XDP_DROP with an XDP_REDIRECT into an
-   * AF_XDP socket, so userspace can hold the packet until the SMF modifies
-   * the FAR from BUFF→FORW (TS 29.244 §7.2.4) — i.e. until the UE has moved
-   * from CM-IDLE to CM-CONNECTED — and then flush it.
-   *
-   * When the FAR is modified, the control plane should:
-   *   1. Update FAR action from BUFF to FORW
-   *   2. Reset bar_state (notify_epoch_ns=NOTIFY_FREE, buffered_pkt_count=0,
-   *      notification_sent=0)
-   *   3. Flush any buffered packets through the new forwarding path
+   * With no socket in the slot the packet is dropped. Do not use XDP_PASS as
+   * the fallback: the host stack would get a packet meant for the UE.
    *
    * BAR is a terminal node — no further tail calls.
    */
   bpf_debug(
-      "BAR: XDP_DROP — Phase 1 notify-only, no capture "
-      "path, SEID=%llu",
-      seid);
-  return xdp_stats_record_action(ctx, XDP_DROP);
+      "BAR: redirect to the AF_XDP socket of RX queue %u, SEID=%llu",
+      ctx->rx_queue_index, seid);
+  return xdp_stats_record_action(
+      ctx, bpf_redirect_map(&xskmap, ctx->rx_queue_index, XDP_DROP));
 }
 
 char _license[] SEC("license") = "GPL";

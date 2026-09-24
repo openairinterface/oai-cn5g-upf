@@ -37,6 +37,7 @@ pfcp_l4_stack::pfcp_l4_stack(
   udp_s_allocated.start_receive(this, sched_params);
 }
 //------------------------------------------------------------------------------
+// Requires trx_mutex_ held.
 uint32_t pfcp_l4_stack::get_next_seq_num() {
   seq_num++;
   if (seq_num & 0x80000000) {
@@ -96,6 +97,7 @@ bool pfcp_l4_stack::check_response_type(
   return false;
 }
 //------------------------------------------------------------------------------
+// Requires trx_mutex_ held.
 void pfcp_l4_stack::start_msg_retry_timer(
     pfcp_procedure& p, uint32_t time_out_milli_seconds,
     const task_id_t& task_id, const uint32_t& seq_num) {
@@ -109,6 +111,7 @@ void pfcp_l4_stack::start_msg_retry_timer(
   // %d",p.retry_timer_id, p.trxn_id, seq_num);
 }
 //------------------------------------------------------------------------------
+// Requires trx_mutex_ held.
 void pfcp_l4_stack::stop_msg_retry_timer(pfcp_procedure& p) {
   if (p.retry_timer_id) {
     itti_inst->timer_remove(p.retry_timer_id);
@@ -120,6 +123,7 @@ void pfcp_l4_stack::stop_msg_retry_timer(pfcp_procedure& p) {
   }
 }
 //------------------------------------------------------------------------------
+// Requires trx_mutex_ held.
 void pfcp_l4_stack::stop_msg_retry_timer(timer_id_t& t) {
   itti_inst->timer_remove(t);
   msg_out_retry_timers.erase(t);
@@ -127,6 +131,7 @@ void pfcp_l4_stack::stop_msg_retry_timer(timer_id_t& t) {
   //   Msg retry timer %d",t);
 }
 //------------------------------------------------------------------------------
+// Requires trx_mutex_ held.
 void pfcp_l4_stack::start_proc_cleanup_timer(
     pfcp_procedure& p, uint32_t time_out_milli_seconds,
     const task_id_t& task_id, const uint32_t& seq_num) {
@@ -140,6 +145,7 @@ void pfcp_l4_stack::start_proc_cleanup_timer(
   // %" PRIu32" ms",p.proc_cleanup_timer_id,p.trxn_id, time_out_milli_seconds);
 }
 //------------------------------------------------------------------------------
+// Requires trx_mutex_ held.
 void pfcp_l4_stack::stop_proc_cleanup_timer(pfcp_procedure& p) {
   itti_inst->timer_remove(p.proc_cleanup_timer_id);
   //   logger_common::pfcp().trace( "Stopped
@@ -153,6 +159,7 @@ void pfcp_l4_stack::stop_proc_cleanup_timer(pfcp_procedure& p) {
 void pfcp_l4_stack::handle_receive_message_cb(
     const pfcp_msg& msg, const endpoint& remote_endpoint,
     const task_id_t& task_id, bool& error, uint64_t& trxn_id) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   trxn_id = 0;
   error   = true;
   std::map<uint32_t, pfcp_procedure>::iterator it;
@@ -239,6 +246,7 @@ void pfcp_l4_stack::handle_receive_message_cb(
 uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const pfcp_heartbeat_request& pfcp_ies,
     const task_id_t& task_id, const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_sequence_number(get_next_seq_num());
@@ -272,6 +280,7 @@ uint32_t pfcp_l4_stack::send_request(
 uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const pfcp_association_setup_request& pfcp_ies,
     const task_id_t& task_id, const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_sequence_number(get_next_seq_num());
@@ -305,6 +314,7 @@ uint32_t pfcp_l4_stack::send_request(
 uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const pfcp_association_release_request& pfcp_ies,
     const task_id_t& task_id, const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_sequence_number(get_next_seq_num());
@@ -401,6 +411,7 @@ uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const uint64_t seid,
     const pfcp_node_report_request& pfcp_ies, const task_id_t& task_id,
     const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_sequence_number(get_next_seq_num());
@@ -435,6 +446,7 @@ uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_establishment_request& pfcp_ies,
     const task_id_t& task_id, const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_seid(seid);
@@ -471,6 +483,7 @@ uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_modification_request& pfcp_ies, const task_id_t& task_id,
     const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_seid(seid);
@@ -538,6 +551,7 @@ uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_deletion_request& pfcp_ies, const task_id_t& task_id,
     const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_seid(seid);
@@ -574,6 +588,7 @@ uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_report_request& pfcp_ies, const task_id_t& task_id,
     const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_seid(seid);
@@ -609,6 +624,7 @@ uint32_t pfcp_l4_stack::send_request(
 void pfcp_l4_stack::send_response(
     const endpoint& dest, const pfcp_heartbeat_response& pfcp_ies,
     const uint64_t trxn_id, const pfcp_transaction_action& a) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   std::map<uint64_t, uint32_t>::iterator it;
   it = trxn_id2seq_num.find(trxn_id);
   if (it != trxn_id2seq_num.end()) {
@@ -642,6 +658,7 @@ void pfcp_l4_stack::send_response(
 void pfcp_l4_stack::send_response(
     const endpoint& dest, const pfcp_association_setup_response& pfcp_ies,
     const uint64_t trxn_id, const pfcp_transaction_action& a) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   std::map<uint64_t, uint32_t>::iterator it;
   it = trxn_id2seq_num.find(trxn_id);
   if (it != trxn_id2seq_num.end()) {
@@ -676,6 +693,7 @@ void pfcp_l4_stack::send_response(
 void pfcp_l4_stack::send_response(
     const endpoint& dest, const pfcp_association_release_response& pfcp_ies,
     const uint64_t trxn_id, const pfcp_transaction_action& a) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   std::map<uint64_t, uint32_t>::iterator it;
   it = trxn_id2seq_num.find(trxn_id);
   if (it != trxn_id2seq_num.end()) {
@@ -711,6 +729,7 @@ void pfcp_l4_stack::send_response(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_establishment_response& pfcp_ies, const uint64_t trxn_id,
     const pfcp_transaction_action& a) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   std::map<uint64_t, uint32_t>::iterator it;
   it = trxn_id2seq_num.find(trxn_id);
   if (it != trxn_id2seq_num.end()) {
@@ -746,6 +765,7 @@ void pfcp_l4_stack::send_response(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_modification_response& pfcp_ies, const uint64_t trxn_id,
     const pfcp_transaction_action& a) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   std::map<uint64_t, uint32_t>::iterator it;
   it = trxn_id2seq_num.find(trxn_id);
   if (it != trxn_id2seq_num.end()) {
@@ -781,6 +801,7 @@ void pfcp_l4_stack::send_response(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_deletion_response& pfcp_ies, const uint64_t trxn_id,
     const pfcp_transaction_action& a) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   std::map<uint64_t, uint32_t>::iterator it;
   it = trxn_id2seq_num.find(trxn_id);
   if (it != trxn_id2seq_num.end()) {
@@ -816,6 +837,7 @@ void pfcp_l4_stack::send_response(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_report_response& pfcp_ies, const uint64_t trxn_id,
     const pfcp_transaction_action& a) {
+  std::lock_guard<std::mutex> lock(trx_mutex_);
   std::map<uint64_t, uint32_t>::iterator it;
   it = trxn_id2seq_num.find(trxn_id);
   if (it != trxn_id2seq_num.end()) {
@@ -857,52 +879,74 @@ void pfcp_l4_stack::notify_ul_error(
 void pfcp_l4_stack::time_out_event(
     const uint32_t timer_id, const task_id_t& task_id, bool& handled) {
   handled = false;
-  std::map<timer_id_t, uint32_t>::iterator it =
-      msg_out_retry_timers.find(timer_id);
-  if (it != msg_out_retry_timers.end()) {
-    std::map<uint32_t, pfcp_procedure>::iterator it_proc =
-        pending_procedures.find(it->second);
-    msg_out_retry_timers.erase(it);
-    handled = true;
-    if (it_proc != pending_procedures.end()) {
-      if (it_proc->second.retry_count < PFCP_N1_REQUESTS) {
-        it_proc->second.retry_count++;
-        start_msg_retry_timer(
-            it_proc->second, PFCP_T1_RESPONSE_MS, task_id,
-            it_proc->second.retry_msg->get_sequence_number());
-        // send again message
-        logger_common::pfcp().trace(
-            "Retry %d Sending msg type %d, seq %d", it_proc->second.retry_count,
-            it_proc->second.retry_msg->get_message_type(),
-            it_proc->second.retry_msg->get_sequence_number());
-        std::ostringstream oss(std::ostringstream::binary);
-        it_proc->second.retry_msg->dump_to(oss);
-        std::string bstream = oss.str();
-        udp_s_8805.async_send_to(
-            reinterpret_cast<const char*>(bstream.c_str()), bstream.length(),
-            it_proc->second.remote_endpoint);
-      } else {
-        // abort procedure
-        notify_ul_error(
-            it_proc->second, ::cause_value_e::REMOTE_PEER_NOT_RESPONDING);
-      }
-    }
-  } else {
-    it = proc_cleanup_timers.find(timer_id);
-    if (it != proc_cleanup_timers.end()) {
+  // notify_ul_error() is the one call into derived code, which may send PFCP
+  // again: collect the failed procedures under trx_mutex_ and notify them
+  // after it is released.
+  std::vector<std::pair<pfcp_procedure, ::cause_value_e>> failed;
+  {
+    std::lock_guard<std::mutex> lock(trx_mutex_);
+    std::map<timer_id_t, uint32_t>::iterator it =
+        msg_out_retry_timers.find(timer_id);
+    if (it != msg_out_retry_timers.end()) {
       std::map<uint32_t, pfcp_procedure>::iterator it_proc =
           pending_procedures.find(it->second);
-      proc_cleanup_timers.erase(it);
+      msg_out_retry_timers.erase(it);
       handled = true;
       if (it_proc != pending_procedures.end()) {
-        it_proc->second.proc_cleanup_timer_id = 0;
-        logger_common::pfcp().trace(
-            "Delete proc %" PRId64 " Retry %d seq %d timer id %u",
-            it_proc->second.trxn_id, it_proc->second.retry_count,
-            it_proc->first, timer_id);
-        trxn_id2seq_num.erase(it_proc->second.trxn_id);
-        pending_procedures.erase(it_proc);
+        if (it_proc->second.retry_count < PFCP_N1_REQUESTS) {
+          it_proc->second.retry_count++;
+          start_msg_retry_timer(
+              it_proc->second, PFCP_T1_RESPONSE_MS, task_id,
+              it_proc->second.retry_msg->get_sequence_number());
+          // send again message
+          logger_common::pfcp().trace(
+              "Retry %d Sending msg type %d, seq %d",
+              it_proc->second.retry_count,
+              it_proc->second.retry_msg->get_message_type(),
+              it_proc->second.retry_msg->get_sequence_number());
+          std::ostringstream oss(std::ostringstream::binary);
+          it_proc->second.retry_msg->dump_to(oss);
+          std::string bstream = oss.str();
+          udp_s_8805.async_send_to(
+              reinterpret_cast<const char*>(bstream.c_str()), bstream.length(),
+              it_proc->second.remote_endpoint);
+        } else {
+          // abort procedure, notified after unlock
+          failed.emplace_back(
+              it_proc->second, ::cause_value_e::REMOTE_PEER_NOT_RESPONDING);
+        }
+      }
+    } else {
+      it = proc_cleanup_timers.find(timer_id);
+      if (it != proc_cleanup_timers.end()) {
+        std::map<uint32_t, pfcp_procedure>::iterator it_proc =
+            pending_procedures.find(it->second);
+        proc_cleanup_timers.erase(it);
+        handled = true;
+        if (it_proc != pending_procedures.end()) {
+          it_proc->second.proc_cleanup_timer_id = 0;
+          // The cleanup timer is absolute, while each retransmission timer is
+          // started when the previous one fires, so they drift. The cleanup
+          // can then fire first and erase a request that was neither answered
+          // nor given up on. Only in that case is a retry timer still pending:
+          // report the give-up here instead, exactly once.
+          pfcp_procedure& p = it_proc->second;
+          if (p.retry_msg && !p.triggered_msg_type && p.retry_timer_id &&
+              msg_out_retry_timers.count(p.retry_timer_id)) {
+            stop_msg_retry_timer(p);
+            failed.emplace_back(p, ::cause_value_e::REMOTE_PEER_NOT_RESPONDING);
+          }
+          logger_common::pfcp().trace(
+              "Delete proc %" PRId64 " Retry %d seq %d timer id %u",
+              it_proc->second.trxn_id, it_proc->second.retry_count,
+              it_proc->first, timer_id);
+          trxn_id2seq_num.erase(it_proc->second.trxn_id);
+          pending_procedures.erase(it_proc);
+        }
       }
     }
+  }
+  for (const auto& f : failed) {
+    notify_ul_error(f.first, f.second);
   }
 }

@@ -89,10 +89,10 @@ class SessionManager {
   ~SessionManager();
 
   // Disable copy and move
-  SessionManager(const SessionManager&) = delete;
+  SessionManager(const SessionManager&)            = delete;
   SessionManager& operator=(const SessionManager&) = delete;
   SessionManager(SessionManager&&)                 = delete;
-  SessionManager& operator=(SessionManager&&) = delete;
+  SessionManager& operator=(SessionManager&&)      = delete;
 
   // ==========================================================================
   // Session Lifecycle Management
@@ -221,19 +221,14 @@ class SessionManager {
       itti_n4_session_deletion_request* del_req      = nullptr);
 
   /**
-   * @brief Clear the DDN one-shot latch (bar_state_map) of a session.
+   * @brief Clear the one-shot DDN (Downlink Data Notification) latch of a
+   *        session in bar_state_map.
    *
-   * Public so that pfcp_switch can reach the BAR program through the already
-   * shared SessionManager instance instead of pulling the XDP skeleton
-   * headers into the SIMPLE_SWITCH library.
+   * Call it when a FAR leaves buffering, after the datapath is reprogrammed;
+   * otherwise a DL packet on the old BUFF FAR sets the latch again. Public so
+   * that pfcp_switch can use it without the XDP skeleton headers.
    *
-   * Must be called when a FAR LEAVES buffering (BUFF -> !BUFF: both the
-   * BUFF->FORW service-request release and the BUFF->DROP paging-failure
-   * stop-buffering), and AFTER the datapath has been reprogrammed, so the
-   * cleared latch cannot be re-set by a DL packet still hitting the old
-   * buffering FAR.
-   *
-   * @param seid UP-SEID of a session believed to be still present. Never
+   * @param seid UP SEID of a session believed to be still present. Never
    *             creates a bar_state entry, so a stale SEID is a no-op.
    * @return true if a bar_state entry existed and was zeroed.
    *

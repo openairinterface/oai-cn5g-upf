@@ -15,12 +15,14 @@
 #include <thread>
 #include <unordered_map>
 #include <memory>
+#include <optional>
 #include <variant>
 #include <vector>
 
 #include "framed_routing/FramedRouting.hpp"
 #include "framed_routing/LocalRouting.hpp"
-//#include "concurrentqueue.h"
+// #include "concurrentqueue.h"
+#include "dl_packet_buffer.hpp"
 #include "itti.hpp"
 #include "itti_msg_n4.hpp"
 #include "msg_pfcp.hpp"
@@ -80,15 +82,10 @@ static_assert(
  *  N4 task thread.  up_seid2pfcp_sessions and the teid/ue-ip maps use
  *  upf_map, which is lock-free for concurrent reads (see upf_map.hpp).
  *
- *  Note that "lock-free for concurrent reads" covers the CONTAINER only.
- *  The pfcp_session objects it hands out are NOT internally synchronised:
- *  their rules are applied on TASK_UPF_APP (pfcp_session::update(),
- *  cleanup()) with no lock; only the FAR list is published copy-on-write
- *  for the datapath (pfcp_session::publish_fars() / find_far()). A thread
- *  other than TASK_UPF_APP must therefore never walk a session's rule
- *  vectors. get_cp_fseid_by_up_seid() is the one accessor built for
- *  cross-thread use: it copies out a single field and takes
- *  cp_fseid_mutex_ for it.
+ *  This covers the containers only. A pfcp_session's rules are changed on
+ *  TASK_UPF_APP without a lock, so other threads must not walk them (the
+ *  datapath uses find_far()). get_cp_fseid_by_up_seid() is safe from any
+ *  thread.
  */
 class pfcp_switch {
  private:
@@ -129,6 +126,9 @@ class pfcp_switch {
 
 #define TASK_UPF_PFCP_SWITCH_MAX_COMMIT_INTERVAL (0)
 #define TASK_UPF_PFCP_SWITCH_MIN_COMMIT_INTERVAL (1)
+/// 1 s one-shot ITTI timer on TASK_UPF_APP, re-armed on every expiry: drives
+/// dl_buffer_tick().
+#define TASK_UPF_PFCP_SWITCH_DL_BUFFER_TICK (2)
 
 #define PFCP_SWITCH_MAX_COMMIT_INTERVAL_MILLISECONDS 200
 #define PFCP_SWITCH_MIN_COMMIT_INTERVAL_MILLISECONDS 50
@@ -161,12 +161,12 @@ class pfcp_switch {
 
   oai::upf::upf_map<uint64_t, pfcp::pfcp_session> up_seid2pfcp_sessions;
 
-  /// Serialises the ONE post-publication write to pfcp_session::cp_fseid
-  /// (Session Modification carrying an F-SEID IE, §8.2.37) against the
-  /// cross-thread read in get_cp_fseid_by_up_seid(). The hash map itself
-  /// needs no lock -- see the thread-safety note on that accessor. Held for
-  /// a single struct copy only, never across a call, so it cannot deadlock
-  /// and does not touch any per-packet path.
+  /// Serialises the only write to pfcp_session::cp_fseid after the session is
+  /// published (a Session Modification carrying an F-SEID IE, §8.2.37)
+  /// against the cross-thread read in get_cp_fseid_by_up_seid(). The hash map
+  /// itself needs no lock -- see the thread-safety note on this class. Held
+  /// for a single struct copy only, never across a call, so it cannot
+  /// deadlock and is not on any per-packet path.
   mutable std::mutex cp_fseid_mutex_;
 
   /// GTP-U TEID → uplink PDR vector (N3 interface, §8.2.3)
@@ -176,6 +176,14 @@ class pfcp_switch {
   /// UE IPv4 (host byte order) → downlink PDR vector (§8.2.62)
   oai::upf::upf_map<uint32_t, std::vector<std::shared_ptr<pfcp::pfcp_pdr>>>
       ue_ipv4_hbo2pfcp_pdr;
+
+  /// DL packets held while a UE is paged, per UP SEID. Built once from the
+  /// datapath configuration; the DL threads enqueue, TASK_UPF_APP owns the
+  /// rest (see dl_packet_buffer). With enable_dl_buffering off every record
+  /// operation is a no-op, so enqueue() takes no lock and allocates nothing.
+  oai::upf::dl_packet_buffer dl_buffer_;
+  /// The stats line last logged by dl_buffer_tick() (TASK_UPF_APP only).
+  oai::upf::dl_buffer_stats dl_buffer_logged_stats_;
 
   timer_id_t timer_max_commit_interval_id;  ///< ITTI timer: maximum interval
                                             ///< between datapath commits
@@ -307,7 +315,7 @@ class pfcp_switch {
  public:
   //------------------------------------------------------------------------------
   pfcp_switch();
-  pfcp_switch(pfcp_switch const&) = delete;
+  pfcp_switch(pfcp_switch const&)    = delete;
   void operator=(pfcp_switch const&) = delete;
   ~pfcp_switch();
 
@@ -350,17 +358,40 @@ class pfcp_switch {
   /** @brief No-op overloads for raw-IP (no GTP) uplink path. */
   void pfcp_session_look_up_pack_in_access(
       struct iphdr* const iph, const std::size_t num_bytes,
-      const endpoint& r_endpoint){};
+      const endpoint& r_endpoint) {};
   void pfcp_session_look_up_pack_in_access(
       struct ipv6hdr* const iph, const std::size_t num_bytes,
-      const endpoint& r_endpoint){};
+      const endpoint& r_endpoint) {};
 
   //------------------------------------------------------------------------------
   /** @brief Match and forward a downlink packet read from tun0 (N6).
    *  @param released true when this packet has already waited for its QoS
-   *         slot, so the meter must not be asked for another one. */
-  void pfcp_session_look_up_pack_in_core(
+   *         slot, so the meter must not be asked for another one.
+   *  @return sent, rebuffered (held again by a BUFF FAR) or dropped. Only the
+   *          replay of held packets uses it; it is exact only when
+   *          @p released is true. */
+  oai::upf::dl_outcome pfcp_session_look_up_pack_in_core(
       const char* buffer, const std::size_t num_bytes, bool released = false);
+
+  /** @brief What classify_dl_buffered() found: the rule a DL packet matches,
+   *  and whether its FAR buffers. Plain values, valid after the RCU section. */
+  struct dl_buffered_match {
+    bool is_buff      = false;  ///< matched a PDR whose FAR has BUFF
+    uint64_t up_seid  = 0;
+    uint64_t rule_uid = 0;
+    uint16_t pdr_id   = 0;
+  };
+
+  //------------------------------------------------------------------------------
+  /** @brief Find the buffering rule of a DL IPv4 packet, and nothing else.
+   *
+   *  Used by the AF_XDP consumer. Same lookup as
+   *  pfcp_session_look_up_pack_in_core(), without counting, metering,
+   *  forwarding or notifying: XDP already did those. Safe from any thread.
+   *  @param ip IPv4 header, @p len bytes of packet (already bounds-checked).
+   *  @return is_buff false when no PDR matches, or its FAR does not buffer. */
+  dl_buffered_match classify_dl_buffered(
+      const uint8_t* ip, const std::size_t len) const;
 
   //------------------------------------------------------------------------------
   /** @brief Charge one packet to its rates; false when the caller must let it
@@ -430,6 +461,30 @@ class pfcp_switch {
   }
   oai::upf::rcu_domain& rcu() const { return rcu_; }
 
+  /// The DL packet store (paging). Thread-safe; see dl_packet_buffer.
+  oai::upf::dl_packet_buffer& dl_buffer() { return dl_buffer_; }
+
+  //------------------------------------------------------------------------------
+  /** @brief Release the DL notification latch (pfcp_pdr::notified_cp) of one
+   *  PDR, so that its next DL packet sends a new Downlink Data Report.
+   *
+   *  TASK_UPF_APP only. The PDR is found by `uid`, or by `pdr_id` after an
+   *  Update PDR (see find_rearm_target()). On eBPF it also clears the
+   *  session's kernel DDN latch. Does nothing for a deleted session.
+   *  @return true when a latch was released. */
+  bool rearm_dl_notification(
+      uint64_t up_seid, const std::optional<uint64_t>& uid,
+      const std::optional<uint16_t>& pdr_id = std::nullopt);
+
+  //------------------------------------------------------------------------------
+  /** @brief The DL buffer's 1 s tick (TASK_UPF_PFCP_SWITCH_DL_BUFFER_TICK).
+   *
+   *  TASK_UPF_APP. Always releases the latches of DL Data Reports that could
+   *  not be sent. With buffering on, it also discards packets held longer
+   *  than default_buffering_duration_ms (T_guard), erases Tombstones and
+   *  logs changed counters. */
+  void dl_buffer_tick();
+
   //------------------------------------------------------------------------------
   /** @brief Resolve an UP SEID to the peer CP F-SEID (§8.2.37).
    *
@@ -481,10 +536,16 @@ class pfcp_switch {
 
   //------------------------------------------------------------------------------
   /** @brief Handle a PFCP Session Modification Request (3GPP TS 29.244
-   *  V17.10.0 §7.5.4). */
+   *  V17.10.0 §7.5.4).
+   *  @param flush  When non-null and the request is accepted with DL
+   *                buffering on, receives the DL buffer verdict and the
+   *                packets detached from the session, which the caller
+   *                replays (FLUSH) or frees after sending the response. Left
+   *                untouched otherwise. */
   void handle_pfcp_session_modification_request(
       std::shared_ptr<itti_n4_session_modification_request> sreq,
-      itti_n4_session_modification_response*);
+      itti_n4_session_modification_response*,
+      oai::upf::dl_flush_result* flush = nullptr);
 
   //------------------------------------------------------------------------------
   /** @brief Handle a PFCP Session Deletion Request (3GPP TS 29.244

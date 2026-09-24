@@ -87,6 +87,21 @@ gtpu_l4_stack::gtpu_l4_stack(
 }
 
 //------------------------------------------------------------------------------
+gtpu_l4_stack::gtpu_l4_stack(
+    const struct in_addr& address, const bool send_ext_hdr)
+    : udp_s(udp_server(address, 0)), send_ext_hdr(send_ext_hdr) {
+  // No start_receive(): no receive thread, and nothing ever reads the socket.
+  Logger::gtpv1_u().info(
+      "gtpu_l4_stack created, transmit only, on %s:%u (ephemeral port)",
+      oai::utils::conv::toString(address).c_str(), udp_s.get_local_port());
+
+  id = 0;
+  srand(time(NULL));
+  seq_num         = rand() & 0x7FFFFFFF;
+  restart_counter = 0;
+}
+
+//------------------------------------------------------------------------------
 uint32_t gtpu_l4_stack::get_next_seq_num() {
   seq_num++;
   if (seq_num & 0x80000000) {

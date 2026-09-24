@@ -194,6 +194,19 @@ class udp_server {
     }
   }
 
+  /** @brief The local UDP port socket_ is bound to, host order; 0 if it
+   *  cannot be read. It is the one the kernel picked when bound to port 0. */
+  uint16_t get_local_port() const {
+    struct sockaddr_storage sa = {};
+    socklen_t sa_len           = sizeof(sa);
+    if (getsockname(socket_, (struct sockaddr*) &sa, &sa_len) != 0) return 0;
+    if (sa.ss_family == AF_INET)
+      return ntohs(((const struct sockaddr_in*) &sa)->sin_port);
+    if (sa.ss_family == AF_INET6)
+      return ntohs(((const struct sockaddr_in6*) &sa)->sin6_port);
+    return 0;
+  }
+
   void start_receive(
       udp_application* gtp_stack,
       const oai::utils::thread_sched_params& sched_params, int n_rx = 1);
@@ -278,7 +291,7 @@ class udp_server {
   /// start_receive() runs, so anything sending before then uses socket_.
   std::vector<int> sockets_;
   /// The endpoint socket_ is bound to, so clone_socket() can bind more there.
-  struct sockaddr_storage bind_addr_ {};
+  struct sockaddr_storage bind_addr_{};
   socklen_t bind_addrlen_{0};
   uint16_t port_;
   sa_family_t sa_family;

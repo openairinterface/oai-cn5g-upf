@@ -132,6 +132,7 @@ COPY --from=oai-upf-builder \
     /usr/lib/?-linux-gnu/libbfd-2.3?-system.so \
     /usr/lib/?-linux-gnu/libopcodes-2.3?-system.so \
     /openair-upf/build/ext/libbpf/src/libbpf.so.1 \
+    /openair-upf/build/ext/xdp-tools/root/usr/lib/libxdp.so.1 \
     # /openair-upf/build/upf/build/upf_app/utils/libupfutils.so \
     ./
 

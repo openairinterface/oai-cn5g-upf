@@ -75,7 +75,7 @@ Based on document **3GPP TS 23.501 V16.0.0 §6.2.3**.
 |        | 2. Reflective QoS marking in DL                                     | :x:                | Not implemented                             |
 | 10     | Uplink Traffic verification (SDF to QoS flow mapping)               | :x:                | Not implemented (missing N9 implementation) |
 | 11     | Transport level packet marking in uplink and downlink               | :x:                | DSCP marking, QFI handling                  |
-| 12     | Downlink packet buffering and downlink data notification            | :x:                | Basic buffering support, DDN limited        |
+| 12     | Downlink packet buffering and downlink data notification            | :large_orange_diamond: | Opt-in, IPv4; see [PAGING](PAGING.md)   |
 |        | triggering                                                          |                    |                                             |
 | 13     | Sending and forwarding "end marker" to source NG-RAN node           | :x:                | Not implemented                             |
 | 14     | ARP requests/IPv6 Neighbour Solicitation handling based on          | :heavy_check_mark: | ARP resolution for N3/N6 interfaces         |
@@ -172,8 +172,8 @@ These features are correctly out-of-scope for:
 | 26     | Apply Action:                                                       |                    |                                             |
 |        | 1. FORW (Forward)                                                   | :heavy_check_mark: | Packet forwarding to destination            |
 |        | 2. DROP                                                             | :heavy_check_mark: | Packet dropping based on policy             |
-|        | 3. BUFF (Buffer)                                                    | :large_orange_diamond: | Basic buffering support                     |
-|        | 4. NOCP (Notify Control Plane)                                      | :large_orange_diamond:                | On-going URR                             |
+|        | 3. BUFF (Buffer)                                                    | :large_orange_diamond: | Held and replayed with `enable_dl_buffering` |
+|        | 4. NOCP (Notify Control Plane)                                      | :large_orange_diamond:                | One DL Data Report per buffering episode |
 |        | 5. DUPL (Duplicate)                                                 | :heavy_check_mark: | Packet duplication for multi-path           |
 | 27     | Forwarding Parameters:                                              |                    |                                             |
 |        | 1. Destination Interface (ACCESS, CORE, CP-FUNCTION)                | :heavy_check_mark: | N3, N6, N4 interface forwarding             |
@@ -310,7 +310,7 @@ These features are correctly out-of-scope for:
 
 | **Category**                       | **Total** | **Applicable** | **Implemented** | **Partial** | **Not Implemented** |
 | ---------------------------------- | --------- | -------------- | --------------- | ----------- | ------------------- |
-| Core UPF Functions                 | 21        | 12             | 4               | 4           | 4                   |
+| Core UPF Functions                 | 21        | 12             | 4               | 5           | 3                   |
 | N4 (PFCP) Protocol Support         | 7         | 7              | 5               | 2           | 0                   |
 | Packet Detection Rules (PDR)       | 4         | 4              | 3               | 1           | 0                   |
 | Forwarding Action Rules (FAR)      | 3         | 3              | 1               | 2           | 0                   |
@@ -320,21 +320,21 @@ These features are correctly out-of-scope for:
 | 5G Features                        | 3         | 3              | 1               | 2           | 0                   |
 | Mobility and Interworking          | 3         | 0              | 0               | 0           | 0                   |
 | Management and Operations          | 5         | 5              | 4               | 1           | 0                   |
-| **TOTAL**                          | **65**    | **53**         | **30**          | **17**      | **6**               |
+| **TOTAL**                          | **65**    | **53**         | **30**          | **18**      | **5**               |
 
 ### **Implementation Coverage**
 
 **Applicable Features:** 53/65 (81.5%) - 12 features excluded as non-applicable  
 **Implementation Rate (of applicable features):**
 - Fully Implemented: 30/53 (56.6%)
-- Partially Implemented: 17/53 (32.1%)
-- Not Implemented: 6/53 (11.3%)
+- Partially Implemented: 18/53 (34.0%)
+- Not Implemented: 5/53 (9.4%)
 
-**Overall Coverage: 88.7%** (30 full + 17 partial / 53 applicable)
+**Overall Coverage: 90.6%** (30 full + 18 partial / 53 applicable)
 
 ### **Perfect Score Categories (100% Coverage):**
 - Data Plane Acceleration (5/5 fully implemented)
-- Core UPF Functions (4/12 full + 4/12 partial = 8/12 coverage)
+- Core UPF Functions (4/12 full + 5/12 partial = 9/12 coverage)
 - N4 (PFCP) Protocol (5/7 full + 2/7 partial = 7/7 coverage)
 - Packet Detection Rules (3/4 full + 1/4 partial = 4/4 coverage)
 - Forwarding Action Rules (1/3 full + 2/3 partial = 3/3 coverage)
@@ -342,10 +342,9 @@ These features are correctly out-of-scope for:
 - 5G Features (1/3 full + 2/3 partial = 3/3 coverage)
 - Management and Operations (4/5 full + 1/5 partial = 5/5 coverage)
 
-### **Remaining Gaps (6 features):**
+### **Remaining Gaps (5 features):**
 All remaining unimplemented features are **enhancements**, not core functionality:
 - Transport level packet marking (ID 11) - Enhancement
-- Downlink packet buffering (ID 12) - Enhancement
 - End marker forwarding (ID 13) - Handover optimization
 - Reflective QoS (ID 32) - Advanced QoS feature
 - Packet Rate Control (ID 34) - Paging optimization

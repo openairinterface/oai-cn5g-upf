@@ -108,6 +108,7 @@ COPY --from=oai-upf-builder \
     /usr/local/lib64/libcpr.so.1 \   
 # libbpf seems to be in the executable now
     /openair-upf/build/ext/libbpf/src/libbpf.so.1 \
+    /openair-upf/build/ext/xdp-tools/root/usr/lib/libxdp.so.1 \
     /lib64/
 RUN ldconfig && \
     echo "ldd /openair-upf/bin/oai_upf" && \

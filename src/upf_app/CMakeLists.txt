@@ -45,6 +45,8 @@ include_directories(${SRC_TOP_DIR}/upf_app/framed_routing) # framed_routing_bpf.
 
 # libbpf headers (bpf/*.h), installed by build_helper.upf (make install_headers)
 include_directories(${SRC_TOP_DIR}/../build/ext/libbpf/root/usr/include)
+# libxdp headers (xdp/xsk.h), installed by build_helper.upf (install_libxdp_from_git)
+include_directories(${SRC_TOP_DIR}/../build/ext/xdp-tools/root/usr/include)
 
 # Kernel BPF headers — shared between kernel programs and user-space wrappers
 include_directories(${SRC_TOP_DIR}/upf_app/kernel)
@@ -67,6 +69,7 @@ set(CMAKE_C_FLAGS "-Wno-gnu-variable-sized-type-not-at-end")
 set(UPF_CONTROL_SOURCES
   control/UserPlaneComponent.cpp
   control/BarDdnConsumer.cpp
+  control/XskConsumer.cpp          # AF_XDP (libxdp): DL buffering on eBPF
   control/Configuration.cpp
   control/SignalHandler.cpp
   control/SessionProgramManager.cpp
@@ -130,6 +133,7 @@ add_library(UPF_XDP STATIC
 
 target_include_directories(UPF_XDP PUBLIC
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/../build/ext/libbpf/root/usr/include>
+  $<BUILD_INTERFACE:${SRC_TOP_DIR}/../build/ext/xdp-tools/root/usr/include>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/include>
   $<BUILD_INTERFACE:${SRC_TOP_DIR}/upf_app/control>
@@ -147,6 +151,9 @@ link_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src)
 target_link_libraries(UPF_XDP
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.a
   ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/libbpf/src/libbpf.so
+  # libxdp is linked to the libbpf.so.1 above (install_libxdp_from_git), so
+  # the process holds a single libbpf.
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../build/ext/xdp-tools/root/usr/lib/libxdp.so
   PRIVATE elf
   PRIVATE z qer_tc eth_broadcast_tc   # TC skeletons for QERProgram + EthBroadcastTCProgram
 )

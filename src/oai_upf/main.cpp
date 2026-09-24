@@ -28,7 +28,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/split.hpp>
 
-//#include <RulesUtilitiesImpl.h>
+// #include <RulesUtilitiesImpl.h>
 #include <SessionManager.h>
 #include <SessionProgramManager.h>
 #include <UserPlaneComponent.h>
@@ -116,10 +116,19 @@ void setup_bpf() {
   auto pUPF_XDPProgram = UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
   pUPF_XDPProgram->SetFramedRouting(upf_cfg.enable_fr);
 
-  // Drain bar_ddn_ringbuf_map so the Dowlink Data Notification events the XDP
-  // BAR program produces actually reach the control plane (only when
-  // enable_bpf_datapath is set).
+  // Drain bar_ddn_ringbuf_map so that the Downlink Data Notification events
+  // of the XDP BAR (Buffering Action Rule) program reach the control plane.
+  // Only when enable_bpf_datapath is set.
   UserPlaneComponent::GetInstance().StartDdnConsumer();
+
+  // Hold the DL packets the BAR program buffers, instead of dropping them:
+  // XDP redirects them to AF_XDP sockets and the DL buffer keeps them until
+  // the SMF ends buffering. Off unless BAR and DL buffering are both on.
+  if (upf_cfg.enable_bar && upf_cfg.enable_dl_buffering) {
+    UserPlaneComponent::GetInstance().StartXskConsumer(
+        upf_cfg.xsk_frame_size, upf_cfg.xsk_frames_per_queue,
+        upf_cfg.xsk_umem_max_mib_total);
+  }
 }
 
 //------------------------------------------------------------------------------
