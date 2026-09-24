@@ -1437,7 +1437,7 @@ size_t SessionManager::HandleFarUpdates(
     std::shared_ptr<pfcp::pfcp_session> session,
     itti_n4_session_modification_request* mod_req) {
   size_t updated_count = 0;
-  // set when at least one FAR of this session LEFT buffering.
+  // Set when at least one FAR of this session left buffering.
   bool left_buffering = false;
 
   for (const auto& update_far : mod_req->pfcp_ies.update_fars) {
@@ -1496,7 +1496,8 @@ size_t SessionManager::HandleFarUpdates(
           existing_far->apply_action.forw ? 1U : 0U,
           existing_far->apply_action.drop ? 1U : 0U);
       left_buffering = true;
-      // simpleswitch parity: clear the per-PDR CP-notify latch as well.
+      // As the simple switch does: also clear the per-PDR CP notification
+      // latch.
       pfcp::rearm_notified_cp(session->pdrs, far_id);
     }
 
@@ -1618,12 +1619,12 @@ size_t SessionManager::HandleFarUpdates(
     session_program_manager_->ModifyPipeline(session);
 
     /*
-     * Clear the DDN one-shot AFTER ModifyPipeline(), never before:
-     * ModifyPipeline() is what pushes the new (FORW/DROP) apply action into
-     * far_config_map, and it also re-runs BARProgram::Setup() whose
-     * InitBarStateMap() is BPF_NOEXIST preserve-only. Resetting first would
-     * leave a window in which a DL packet still matches the old BUFF FAR and
-     * re-latches the entry we just cleared.
+     * Clear the one-shot DDN (Downlink Data Notification) latch after
+     * ModifyPipeline(), never before. ModifyPipeline() pushes the new
+     * FORW/DROP apply action into far_config_map, and it re-runs
+     * BARProgram::Setup(), whose InitBarStateMap() uses BPF_NOEXIST and so
+     * keeps an existing entry. Resetting first would leave a window in which
+     * a DL packet still matches the old BUFF FAR and latches the entry again.
      */
     if (left_buffering && upf_cfg.enable_bar) {
       ResetBarState(session->get_up_seid());

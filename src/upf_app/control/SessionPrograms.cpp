@@ -30,13 +30,9 @@ SessionPrograms::~SessionPrograms() {
   // 1. Tear down per-session QER TC-BPF program (rate shaping classes)
   //    This removes HTB qdisc classes and TC filters for this session
   //
-  //    Guarded: QERTCProgram::TearDown() builds a BPFMaps and calls
-  //    GetMap("egress_ifindex"), which THROWS when the name is absent. This is
-  //    a destructor — implicitly noexcept — so an escaping exception is
-  //    std::terminate(), and even if it were not it would skip
-  //    CleanupBpfMapEntries() below and strand the bar_state_map entry
-  //    (a stale DDN one-shot latch wedges paging for a re-established
-  //    SEID). Same rule as SessionProgramManager::RemoveSession().
+  //    Guarded: QERTCProgram::TearDown() can throw, and an exception leaving
+  //    this destructor calls std::terminate(). It would also skip
+  //    CleanupBpfMapEntries() and leave a stale DDN latch behind.
   if (qer_program_) {
     Logger::upf_app().debug(
         "  Tearing down QER TC-BPF program for SEID=0x%016lx", seid_);
@@ -152,16 +148,9 @@ void SessionPrograms::CleanupBpfMapEntries() {
   }
 
   /*
-   * TryRemove(), not Remove(): this runs from ~SessionPrograms(), which is
-   * implicitly noexcept, and BPFMap::Remove() THROWS on any non-zero return
-   * including -ENOENT. Deleting an entry the session never created is a
-   * normal outcome here (the rule-enabled gates below are a bitmask, not a
-   * guarantee that the kernel-side entry exists), so a throwing delete would
-   * either std::terminate() or — were the destructor made noexcept(false) —
-   * skip every cleanup line after it, including the bar_state_map erase that
-   * keeps a re-established SEID from inheriting a latched notification_sent.
-   * Same rule as SessionProgramManager::RemoveSession().
-   *
+   * TryRemove(), not Remove(): Remove() throws on -ENOENT, and an entry may
+   * be missing here even when its rule flag is set. This runs from a
+   * destructor, so a throw would call std::terminate().
    */
 
   // --- URR maps (config + volume counters) ---

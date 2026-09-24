@@ -67,12 +67,24 @@ constexpr auto UPF_MAX_SDF_FILTERS_PER_PDU_SESSION =
     "max_sdf_filters_per_pdu_session";
 constexpr auto UPF_MAX_SDF_FILTER_STRING_LENGTH =
     "max_sdf_filter_string_length";
-constexpr auto UPF_MAX_UPF_INTERFACES          = "max_upf_interfaces";
-constexpr auto UPF_N3_RX_THREADS               = "n3_rx_threads";
-constexpr auto UPF_DL_RX_QUEUES                = "dl_rx_queues";
-constexpr auto UPF_QOS_BURST_MS                = "qos_burst_ms";
-constexpr auto UPF_QOS_SHAPE_MS                = "qos_shape_ms";
-constexpr auto UPF_QOS_SHAPE_UL_MS             = "qos_shape_ul_ms";
+constexpr auto UPF_MAX_UPF_INTERFACES  = "max_upf_interfaces";
+constexpr auto UPF_N3_RX_THREADS       = "n3_rx_threads";
+constexpr auto UPF_DL_RX_QUEUES        = "dl_rx_queues";
+constexpr auto UPF_QOS_BURST_MS        = "qos_burst_ms";
+constexpr auto UPF_QOS_SHAPE_MS        = "qos_shape_ms";
+constexpr auto UPF_QOS_SHAPE_UL_MS     = "qos_shape_ul_ms";
+constexpr auto UPF_ENABLE_DL_BUFFERING = "enable_dl_buffering";
+constexpr auto UPF_DL_BUFFER_MAX_PKTS_PER_SESSION =
+    "dl_buffer_max_pkts_per_session";
+constexpr auto UPF_DL_BUFFER_MAX_KIB_PER_SESSION =
+    "dl_buffer_max_kib_per_session";
+constexpr auto UPF_DL_BUFFER_MAX_PKTS_TOTAL = "dl_buffer_max_pkts_total";
+constexpr auto UPF_DL_BUFFER_MAX_KIB_TOTAL  = "dl_buffer_max_kib_total";
+constexpr auto UPF_DEFAULT_BUFFERING_DURATION_MS =
+    "default_buffering_duration_ms";
+constexpr auto UPF_XSK_FRAME_SIZE              = "xsk_frame_size";
+constexpr auto UPF_XSK_FRAMES_PER_QUEUE        = "xsk_frames_per_queue";
+constexpr auto UPF_XSK_UMEM_MAX_MIB_TOTAL      = "xsk_umem_max_mib_total";
 constexpr auto UPF_MAX_UPF_REDIRECT_INTERFACES = "max_upf_redirect_interfaces";
 constexpr auto UPF_MAX_ARP_ENTRIES             = "max_arp_entries";
 constexpr auto UPF_MAX_APPLICATION_IDS_PER_SESSION =
@@ -105,6 +117,22 @@ constexpr auto UPF_DL_RX_QUEUES_LABEL       = "TUN RX Queues (DL)";
 constexpr auto UPF_QOS_BURST_MS_LABEL       = "QoS policer burst (ms)";
 constexpr auto UPF_QOS_SHAPE_MS_LABEL       = "QoS shaper queue, DL (ms)";
 constexpr auto UPF_QOS_SHAPE_UL_MS_LABEL    = "QoS shaper queue, UL (ms)";
+constexpr auto UPF_ENABLE_DL_BUFFERING_LABEL =
+    "DL buffering while UE idle (paging)";
+constexpr auto UPF_DL_BUFFER_MAX_PKTS_PER_SESSION_LABEL =
+    "DL buffer max packets per session";
+constexpr auto UPF_DL_BUFFER_MAX_KIB_PER_SESSION_LABEL =
+    "DL buffer max KiB per session";
+constexpr auto UPF_DL_BUFFER_MAX_PKTS_TOTAL_LABEL =
+    "DL buffer max packets total";
+constexpr auto UPF_DL_BUFFER_MAX_KIB_TOTAL_LABEL = "DL buffer max KiB total";
+constexpr auto UPF_DEFAULT_BUFFERING_DURATION_MS_LABEL =
+    "DL buffering duration (ms)";
+constexpr auto UPF_XSK_FRAME_SIZE_LABEL = "DL buffer AF_XDP frame size (B)";
+constexpr auto UPF_XSK_FRAMES_PER_QUEUE_LABEL =
+    "DL buffer AF_XDP frames per N6 RX queue";
+constexpr auto UPF_XSK_UMEM_MAX_MIB_TOTAL_LABEL =
+    "DL buffer AF_XDP UMEM max MiB total";
 constexpr auto UPF_MAX_UPF_REDIRECT_INTERFACES_LABEL =
     "Max UPF Redirect Interfaces";
 constexpr auto UPF_MAX_ARP_ENTRIES_LABEL = "Max ARP Entries";
@@ -136,11 +164,29 @@ constexpr int UPF_DEFAULT_MAX_SDF_FILTER_STRING_LENGTH    = 512;
 // Network Interface Limits
 constexpr int UPF_DEFAULT_MAX_UPF_INTERFACES = 4;
 // 1 = the original single-threaded datapath, one core per direction.
-constexpr int UPF_DEFAULT_N3_RX_THREADS               = 1;
-constexpr int UPF_DEFAULT_DL_RX_QUEUES                = 1;
-constexpr int UPF_DEFAULT_QOS_BURST_MS                = 400;
-constexpr int UPF_DEFAULT_QOS_SHAPE_MS                = 0;
-constexpr int UPF_DEFAULT_QOS_SHAPE_UL_MS             = 0;
+constexpr int UPF_DEFAULT_N3_RX_THREADS   = 1;
+constexpr int UPF_DEFAULT_DL_RX_QUEUES    = 1;
+constexpr int UPF_DEFAULT_QOS_BURST_MS    = 400;
+constexpr int UPF_DEFAULT_QOS_SHAPE_MS    = 0;
+constexpr int UPF_DEFAULT_QOS_SHAPE_UL_MS = 0;
+// DL buffering while the UE is idle (paging). Off by default: packets that hit
+// a BUFF (buffer) FAR are dropped. The bounds are finite on purpose -- the SMF
+// never says stop, and the DN can flood an idle UE -- so 0 is rejected, never
+// unlimited.
+constexpr bool UPF_DEFAULT_ENABLE_DL_BUFFERING           = false;
+constexpr int UPF_DEFAULT_DL_BUFFER_MAX_PKTS_PER_SESSION = 64;
+constexpr int UPF_DEFAULT_DL_BUFFER_MAX_KIB_PER_SESSION  = 128;
+constexpr int UPF_DEFAULT_DL_BUFFER_MAX_PKTS_TOTAL       = 16384;
+constexpr int UPF_DEFAULT_DL_BUFFER_MAX_KIB_TOTAL        = 32768;
+// Longer than paging can take: T3513 and its retries at the AMF, the Service
+// Request, then the SMF's N4 Session Modification.
+constexpr int UPF_DEFAULT_DEFAULT_BUFFERING_DURATION_MS = 20000;
+// AF_XDP capture of buffered DL packets (eBPF datapath): one UMEM (packet
+// memory shared with the kernel) per N6 RX queue, 2048 x 4096 B = 8 MiB each,
+// and at most 256 MiB for all of them.
+constexpr int UPF_DEFAULT_XSK_FRAME_SIZE              = 4096;
+constexpr int UPF_DEFAULT_XSK_FRAMES_PER_QUEUE        = 2048;
+constexpr int UPF_DEFAULT_XSK_UMEM_MAX_MIB_TOTAL      = 256;
 constexpr int UPF_DEFAULT_MAX_UPF_REDIRECT_INTERFACES = 2;
 constexpr int UPF_DEFAULT_MAX_ARP_ENTRIES             = 256;
 
@@ -631,6 +677,33 @@ class upf_datapath_configuration : public config_type {
   int_config_value m_qos_shape_ul_ms{};
 
   /**
+   * @brief DL buffering while the UE is idle (paging).
+   *
+   * Packets hitting a BUFF FAR are held per session, then replayed through
+   * the DL lookup once the SMF installs the new rules. Bounded per session
+   * and in total (packets and KiB, charged by allocated size), and held for
+   * at most default_buffering_duration_ms. When off, BUFF packets are dropped.
+   */
+  option_config_value m_enable_dl_buffering{};
+  int_config_value m_dl_buffer_max_pkts_per_session{};
+  int_config_value m_dl_buffer_max_kib_per_session{};
+  int_config_value m_dl_buffer_max_pkts_total{};
+  int_config_value m_dl_buffer_max_kib_total{};
+  int_config_value m_default_buffering_duration_ms{};
+
+  /**
+   * @brief AF_XDP capture of buffered DL packets (eBPF datapath only).
+   *
+   * One UMEM per N6 RX queue: xsk_frames_per_queue frames of xsk_frame_size
+   * bytes (2048 or 4096). The frame count is also the ring size, so it must
+   * be a power of two. xsk_umem_max_mib_total caps all queues together; it is
+   * checked when the consumer starts, once the queue count is known.
+   */
+  int_config_value m_xsk_frame_size{};
+  int_config_value m_xsk_frames_per_queue{};
+  int_config_value m_xsk_umem_max_mib_total{};
+
+  /**
    * @brief Maximum number of redirect interfaces
    *
    * Interfaces used for traffic redirection (e.g., for lawful intercept,
@@ -893,6 +966,15 @@ class upf_datapath_configuration : public config_type {
   [[nodiscard]] int get_qos_burst_ms() const;
   [[nodiscard]] int get_qos_shape_ms() const;
   [[nodiscard]] int get_qos_shape_ul_ms() const;
+  [[nodiscard]] bool get_enable_dl_buffering() const;
+  [[nodiscard]] int get_dl_buffer_max_pkts_per_session() const;
+  [[nodiscard]] int get_dl_buffer_max_kib_per_session() const;
+  [[nodiscard]] int get_dl_buffer_max_pkts_total() const;
+  [[nodiscard]] int get_dl_buffer_max_kib_total() const;
+  [[nodiscard]] int get_default_buffering_duration_ms() const;
+  [[nodiscard]] int get_xsk_frame_size() const;
+  [[nodiscard]] int get_xsk_frames_per_queue() const;
+  [[nodiscard]] int get_xsk_umem_max_mib_total() const;
 
   /**
    * @brief Get maximum redirect interfaces

@@ -11,9 +11,11 @@
 #include "simple_switch.hpp"
 #include "upf_n4.hpp"
 #include "upf_nrf.hpp"
+#include "UserPlaneComponent.h"
 
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <atomic>
 #include <stdexcept>
 
 using namespace pfcp;
@@ -33,6 +35,67 @@ extern upf_app* upf_app_inst;
 extern upf_config upf_cfg;
 
 void upf_app_task(void*);
+
+namespace {
+// The DL buffer tick (pfcp_switch::dl_buffer_tick()) is a one-shot ITTI
+// timer. It is re-armed first thing on each expiry, so a slow tick does not
+// stretch the period.
+//
+// The state lives here rather than in upf_app because the task loop may see
+// the first expiry before upf_app_inst is assigned. It is written on
+// TASK_UPF_APP and by stop(), hence atomic. A tick that fires while stop()
+// runs just runs once more and does not re-arm.
+std::atomic<timer_id_t> dl_buffer_tick_timer{ITTI_INVALID_TIMER_ID};
+std::atomic<bool> dl_buffer_tick_stopped{false};
+
+void arm_dl_buffer_tick() {
+  if (dl_buffer_tick_stopped.load()) return;
+  dl_buffer_tick_timer.store(itti_inst->timer_setup(
+      1, 0, TASK_UPF_APP, TASK_UPF_PFCP_SWITCH_DL_BUFFER_TICK));
+}
+
+//------------------------------------------------------------------------------
+// replay_dl_flush -- send, or free, the packets a Session Modification took
+// out of a session's DL buffer.
+//
+// Runs after the response is handed to TASK_UPF_N4: the gNB takes the new
+// tunnel only once the SMF has its answer. Each packet goes back through the
+// DL lookup, because the old rule may be gone. That lookup sends on the new
+// FAR, or buffers the packet again if the UE is idle again. `released` skips
+// the QoS meter, so a packet that waited for paging is not delayed again.
+// Packets of a DISCARD or KEEP verdict are only freed.
+//------------------------------------------------------------------------------
+void replay_dl_flush(uint64_t seid, oai::upf::dl_flush_result& f) {
+  if (f.verdict != oai::upf::dl_verdict::flush || f.removed.empty()) return;
+  auto& store = pfcp_switch_inst->dl_buffer();
+  size_t sent = 0, dropped = 0, rebuffered = 0;
+  for (auto& pkt : f.removed) {
+    // No N3 sender (eBPF datapath): the lookup could not forward it.
+    const oai::upf::dl_outcome r =
+        upf_n3_inst ? pfcp_switch_inst->pfcp_session_look_up_pack_in_core(
+                          reinterpret_cast<const char*>(pkt.data()), pkt.len,
+                          /*released=*/true) :
+                      oai::upf::dl_outcome::dropped;
+    store.note_replay(r);
+    switch (r) {
+      case oai::upf::dl_outcome::sent:
+        sent++;
+        break;
+      case oai::upf::dl_outcome::dropped:
+        dropped++;
+        break;
+      case oai::upf::dl_outcome::rebuffered:
+        rebuffered++;
+        break;
+    }
+  }
+  f.removed.clear();
+  Logger::pfcp_switch().info(
+      "DL buffer seid " SEID_FMT
+      ": replay sent %zu, dropped %zu, rebuffered %zu",
+      seid, sent, dropped, rebuffered);
+}
+}  // namespace
 
 //------------------------------------------------------------------------------
 void upf_app_task(void* args_p) {
@@ -78,6 +141,22 @@ void upf_app_task(void* args_p) {
                 shared_msg));
         break;
 
+      case N4_DL_NOTIFY_REARM:
+        // TASK_UPF_N4 gave up on a DL Data Report (the SMF never answered).
+        // This task owns the rules, so the PDR's notification latch is
+        // released here. It is found by PDR ID because the report carries no
+        // uid, which also finds the rule after an Update PDR.
+        if (auto* m = dynamic_cast<itti_n4_dl_notify_rearm*>(msg)) {
+          const bool rearmed =
+              pfcp_switch_inst && pfcp_switch_inst->rearm_dl_notification(
+                                      m->up_seid, std::nullopt, m->pdr_id);
+          Logger::upf_app().debug(
+              "Received N4_DL_NOTIFY_REARM seid " SEID_FMT " pdr %u: %s",
+              m->up_seid, m->pdr_id,
+              rearmed ? "latch re-armed" : "nothing to re-arm");
+        }
+        break;
+
       case TIME_OUT:
         if (itti_msg_timeout* to = dynamic_cast<itti_msg_timeout*>(msg)) {
           switch (to->arg1_user) {
@@ -86,6 +165,10 @@ void upf_app_task(void* args_p) {
               break;
             case TASK_UPF_PFCP_SWITCH_MAX_COMMIT_INTERVAL:
               // pfcp_switch_inst->time_out_max_commit_interval(to->timer_id);
+              break;
+            case TASK_UPF_PFCP_SWITCH_DL_BUFFER_TICK:
+              arm_dl_buffer_tick();
+              if (pfcp_switch_inst) pfcp_switch_inst->dl_buffer_tick();
               break;
             default:;
           }
@@ -133,6 +216,17 @@ upf_app::upf_app(const std::string& config_file) {
       Logger::upf_app().error("Cannot create UPF_N3: %s", e.what());
       throw;
     }
+  } else if (upf_cfg.enable_bar and upf_cfg.enable_dl_buffering) {
+    // XDP owns N3 on the eBPF datapath, but the DL buffer replay (after the
+    // Session Modification that ends buffering) is sent from userspace. Give
+    // it a sender that opens no listener on 2152.
+    try {
+      upf_n3_inst = new upf_n3(upf_n3::tx_only_t{});
+    } catch (std::exception& e) {
+      Logger::upf_app().error(
+          "Cannot create transmit-only UPF_N3: %s", e.what());
+      throw;
+    }
   }
   try {
     pfcp_switch_inst = new pfcp_switch();
@@ -140,6 +234,9 @@ upf_app::upf_app(const std::string& config_file) {
     Logger::upf_app().error("Cannot create PFCP_SWITCH: %s", e.what());
     throw;
   }
+  // Armed whether or not DL buffering is enabled: the tick also releases the
+  // latch of a DL Data Report that could not be sent.
+  arm_dl_buffer_tick();
   try {
     if (upf_cfg.enable_5g_features and upf_cfg.register_nrf)
       upf_nrf_inst = new upf_nrf();
@@ -170,6 +267,14 @@ upf_app::~upf_app() {
 void upf_app::stop() {
   if (upf_nrf_inst) {
     upf_nrf_inst->deregister_to_nrf();
+  }
+  dl_buffer_tick_stopped.store(true);
+  itti_inst->timer_remove(dl_buffer_tick_timer.exchange(ITTI_INVALID_TIMER_ID));
+  // The AF_XDP thread enqueues into pfcp_switch, which ~upf_app deletes, so
+  // stop it first. UserPlaneComponent::TearDown() normally stopped it
+  // already; stopping twice is harmless.
+  if (upf_cfg.enable_bpf_datapath) {
+    UserPlaneComponent::GetInstance().StopXskConsumer();
   }
   // TODO: upf_n4, pfcp_switch
 }
@@ -264,7 +369,9 @@ void upf_app::handle_itti_msg(
 
   itti_n4_session_modification_response* n4_resp =
       new itti_n4_session_modification_response(TASK_UPF_APP, TASK_UPF_N4);
-  pfcp_switch_inst->handle_pfcp_session_modification_request(m, n4_resp);
+  oai::upf::dl_flush_result flush;
+  pfcp_switch_inst->handle_pfcp_session_modification_request(
+      m, n4_resp, &flush);
 
   n4_resp->trxn_id    = m->trxn_id;
   n4_resp->r_endpoint = m->r_endpoint;
@@ -277,6 +384,7 @@ void upf_app::handle_itti_msg(
         "Could not send ITTI message %s to task TASK_UPF_N4",
         n4_resp->get_msg_name());
   }
+  replay_dl_flush(m->seid, flush);
 }
 //------------------------------------------------------------------------------
 void upf_app::handle_itti_msg(

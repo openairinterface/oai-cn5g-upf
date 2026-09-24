@@ -8,6 +8,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -72,7 +73,10 @@ class pfcp_l4_stack : public udp_application {
   udp_server udp_s_8805;
   udp_server udp_s_allocated;
 
-  // seems no need for std::atomic_uint32_t
+  // Guards seq_num and the four transaction maps, which TASK_UPF_N4 and the
+  // UDP receive threads share. The public entry points lock it. The
+  // protected helpers expect it held. notify_ul_error() runs without it.
+  std::mutex trx_mutex_;
   uint32_t seq_num;
   uint32_t restart_counter;
 
@@ -101,7 +105,11 @@ class pfcp_l4_stack : public udp_application {
   void stop_msg_retry_timer(pfcp_procedure& p);
   void stop_msg_retry_timer(timer_id_t& t);
   void stop_proc_cleanup_timer(pfcp_procedure& p);
-  void notify_ul_error(const pfcp_procedure& p, const ::cause_value_e cause);
+  /// A request this node sent was given up on (e.g. no response after
+  /// PFCP_N1_REQUESTS retransmissions). Called with trx_mutex_ released, so
+  /// an override may send PFCP again.
+  virtual void notify_ul_error(
+      const pfcp_procedure& p, const ::cause_value_e cause);
 
  public:
   static const uint8_t version = 2;

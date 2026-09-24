@@ -25,26 +25,18 @@ struct bar_config {
                                     *   SMF suggests how many DL packets
                                     *   the UPF should buffer per UE.      */
   __u8 dl_notification_delay_50ms; /**< DL Data Notification Delay (§8.2.28)
-                                    *   in units of 50 ms, copied verbatim
-                                    *   from the PFCP IE (no lossy rounding
-                                    *   to seconds).
-                                    *   0 = one-shot per idle burst: the
-                                    *   first DDN commits an epoch and every
-                                    *   later packet takes the suppression
-                                    *   branch; no re-notification until the
-                                    *   state is reset on leaving BUFFER.
-                                    *   Non-zero = re-notification is
-                                    *   permitted once the delay window
-                                    *   (value x 50 ms) has elapsed since the
-                                    *   last committed DDN.                */
+                                    *   in 50 ms units, as in the IE.
+                                    *   0 = one DDN until bar_state is
+                                    *   reset. N = a new DDN is allowed
+                                    *   N x 50 ms after the last one.      */
   __u8 notify_cp;                  /**< 1 = at least one FAR referencing this
                                     *   BAR has apply_action.nocp set, i.e.
                                     *   the CP asked to be notified
-                                    *   (§8.2.26). Populated by UPF;
-                                    *   reuses the former pad byte.        */
+                                    *   (§8.2.26). Set by the UPF control
+                                    *   plane, not by the PFCP BAR IE.     */
 };
-/* sizeof(struct bar_config) == 8 — asserted userspace-side in
- * user/bar_apply_user.h; keep the kernel and userspace views in lockstep. */
+/* sizeof(struct bar_config) == 8 — asserted on the userspace side in
+ * user/bar_apply_user.h, so that the kernel and userspace layouts match. */
 
 /* ==========================================================================
  * bar_state.notify_epoch_ns sentinels (see struct bar_state below)
@@ -76,27 +68,19 @@ struct bar_config {
  * entry so that a fresh DDN is sent on the next DL packet burst.
  */
 struct bar_state {
-  __u64 notify_epoch_ns;    /**< 64-bit atomic claim/epoch word — the ONLY
-                             *   __sync_* operand (8/32-bit __sync_* does not
-                             *   compile for the BPF target).
-                             *   NOTIFY_FREE (0) = no DDN committed or in
-                             *   flight; NOTIFY_CLAIMED = a CPU claimed the
-                             *   window, submit in flight; any other value
-                             *   (high bit clear, nonzero) = committed DDN
-                             *   epoch, i.e. the timestamp of the last
-                             *   successful submit AND the DL-notification-
-                             *   delay-window reference. Repurposes the
-                             *   aligned __u64 slot that was last_ddn_ns —
-                             *   same size/offset/alignment.              */
+  __u64 notify_epoch_ns;    /**< The atomic latch (64-bit: smaller __sync_*
+                             *   ops do not compile for BPF).
+                             *   NOTIFY_FREE: no DDN sent.
+                             *   NOTIFY_CLAIMED: a DDN is being sent.
+                             *   Otherwise: time of the last DDN, with
+                             *   the high bit cleared.                    */
   __u32 buffered_pkt_count; /**< Packets buffered since last DDN          */
-  __u8 notification_sent;   /**< DERIVED readback MIRROR (debug / bpftool /
-                             *   tests only, NOT the atomic operand):
-                             *   1 iff notify_epoch_ns holds a committed
-                             *   epoch, else 0.                           */
+  __u8 notification_sent;   /**< 1 iff notify_epoch_ns holds a sent time.
+                             *   For debugging only; not the latch.       */
   __u8 pad[3];
 };
-/* sizeof(struct bar_state) == 16, naturally 8-byte aligned — asserted
- * userspace-side in user/bar_apply_user.h. */
+/* sizeof(struct bar_state) == 16, naturally 8-byte aligned — asserted on the
+ * userspace side in user/bar_apply_user.h. */
 
 /* ==========================================================================
  * DDN event  (data plane -> userspace)

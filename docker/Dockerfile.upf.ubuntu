@@ -118,6 +118,7 @@ COPY --from=oai-upf-builder \
     /usr/local/lib/libyaml-cpp.so.0.? \
     /usr/local/lib/libcpr.so.1* \
     /openair-upf/build/ext/libbpf/src/libbpf.so.1 \
+    /openair-upf/build/ext/xdp-tools/root/usr/lib/libxdp.so.1 \
     ./
 
 RUN ldconfig && \

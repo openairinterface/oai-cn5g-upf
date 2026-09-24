@@ -109,11 +109,12 @@ class SessionProgramManager {
   void RemoveSession(uint64_t seid);
 
   /**
-   * @brief Clear the DDN one-shot latch (bar_state_map) of a session.
+   * @brief Clear the one-shot DDN (Downlink Data Notification) latch of a
+   *        session in bar_state_map.
    *
-   * Forwards to BARProgram::ResetBarState(): the entry is OVERWRITTEN with a
-   * zeroed bar_state when it exists and is NEVER created when it does not
-   * (BPF_EXIST), so a stale UP-SEID cannot resurrect a dead map entry.
+   * Forwards to BARProgram::ResetBarState(): an existing entry is overwritten
+   * with a zeroed bar_state, and a missing one is never created (BPF_EXIST),
+   * so a stale UP SEID cannot bring back a deleted map entry.
    *
    * @param seid Session Endpoint Identifier
    * @return true if an entry existed and was zeroed.
@@ -198,7 +199,7 @@ class SessionProgramManager {
    * downstream tail call programs should be active:
    *   - QER present in any PDR -> RULE_QER_ENABLED
    *   - URR present in any PDR -> RULE_URR_ENABLED
-   *   - BAR associated with any FAR -> RULE_BAR_ENABLED
+   *   - BAR associated with any FAR, or any BUFF FAR -> RULE_BAR_ENABLED
    *   - MAR present in any PDR -> RULE_MAR_ENABLED
    *
    * The result is stored in session_rules_enabled_map and cached in

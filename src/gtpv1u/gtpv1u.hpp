@@ -60,6 +60,14 @@ class gtpu_l4_stack : public udp_application {
       char* ip_address, const uint16_t port_num,
       const oai::utils::thread_sched_params& sched_params,
       const bool send_ext_hdr, int n_rx = 1);
+  /** @brief Transmit-only stack: bound to @p address on an ephemeral port
+   *  (port 0) and never receiving, so it opens no listener on 2152.
+   *
+   *  For the eBPF datapath, where XDP owns N3 and userspace only replays
+   *  buffered DL packets. TS 29.281 V17.4.0 §4.4.2.0 lets the sender set the
+   *  UDP Source Port dynamically; §4.4.2.3 fixes the Destination Port of a
+   *  G-PDU at 2152, which is the caller's peer port. */
+  gtpu_l4_stack(const struct in_addr& address, const bool send_ext_hdr);
   virtual void handle_receive(
       char* recv_buffer, const std::size_t bytes_transferred,
       const endpoint& r_endpoint);

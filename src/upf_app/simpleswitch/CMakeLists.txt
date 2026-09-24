@@ -42,3 +42,16 @@ add_library (SIMPLE_SWITCH STATIC
   ${SRC_TOP_DIR}/upf_app/framed_routing/LocalRouting.cpp
 )
 
+
+# Standalone self-checks for header-only units (assert()-based).
+option(UPF_BUILD_SELF_TESTS "Build simple-switch self-check programs" ON)
+if(UPF_BUILD_SELF_TESTS)
+  enable_testing()
+  foreach(t test_gtpu_walk test_qos_mbr test_upf_rcu
+            test_dl_packet_buffer test_dl_flush test_xsk_frame)
+    add_executable(${t} ${t}.cpp)
+    target_compile_options(${t} PRIVATE -UNDEBUG)
+    target_link_libraries(${t} pthread)
+    add_test(NAME ${t} COMMAND ${t})
+  endforeach()
+endif()
