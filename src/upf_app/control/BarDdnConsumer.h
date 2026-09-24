@@ -32,54 +32,46 @@ enum class DldrDispatch {
 
 /**
  * @class BarDdnConsumer
- * @brief Polls bar_ddn_ringbuf_map and dispatches the DDN events it carries.
+ * @brief Polls bar_ddn_ringbuf_map and turns each DDN (Downlink Data
+ * Notification) event of the XDP BAR program into a PFCP Downlink Data Report.
  *
- * Lifecycle -- owned by UserPlaneComponent, so it tracks the eBPF datapath:
- *   Start()  from setup_bpf() (main.cpp), i.e. only when enable_bpf_datapath
- *            is set and only after UserPlaneComponent::Setup() has loaded the
- *            BAR program;
- *   Stop()   FIRST thing in UserPlaneComponent::TearDown(), i.e. BEFORE the
- *            per-session BAR map entries are erased and before the N4 task /
- *            pfcp_switch are destroyed. A poll thread still
- *            running past that point would resolve SEIDs against a freed
- *            pfcp_switch and post to a deleted ITTI.
- *
- * Both are idempotent: TearDown() is reachable twice (SignalHandler and then
- * the singleton destructor at exit()).
+ * Owned by UserPlaneComponent. Start() is called from setup_bpf() once the
+ * BAR program is loaded. Stop() runs early in UserPlaneComponent::TearDown(),
+ * before the BAR maps, the N4 task and pfcp_switch go away. Both are
+ * idempotent, because TearDown() can run twice.
  */
 class BarDdnConsumer {
  public:
   /** @brief UP SEID -> CP F-SEID resolution.
    *
-   * Defaults to the live pfcp_switch (pfcp_switch::get_cp_fseid_by_up_seid,
-   * the public accessor added for this consumer). It is a member rather than
-   * a direct call so the unit tests can drive the resolved / stale-SEID
-   * branches without standing up a pfcp_switch, which owns tun interfaces and
-   * worker threads.
+   * Defaults to pfcp_switch::get_cp_fseid_by_up_seid() on the live
+   * pfcp_switch. It is a member rather than a direct call so that a test can
+   * drive the resolved and stale-SEID branches without a pfcp_switch, which
+   * owns tun interfaces and worker threads.
    */
   using CpFseidResolver = std::function<bool(uint64_t, pfcp::fseid_t&)>;
 
-  /** @brief DLDR -> TASK_UPF_N4 hand-off.
+  /** @brief Hand-off of a DLDR (Downlink Data Report) to TASK_UPF_N4.
    *
-   * Defaults to the STATIC upf_n4::enqueue_session_report_request(). It
-   * deliberately does NOT go through upf_n4_inst: that is the whole point of
-   * the function being static, since ~upf_app() deletes upf_n4_inst without
-   * nulling it. A member rather than a direct call for the same reason as the
-   * resolver: the unit tests drive all three DldrDispatch outcomes without an
-   * ITTI, an N4 task or a PFCP association table.
+   * Arguments: (cp_fseid, report, up_seid, pdr_id). Defaults to the static
+   * upf_n4::enqueue_session_report_request(), which does not use upf_n4_inst
+   * (~upf_app() deletes it without setting it to null). (up_seid, pdr_id)
+   * goes with the report, so that TASK_UPF_N4 can release the latch if the
+   * SMF never answers. A member so that a test can replace it.
    */
   using DldrDispatcher = std::function<DldrDispatch(
-      const pfcp::fseid_t&, const pfcp::pfcp_session_report_request&)>;
+      const pfcp::fseid_t&, const pfcp::pfcp_session_report_request&, uint64_t,
+      uint16_t)>;
 
   /** @brief Release the kernel one-shot DDN latch of a session.
    *
    * Defaults to SessionProgramManager::ResetBarState() ->
-   * BARProgram::ResetBarState() (UPF-T6), which is BPF_EXIST and therefore
-   * can only ever overwrite an entry, never create one.
+   * BARProgram::ResetBarState(), which writes with BPF_EXIST and so can only
+   * overwrite an entry, never create one.
    *
-   * @warning Only ever invoked for a session that RESOLVED (i.e. is still
-   *          present). A stale UP-SEID must be dropped and counted -- see the
-   *          re-arm contract on HandleEvent().
+   * @warning Only called for a session that resolved, i.e. is still present.
+   *          A stale UP SEID must be dropped and counted -- see the re-arm
+   *          contract on HandleEvent().
    */
   using BarStateRearm = std::function<bool(uint64_t)>;
 
@@ -97,10 +89,10 @@ class BarDdnConsumer {
 
   /** @brief ring_buffer__poll() seam: (timeout_ms) -> libbpf return code.
    *
-   * Defaults to ring_buffer__poll(ring_, timeout_ms), null-guarded on ring_.
-   * A member for one reason: the poll loop's FATAL-error exit (the path that
-   * must clear running_) is otherwise unreachable in a unit test, because
-   * making the real ring_buffer__poll() fail needs a loaded map and CAP_BPF.
+   * Defaults to ring_buffer__poll(ring_, timeout_ms), guarded against a null
+   * ring_. It is a member so that a test can reach the poll loop's
+   * fatal-error exit, which must clear running_: making the real
+   * ring_buffer__poll() fail needs a loaded map and CAP_BPF.
    */
   using RingPoller = std::function<int(int)>;
 
@@ -111,44 +103,37 @@ class BarDdnConsumer {
   BarDdnConsumer();
   ~BarDdnConsumer();
 
-  BarDdnConsumer(const BarDdnConsumer&) = delete;
+  BarDdnConsumer(const BarDdnConsumer&)            = delete;
   BarDdnConsumer& operator=(const BarDdnConsumer&) = delete;
 
   /**
    * @brief Attach to the DDN ring and start the poll thread.
    *
-   * @param ddn_ringbuf bar_ddn_ringbuf_map, obtained by the caller from
-   *        UPF_XDPProgram::GetBarProgram()->GetBarDdnRingbuf(). NOT
-   *        GetMapByName(): that helper only knows bar_config_map and
-   *        bar_state_map and returns nullptr for the ring.
+   * On failure (no map, no fd, ring_buffer__new() fails) it logs and starts
+   * nothing. It can be called again after the poll loop died on an error:
+   * the old thread and ring are cleaned up first.
+   *
+   * @param ddn_ringbuf bar_ddn_ringbuf_map, from
+   *        UPF_XDPProgram::GetBarProgram()->GetBarDdnRingbuf()
+   *        (GetMapByName() does not know the ring).
    * @return true if the poll thread is running.
-   *
-   * Bails cleanly (logs, returns false, starts no thread) when the map is
-   * null, when its fd is negative (unloaded / absent map), or when
-   * ring_buffer__new() fails.
-   *
-   * Restartable: the poll loop can also end by ITSELF on a fatal
-   * ring_buffer__poll() error, which leaves a joinable-but-dead thread and an
-   * attached ring behind. Start() reaps that corpse (Stop()) before
-   * re-attaching, so a restart either really restarts or fails with a logged
-   * reason -- it never silently returns "running" while polling nothing.
    */
   bool Start(const std::shared_ptr<BPFMap>& ddn_ringbuf);
 
   /** @brief Stop and join the poll thread, then free the ring. Idempotent.
    *
-   * Safe to call FROM the poll thread: the thread is then detached instead of
-   * joined, because joining self throws std::system_error and, on the path
-   * that actually does this (SIGSEGV taken ON the poll thread ->
-   * SignalHandler::TearDown), the throw would be an uncaught exception inside
-   * a signal handler, i.e. std::terminate. See the guard in the definition.
+   * Safe to call from the poll thread itself: the thread is then detached
+   * instead of joined. Joining itself throws std::system_error, and on the
+   * path that does this (a SIGSEGV on the poll thread ->
+   * SignalHandler::TearDown) that would be an uncaught exception inside a
+   * signal handler, i.e. std::terminate.
    */
   void Stop();
 
   /** @brief True while the poll thread is alive.
    *
-   * Set by Start(), cleared by Stop() AND by the poll loop itself when
-   * ring_buffer__poll() fails fatally -- so a dead consumer never reports
+   * Set by Start(), cleared by Stop() and also by the poll loop itself when
+   * ring_buffer__poll() fails fatally, so a dead consumer never reports
    * healthy.
    */
   bool IsRunning() const;
@@ -159,13 +144,13 @@ class BarDdnConsumer {
   /**
    * @brief Handle one ring record.
    *
-   * Public because it is the whole decision logic of this class and the unit
-   * tests drive it directly; production reaches it through OnDdnEvent().
+   * Public because it holds all the decision logic of this class and a test
+   * can drive it directly; production reaches it through OnDdnEvent().
    *
    * @par Re-arm contract
-   * UPF onsumes the kernel latch the instant the event is PRODUCED, so a
-   * DDN that is not turned into a report is a downlink burst lost forever
-   * unless the latch is released again. Exactly four outcomes:
+   * The XDP program takes the latch when it produces the event, so a DDN that
+   * is not turned into a report silences the session unless the latch is
+   * released. There are four outcomes:
    *
    *   | outcome                     | report sent | ResetBarState |
    *   |-----------------------------|-------------|---------------|
@@ -174,22 +159,13 @@ class BarDdnConsumer {
    *   | no PFCP association         | no          | YES           |
    *   | stale / unknown UP-SEID     | no          | NEVER         |
    *
-   * The stale row is structural, not a branch below: the function returns on
-   * the !resolved path before any of this runs. It must stay that way -- a
-   * write to bar_state_map for a torn-down SEID could resurrect a dead entry
-   * that nothing ever deletes again.
+   * A stale SEID must never be re-armed: writing bar_state_map for a deleted
+   * session would create an entry that nothing deletes.
    *
-   * "NO" on the enqueued row is first of all the approved plan's rule: do not
-   * duplicate a report that is already queued. It is now also backed by the
-   * transaction layer, which since the H1 fix really does own retransmission
-   * on TASK_UPF_N4 -- send_request() arms its retry/cleanup timers with the
-   * PFCP_TIMER_ARG1_* sentinels (pfcp.hpp) and upf_n4_task()'s TIME_OUT case
-   * routes them to pfcp_l4_stack::time_out_event(), which resends the report
-   * up to PFCP_N1_REQUESTS times before giving up. Residual exposure: on
-   * give-up notify_ul_error() only logs at TRACE and cannot call back here, so
-   * a report lost on all four attempts still leaves the latch consumed and
-   * that burst unpaged. See the kEnqueued arm of HandleEvent() for the full
-   * note.
+   * An enqueued report is not re-armed here. The PFCP layer retransmits it;
+   * if the SMF never answers, upf_n4::notify_ul_error() asks TASK_UPF_APP to
+   * release the latch. If the report is answered, the Session Modification
+   * that ends buffering releases it.
    *
    * @param data Start of the record as handed over by libbpf.
    * @param size Record size in bytes, as reserved by the datapath.
@@ -216,12 +192,9 @@ class BarDdnConsumer {
   /**
    * @brief Spawn the poll thread with NO ring attached (unit tests).
    *
-   * The production entry point is Start(), which needs a loaded map, an fd and
-   * ring_buffer__new(); none of that exists on a host without CAP_BPF. This
-   * runs the very same PollLoop() through the very same StartPollThread(), so
-   * the running_ bookkeeping under test is the shipped one. Pair it with
-   * SetRingPollerForTesting(); without a poller the loop exits immediately as
-   * if the ring were unusable, and never touches a null ring_.
+   * Start() needs a loaded map, which a host without CAP_BPF does not have.
+   * This runs the same PollLoop() as production. Pair it with
+   * SetRingPollerForTesting(); without a poller the loop exits at once.
    *
    * @return false if a poll thread is already running or not yet reaped.
    */

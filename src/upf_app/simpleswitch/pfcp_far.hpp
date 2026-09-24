@@ -11,13 +11,10 @@ struct iphdr;
 namespace pfcp {
 
 /**
- * @brief True iff an Apply Action change LEAVES buffering (BUFF -> !BUFF).
+ * @brief True iff an Apply Action change leaves buffering (BUFF -> !BUFF).
  *
- * @param before Apply Action as it was BEFORE the Update FAR was applied.
- *               Both call sites overwrite the FAR's apply_action in place, so
- *               this value can only be obtained by snapshotting it BEFORE the
- *               update call -- a hook placed afterwards sees the new value
- *               twice and can never detect the transition.
+ * @param before Apply Action before the Update FAR. Save it before calling
+ *               update(), which overwrites it in place.
  * @param after  Apply Action after the Update FAR was applied.
  */
 inline bool apply_action_leaves_buffering(
@@ -180,17 +177,16 @@ class pfcp_far {
 };
 
 /**
- * @brief True iff applying @p update to @p existing LEAVES buffering.
+ * @brief True iff applying @p update to @p existing leaves buffering.
  *
- * @param existing FAR as it stands BEFORE the Update FAR is applied.
+ * @param existing FAR as it stands before the Update FAR is applied.
  * @param update   Update FAR IE (3GPP TS 29.244 V17.10.0 Table 7.5.4.3-1).
- * @return true when the Apply Action IE is present AND it takes the FAR out
- *         of buffering (BUFF -> !BUFF).
+ * @return true when the Apply Action IE is present and takes the FAR out of
+ *         buffering (BUFF -> !BUFF).
  *
- * @note The `apply_action.first` gate is load-bearing: pfcp_far::update()
- *       calls set(update.apply_action.second) unconditionally, so an Update
- *       FAR carrying no Apply Action IE would otherwise read as
- *       "BUFF -> all-zero" and fire a spurious re-arm.
+ * @note Keep the `apply_action.first` check: pfcp_far::update() sets the
+ *       Apply Action even when the IE is absent, which would look like
+ *       leaving BUFF.
  */
 inline bool far_update_leaves_buffering(
     const pfcp_far& existing, const pfcp::update_far& update) {

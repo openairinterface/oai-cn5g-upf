@@ -47,6 +47,8 @@ Contribution guidelines and development workflows are described in the [CONTRIBU
 
 For information about supported features and capabilities, see the [Feature Set](docs/FEATURE_SET.md).
 
+For downlink buffering while a UE is paged (configuration, build dependency and limitations), see [Downlink Buffering and Paging](docs/PAGING.md).
+
 ## Contribution Requests
 
 Anyone is welcome to contribute to any part of the codebase and any network component.

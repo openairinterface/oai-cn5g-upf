@@ -52,11 +52,15 @@ BarDdnConsumer::BarDdnConsumer()
         return pfcp_switch_inst->get_cp_fseid_by_up_seid(up_seid, out);
       }),
       dispatch_dldr_([](const pfcp::fseid_t& cp_fseid,
-                        const pfcp::pfcp_session_report_request& report) {
-        // Send an itti_n4_session_report_request message to Task UPF N4
+                        const pfcp::pfcp_session_report_request& report,
+                        uint64_t up_seid, uint16_t pdr_id) {
+        // Send an itti_n4_session_report_request to TASK_UPF_N4, tagged with
+        // (UP SEID, PDR ID) so that the latch is re-armed if the SMF never
+        // answers.
         bool association_found = false;
         if (upf_n4::enqueue_session_report_request(
-                cp_fseid, report, association_found)) {
+                cp_fseid, report, association_found,
+                std::make_pair(up_seid, pdr_id))) {
           return DldrDispatch::kEnqueued;
         }
         return association_found ? DldrDispatch::kEnqueueFailed :
@@ -132,13 +136,11 @@ bool BarDdnConsumer::Start(const std::shared_ptr<BPFMap>& ddn_ringbuf) {
   }
 
   /*
-   * Not running, but possibly not reaped either: PollLoop() also exits on its
-   * OWN on a fatal ring_buffer__poll() error, and it clears running_ when it
-   * does. What it leaves behind is a joinable-but-dead std::thread and an
-   * attached ring. Assigning over a joinable std::thread calls
-   * std::terminate(), so reap here rather than in the caller -- Stop() joins
-   * the finished thread and frees the old ring, both no-ops if there is
-   * nothing to reap.
+   * Not running, but possibly not reaped either: PollLoop() exits on its own
+   * on a fatal ring_buffer__poll() error and clears running_, leaving a
+   * finished but joinable std::thread and an attached ring. Assigning over a
+   * joinable std::thread calls std::terminate(), so reap it here with Stop(),
+   * which joins the thread and frees the old ring.
    */
   if (poll_thread_.joinable() || ring_) {
     Logger::upf_app().warn(
@@ -292,9 +294,10 @@ int BarDdnConsumer::HandleEvent(const void* data, size_t size) {
 
   const pfcp::pfcp_session_report_request report = make_dldr_report(pdr_id);
 
-  const DldrDispatch outcome = dispatch_dldr_ ?
-                                   dispatch_dldr_(cp_fseid, report) :
-                                   DldrDispatch::kEnqueueFailed;
+  const DldrDispatch outcome =
+      dispatch_dldr_ ?
+          dispatch_dldr_(cp_fseid, report, evt.seid, pdr_id.rule_id) :
+          DldrDispatch::kEnqueueFailed;
 
   switch (outcome) {
     case DldrDispatch::kEnqueued:

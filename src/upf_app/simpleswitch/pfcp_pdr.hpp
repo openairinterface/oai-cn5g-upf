@@ -7,6 +7,7 @@
 
 #include <linux/ip.h>
 #include <linux/ipv6.h>
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include "endpoint.hpp"
@@ -14,6 +15,10 @@
 #include "framed_routing/FramedRouting.hpp"
 #include "qos_mbr.hpp"
 #include "sdf_filter.hpp"
+
+namespace oai::upf {
+class dl_packet_buffer;
+}
 
 namespace pfcp {
 
@@ -27,6 +32,11 @@ class pfcp_session;
  */
 class pfcp_pdr {
  public:
+  /// The mutex also makes pfcp_pdr non-assignable (std::mutex deletes copy
+  /// and move assignment), so a rule is never overwritten in place and never
+  /// keeps an old rule_uid. The user-declared copy constructor below
+  /// suppresses the implicit move constructor, so a move is a copy too, and
+  /// every copy takes a fresh rule_uid.
   mutable std::mutex lock;
 
   // ---- Key -----------------------------------------------------------------
@@ -84,7 +94,25 @@ class pfcp_pdr {
   /// is set: parsing it per packet would cost more than forwarding it.
   oai::upf::sdf_rule sdf;
 
-  bool notified_cp;  ///< true after a CP-Notify has been sent for this PDR
+  /// true after a CP-Notify has been sent for this PDR. Atomic because the
+  /// DL threads set it (notify_cp_requested()) while TASK_UPF_APP clears it
+  /// (rearm_notified_cp()).
+  std::atomic<bool> notified_cp;
+
+  /// Process-wide unique identity of this rule instance, used by the DL
+  /// buffer (dl_packet_buffer.hpp) to tell the current BUFF rule from a
+  /// removed or replaced one. Written once at construction and read-only
+  /// after, so the datapath reads it without any atomic operation. Never
+  /// reused and never copied: the copy made by an Update PDR (copy-on-write)
+  /// gets a new value. Unlike the PDR's address, which a later allocation can
+  /// reuse, it can never be mistaken for another rule.
+  const uint64_t rule_uid;
+
+  /// Next rule_uid. Starts at 1; 64 bits never wrap in practice.
+  static uint64_t next_rule_uid() {
+    static std::atomic<uint64_t> counter{1};
+    return counter.fetch_add(1, std::memory_order_relaxed);
+  }
 
   //------------------------------------------------------------------------------
   /** @brief Construct with a UP SEID only (fields filled later via set()). */
@@ -100,7 +128,8 @@ class pfcp_pdr {
         qer_id(),
         mar_id(),
         activate_predefined_rules(),
-        notified_cp(false) {}
+        notified_cp(false),
+        rule_uid(next_rule_uid()) {}
 
   //------------------------------------------------------------------------------
   /** @brief Construct from Create PDR IE (3GPP TS 29.244 V17.10.0
@@ -120,12 +149,13 @@ class pfcp_pdr {
         qer_id(c.qer_id),
         mar_id(),
         activate_predefined_rules(c.activate_predefined_rules),
-        notified_cp(false) {
+        notified_cp(false),
+        rule_uid(next_rule_uid()) {
     compile_sdf();
   }
 
   //------------------------------------------------------------------------------
-  /** @brief Copy constructor. */
+  /** @brief Copy constructor. Takes a fresh rule_uid, never c.rule_uid. */
   pfcp_pdr(const pfcp_pdr& c)
       : lock(),
         precedence(c.precedence),
@@ -139,7 +169,8 @@ class pfcp_pdr {
         qos(c.qos),
         tx_qfi(c.tx_qfi),
         sdf(c.sdf),
-        notified_cp(c.notified_cp) {
+        notified_cp(c.notified_cp.load()),
+        rule_uid(next_rule_uid()) {
     local_seid = c.local_seid;
     pdr_id     = c.pdr_id;
   }
@@ -338,13 +369,25 @@ class pfcp_pdr {
       struct iphdr* const iph, const std::size_t num_bytes);
 
   //------------------------------------------------------------------------------
-  /** @brief Buffer a downlink packet while waiting for paging to complete. */
-  void buffering_requested(const char* buffer, const std::size_t num_bytes);
+  /** @brief Hold a copy of a downlink packet while the UE is paged.
+   *
+   *  DL threads. Hands the packet to `store`, which decides whether to keep
+   *  it. Never throws.
+   *  @return true when the packet is now held. */
+  bool buffering_requested(
+      oai::upf::dl_packet_buffer& store, const char* buffer,
+      const std::size_t num_bytes);
 
   //------------------------------------------------------------------------------
   /** @brief Send a Downlink Data Report to the CP function (3GPP TS 29.244
-   *  V17.10.0 §8.2.21 — Report Type IE, DLDR flag). */
-  void notify_cp_requested(std::shared_ptr<pfcp::pfcp_session> session);
+   *  V17.10.0 §8.2.21 — Report Type IE, DLDR flag), once per episode.
+   *
+   *  DL threads. The first caller claims notified_cp. If the report cannot be
+   *  queued, the latch stays held and the next DL buffer tick releases it,
+   *  so there is at most one attempt per tick. */
+  void notify_cp_requested(
+      oai::upf::dl_packet_buffer& store,
+      std::shared_ptr<pfcp::pfcp_session> session);
 
   //------------------------------------------------------------------------------
   /** @brief Comparison by precedence — for sorted insertion in PDR vectors. */
@@ -355,24 +398,14 @@ class pfcp_pdr {
 
 //------------------------------------------------------------------------------
 /**
- * @brief Re-arm the per-PDR CP-notify one-shot for every PDR of a FAR.
+ * @brief Re-arm the one-shot CP notification latch of every PDR of a FAR.
  *
- * simpleswitch counterpart of BARProgram::ResetBarState(): the eBPF
- * datapath latches "a DDN was already sent for this idle burst" in
- * bar_state.notify_epoch_ns, the simpleswitch datapath latches exactly the
- * same thing in pfcp_pdr::notified_cp (see notify_cp_requested(), which sends
- * the Downlink Data Report only `if (not notified_cp)`). Neither latch was
- * ever cleared, so a SECOND idle -> DL -> paging cycle on the same session
- * never re-notified the SMF.
- *
- * Call this on the same transition the eBPF reset uses -- a FAR LEAVING
- * buffering, see apply_action_leaves_buffering() -- so that simpleswitch does
- * not regress with the bug the eBPF path just fixed.
+ * Called when a FAR leaves buffering, so that the next idle period reports
+ * again. Simple-switch counterpart of BARProgram::ResetBarState(). Other
+ * re-arms go through pfcp_switch::rearm_dl_notification().
  *
  * @param pdrs    The session's PDRs (null entries are ignored).
- * @param far_id  FAR that left buffering; only PDRs referencing it (§8.2.74)
- *                are re-armed, so a multi-FAR session does not lose the
- *                latch of a FAR that is still buffering.
+ * @param far_id  FAR that left buffering; only PDRs using it are re-armed.
  * @return Number of PDRs whose latch was actually cleared.
  */
 inline size_t rearm_notified_cp(
@@ -382,8 +415,8 @@ inline size_t rearm_notified_cp(
     if (!pdr) continue;
     if (!pdr->far_id.first) continue; /* PDR references no FAR */
     if (pdr->far_id.second.far_id != far_id) continue;
-    if (!pdr->notified_cp) continue; /* nothing latched */
-    pdr->notified_cp = false;
+    if (!pdr->notified_cp.load()) continue; /* nothing latched */
+    pdr->notified_cp.store(false);
     ++rearmed;
   }
   return rearmed;

@@ -21,6 +21,7 @@
 #define USER_PLANE_COMPONENT_H_
 
 #include <bpf/libbpf.h>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include "observer/SessionObserver.h"  // For ISessionObserver interface
@@ -37,7 +38,8 @@ namespace oai {
 namespace upf {
 namespace app {
 class BarDdnConsumer;
-}
+class XskConsumer;
+}  // namespace app
 }  // namespace upf
 }  // namespace oai
 
@@ -119,32 +121,51 @@ class UserPlaneComponent : public ISessionObserver {
       const std::string& gtp_interface, const std::string& non_gtp_interface);
 
   /**
-   * @brief Start the eBPF DDN ring-buffer consumer
+   * @brief Start the eBPF DDN (Downlink Data Notification) ring-buffer
+   *        consumer
    *
-   * Resolves bar_ddn_ringbuf_map through
-   * UPF_XDPProgram::GetBarProgram()->GetBarDdnRingbuf() and hands it to a
-   * BarDdnConsumer poll thread owned by this component. A no-op (info log,
-   * no thread) when the BAR feature is disabled, so it is safe to call
-   * unconditionally from the eBPF bring-up path.
-   *
-   * Must be called AFTER Setup(): the BAR program has to be loaded before the
-   * ring has an fd.
+   * Starts a BarDdnConsumer on bar_ddn_ringbuf_map. Does nothing when BAR is
+   * disabled, so it is safe to call unconditionally. Call it after Setup():
+   * the ring has no fd before the BAR program is loaded.
    */
   void StartDdnConsumer();
 
   /**
    * @brief Stop and join the DDN ring-buffer consumer. Idempotent.
    *
-   * Called first by TearDown(); exposed separately so a shutdown path can
-   * quiesce the poll thread earlier if it ever needs to.
+   * Called early by TearDown(); public so that another shutdown path can stop
+   * the poll thread sooner if it needs to.
    */
   void StopDdnConsumer();
+
+  /**
+   * @brief Start capturing the DL packets XDP buffers (AF_XDP, one socket and
+   *        UMEM per N6 RX queue) into the DL buffer.
+   *
+   * The caller checks the settings. Does nothing when BAR is not loaded. On
+   * failure it logs one error and the UPF runs without capture. Call it
+   * after Setup().
+   *
+   * @param frame_size        bytes per UMEM frame (xsk_frame_size)
+   * @param frames_per_queue  frames per queue (xsk_frames_per_queue)
+   * @param umem_max_mib_total cap on all UMEMs (xsk_umem_max_mib_total)
+   */
+  void StartXskConsumer(
+      uint32_t frame_size, uint32_t frames_per_queue,
+      uint32_t umem_max_mib_total);
+
+  /**
+   * @brief Stop the AF_XDP consumer and delete its sockets. Idempotent and
+   *        non-throwing (it runs in the signal handler).
+   */
+  void StopXskConsumer();
 
   /**
    * @brief Tear down user plane component and cleanup resources
    *
    * Performs graceful shutdown:
-   *   - Stops the DDN ring-buffer poll thread (must be first)
+   *   - Stops the AF_XDP consumer and the DDN ring-buffer poll thread
+   *     (must be first)
    *   - Removes all active sessions
    *   - Unloads BPF tail-call pipeline
    *   - Releases network interfaces
@@ -277,10 +298,15 @@ class UserPlaneComponent : public ISessionObserver {
   /// BPF data plane manager (entry programs + shared map ownership)
   std::shared_ptr<UPF_XDPProgram> upf_xdp_program_;
 
-  /// DDN ring-buffer poll thread. Owned here so its lifetime is
-  /// bounded by the datapath's: created in StartDdnConsumer(), joined at the
-  /// very top of TearDown(), before any BAR map entry is erased.
+  /// DDN ring-buffer poll thread. Owned here so that it never outlives the
+  /// datapath: created in StartDdnConsumer(), joined at the top of
+  /// TearDown(), before any BAR map entry is erased.
   std::unique_ptr<oai::upf::app::BarDdnConsumer> ddn_consumer_;
+
+  /// AF_XDP capture of buffered DL packets. Same lifetime rule as
+  /// ddn_consumer_: stopped at the top of TearDown(), while xskmap and
+  /// pfcp_switch still exist.
+  std::unique_ptr<oai::upf::app::XskConsumer> xsk_consumer_;
 
   /// N3 GTP-U interface name
   std::string gtp_interface_;
