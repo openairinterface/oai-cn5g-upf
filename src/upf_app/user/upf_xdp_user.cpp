@@ -478,9 +478,14 @@ void UPF_XDPProgram::VerifySharedMapIdentity() const {
   };
 
   static constexpr const char* kEthOnlySessionMaps[] = {
-      "session_by_mac_map", "eth_session_mapping_map",
-      "eth_egress_ifindex_map", "mac_pdu_session_map"};
+      "session_by_mac_map", "eth_session_mapping_map", "eth_egress_ifindex_map",
+      "mac_pdu_session_map"};
   const bool eth_pipeline_active = (sl_eth_ != nullptr);
+
+  /* Per-CPU scratch maps that are private to each BPF object by design,
+   * so there is no shared identity to check. */
+  static constexpr const char* kIntentionallyPrivateMaps[] = {
+      "fib_lookup_scratch_map"};
 
   struct Instance {
     const char* label;
@@ -512,6 +517,13 @@ void UPF_XDPProgram::VerifySharedMapIdentity() const {
               [name](const char* eth_name) {
                 return std::strcmp(name, eth_name) == 0;
               }) != std::end(kEthOnlySessionMaps))
+        continue;
+      if (std::find_if(
+              std::begin(kIntentionallyPrivateMaps),
+              std::end(kIntentionallyPrivateMaps),
+              [name](const char* priv_name) {
+                return std::strcmp(name, priv_name) == 0;
+              }) != std::end(kIntentionallyPrivateMaps))
         continue;
       int fd = bpf_map__fd(map);
       if (fd < 0) continue;
