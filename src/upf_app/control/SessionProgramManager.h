@@ -720,6 +720,20 @@ class SessionProgramManager {
    */
   int32_t GetEmptySlot();
 
+  /**
+   * @brief Remove a session_by_ue_ip_map entry if it still names this SEID
+   *
+   * Leaves the entry alone if a newer session has already reclaimed the
+   * address. Does not lock mutex_; the caller must hold it.
+   *
+   * @param upf_xdp_program XDP program owning session_by_ue_ip_map
+   * @param ue_ip_key UE IP in map-key byte order
+   * @param seid Session Endpoint Identifier expected to own the entry
+   */
+  void RemoveUeIpMappingIfOwned(
+      std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t ue_ip_key,
+      uint64_t seid);
+
   // ==========================================================================
   // Member Variables
   // ==========================================================================
@@ -753,10 +767,10 @@ class SessionProgramManager {
   std::map<uint64_t, std::set<uint32_t>> session_n3_arp_cache_;
   /// Track PDU session type per SEID for cleanup and map routing
   std::map<uint64_t, PduSessionType> session_pdu_type_map_;
-  /// Track the session_by_ue_ip_map key (UE IP, in map-key byte order) per
-  /// SEID, so RemoveSession() can clear it without leaving a deleted
-  /// session's IP attribution behind for a re-attaching UE (issue #12).
-  std::map<uint64_t, uint32_t> session_ue_ip_key_map_;
+  /// Track the session_by_ue_ip_map keys (UE IP, in map-key byte order) per
+  /// SEID, so ModifyPipeline() can drop a replaced IP and RemoveSession()
+  /// can clear them all (issue #12).
+  std::map<uint64_t, std::set<uint32_t>> session_ue_ip_key_map_;
 };
 
 #endif  // SESSION_PROGRAM_MANAGER_H_
