@@ -2143,10 +2143,12 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         // A PDR may reference a FAR created earlier in this same session
         std::shared_ptr<pfcp::pfcp_far> existing_far;
         if (not session->get(far_id.far_id, existing_far)) {
-          // Neither a Create FAR IE in this request nor an existing FAR in
-          // the session provides far_id.
-          cause.cause_value         = CAUSE_VALUE_MANDATORY_IE_MISSING;
-          offending_ie.offending_ie = PFCP_IE_CREATE_FAR;
+          // FAR ID is present but references no FAR in this request or the
+          // session: report the Create PDR that could not be created.
+          cause.cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+          failed_rule.rule_id_type  = FAILED_RULE_ID_TYPE_PDR;
+          failed_rule.rule_id_value = cr_pdr.pdr_id.second.rule_id;
+          resp->pfcp_ies.set(failed_rule);
           break;
         }
 
