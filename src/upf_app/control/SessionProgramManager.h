@@ -739,19 +739,19 @@ class SessionProgramManager {
    * @brief Parse a PDR's SDF filter and store it in the sdf_filters map
    *
    * Shared by CreatePipeline() and ModifyPipeline(). Extracts the flow
-   * description from the PDR's PDI, resolves the QFI from the associated
-   * QER, injects the QFI back into the PDR's PDI for downstream BPF
-   * matching, and stores the parsed filter keyed by (seid, qfi). No-op if
-   * the PDR has no QER reference.
+   * description from the PDR's PDI and stores the parsed filter keyed by
+   * (seid, qfi). Does not modify the PDR. No-op if the PDR has no QER
+   * reference.
    *
    * @param upf_xdp_program XDP program owning the sdf_filters map
    * @param seid Session Endpoint Identifier
-   * @param pdr PDR to parse (its PDI may be updated with the QFI)
-   * @param qer QER associated with pdr, or nullptr if none
+   * @param pdr PDR to parse
+   * @param qfi QFI already resolved into the converted BPF PDR
+   *        (bpf_pdr.pdi.qfi.qfi), i.e. the value the datapath looks up
    */
   void ParseAndStoreSdfFilter(
       std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
-      std::shared_ptr<pfcp::pfcp_pdr> pdr, std::shared_ptr<pfcp::pfcp_qer> qer);
+      std::shared_ptr<pfcp::pfcp_pdr> pdr, uint8_t qfi);
 
   // ==========================================================================
   // Member Variables

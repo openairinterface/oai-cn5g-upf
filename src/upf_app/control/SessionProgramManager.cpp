@@ -567,6 +567,7 @@ void SessionProgramManager::SetupSessionEnforcementPrograms(
     qer_program->Setup(seid, session->qers_downlink, session->pdrs_downlink);
     {
       std::lock_guard<std::mutex> lock(mutex_);
+      // TODO(#11): tear down the previous QERTCProgram before replacing it
       qer_programs_map_[seid] = qer_program;
     }
   }
@@ -606,7 +607,7 @@ void SessionProgramManager::SetupSessionEnforcementPrograms(
  */
 void SessionProgramManager::ParseAndStoreSdfFilter(
     std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
-    std::shared_ptr<pfcp::pfcp_pdr> pdr, std::shared_ptr<pfcp::pfcp_qer> qer) {
+    std::shared_ptr<pfcp::pfcp_pdr> pdr, uint8_t qfi) {
   if (!pdr->qer_id.first) return;
 
   auto& logger          = Logger::upf_app();
@@ -621,19 +622,6 @@ void SessionProgramManager::ParseAndStoreSdfFilter(
 
   if (sdf.fd && sdf.length_of_flow_description > 0) {
     flow_description = sdf.flow_description;
-  }
-
-  // Get QFI from QER
-  uint32_t qfi = 0;
-  if (qer && qer->qos_flow_id.first) {
-    qfi = qer->qos_flow_id.second.qfi;
-  }
-
-  // Inject QFI into PDI if available
-  if (qfi != 0) {
-    pdi.qfi.first      = true;
-    pdi.qfi.second.qfi = qfi;
-    pdr->set(pdi);
   }
 
   // Parse and store SDF filter
@@ -879,7 +867,7 @@ void SessionProgramManager::CreatePipeline(
       }
 
       // Parse SDF Filter for traffic classification (if QER present)
-      ParseAndStoreSdfFilter(upf_xdp_program, seid, pdr, qer);
+      ParseAndStoreSdfFilter(upf_xdp_program, seid, pdr, bpf_pdr.pdi.qfi.qfi);
 
       // Launch async ARP table updates based on source interface
       if (source_interface.interface_value == INTERFACE_VALUE_ACCESS) {
@@ -1289,7 +1277,7 @@ void SessionProgramManager::ModifyPipeline(
       }
 
       // Parse SDF Filter for traffic classification (if QER present)
-      ParseAndStoreSdfFilter(upf_xdp_program, seid, pdr, qer);
+      ParseAndStoreSdfFilter(upf_xdp_program, seid, pdr, bpf_pdr.pdi.qfi.qfi);
 
       // Store PDR in array for batch update
       pdrs[pdr_index] = bpf_pdr;
