@@ -155,9 +155,17 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
     if (mar_map) mar_map->Remove(seid);
 
     // Prune rules_match_pdr_map / eth_rules_match_pdr_map, sdf_filters_map,
-    // and the per-session PDR array itself.
-    auto stale_pdrs = GetTrackedPdrQfis(upf_xdp_program, seid, is_eth_pdu);
-    PruneStaleRuleEntries(upf_xdp_program, seid, is_eth_pdu, stale_pdrs, {});
+    // and the per-session PDR array itself. Every recorded PDR and QFI is
+    // stale.
+    std::set<uint16_t> stale_pdr_ids;
+    std::set<uint32_t> stale_qfis;
+    for (const auto& [pdr_id, qfi] :
+         GetTrackedPdrQfis(upf_xdp_program, seid, is_eth_pdu)) {
+      stale_pdr_ids.insert(pdr_id);
+      if (qfi != 0) stale_qfis.insert(qfi);
+    }
+    PruneStaleRuleEntries(
+        upf_xdp_program, seid, is_eth_pdu, stale_pdr_ids, stale_qfis);
 
     const char* pdrs_map_name =
         is_eth_pdu ? "eth_session_pdrs_map" : "pdrs_per_session_map";
@@ -584,30 +592,31 @@ std::map<uint16_t, uint32_t> SessionProgramManager::GetTrackedPdrQfis(
 
 //------------------------------------------------------------------------------
 /**
- * @brief Remove rules_match_pdr_map / sdf_filters_map entries for PDRs that
- *        no longer exist
+ * @brief Remove rules_match_pdr_map entries for stale PDR IDs and
+ *        sdf_filters_map entries for stale QFIs
  * @see SessionProgramManager::PruneStaleRuleEntries (header)
  */
 void SessionProgramManager::PruneStaleRuleEntries(
     std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
-    bool is_eth_pdu, const std::map<uint16_t, uint32_t>& stale_pdrs,
-    const std::set<uint32_t>& qfis_still_in_use) {
-  if (!upf_xdp_program || stale_pdrs.empty()) return;
+    bool is_eth_pdu, const std::set<uint16_t>& stale_pdr_ids,
+    const std::set<uint32_t>& stale_qfis) {
+  if (!upf_xdp_program || (stale_pdr_ids.empty() && stale_qfis.empty())) return;
 
   const char* rules_map_name =
       is_eth_pdu ? "eth_rules_match_pdr_map" : "rules_match_pdr_map";
   auto rules_map = upf_xdp_program->GetMapByName(rules_map_name);
-  auto sdf_map   = upf_xdp_program->GetSdfFilterMap();
-
-  for (const auto& [stale_pdr_id, stale_qfi] : stale_pdrs) {
-    if (rules_map) {
+  if (rules_map) {
+    for (const uint16_t stale_pdr_id : stale_pdr_ids) {
       struct pdrs_per_session pdr_key = {0};
       pdr_key.pdr_id                  = stale_pdr_id;
       pdr_key.seid                    = seid;
       rules_map->Remove(pdr_key);
     }
+  }
 
-    if (stale_qfi != 0 && sdf_map && !qfis_still_in_use.count(stale_qfi)) {
+  auto sdf_map = upf_xdp_program->GetSdfFilterMap();
+  if (sdf_map) {
+    for (const uint32_t stale_qfi : stale_qfis) {
       struct session_qfi sdf_key = {0};
       sdf_key.qfi                = stale_qfi;
       sdf_key.seid               = seid;
@@ -616,8 +625,9 @@ void SessionProgramManager::PruneStaleRuleEntries(
   }
 
   Logger::upf_app().debug(
-      "Pruned %zu stale PDR rule(s) for seid " SEID_FMT, stale_pdrs.size(),
-      seid);
+      "Pruned %zu stale PDR rule(s) and %zu stale SDF QFI(s) for "
+      "seid " SEID_FMT,
+      stale_pdr_ids.size(), stale_qfis.size(), seid);
 }
 
 //------------------------------------------------------------------------------
@@ -1384,16 +1394,18 @@ void SessionProgramManager::ModifyPipeline(
       session_pdrs_map->Update(seid, pdrs, BPF_ANY);
     }
 
-    // Prune rules_match_pdr_map / sdf_filters_map entries for PDRs this
-    // modification withdrew
-    std::map<uint16_t, uint32_t> stale_pdrs;
+    // Prune rules_match_pdr_map by withdrawn PDR ID, and sdf_filters_map by
+    // QFIs no surviving PDR uses -- including a surviving PDR's old QFI
+    std::set<uint16_t> stale_pdr_ids;
+    std::set<uint32_t> stale_qfis;
     for (const auto& [old_pdr_id, old_qfi] : old_pdr_qfis) {
-      if (!new_pdr_ids.count(old_pdr_id)) {
-        stale_pdrs[old_pdr_id] = old_qfi;
+      if (!new_pdr_ids.count(old_pdr_id)) stale_pdr_ids.insert(old_pdr_id);
+      if (old_qfi != 0 && !new_qfis_in_use.count(old_qfi)) {
+        stale_qfis.insert(old_qfi);
       }
     }
     PruneStaleRuleEntries(
-        upf_xdp_program, seid, is_eth_pdu, stale_pdrs, new_qfis_in_use);
+        upf_xdp_program, seid, is_eth_pdu, stale_pdr_ids, stale_qfis);
 
     logger.info(
         "[eBPF] Modify Pipeline - Pipeline modified for session " SEID_FMT

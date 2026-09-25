@@ -739,25 +739,25 @@ class SessionProgramManager {
       bool is_eth_pdu) const;
 
   /**
-   * @brief Remove rules_match_pdr_map / sdf_filters_map entries for PDRs
-   *        that no longer exist
+   * @brief Remove rules_match_pdr_map entries for stale PDR IDs and
+   *        sdf_filters_map entries for stale QFIs
    *
-   * For each (pdr_id, qfi) in stale_pdrs, removes the rules_match_pdr_map
-   * (or eth_rules_match_pdr_map) entry for that PDR, and the
-   * sdf_filters_map entry for its QFI -- unless that QFI is still used by a
-   * surviving PDR (qfis_still_in_use), in which case the SDF filter is left
-   * alone.
+   * The two maps are keyed differently, so the caller diffs them
+   * separately: rules_match_pdr_map (or eth_rules_match_pdr_map) by
+   * (pdr_id, seid), sdf_filters_map by (seid, qfi). A PDR that survives
+   * but changes QFI leaves its PDR ID out of stale_pdr_ids while its old
+   * QFI can still be in stale_qfis.
    *
    * @param upf_xdp_program XDP program owning the maps
    * @param seid Session Endpoint Identifier
    * @param is_eth_pdu Selects the ETH or IP variant of rules_match_pdr_map
-   * @param stale_pdrs PDR IDs (with their QFIs) to remove
-   * @param qfis_still_in_use QFIs a surviving PDR still references
+   * @param stale_pdr_ids PDR IDs no longer in the session
+   * @param stale_qfis Non-zero QFIs no surviving PDR uses
    */
   void PruneStaleRuleEntries(
       std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
-      bool is_eth_pdu, const std::map<uint16_t, uint32_t>& stale_pdrs,
-      const std::set<uint32_t>& qfis_still_in_use);
+      bool is_eth_pdu, const std::set<uint16_t>& stale_pdr_ids,
+      const std::set<uint32_t>& stale_qfis);
 
   // ==========================================================================
   // Member Variables
