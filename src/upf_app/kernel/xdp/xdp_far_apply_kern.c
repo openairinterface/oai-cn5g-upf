@@ -42,6 +42,7 @@
 #include "pipeline_maps.h"
 #include "interfaces_maps.h"
 #include "arp_maps.h"
+#include "utils/mac_resolution.h"
 #include "tail_call_dispatcher.h"
 #include "stats_maps.h"
 #include "stats_types.h"
@@ -382,39 +383,26 @@ static __always_inline u32 gtpu_decap_ipv4(
     return RET_DROP;
   }
 
-  struct bpf_fib_lookup fib = {};
-  fib.family                = AF_INET;
-  fib.tos                   = inner_iph->tos;
-  fib.l4_protocol           = inner_iph->protocol;
-  fib.tot_len               = bpf_ntohs(inner_iph->tot_len);
-  fib.ipv4_src              = inner_iph->saddr;
-  fib.ipv4_dst              = inner_iph->daddr;
-  fib.ifindex               = ctx->ingress_ifindex;
-
-  int fib_rc = bpf_fib_lookup(ctx, &fib, sizeof(fib), 0);
+  __u32 nh_ip; /* Always written; may hold the next-hop gateway on a miss. */
+  int fib_rc = resolve_mac_via_fib(
+      ctx, inner_iph, inner_iph->daddr, ctx->ingress_ifindex, 0,
+      eth_inner->h_dest, eth_inner->h_source, &nh_ip);
+  if (!nh_ip) nh_ip = inner_iph->daddr;
 
   if (fib_rc == BPF_FIB_LKUP_RET_SUCCESS) {
     /* Routing resolved the next-hop (handles routed dst across an L2 network
      * between the UPF and the N6 gateway). */
-    __builtin_memcpy(eth_inner->h_dest, fib.dmac, ETH_ALEN);
-    __builtin_memcpy(eth_inner->h_source, fib.smac, ETH_ALEN);
     bpf_debug("N6 next-hop: FIB hit, dst MAC %pM", eth_inner->h_dest);
   } else {
     /* FIB miss -> arp_table_map fallback ("arping"), keyed by the resolved
      * next-hop gateway IP, then the inner destination as a last resort. */
-    u32 nh_ip                = fib.ipv4_dst ? fib.ipv4_dst : inner_iph->daddr;
-    struct arp_entry* arp_n6 = bpf_map_lookup_elem(&arp_table_map, &nh_ip);
-    if (!arp_n6) {
-      u32 dst_ip = inner_iph->daddr;
-      arp_n6     = bpf_map_lookup_elem(&arp_table_map, &dst_ip);
-    }
-    if (!arp_n6) {
+    if (!resolve_mac_via_arp(nh_ip, eth_inner->h_dest) &&
+        !resolve_mac_via_arp(inner_iph->daddr, eth_inner->h_dest)) {
       bpf_debug(
           "N6 next-hop: FIB miss (rc=%d) and no ARP entry for %pI4 -- dropping",
           fib_rc, &nh_ip);
       return RET_FAILURE;
     }
-    __builtin_memcpy(eth_inner->h_dest, arp_n6->mac_address, ETH_ALEN);
     bpf_debug(
         "N6 next-hop: FIB miss (rc=%d), ARP fallback dst MAC %pM", fib_rc,
         eth_inner->h_dest);
