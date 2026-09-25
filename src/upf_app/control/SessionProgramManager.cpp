@@ -95,11 +95,12 @@ void SessionProgramManager::CreateSession(uint64_t seid) {
  *
  * Cleans up all BPF maps associated with this session:
  * - session_rules_enabled_map (tail call skip-chain flags)
- * - ETH-specific maps if Ethernet PDU session
  * - urr_config_map, urr_volume_counters_map (usage reporting state)
  * - bar_config_map, bar_state_map (buffering state)
  * - mar_rules_map (ATSSS steering)
  * - QER TC-BPF program (if instantiated)
+ * - rules_match_pdr_map / eth_rules_match_pdr_map, sdf_filters_map, and the
+ *   per-session PDR array (pdrs_per_session_map / eth_session_pdrs_map)
  * - ARP caches for N3/N6 endpoints
  *
  * @param seid Session Endpoint Identifier
@@ -129,14 +130,14 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
       rules_en_map->Remove(seid);
     }
 
-    // Clean up ETH-specific maps if this was an ETH PDU session
+    // Determine PDU session type before erasing the tracking entry
+    bool is_eth_pdu  = false;
     auto pdu_type_it = session_pdu_type_map_.find(seid);
     if (pdu_type_it != session_pdu_type_map_.end()) {
-      if (pdu_type_it->second == PduSessionType::Ethernet) {
+      is_eth_pdu = (pdu_type_it->second == PduSessionType::Ethernet);
+      if (is_eth_pdu) {
         Logger::upf_app().debug(
             "Cleaning up ETH PDU maps for seid " SEID_FMT, seid);
-        auto eth_pdrs = upf_xdp_program->GetMapByName("eth_session_pdrs_map");
-        if (eth_pdrs) eth_pdrs->Remove(seid);
       }
       session_pdu_type_map_.erase(pdu_type_it);
     }
@@ -152,6 +153,24 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
     if (bar_st_map) bar_st_map->Remove(seid);
     auto mar_map = upf_xdp_program->GetMapByName("mar_rules_map");
     if (mar_map) mar_map->Remove(seid);
+
+    // Prune rules_match_pdr_map / eth_rules_match_pdr_map, sdf_filters_map,
+    // and the per-session PDR array itself. Every recorded PDR and QFI is
+    // stale.
+    std::set<uint16_t> stale_pdr_ids;
+    std::set<uint32_t> stale_qfis;
+    for (const auto& [pdr_id, qfi] :
+         GetTrackedPdrQfis(upf_xdp_program, seid, is_eth_pdu)) {
+      stale_pdr_ids.insert(pdr_id);
+      if (qfi != 0) stale_qfis.insert(qfi);
+    }
+    PruneStaleRuleEntries(
+        upf_xdp_program, seid, is_eth_pdu, stale_pdr_ids, stale_qfis);
+
+    const char* pdrs_map_name =
+        is_eth_pdu ? "eth_session_pdrs_map" : "pdrs_per_session_map";
+    auto pdrs_map = upf_xdp_program->GetMapByName(pdrs_map_name);
+    if (pdrs_map) pdrs_map->Remove(seid);
   }
 
   // Clean up ARP caches
@@ -539,6 +558,76 @@ PduSessionType SessionProgramManager::DetectPduSessionType(
   }
 
   return PduSessionType::IP;
+}
+
+//------------------------------------------------------------------------------
+// Stale rule-map pruning (used by both ModifyPipeline and RemoveSession)
+//------------------------------------------------------------------------------
+
+/**
+ * @brief Read the PDR IDs (and their QFIs) currently recorded for a session
+ * @see SessionProgramManager::GetTrackedPdrQfis (header)
+ */
+std::map<uint16_t, uint32_t> SessionProgramManager::GetTrackedPdrQfis(
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
+    bool is_eth_pdu) const {
+  std::map<uint16_t, uint32_t> pdr_qfis;
+  if (!upf_xdp_program) return pdr_qfis;
+
+  const char* pdrs_map_name =
+      is_eth_pdu ? "eth_session_pdrs_map" : "pdrs_per_session_map";
+  auto pdrs_map = upf_xdp_program->GetMapByName(pdrs_map_name);
+  if (!pdrs_map) return pdr_qfis;
+
+  struct pfcp_pdr recorded_pdrs[MAX_PDRS_PER_PDU_SESSION_LIMIT] = {0};
+  if (pdrs_map->Lookup(seid, recorded_pdrs) != 0) return pdr_qfis;
+
+  for (const auto& pdr : recorded_pdrs) {
+    if (pdr.pdr_id.rule_id != 0) {
+      pdr_qfis[pdr.pdr_id.rule_id] = pdr.pdi.qfi.qfi;
+    }
+  }
+  return pdr_qfis;
+}
+
+//------------------------------------------------------------------------------
+/**
+ * @brief Remove rules_match_pdr_map entries for stale PDR IDs and
+ *        sdf_filters_map entries for stale QFIs
+ * @see SessionProgramManager::PruneStaleRuleEntries (header)
+ */
+void SessionProgramManager::PruneStaleRuleEntries(
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
+    bool is_eth_pdu, const std::set<uint16_t>& stale_pdr_ids,
+    const std::set<uint32_t>& stale_qfis) {
+  if (!upf_xdp_program || (stale_pdr_ids.empty() && stale_qfis.empty())) return;
+
+  const char* rules_map_name =
+      is_eth_pdu ? "eth_rules_match_pdr_map" : "rules_match_pdr_map";
+  auto rules_map = upf_xdp_program->GetMapByName(rules_map_name);
+  if (rules_map) {
+    for (const uint16_t stale_pdr_id : stale_pdr_ids) {
+      struct pdrs_per_session pdr_key = {0};
+      pdr_key.pdr_id                  = stale_pdr_id;
+      pdr_key.seid                    = seid;
+      rules_map->Remove(pdr_key);
+    }
+  }
+
+  auto sdf_map = upf_xdp_program->GetSdfFilterMap();
+  if (sdf_map) {
+    for (const uint32_t stale_qfi : stale_qfis) {
+      struct session_qfi sdf_key = {0};
+      sdf_key.qfi                = stale_qfi;
+      sdf_key.seid               = seid;
+      sdf_map->Remove(sdf_key);
+    }
+  }
+
+  Logger::upf_app().debug(
+      "Pruned %zu stale PDR rule(s) and %zu stale SDF QFI(s) for "
+      "seid " SEID_FMT,
+      stale_pdr_ids.size(), stale_qfis.size(), seid);
 }
 
 //------------------------------------------------------------------------------
@@ -937,6 +1026,12 @@ void SessionProgramManager::ModifyPipeline(
     const bool is_eth_pdu       = (pdu_type == PduSessionType::Ethernet);
     session_pdu_type_map_[seid] = pdu_type;
 
+    // Snapshot the PDR set currently recorded for this session before this
+    // call's writes overwrite it, so PDRs withdrawn by this modification can
+    // be pruned from rules_match_pdr_map / sdf_filters_map below
+    const std::map<uint16_t, uint32_t> old_pdr_qfis =
+        GetTrackedPdrQfis(upf_xdp_program, seid, is_eth_pdu);
+
     // Get network configuration for ARP updates
     const uint32_t dn_ip     = upf::GetDnIp();
     const uint32_t upf_n3_ip = upf::GetN3Ip();
@@ -1088,6 +1183,11 @@ void SessionProgramManager::ModifyPipeline(
     pfcp::source_interface_t source_interface;
     uint16_t pdr_id = 0;
 
+    // Tracks which PDRs/QFIs survive this modification, so old_pdr_qfis can
+    // be diffed against it afterward to prune what dropped out
+    std::set<uint16_t> new_pdr_ids;
+    std::set<uint32_t> new_qfis_in_use;
+
     for (const auto& pdr : session->pdrs) {
       pdr_id = pdr->pdr_id.rule_id;
 
@@ -1138,6 +1238,13 @@ void SessionProgramManager::ModifyPipeline(
       // 3GPP TS 29.244 Section 8.2.89 - QFI is in QER for downlink
       if (bpf_pdr.pdi.qfi.qfi == 0 && bpf_qer.qos_flow_identifier.qfi != 0) {
         bpf_pdr.pdi.qfi.qfi = bpf_qer.qos_flow_identifier.qfi;
+      }
+
+      // This PDR survives the modification -- exclude it (and its QFI)
+      // from the stale-entry pruning below
+      new_pdr_ids.insert(pdr_id);
+      if (bpf_pdr.pdi.qfi.qfi != 0) {
+        new_qfis_in_use.insert(bpf_pdr.pdi.qfi.qfi);
       }
 
       /* Update rules_match_pdr map with ALL rules (TS 29.244 Section 8.2)
@@ -1286,6 +1393,19 @@ void SessionProgramManager::ModifyPipeline(
     if (session_pdrs_map) {
       session_pdrs_map->Update(seid, pdrs, BPF_ANY);
     }
+
+    // Prune rules_match_pdr_map by withdrawn PDR ID, and sdf_filters_map by
+    // QFIs no surviving PDR uses -- including a surviving PDR's old QFI
+    std::set<uint16_t> stale_pdr_ids;
+    std::set<uint32_t> stale_qfis;
+    for (const auto& [old_pdr_id, old_qfi] : old_pdr_qfis) {
+      if (!new_pdr_ids.count(old_pdr_id)) stale_pdr_ids.insert(old_pdr_id);
+      if (old_qfi != 0 && !new_qfis_in_use.count(old_qfi)) {
+        stale_qfis.insert(old_qfi);
+      }
+    }
+    PruneStaleRuleEntries(
+        upf_xdp_program, seid, is_eth_pdu, stale_pdr_ids, stale_qfis);
 
     logger.info(
         "[eBPF] Modify Pipeline - Pipeline modified for session " SEID_FMT
