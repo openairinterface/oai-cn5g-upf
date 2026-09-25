@@ -542,6 +542,112 @@ PduSessionType SessionProgramManager::DetectPduSessionType(
 }
 
 //------------------------------------------------------------------------------
+// Shared enforcement setup (used by both CreatePipeline and ModifyPipeline)
+//------------------------------------------------------------------------------
+
+/**
+ * @brief Instantiate/refresh per-session QER-TC, URR, BAR, and MAR programs
+ * @see SessionProgramManager::SetupSessionEnforcementPrograms (header)
+ */
+void SessionProgramManager::SetupSessionEnforcementPrograms(
+    std::shared_ptr<pfcp::pfcp_session> session,
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t rules_flags) {
+  const uint64_t seid = session->get_up_seid();
+  auto& logger        = Logger::upf_app();
+
+  // QER-XDP: gate-check is stateless -- rules_match_pdr_map already carries
+  // the pfcp_qer struct per PDR; no per-session map write needed here.
+
+  // QER-TC: per-session HTB class setup (rate shaping via TC BPF).
+  // Requires downlink QER rules and RULE_QER_ENABLED in rules_flags.
+  if ((rules_flags & RULE_QER_ENABLED) && !session->qers_downlink.empty()) {
+    logger.debug("Setup QERTCProgram for SEID=" SEID_FMT, seid);
+    std::shared_ptr<QERTCProgram> qer_program =
+        std::make_shared<QERTCProgram>();
+    qer_program->Setup(seid, session->qers_downlink, session->pdrs_downlink);
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      // TODO(#11): tear down the previous QERTCProgram before replacing it
+      qer_programs_map_[seid] = qer_program;
+    }
+  }
+
+  // URR: populate urr_config_map + initialise urr_volume_counters_map.
+  if ((rules_flags & RULE_URR_ENABLED) && !session->urrs.empty()) {
+    auto urr = upf_xdp_program->GetUrrProgram();
+    if (urr) {
+      logger.debug("Setup URRProgram for SEID=" SEID_FMT, seid);
+      urr->Setup(seid, session->urrs);
+    }
+  }
+
+  // BAR: populate bar_config_map + initialise bar_state_map.
+  if ((rules_flags & RULE_BAR_ENABLED) && !session->bars.empty()) {
+    auto bar = upf_xdp_program->GetBarProgram();
+    if (bar) {
+      logger.debug("Setup BARProgram for SEID=" SEID_FMT, seid);
+      bar->Setup(seid, session->bars);
+    }
+  }
+
+  // MAR: populate mar_config_map + initialise mar_access_state_map.
+  if ((rules_flags & RULE_MAR_ENABLED) && !session->mars.empty()) {
+    auto mar = upf_xdp_program->GetMarProgram();
+    if (mar) {
+      logger.debug("Setup MARProgram for SEID=" SEID_FMT, seid);
+      mar->Setup(seid, session->mars);
+    }
+  }
+}
+
+//------------------------------------------------------------------------------
+/**
+ * @brief Parse a PDR's SDF filter and store it in the sdf_filters map
+ * @see SessionProgramManager::ParseAndStoreSdfFilter (header)
+ */
+void SessionProgramManager::ParseAndStoreSdfFilter(
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
+    std::shared_ptr<pfcp::pfcp_pdr> pdr, uint8_t qfi) {
+  if (!pdr->qer_id.first) return;
+
+  auto& logger          = Logger::upf_app();
+  const uint16_t pdr_id = pdr->pdr_id.rule_id;
+
+  pfcp::pdi pdi;
+  pfcp::sdf_filter_t sdf;
+  struct sdf_filtr sdf_filter;
+  std::string flow_description;
+
+  if (!(pdr->get(pdi) && pdi.get(sdf))) return;
+
+  if (sdf.fd && sdf.length_of_flow_description > 0) {
+    flow_description = sdf.flow_description;
+  }
+
+  // Parse and store SDF filter
+  auto filter_info = SdfFilterParser::ParseSdfFilter(flow_description);
+  if (!filter_info) {
+    logger.warn(
+        "Failed to parse SDF filter for PDR %u: '%s'", pdr_id,
+        flow_description.c_str());
+    return;
+  }
+
+  sdf_filter              = *filter_info;
+  sdf_filter.session.seid = seid;
+  sdf_filter.session.qfi  = qfi;
+
+  struct session_qfi sdf_key = {0};
+  sdf_key.qfi                = qfi;
+  sdf_key.seid               = seid;
+
+  auto sdf_map = upf_xdp_program->GetSdfFilterMap();
+  if (sdf_map) {
+    sdf_map->Update(sdf_key, sdf_filter, BPF_ANY);
+  }
+}
+
+//------------------------------------------------------------------------------
 // Pipeline Management - 3GPP TS 29.244 Section 5.2
 //------------------------------------------------------------------------------
 /**
@@ -749,17 +855,6 @@ void SessionProgramManager::CreatePipeline(
       rules.bar                    = bpf_bar;
       rules.mar                    = bpf_mar;
 
-      // Populate dedicated config maps for URR/BAR/MAR (runtime state init)
-      /* if (bpf_urr.urr_id != 0) {
-         PopulateUrrConfigMap(upf_xdp_program, seid, bpf_urr);
-       }
-       if (bpf_bar.bar_id != 0) {
-         PopulateBarConfigMap(upf_xdp_program, seid, bpf_bar);
-       }
-       if (bpf_mar.mar_id != 0) {
-         PopulateMarRulesMap(upf_xdp_program, seid, bpf_mar);
-       }
- */
       struct pdrs_per_session pdr_key = {0};
       pdr_key.pdr_id                  = pdr_id;
       pdr_key.seid                    = seid;
@@ -770,6 +865,9 @@ void SessionProgramManager::CreatePipeline(
       if (rules_map) {
         rules_map->Update(pdr_key, rules, BPF_ANY);
       }
+
+      // Parse SDF Filter for traffic classification (if QER present)
+      ParseAndStoreSdfFilter(upf_xdp_program, seid, pdr, bpf_pdr.pdi.qfi.qfi);
 
       // Launch async ARP table updates based on source interface
       if (source_interface.interface_value == INTERFACE_VALUE_ACCESS) {
@@ -847,6 +945,9 @@ void SessionProgramManager::CreatePipeline(
     // Compute and store rules_enabled flags for tail call skip-chain
     uint32_t rules_flags = ComputeRulesEnabledFlags(session);
     UpdateRulesEnabledMap(upf_xdp_program, seid, rules_flags);
+
+    // Instantiate QER-TC/URR/BAR/MAR enforcement for this session
+    SetupSessionEnforcementPrograms(session, upf_xdp_program, rules_flags);
 
     logger.info(
         "Pipeline created for session " SEID_FMT
@@ -973,54 +1074,13 @@ void SessionProgramManager::ModifyPipeline(
 
     // ── Per-session stage program Setup() calls ─────────────────────────────
     // rules_flags was computed and written to session_rules_enabled_map above.
-    // Use it here (no redundant IsQosEnabled() / IsBpfDatapathEnabled() calls)
-    // to decide which per-session maps and TC programs need to be initialised.
-    // This mirrors the pipeline-level Setup() in UPF_XDPProgram which only
-    // loads the XDP programs; per-session map population is done here.
+    // SetupSessionEnforcementPrograms uses it (no redundant IsQosEnabled() /
+    // IsBpfDatapathEnabled() calls) to decide which per-session maps and TC
+    // programs need to be (re)initialised. This mirrors the pipeline-level
+    // Setup() in UPF_XDPProgram which only loads the XDP programs;
+    // per-session map population is done here.
     // ─────────────────────────────────────────────────────────────────────────
-
-    // QER-XDP: gate-check is stateless -- rules_match_pdr_map already carries
-    // the pfcp_qer struct per PDR; no per-session map write needed here.
-
-    // QER-TC: per-session HTB class setup (rate shaping via TC BPF).
-    // Requires downlink QER rules and RULE_QER_ENABLED in rules_flags.
-    if ((rules_flags & RULE_QER_ENABLED) && !session->qers_downlink.empty()) {
-      logger.debug("Setup QERTCProgram for SEID=" SEID_FMT, seid);
-      std::shared_ptr<QERTCProgram> qer_program =
-          std::make_shared<QERTCProgram>();
-      qer_program->Setup(seid, session->qers_downlink, session->pdrs_downlink);
-      {
-        std::lock_guard<std::mutex> lock(mutex_);
-        qer_programs_map_[seid] = qer_program;
-      }
-    }
-
-    // URR: populate urr_config_map + initialise urr_volume_counters_map.
-    if ((rules_flags & RULE_URR_ENABLED) && !session->urrs.empty()) {
-      auto urr = upf_xdp_program->GetUrrProgram();
-      if (urr) {
-        logger.debug("Setup URRProgram for SEID=" SEID_FMT, seid);
-        urr->Setup(seid, session->urrs);
-      }
-    }
-
-    // BAR: populate bar_config_map + initialise bar_state_map.
-    if ((rules_flags & RULE_BAR_ENABLED) && !session->bars.empty()) {
-      auto bar = upf_xdp_program->GetBarProgram();
-      if (bar) {
-        logger.debug("Setup BARProgram for SEID=" SEID_FMT, seid);
-        bar->Setup(seid, session->bars);
-      }
-    }
-
-    // MAR: populate mar_config_map + initialise mar_access_state_map.
-    if ((rules_flags & RULE_MAR_ENABLED) && !session->mars.empty()) {
-      auto mar = upf_xdp_program->GetMarProgram();
-      if (mar) {
-        logger.debug("Setup MARProgram for SEID=" SEID_FMT, seid);
-        mar->Setup(seid, session->mars);
-      }
-    }
+    SetupSessionEnforcementPrograms(session, upf_xdp_program, rules_flags);
 
     // Extract TEIDs from uplink PDRs
     std::vector<uint32_t> uplink_teids;
@@ -1150,17 +1210,6 @@ void SessionProgramManager::ModifyPipeline(
       rules.bar                    = bpf_bar;
       rules.mar                    = bpf_mar;
 
-      // Populate dedicated config maps for URR/BAR/MAR (runtime state init)
-      /* if (bpf_urr.urr_id != 0) {
-         PopulateUrrConfigMap(upf_xdp_program, seid, bpf_urr);
-       }
-       if (bpf_bar.bar_id != 0) {
-         PopulateBarConfigMap(upf_xdp_program, seid, bpf_bar);
-       }
-       if (bpf_mar.mar_id != 0) {
-         PopulateMarRulesMap(upf_xdp_program, seid, bpf_mar);
-       }
- */
       struct pdrs_per_session pdr_key = {0};
       pdr_key.pdr_id                  = pdr_id;
       pdr_key.seid                    = seid;
@@ -1228,50 +1277,7 @@ void SessionProgramManager::ModifyPipeline(
       }
 
       // Parse SDF Filter for traffic classification (if QER present)
-      if (pdr->qer_id.first) {
-        pfcp::sdf_filter_t sdf;
-        struct sdf_filtr sdf_filter;
-        std::string flow_description;
-
-        if (pdr->get(pdi) && pdi.get(sdf)) {
-          if (sdf.fd && sdf.length_of_flow_description > 0)
-            flow_description = sdf.flow_description;
-
-          // Get QFI from QER
-          uint32_t qfi = 0;
-          if (qer && qer->qos_flow_id.first) {
-            qfi = qer->qos_flow_id.second.qfi;
-          }
-
-          // Inject QFI into PDI if available
-          if (qfi != 0) {
-            pdi.qfi.first      = true;
-            pdi.qfi.second.qfi = qfi;
-            pdr->set(pdi);
-          }
-
-          // Parse and store SDF filter
-          auto filter_info = SdfFilterParser::ParseSdfFilter(flow_description);
-          if (filter_info) {
-            sdf_filter              = *filter_info;
-            sdf_filter.session.seid = seid;
-            sdf_filter.session.qfi  = qfi;
-
-            struct session_qfi sdf_key = {0};
-            sdf_key.qfi                = qfi;
-            sdf_key.seid               = seid;
-
-            auto sdf_map = upf_xdp_program->GetSdfFilterMap();
-            if (sdf_map) {
-              sdf_map->Update(sdf_key, sdf_filter, BPF_ANY);
-            }
-          } else {
-            logger.warn(
-                "Failed to parse SDF filter for PDR %u: '%s'", pdr_id,
-                flow_description.c_str());
-          }
-        }
-      }
+      ParseAndStoreSdfFilter(upf_xdp_program, seid, pdr, bpf_pdr.pdi.qfi.qfi);
 
       // Store PDR in array for batch update
       pdrs[pdr_index] = bpf_pdr;
