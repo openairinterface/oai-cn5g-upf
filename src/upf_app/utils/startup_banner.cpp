@@ -263,12 +263,6 @@ void DisplayDataPlaneStatus() {
         "│ eth_session_mapping_map              │ %-36u │",
         upf::GetMaxPduSessions());
     Logger::upf_app().startup(
-        "│ eth_session_pdrs_map                 │ %-36u │",
-        upf::GetMaxPduSessions());
-    Logger::upf_app().startup(
-        "│ eth_rules_match_pdr_map              │ %-36u │",
-        upf::GetMaxPduSessions() * upf::GetMaxPdrsPerSession());
-    Logger::upf_app().startup(
         "│ eth_egress_ifindex_map               │ %-36u │",
         upf::GetMaxUpfInterfaces());
     Logger::upf_app().startup(

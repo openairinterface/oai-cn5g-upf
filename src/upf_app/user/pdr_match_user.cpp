@@ -44,7 +44,9 @@ void PdrMatchProgram::ConfigureMaps(struct xdp_pdr_match_kern_c* skel) {
   /* rodata: 7 fields.
    * xdp_pdr_match_kern.c includes pipeline_maps.h to declare the shared maps
    * (pdrs_per_session_map, rules_match_pdr_map). pipeline_maps.h declares all
-   * 7 rodata fields and is a superset of sdf_maps.h rodata. */
+   * 7 rodata fields and is a superset of sdf_maps.h rodata.
+   * MAX_PDRS_PER_PDU_SESSION also bounds match_pdr_eth_n3()'s loop in
+   * xdp_pdr_match_kern.c */
   if (skel->rodata) {
     skel->rodata->MAX_UPF_INTERFACES = upf::GetMaxUpfInterfaces();
     skel->rodata->MAX_UPF_REDIRECT_INTERFACES =

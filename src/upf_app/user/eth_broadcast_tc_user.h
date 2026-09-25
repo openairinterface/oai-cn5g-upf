@@ -131,7 +131,7 @@ class EthBroadcastTCProgram : public BPFProgram {
   void InitializeMaps();
 
   /* Skeleton + lifecycle */
-  eth_broadcast_tc_kern_c* skeleton_;
+  eth_broadcast_tc_kern_c* skeleton_ = nullptr;
   std::shared_ptr<EthBroadcastTCProgramLifeCycle> lifecycle_;
 
   /* Map wrappers */

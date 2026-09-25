@@ -77,8 +77,6 @@ class N6EthEntryProgram : public BPFProgram {
   std::shared_ptr<BPFMap> GetRedirectInterfacesMap() const;
   std::shared_ptr<BPFMap> GetSessionByMacMap() const;
   std::shared_ptr<BPFMap> GetEthSessionMappingMap() const;
-  std::shared_ptr<BPFMap> GetEthSessionPdrsMap() const;
-  std::shared_ptr<BPFMap> GetEthRulesMatchPdrMap() const;
   std::shared_ptr<BPFMap> GetEthEgressIfindexMap() const;
   std::shared_ptr<BPFMap> GetMacPduSessionMap() const;
   std::shared_ptr<BPFMap> GetMcStatsMap() const;
@@ -150,8 +148,6 @@ class N6EthEntryProgram : public BPFProgram {
   /* eth_pdu_maps.h */
   std::shared_ptr<BPFMap> session_by_mac_map_;
   std::shared_ptr<BPFMap> eth_session_mapping_map_;
-  std::shared_ptr<BPFMap> eth_session_pdrs_map_;
-  std::shared_ptr<BPFMap> eth_rules_match_pdr_map_;
   std::shared_ptr<BPFMap> eth_egress_ifindex_map_;
   std::shared_ptr<BPFMap> mac_pdu_session_map_;
   /* stats_maps.h */
