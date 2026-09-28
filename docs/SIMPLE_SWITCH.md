@@ -62,8 +62,11 @@ Four properties follow from that, and they are what you configure against:
 Reads and writes are batched — one `recvmmsg()` or `sendmmsg()` carries up to
 64 packets. `tun0` is opened with `IFF_VNET_HDR` and TSO, so the kernel hands
 over TCP in super-packets of up to 64 kB and the UPF splits them itself rather
-than paying a syscall per segment. Session lookups are lock-free on the read
-side; only the N4 thread writes.
+than paying a syscall per segment. Asking for TSO means asking for
+`TUN_F_CSUM` too, so the kernel stops computing L4 checksums and the UPF
+finishes every one itself — on the segments it creates, and on the packets it
+forwards whole. Session lookups are lock-free on the read side; only the N4
+thread writes.
 
 ## 4. QoS and usage reporting
 
@@ -165,6 +168,28 @@ set: anything pinned there must place its own threads. The UPF does, with
 onto the first CPU of their cpuset while the rest idle — which looks exactly
 like a UPF ceiling and is not one. Give each such container a narrow cpuset and
 `taskset` its processes explicitly.
+
+**ECN needs no configuration, but it is worth knowing why it is rarely
+exercised.** `tun0` advertises `TUN_F_TSO_ECN`, so when a connection has
+negotiated ECN the kernel ORs `VIRTIO_NET_HDR_GSO_ECN` (`0x80`) into the GSO
+type: a TCPv4 super-packet then arrives as `0x81`, not `0x01`. The UPF masks
+that flag off before deciding whether it can split the packet, because the
+type is a value with flags on it rather than a plain enum.
+
+Nothing has to be set for that to work. It goes untested on most hosts because
+Linux ships `net.ipv4.tcp_ecn = 2` — accept ECN when the peer asks for it,
+never ask — so with both ends at the default no connection is ECN-capable and
+the flag never appears. To exercise the path deliberately, have the sending
+end request it:
+
+```
+sysctl -w net.ipv4.tcp_ecn=1     # sender, for a test; 2 is the default
+```
+
+and check the receiver actually sees marked traffic before drawing any
+conclusion from the result. Changing it on the UPF host does nothing: the UPF
+is not a TCP endpoint, it only forwards what the UE and the server negotiate
+between themselves.
 
 **TCP congestion control is not a UPF setting.** The endpoints are the UE and
 the server; the UPF only forwards, and needs nothing from BBR or from CUBIC. If
