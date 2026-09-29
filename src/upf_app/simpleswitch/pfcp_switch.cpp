@@ -30,6 +30,7 @@
 #include "common_defs.h"
 #include "itti.hpp"
 #include "logger.hpp"
+#include "csum.hpp"
 #include "qos_mbr.hpp"
 #include "simple_switch.hpp"
 #include "upf_config.hpp"
@@ -59,72 +60,6 @@ void insert_or_error(Map& map, const Key key, Val val, const char* what) {
     Logger::pfcp_switch().error(
         "%s table is full: 0x%lx not installed, its packets will match no rule",
         what, (unsigned long) key);
-}
-
-// --- checksums, for the segments this code builds itself ---------------------
-// Only needed on the GSO path: a segment the kernel did not create has no
-// checksum of its own, and the inner header travels end to end inside GTP-U,
-// so it has to be right here. This is work the kernel would otherwise have
-// done while segmenting, not extra work.
-
-/// Sum @p len bytes into a 32-bit accumulator, ones-complement style.
-inline uint32_t csum_partial(const void* p, size_t len, uint32_t sum) {
-  const auto* b = (const uint8_t*) p;
-  while (len > 1) {
-    uint16_t w;
-    memcpy(&w, b, 2);
-    sum += w;
-    b += 2;
-    len -= 2;
-  }
-  if (len) sum += *b;  // odd trailing byte, already in network order
-  return sum;
-}
-
-inline uint16_t csum_fold(uint32_t sum) {
-  while (sum >> 16) sum = (sum & 0xFFFF) + (sum >> 16);
-  return (uint16_t) ~sum;
-}
-
-/// IPv4 header checksum, over the header only (§RFC 791).
-inline void ip_csum_set(struct iphdr* iph) {
-  iph->check = 0;
-  iph->check = csum_fold(csum_partial(iph, (size_t) iph->ihl * 4, 0));
-}
-
-/// TCP checksum over the pseudo-header plus the segment (§RFC 793).
-inline void tcp_csum_set(struct iphdr* iph, size_t l4_len) {
-  auto* th   = (struct tcphdr*) ((uint8_t*) iph + (size_t) iph->ihl * 4);
-  th->check  = 0;
-  uint32_t s = 0;
-  s          = csum_partial(&iph->saddr, 4, s);
-  s          = csum_partial(&iph->daddr, 4, s);
-  const uint16_t proto_be = htons(IPPROTO_TCP);
-  const uint16_t len_be   = htons((uint16_t) l4_len);
-  s                       = csum_partial(&proto_be, 2, s);
-  s                       = csum_partial(&len_be, 2, s);
-  s                       = csum_partial(th, l4_len, s);
-  th->check               = csum_fold(s);
-}
-
-/// @brief Finish a checksum the kernel deliberately left incomplete.
-///
-/// TUN_F_CSUM has to be advertised to get TSO, and it also stops the kernel
-/// checksumming the packets it does *not* split. Those arrive with NEEDS_CSUM
-/// set and the two bytes at csum_start+csum_offset holding the pseudo-header
-/// sum instead of a finished checksum. Forwarding one unchanged puts a packet
-/// on the air that every receiver counts as a bad segment and discards.
-///
-/// That partial sum lies inside the range being summed, so summing
-/// [csum_start, end) and folding picks it up: the field must be read as part
-/// of the data, never cleared first.
-inline void vnet_complete_csum(
-    char* pkt, size_t plen, uint16_t csum_start, uint16_t csum_offset) {
-  const size_t at = (size_t) csum_start + csum_offset;
-  if (csum_start >= plen || at + sizeof(uint16_t) > plen) return;  // malformed
-  const uint16_t c =
-      csum_fold(csum_partial(pkt + csum_start, plen - csum_start, 0));
-  memcpy(pkt + at, &c, sizeof(c));
 }
 
 //------------------------------------------------------------------------------
@@ -292,13 +227,16 @@ int pfcp_switch::segment_and_forward(
 
   // Only IPv4 TCP is split here. IPv6 and everything else falls through to the
   // copy below, which still forwards the packet correctly.
-  const bool splittable = plen >= sizeof(struct iphdr) && iph->version == 4 &&
-                          iph->protocol == IPPROTO_TCP && mss > 0 &&
-                          (vnet.gso_type == UPF_VNET_HDR_GSO_TCPV4 ||
-                           vnet.gso_type == UPF_VNET_HDR_GSO_NONE);
+  // gso_type carries flags as well as a type, so normalise it before the
+  // comparison -- see vnet_gso_base().
+  const uint8_t gso_type = vnet_gso_base(vnet.gso_type);
+  const bool splittable =
+      plen >= sizeof(struct iphdr) && iph->version == 4 &&
+      iph->protocol == IPPROTO_TCP && mss > 0 &&
+      (gso_type == UPF_VNET_HDR_GSO_TCPV4 || gso_type == UPF_VNET_HDR_GSO_NONE);
 
-  // Pass it on unchanged. Right for a packet that is already one segment, and
-  // the only thing that can be done with one this cannot read.
+  // Send it without splitting: right for a packet that is already one segment,
+  // and the only thing that can be done with one this cannot read.
   const auto forward_whole = [&]() {
     give_up();
     if (plen > slot_capacity) {
@@ -309,6 +247,11 @@ int pfcp_switch::segment_and_forward(
       return 0;
     }
     memcpy(slot[0], pkt, plen);
+    // Finish the checksum the kernel left open. TUN_F_CSUM, which TSO
+    // requires, leaves every checksum to us, and unlike the split path below
+    // this one computes none of its own.
+    if (vnet.flags & UPF_VNET_HDR_F_NEEDS_CSUM)
+      vnet_complete_csum(slot[0], plen, vnet.csum_start, vnet.csum_offset);
     slot_len[0] = (ssize_t) plen;
     return 1;
   };

@@ -28,41 +28,13 @@
 #include "uint_generator.hpp"
 #include "upf_map.hpp"
 #include "upf_rcu.hpp"
+#include "vnet_hdr.hpp"
 
 #include <SessionManager.h>
 
 namespace oai {
 namespace upf {
 namespace app {
-
-/**
- * @brief The virtio-net header a tun queue opened with IFF_VNET_HDR prefixes
- *        to every packet, in both directions.
- *
- * Declared here rather than included from <linux/virtio_net.h>, which does not
- * compile as C++: it declares a field called `class`. The layout is fixed by
- * the virtio specification and is what TUNSETVNETHDRSZ is told to expect, so
- * restating it is safe -- but the size must stay 10 bytes, hence the assert.
- */
-struct upf_vnet_hdr {
-  uint8_t flags;
-  uint8_t gso_type;
-  uint16_t hdr_len;     ///< bytes of header before the payload
-  uint16_t gso_size;    ///< MSS: payload bytes per segment once split
-  uint16_t csum_start;  ///< only meaningful with NEEDS_CSUM
-  uint16_t csum_offset;
-} __attribute__((packed));
-static_assert(
-    sizeof(struct upf_vnet_hdr) == 10,
-    "virtio_net_hdr is 10 bytes; TUNSETVNETHDRSZ agrees that with the kernel");
-
-/// @name virtio_net_hdr values used here (virtio spec §5.1.6).
-/// @{
-#define UPF_VNET_HDR_F_NEEDS_CSUM 1
-#define UPF_VNET_HDR_GSO_NONE 0
-#define UPF_VNET_HDR_GSO_TCPV4 1
-#define UPF_VNET_HDR_GSO_TCPV6 4
-/// @}
 
 /// Maximum sessions tracked simultaneously
 #define PFCP_SWITCH_MAX_SESSIONS 1024
