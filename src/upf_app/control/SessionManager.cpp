@@ -1341,8 +1341,8 @@ size_t SessionManager::HandlePdrUpdates(
       if (pdi.get(new_fteid)) {
         if (new_fteid.ch) {
           // CH=1: allocate a new N3 TEID on behalf of the CP (§8.2.3).
-          // TODO §8.2.3 CH/CHID: CHID (choose_id) selects from a TEID pool;
-          //   not yet supported — allocate without pool selection for now.
+          // TODO §5.2.3.1 CHID: Create PDR shares one F-TEID per CHOOSE ID
+          //   (pfcp_session::create); this path still allocates a fresh one.
           pfcp::fteid_t allocated_fteid = pfcp_switch_inst->generate_fteid_n3();
           // session->dataplane_->generate_fteid_n3();
 

@@ -14,6 +14,7 @@
 #include <utils/endian_utils.h>
 #include <helpers/NextHopFinder.hpp>
 #include <helpers/SdfFilterParser.hpp>
+#include <algorithm>
 #include <net/if.h>
 #include <arpa/inet.h>
 #include "observer/SessionObserver.h"
@@ -1082,13 +1083,18 @@ void SessionProgramManager::ModifyPipeline(
     // ─────────────────────────────────────────────────────────────────────────
     SetupSessionEnforcementPrograms(session, upf_xdp_program, rules_flags);
 
+    // Each TEID is listed once: PDRs that share an F-TEID (CHOOSE ID,
+    // §5.2.3.1), or FARs that point at the same gNB tunnel, are one tunnel.
+    const auto add_unique = [](std::vector<uint32_t>& teids, uint32_t teid) {
+      if (teid != 0 &&
+          std::find(teids.begin(), teids.end(), teid) == teids.end())
+        teids.push_back(teid);
+    };
+
     // Extract TEIDs from uplink PDRs
     std::vector<uint32_t> uplink_teids;
     for (const auto& pdr : session->pdrs_uplink) {
-      uint32_t teid = SessionManager::GetUplinkTeidFromPdr(pdr);
-      if (teid != 0) {
-        uplink_teids.push_back(teid);
-      }
+      add_unique(uplink_teids, SessionManager::GetUplinkTeidFromPdr(pdr));
     }
 
     // Extract TEIDs from downlink FARs
@@ -1096,10 +1102,7 @@ void SessionProgramManager::ModifyPipeline(
     for (const auto& pdr : session->pdrs_downlink) {
       std::shared_ptr<pfcp::pfcp_far> far;
       if (GetFarForPdr(session, pdr, far)) {
-        uint32_t teid = SessionManager::GetDownlinkTeidFromFar(far);
-        if (teid != 0) {
-          downlink_teids.push_back(teid);
-        }
+        add_unique(downlink_teids, SessionManager::GetDownlinkTeidFromFar(far));
       }
     }
 
