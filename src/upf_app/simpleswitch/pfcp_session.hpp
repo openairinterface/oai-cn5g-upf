@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <map>
 #include <mutex>
 
 #include "3gpp_29.244.h"
@@ -198,6 +199,12 @@ class pfcp_session {
       qers_downlink;  ///< Downlink QERs
 
   pfcp::fteid_t teid_uplink = {};  ///< Allocated N3 F-TEID (§8.2.3)
+
+  /// F-TEID allocated for each CHOOSE ID (§5.2.3.1), so every Create PDR that
+  /// carries the same CHOOSE ID gets the same tunnel. Kept for the session's
+  /// lifetime rather than one request, so a PDR created by a later Session
+  /// Modification joins the tunnel the gNB already uses.
+  std::map<uint8_t, pfcp::fteid_t> chosen_fteids;
 
   // ---- Session AMBR meters (3GPP TS 29.244 §8.2.8) --------------------------
   /// One bucket per direction for the whole session, shared by every PDR that

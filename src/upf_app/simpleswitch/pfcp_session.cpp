@@ -1824,8 +1824,23 @@ bool pfcp_session::create(
     const pfcp::fteid_t& local_fteid = pdi.local_fteid.second;
     allocated_fteid                  = {};
     if (local_fteid.ch) {
-      // TODO if (local_fteid.choose_id) {
-      allocated_fteid = pfcp_switch_inst->generate_fteid_n3();
+      // §5.2.3.1: PDRs that carry the same CHOOSE ID share one F-TEID. The
+      // SMF gives the gNB a single TEID for the PDU session, so allocating
+      // one per PDR leaves every other uplink PDR unreachable.
+      const auto chosen = local_fteid.chid ?
+                              chosen_fteids.find(local_fteid.choose_id) :
+                              chosen_fteids.end();
+      if (chosen != chosen_fteids.end()) {
+        allocated_fteid = chosen->second;
+        Logger::upf_n4().info(
+            "TEID " TEID_FMT " reused for CHOOSE ID %u", allocated_fteid.teid,
+            local_fteid.choose_id);
+      } else {
+        allocated_fteid = pfcp_switch_inst->generate_fteid_n3();
+        if (local_fteid.chid) {
+          chosen_fteids[local_fteid.choose_id] = allocated_fteid;
+        }
+      }
     } else {
       // cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
       allocated_fteid = pdi.local_fteid.second;
@@ -2057,6 +2072,7 @@ void pfcp_session::cleanup() {
   urrs.clear();
   bars.clear();
   mars.clear();
+  chosen_fteids.clear();
 }
 
 //------------------------------------------------------------------------------
