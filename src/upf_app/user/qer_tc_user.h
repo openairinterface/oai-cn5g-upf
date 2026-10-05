@@ -8,6 +8,7 @@
 #include <ProgramLifeCycle.hpp>
 #include <linux/bpf.h>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 #include <qer_tc_kern_skel.h>
@@ -120,7 +121,12 @@ class QERTCProgram : public BPFProgram {
   std::shared_ptr<BPFMaps> GetMaps();
 
   /**
-   * @brief Teardown TC-BPF program
+   * @brief Release this session's shaping state and the BPF program
+   *
+   * Deletes the tc classes Setup() created, children first, then destroys
+   * the skeleton. The shared root qdisc, the shared BPF filter and the N6
+   * tc_redirect hook are left in place, since other sessions use them.
+   * Safe to call more than once.
    */
   void TearDown();
 
@@ -207,6 +213,15 @@ class QERTCProgram : public BPFProgram {
    */
   std::shared_ptr<pfcp::pfcp_pdr> GetPdrByQerId(uint32_t qer_id) const;
 
+  /**
+   * @brief Delete the tc classes recorded by Setup(), children first
+   *
+   * Only classes whose `tc class add` succeeded are recorded, so a class id
+   * that already existed (for example, held by another session) is never
+   * deleted here.
+   */
+  void DeleteTcClasses();
+
   // Default class configuration (HTB parameters)
   uint32_t default_class_handle_;  ///< TC class handle for default flow
   uint32_t default_class_rate_;    ///< Default rate in kbps
@@ -227,6 +242,12 @@ class QERTCProgram : public BPFProgram {
       pdr_map_;                                  /// PDR lookup map
   std::shared_ptr<BPFMap> egress_ifindex_map_;   ///< Egress interfaces
   std::shared_ptr<BPFMap> qos_flow_params_map_;  ///< QoS flow parameters
+
+  // ==========================================================================
+  // tc classes created by Setup(), released by TearDown()
+  // ==========================================================================
+  std::string tc_iface_;                    ///< Interface the classes live on
+  std::vector<uint16_t> created_classids_;  ///< Minor ids, in creation order
 };
 
 #endif  // QER_TC_USER_H_

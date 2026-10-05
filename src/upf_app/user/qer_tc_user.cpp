@@ -96,7 +96,12 @@ QERTCProgram::QERTCProgram()
 }
 
 //------------------------------------------------------------------------------
-QERTCProgram::~QERTCProgram() {}
+QERTCProgram::~QERTCProgram() {
+  // Normally a no-op, because owners call TearDown() first. This covers a
+  // Setup() that threw after creating classes, before anything owned the
+  // program. The skeleton itself is released by ~ProgramLifeCycle.
+  DeleteTcClasses();
+}
 
 //------------------------------------------------------------------------------
 bool QERTCProgram::NoHtbRootQdisc(const std::string& interface) {
@@ -244,6 +249,9 @@ void QERTCProgram::Setup(
           gtp_iface.c_str());
     }
 
+    // TearDown() deletes the classes recorded below from this interface
+    tc_iface_ = gtp_iface;
+
     // Create PDU Session Class
     uint16_t casted_seid = static_cast<uint16_t>(seid);
     uint64_t rate_bytes  = ((uint64_t) max_rate * 1000) / 8;
@@ -264,6 +272,7 @@ void QERTCProgram::Setup(
     } else {
       Logger::upf_app().info(
           "  └─ ✓ PDU session class  1:%x created successfully", casted_seid);
+      created_classids_.push_back(casted_seid);
     }
 
     // Process each QER
@@ -304,6 +313,7 @@ void QERTCProgram::Setup(
         } else {
           Logger::upf_app().info(
               "  └─ ✓ Default class  1:%x created successfully", default_minor);
+          created_classids_.push_back(default_minor);
 
           Logger::upf_app().info(
               "  ┌─ Creating PFIFO default class %d: Child of Parent 1:%d",
@@ -327,6 +337,7 @@ void QERTCProgram::Setup(
           } else {
             Logger::upf_app().info(
                 "  └─ ✓ PFIFO default class  1:%d created successfully", minor);
+            created_classids_.push_back(minor);
           }
 
           // Add default flow to table
@@ -379,6 +390,8 @@ void QERTCProgram::Setup(
               "  └─ ✗ Failed to create QoS flow class for QER %u", qer_id);
           has_errors = true;
         } else {
+          created_classids_.push_back(minor);
+
           // Add flow to table
           QosFlowInfo flow;
           flow.qer_id    = qer_id;
@@ -446,7 +459,24 @@ std::shared_ptr<BPFMaps> QERTCProgram::GetMaps() {
 
 //------------------------------------------------------------------------------
 void QERTCProgram::TearDown() {
+  DeleteTcClasses();
   lifecycle_->tearDown();
+}
+
+//------------------------------------------------------------------------------
+void QERTCProgram::DeleteTcClasses() {
+  // Reverse creation order: every parent was created before its children,
+  // and HTB refuses to delete a class that still has children.
+  for (auto it = created_classids_.rbegin(); it != created_classids_.rend();
+       ++it) {
+    const std::string cmd =
+        fmt::format("tc class del dev {} classid 1:{:x}", tc_iface_, *it);
+    if (system(cmd.c_str()) != 0) {
+      Logger::upf_app().warn(
+          "Failed to delete tc class 1:%x on %s", *it, tc_iface_.c_str());
+    }
+  }
+  created_classids_.clear();
 }
 
 //------------------------------------------------------------------------------

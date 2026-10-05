@@ -561,6 +561,22 @@ void SessionProgramManager::SetupSessionEnforcementPrograms(
 
   // QER-TC: per-session HTB class setup (rate shaping via TC BPF).
   // Requires downlink QER rules and RULE_QER_ENABLED in rules_flags.
+  //
+  // Tear down the previous program first, even if no new one is set up: its
+  // classes use the same (SEID, QFI)-derived ids, so the new Setup() would
+  // collide with them, and a modification that removes every QER must still
+  // release them.
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto qer_it = qer_programs_map_.find(seid);
+    if (qer_it != qer_programs_map_.end()) {
+      logger.debug(
+          "Tearing down previous QERTCProgram for SEID=" SEID_FMT, seid);
+      qer_it->second->TearDown();
+      qer_programs_map_.erase(qer_it);
+    }
+  }
+
   if ((rules_flags & RULE_QER_ENABLED) && !session->qers_downlink.empty()) {
     logger.debug("Setup QERTCProgram for SEID=" SEID_FMT, seid);
     std::shared_ptr<QERTCProgram> qer_program =
@@ -568,7 +584,6 @@ void SessionProgramManager::SetupSessionEnforcementPrograms(
     qer_program->Setup(seid, session->qers_downlink, session->pdrs_downlink);
     {
       std::lock_guard<std::mutex> lock(mutex_);
-      // TODO(#11): tear down the previous QERTCProgram before replacing it
       qer_programs_map_[seid] = qer_program;
     }
   }
