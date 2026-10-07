@@ -25,7 +25,7 @@ typedef enum {
   TASK_UPF_APP,
   TASK_UPF_N4,
   TASK_UPF_N3,
-  TASK_UPF_NRF,
+  TASK_UPF_SBI,
   TASK_MAX,
   TASK_NONE,
   TASK_ALL = 255

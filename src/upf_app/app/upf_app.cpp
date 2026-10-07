@@ -10,7 +10,7 @@
 #include "upf_config.hpp"
 #include "simple_switch.hpp"
 #include "upf_n4.hpp"
-#include "upf_nrf.hpp"
+#include "upf_sbi.hpp"
 
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -25,7 +25,7 @@ using namespace std;
 
 upf_n4* upf_n4_inst   = nullptr;
 upf_n3* upf_n3_inst   = nullptr;
-upf_nrf* upf_nrf_inst = nullptr;
+upf_sbi* upf_sbi_inst = nullptr;
 
 extern itti_mw* itti_inst;
 extern pfcp_switch* pfcp_switch_inst;
@@ -142,9 +142,9 @@ upf_app::upf_app(const std::string& config_file) {
   }
   try {
     if (upf_cfg.enable_5g_features and upf_cfg.register_nrf)
-      upf_nrf_inst = new upf_nrf();
+      upf_sbi_inst = new upf_sbi();
   } catch (std::exception& e) {
-    Logger::upf_app().error("Cannot create UPF_NRF: %s", e.what());
+    Logger::upf_app().error("Cannot create UPF_SBI: %s", e.what());
     throw;
   }
   // Logger::upf_app().startup("Started");
@@ -158,8 +158,8 @@ upf_app::~upf_app() {
   if (upf_n4_inst) {
     delete upf_n4_inst;
   }
-  if (upf_nrf_inst) {
-    delete upf_nrf_inst;
+  if (upf_sbi_inst) {
+    delete upf_sbi_inst;
   }
   if (pfcp_switch_inst) {
     delete pfcp_switch_inst;
@@ -168,8 +168,8 @@ upf_app::~upf_app() {
 
 //------------------------------------------------------------------------------
 void upf_app::stop() {
-  if (upf_nrf_inst) {
-    upf_nrf_inst->deregister_to_nrf();
+  if (upf_sbi_inst) {
+    upf_sbi_inst->deregister_to_nrf();
   }
   // TODO: upf_n4, pfcp_switch
 }
