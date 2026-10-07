@@ -83,6 +83,10 @@ EthBroadcastTCProgram::EthBroadcastTCProgram() : BPFProgram() {
       return nullptr;
     }
     this->ConfigureMaps(skel);
+    // Store skeleton pointer -- available from this point onwards. Without
+    // this, GetBpfObject() reads an indeterminate skeleton_ and
+    // ShareMapsOwned() silently skips sharing eth_session_mapping_map.
+    skeleton_ = skel;
     return skel;
   };
 

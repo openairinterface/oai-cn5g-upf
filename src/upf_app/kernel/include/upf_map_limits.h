@@ -49,7 +49,9 @@ const volatile int MAX_ARP_ENTRIES SEC(".rodata");
  *  Typical value: 1000.  Set from config: max_pdu_sessions. */
 const volatile int MAX_PDU_SESSIONS SEC(".rodata");
 
-/** Maximum PDRs per PDU session (array size in pdrs_per_session_map).
+/** Maximum PDRs per PDU session (array size in pdrs_per_session_map, read
+ *  by both the IP and ETH PDU match loops in xdp_pdr_match_kern.c --
+ *  pdrs_per_session_map is shared by both session types, keyed by SEID).
  *  Typical value: 16.  Set from config: max_pdrs_per_session. */
 const volatile int MAX_PDRS_PER_PDU_SESSION SEC(".rodata");
 

@@ -34,14 +34,6 @@ void SessionLookupETHProgram::ConfigureMaps(
       upf::GetMaxPduSessions());
 
   ok &= ConfigureMapMaxEntries(
-      skel->maps.eth_session_pdrs_map, "eth_session_pdrs_map",
-      upf::GetMaxPduSessions());
-
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.eth_rules_match_pdr_map, "eth_rules_match_pdr_map",
-      upf::GetMaxPduSessions() * upf::GetMaxPdrsPerSession());
-
-  ok &= ConfigureMapMaxEntries(
       skel->maps.eth_egress_ifindex_map, "eth_egress_ifindex_map",
       upf::GetMaxUpfInterfaces());
 
@@ -130,8 +122,6 @@ void SessionLookupETHProgram::InitializeMaps() {
   /* eth_pdu_maps.h */
   session_by_mac_map_      = get("session_by_mac_map");
   eth_session_mapping_map_ = get("eth_session_mapping_map");
-  eth_session_pdrs_map_    = get("eth_session_pdrs_map");
-  eth_rules_match_pdr_map_ = get("eth_rules_match_pdr_map");
   eth_egress_ifindex_map_  = get("eth_egress_ifindex_map");
   mac_pdu_session_map_     = get("mac_pdu_session_map");
   /* NOTE: feature_dispatch_map belongs to the IP pipeline (pipeline_maps.h),
@@ -175,17 +165,6 @@ std::shared_ptr<BPFMap> SessionLookupETHProgram::GetSessionByMacMap() const {
 std::shared_ptr<BPFMap> SessionLookupETHProgram::GetEthSessionMappingMap()
     const {
   return eth_session_mapping_map_;
-}
-
-//------------------------------------------------------------------------------
-std::shared_ptr<BPFMap> SessionLookupETHProgram::GetEthSessionPdrsMap() const {
-  return eth_session_pdrs_map_;
-}
-
-//------------------------------------------------------------------------------
-std::shared_ptr<BPFMap> SessionLookupETHProgram::GetEthRulesMatchPdrMap()
-    const {
-  return eth_rules_match_pdr_map_;
 }
 
 //------------------------------------------------------------------------------
