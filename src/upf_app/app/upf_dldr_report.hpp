@@ -23,7 +23,7 @@ inline pfcp::pfcp_session_report_request make_dldr_report(
   pfcp::pfcp_session_report_request h;
 
   pfcp::report_type_t report = {};
-  report.dldr = 1;  // Downlink Data Report — Report Type §8.2.21
+  report.dldr                = 1;  // Downlink Data Report — Report Type §8.2.21
 
   pfcp::downlink_data_report dl_data_report;
   dl_data_report.set(pdr_id);
