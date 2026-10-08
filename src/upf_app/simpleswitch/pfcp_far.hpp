@@ -10,6 +10,18 @@ struct iphdr;
 
 namespace pfcp {
 
+/**
+ * @brief True iff an Apply Action change leaves buffering (BUFF -> !BUFF).
+ *
+ * @param before Apply Action before the Update FAR. Save it before calling
+ *               update(), which overwrites it in place.
+ * @param after  Apply Action after the Update FAR was applied.
+ */
+inline bool apply_action_leaves_buffering(
+    const pfcp::apply_action_t& before, const pfcp::apply_action_t& after) {
+  return before.buff && !after.buff;
+}
+
 /** @brief Control-plane representation of a Forwarding Action Rule (FAR).
  *
  *  Stores all IEs from 3GPP TS 29.244 V17.10.0 Table 7.5.2.3-1 (Create FAR)
@@ -163,6 +175,25 @@ class pfcp_far {
       struct iphdr* const iph, const std::size_t num_bytes, bool& nocp,
       bool& buff, uint8_t qfi);
 };
+
+/**
+ * @brief True iff applying @p update to @p existing leaves buffering.
+ *
+ * @param existing FAR as it stands before the Update FAR is applied.
+ * @param update   Update FAR IE (3GPP TS 29.244 V17.10.0 Table 7.5.4.3-1).
+ * @return true when the Apply Action IE is present and takes the FAR out of
+ *         buffering (BUFF -> !BUFF).
+ *
+ * @note Keep the `apply_action.first` check: pfcp_far::update() sets the
+ *       Apply Action even when the IE is absent, which would look like
+ *       leaving BUFF.
+ */
+inline bool far_update_leaves_buffering(
+    const pfcp_far& existing, const pfcp::update_far& update) {
+  return update.apply_action.first &&
+         apply_action_leaves_buffering(
+             existing.apply_action, update.apply_action.second);
+}
 }  // namespace pfcp
 
 #endif  // FILE_PFCP_FAR_HPP_SEEN

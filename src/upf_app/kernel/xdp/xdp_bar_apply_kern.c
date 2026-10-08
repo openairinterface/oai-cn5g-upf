@@ -43,8 +43,11 @@
  * @param cfg BAR configuration
  * @param pctx Packet context (for pdr_id, ue_ip)
  * @param now_ns Current timestamp
+ * @return true iff the record was reserved and submitted to the ring buffer;
+ *         false when the ring is full. Nothing was produced then, so the
+ *         caller must not commit the notification latch.
  */
-static __always_inline void bar_submit_ddn(
+static __always_inline bool bar_submit_ddn(
     __u64 seid, struct bar_config* cfg, struct packet_context* pctx,
     __u64 now_ns) {
   struct bar_ddn_event* evt =
@@ -55,7 +58,7 @@ static __always_inline void bar_submit_ddn(
         "BAR: Ringbuf full — DDN dropped "
         "SEID=%llu (§7.2.5)",
         seid);
-    return;
+    return false;
   }
 
   evt->seid         = seid;
@@ -65,41 +68,97 @@ static __always_inline void bar_submit_ddn(
   evt->ue_ip        = pctx->ue_ip;
   evt->pad          = 0;
 
+  /* bpf_ringbuf_submit() returns void and cannot fail once the reservation
+   * succeeded, so a successful reserve() is the whole success test. */
   bpf_ringbuf_submit(evt, 0);
 
   bpf_debug(
       "BAR: DDN submitted  — "
       "BAR-ID = %u, SEID = %llu, UE-IP = %pI4",
       cfg->bar_id, seid, &pctx->ue_ip);
+
+  return true;
 }
 
 /**
- * @brief Check if DDN should be sent or suppressed
+ * @brief Send a DDN (Downlink Data Notification) if one is due. This is the
+ *        only place a DDN is produced.
  *
- * DDN suppression logic (DL Data Notification Delay, §8.2.28):
- *   - First packet for an idle session: always send DDN
- *   - Subsequent packets within delay window: suppress DDN
- *   - After delay expires: send new DDN
+ *   1. No DDN if no FAR asked to notify the CP (NOCP, §8.2.26).
+ *   2. A DDN is due if none was sent yet, or if the DL Data Notification
+ *      Delay (§8.2.28) has passed since the last one.
+ *   3. A compare-and-swap to NOTIFY_CLAIMED lets exactly one CPU send it.
+ *   4. On success the send time is stored. If the ring is full, the old
+ *      value is restored so that the next packet tries again.
  *
- * @param state Per-session buffering state
- * @param delay_sec Configured notification delay (0 = no suppression)
+ * @param seid   PFCP session ID
+ * @param cfg    BAR configuration (map value)
+ * @param state  Per-session BAR runtime state (map value)
+ * @param pctx   Packet context (for pdr_id, ue_ip)
  * @param now_ns Current timestamp
- * @return true if DDN should be sent, false if suppressed
+ * @return true iff this packet produced a DDN
  */
-static __always_inline bool bar_should_notify(
-    struct bar_state* state, __u8 delay_sec, __u64 now_ns) {
-  /* First packet ever for this idle session — always notify */
-  if (!state->notification_sent) return true;
+static __always_inline bool bar_notify_if_due(
+    __u64 seid, struct bar_config* cfg, struct bar_state* state,
+    struct packet_context* pctx, __u64 now_ns) {
+  /* (1) NOCP gate — BUFF without NOCP buffers silently (§8.2.26). */
+  if (!cfg->notify_cp) {
+    bpf_debug(
+        "BAR: notify_cp=0 for SEID=%llu — "
+        "buffering silently, no DDN (§8.2.26)",
+        seid);
+    return false;
+  }
 
-  /* No delay configured — notify on every BUFFER event */
-  if (delay_sec == 0) return true;
+  /* (2) Which value of the claim word are we allowed to take over? */
+  __u64 cur = state->notify_epoch_ns;
+  __u64 from;
 
-  /* Check if delay has expired since last DDN */
-  __u64 delay_ns = (__u64) delay_sec * 1000000000ULL;
-  __u64 elapsed  = now_ns - state->last_ddn_ns;
+  if (cur == NOTIFY_FREE) {
+    /* First DDN of the idle burst. */
+    from = NOTIFY_FREE;
+  } else if (
+      (cur & NOTIFY_CLAIMED) == 0 && cfg->dl_notification_delay_50ms != 0 &&
+      (now_ns - cur) >= (__u64) cfg->dl_notification_delay_50ms * 50000000ULL) {
+    /* Committed epoch, no submit in flight, delay window expired (§8.2.28:
+     * the IE is in 50 ms units, 1 unit = 50 000 000 ns) — re-notify. */
+    from = cur;
+  } else {
+    bpf_debug(
+        "BAR: DDN suppressed for SEID=%llu — "
+        "already delivered or in flight (§8.2.28)",
+        seid);
+    return false;
+  }
 
-  if (elapsed >= delay_ns) return true;
+  /* (3) Single-winner claim. */
+  if (__sync_val_compare_and_swap(
+          &state->notify_epoch_ns, from, NOTIFY_CLAIMED) != from) {
+    bpf_debug(
+        "BAR: DDN claim lost for SEID=%llu — "
+        "another CPU owns this notification window",
+        seid);
+    return false;
+  }
 
+  /* The word now reads NOTIFY_CLAIMED, which is not a committed epoch, so the
+   * derived mirror must read 0 for as long as the submit is in flight. */
+  state->notification_sent = 0;
+
+  /* (4) Commit only on a successful submit, otherwise release the claim. */
+  if (bar_submit_ddn(seid, cfg, pctx, now_ns)) {
+    state->notify_epoch_ns   = now_ns & ~NOTIFY_CLAIMED;
+    state->notification_sent = 1; /* derived mirror */
+    return true;
+  }
+
+  state->notify_epoch_ns   = from;
+  state->notification_sent = (from == NOTIFY_FREE) ? 0 : 1; /* derived mirror */
+
+  bpf_debug(
+      "BAR: DDN claim released for SEID=%llu — "
+      "ring full, next DL packet retries (§7.2.5)",
+      seid);
   return false;
 }
 
@@ -127,9 +186,10 @@ int bar_apply(struct xdp_md* ctx) {
 
   if (!cfg) {
     /*
-     * FAR said BUFFER but no BAR configured — cannot buffer.
-     * Drop packet. Control plane should always create BAR when
-     * creating a FAR with BUFF action.
+     * FAR said BUFFER but there is no bar_config for the session — cannot
+     * buffer. Drop the packet. The control plane writes one for every BUFF
+     * FAR (Setup, or SetupWithoutBar for a BAR-less one), so this is reached
+     * only before that has run, e.g. for BUFF in the Establishment Request.
      */
     bpf_debug(
         "BAR: No BAR config for SEID=%llu — "
@@ -139,9 +199,9 @@ int bar_apply(struct xdp_md* ctx) {
   }
 
   bpf_debug(
-      "BAR: BAR-ID=%u, buf_pkt_cnt=%u, ddn_delay=%u sec "
+      "BAR: BAR-ID=%u, buf_pkt_cnt=%u, ddn_delay=%u x50ms "
       "(§8.2.49, §8.2.50, §8.2.28)",
-      cfg->bar_id, cfg->suggested_buf_pkt_cnt, cfg->dl_notification_delay_sec);
+      cfg->bar_id, cfg->suggested_buf_pkt_cnt, cfg->dl_notification_delay_50ms);
 
   /* ---------------------------------------------------------------- */
   /*  Step 2: Lookup or initialize buffering state                    */
@@ -150,43 +210,47 @@ int bar_apply(struct xdp_md* ctx) {
 
   if (!state) {
     /*
-     * No state entry — control plane should pre-create it.
-     * As fallback, send DDN and drop the packet (cannot track
-     * buffering state without a map entry).
+     * No state entry — the control plane should have pre-created it
+     * (BARProgram::InitBarStateMap). Create a zeroed entry here: without one
+     * there is no claim word, and every DL packet of the burst would send its
+     * own DDN. BPF_NOEXIST keeps an entry that another CPU created meanwhile,
+     * and any latch it holds, intact.
      */
+    struct bar_state fresh = {};
+
+    bpf_map_update_elem(&bar_state_map, &seid, &fresh, BPF_NOEXIST);
+    state = bpf_map_lookup_elem(&bar_state_map, &seid);
+
+    if (!state) {
+      /*
+       * Fail closed: the state entry could not be created (bar_state_map
+       * full, or the update was rejected). Drop the packet and count it
+       * under XDP_ABORTED in mc_stats_map so userspace can notice. Never fall
+       * back to one DDN per packet.
+       */
+      bpf_debug(
+          "BAR: Cannot establish state for SEID=%llu — "
+          "failing closed (no DDN, packet dropped)",
+          seid);
+      return xdp_stats_record_action(ctx, XDP_ABORTED);
+    }
+
     bpf_debug(
-        "BAR: No state entry for SEID=%llu — "
-        "sending DDN, dropping packet",
+        "BAR: State entry created on the fly for SEID=%llu "
+        "(control plane had not pre-created it)",
         seid);
-
-    __u64 now_ns = bpf_ktime_get_ns();
-
-    bar_submit_ddn(seid, cfg, pctx, now_ns);
-    return xdp_stats_record_action(ctx, XDP_DROP);
   }
 
   __u64 now_ns = bpf_ktime_get_ns();
 
   /* ---------------------------------------------------------------- */
-  /*  Step 3: DDN notification with suppression (§8.2.28)            */
+  /*  Step 3: DDN notification — NOCP gate + atomic claim (§8.2.28)  */
   /* ---------------------------------------------------------------- */
-  if (bar_should_notify(state, cfg->dl_notification_delay_sec, now_ns)) {
-    bar_submit_ddn(seid, cfg, pctx, now_ns);
-
-    /*
-     * Update DDN state. These writes are racy across CPUs but
-     * the consequence is at most one extra DDN — acceptable.
-     */
-    state->last_ddn_ns       = now_ns;
-    state->notification_sent = 1;
-
-    bpf_debug("BAR: DDN sent for SEID=%llu (§8.2.28)", seid);
-  } else {
-    bpf_debug(
-        "BAR: DDN suppressed for SEID=%llu — "
-        "within delay window (§8.2.28)",
-        seid);
-  }
+  /*
+   * Both the normal path and the missing-state path above reach this single
+   * call, so the NOCP gate and the one-shot latch apply identically to both.
+   */
+  bar_notify_if_due(seid, cfg, state, pctx, now_ns);
 
   /* ---------------------------------------------------------------- */
   /*  Step 4: Buffer overflow check (§8.2.50)                        */
@@ -222,26 +286,23 @@ int bar_apply(struct xdp_md* ctx) {
   }
 
   /* ---------------------------------------------------------------- */
-  /*  Step 5: Pass packet to kernel for userspace buffering          */
+  /*  Step 5: Terminal action — hand the packet to userspace          */
   /* ---------------------------------------------------------------- */
   /*
-   * XDP_PASS sends the packet to the kernel network stack. Userspace
-   * captures it via a raw socket or AF_XDP and holds it until the SMF
-   * modifies the FAR from BUFF→FORW (TS 29.244 §7.2.4), indicating
-   * the UE has transitioned from CM-IDLE to CM-CONNECTED state.
+   * Redirect the packet (still Ethernet + IPv4) to the AF_XDP socket of its
+   * RX queue. Userspace holds it until the SMF ends buffering, then sends it
+   * on the new rules.
    *
-   * When FAR is modified, control plane should:
-   *   1. Update FAR action from BUFF to FORW
-   *   2. Reset bar_state (buffered_pkt_count=0, notification_sent=0)
-   *   3. Flush any buffered packets through the new forwarding path
+   * With no socket in the slot the packet is dropped. Do not use XDP_PASS as
+   * the fallback: the host stack would get a packet meant for the UE.
    *
    * BAR is a terminal node — no further tail calls.
    */
   bpf_debug(
-      "BAR: XDP_PASS — packet sent to kernel for "
-      "buffering, SEID=%llu",
-      seid);
-  return xdp_stats_record_action(ctx, XDP_PASS);
+      "BAR: redirect to the AF_XDP socket of RX queue %u, SEID=%llu",
+      ctx->rx_queue_index, seid);
+  return xdp_stats_record_action(
+      ctx, bpf_redirect_map(&xskmap, ctx->rx_queue_index, XDP_DROP));
 }
 
 char _license[] SEC("license") = "GPL";

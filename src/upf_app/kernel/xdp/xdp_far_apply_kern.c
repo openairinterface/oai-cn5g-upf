@@ -632,18 +632,13 @@ int far_apply(struct xdp_md* ctx) {
   }
 
   /* -------------------------------------------------------------- */
-  /*  Priority 4: NOTIFY_CP (§8.2.26 bit 3) — informational        */
+  /*  Priority 4: NOTIFY_CP (§8.2.26 bit 3) — handled by the BAR    */
   /* -------------------------------------------------------------- */
-  if (action & PFCP_APPLY_ACTION_NOCP) {
-    bpf_debug(
-        "Apply Action: NOCP ( SEID = %llu ) - "
-        "not supported in XDP",
-        seid);
-    /*
-     * TODO: Trigger notification to control plane via
-     * bpf_perf_event_output() or BPF_MAP_TYPE_RINGBUF
-     */
-  }
+  /*
+   * Nothing to do here: the BAR program sends the DDN on the BUFF path,
+   * using bar_config.notify_cp. Sending one here too would notify the SMF
+   * twice. NOCP without BUFF does nothing.
+   */
 
   /* -------------------------------------------------------------- */
   /*  Priority 5: DUPLICATE (§8.2.26 bit 4)                         */

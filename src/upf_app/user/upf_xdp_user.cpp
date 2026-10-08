@@ -484,7 +484,7 @@ std::vector<ProgramLoadInfo> UPF_XDPProgram::BuildPipelineLoadInfo(
     info.push_back({"QERTCProgram", 1, "", true, true});
   }
   if (urr_) info.push_back({"URRProgram", 5, "", false, false});
-  if (bar_) info.push_back({"BARProgram", 5, "", false, false});
+  if (bar_) info.push_back({"BARProgram", 6, "", false, false});
   if (mar_) info.push_back({"MARProgram", 5, "", false, false});
   if (!is_eth)
     info.push_back({"N6EntryProgram", 3, non_gtp_interface_, false, false});

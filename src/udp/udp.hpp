@@ -194,6 +194,19 @@ class udp_server {
     }
   }
 
+  /** @brief The local UDP port socket_ is bound to, host order; 0 if it
+   *  cannot be read. It is the one the kernel picked when bound to port 0. */
+  uint16_t get_local_port() const {
+    struct sockaddr_storage sa = {};
+    socklen_t sa_len           = sizeof(sa);
+    if (getsockname(socket_, (struct sockaddr*) &sa, &sa_len) != 0) return 0;
+    if (sa.ss_family == AF_INET)
+      return ntohs(((const struct sockaddr_in*) &sa)->sin_port);
+    if (sa.ss_family == AF_INET6)
+      return ntohs(((const struct sockaddr_in6*) &sa)->sin6_port);
+    return 0;
+  }
+
   void start_receive(
       udp_application* gtp_stack,
       const oai::utils::thread_sched_params& sched_params, int n_rx = 1);

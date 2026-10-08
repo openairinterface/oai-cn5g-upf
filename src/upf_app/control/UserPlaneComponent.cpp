@@ -3,6 +3,8 @@
  */
 
 #include "UserPlaneComponent.h"
+#include "BarDdnConsumer.h"
+#include "XskConsumer.hpp"
 #include "SessionManager.h"
 #include "SessionProgramManager.h"
 #include "SignalHandler.h"
@@ -208,8 +210,97 @@ void UserPlaneComponent::Setup(
 }
 
 //------------------------------------------------------------------------------
+void UserPlaneComponent::StartDdnConsumer() {
+  if (!upf_xdp_program_) {
+    Logger::upf_app().warn(
+        "DDN ring-buffer consumer not started: no XDP pipeline");
+    return;
+  }
+
+  auto bar_program = upf_xdp_program_->GetBarProgram();
+  if (!bar_program) {
+    // enable_bar == false: the BAR program was never instantiated, so there
+    // is no ring to poll. Not an error.
+    Logger::upf_app().info(
+        "BAR disabled -- DDN ring-buffer consumer not started");
+    return;
+  }
+
+  if (!ddn_consumer_) {
+    ddn_consumer_ = std::make_unique<oai::upf::app::BarDdnConsumer>();
+  }
+
+  // bar_ddn_ringbuf_map is reachable only through the BAR program:
+  // UPF_XDPProgram::GetMapByName() knows bar_config_map and bar_state_map but
+  // returns nullptr for the ring.
+  (void) ddn_consumer_->Start(bar_program->GetBarDdnRingbuf());
+}
+
+//------------------------------------------------------------------------------
+void UserPlaneComponent::StopDdnConsumer() {
+  if (ddn_consumer_) {
+    ddn_consumer_->Stop();
+  }
+}
+
+//------------------------------------------------------------------------------
+void UserPlaneComponent::StartXskConsumer(
+    uint32_t frame_size, uint32_t frames_per_queue,
+    uint32_t umem_max_mib_total) {
+  if (!upf_xdp_program_) {
+    Logger::upf_app().warn(
+        "DL buffer AF_XDP consumer not started: no XDP pipeline");
+    return;
+  }
+  auto bar_program = upf_xdp_program_->GetBarProgram();
+  if (!bar_program) {
+    Logger::upf_app().info(
+        "BAR disabled -- DL buffer AF_XDP consumer not started");
+    return;
+  }
+
+  oai::upf::app::XskConsumer::Config cfg;
+  cfg.ifname           = non_gtp_interface_;
+  cfg.frame_size       = frame_size;
+  cfg.frames_per_queue = frames_per_queue;
+  cfg.umem_max_bytes   = (uint64_t) umem_max_mib_total << 20;
+  cfg.max_queues       = BARProgram::kXskMapMaxEntries;
+  // Generic (SKB-mode) XDP can deliver to AF_XDP only by copy.
+  // ProgramLifeCycle::attach falls back to it when the driver has no native
+  // XDP.
+  cfg.skb_mode = !upf_xdp_program_->IsNativeXdp(non_gtp_interface_);
+
+  if (!xsk_consumer_) {
+    xsk_consumer_ = std::make_unique<oai::upf::app::XskConsumer>();
+  }
+  (void) xsk_consumer_->Start(cfg, bar_program->GetXskMap());
+}
+
+//------------------------------------------------------------------------------
+void UserPlaneComponent::StopXskConsumer() {
+  if (xsk_consumer_) {
+    xsk_consumer_->Stop();
+  }
+}
+
+//------------------------------------------------------------------------------
 void UserPlaneComponent::TearDown() {
   Logger::upf_app().info("Tearing down User Plane Component");
+
+  /*
+   * The AF_XDP thread enqueues into pfcp_switch's DL buffer, and its sockets
+   * sit in xskmap, which goes away with the pipeline below. SignalHandler
+   * deletes pfcp_switch right after this returns. Stop() joins the thread, so
+   * nothing runs past this point.
+   */
+  StopXskConsumer();
+
+  /*
+   * Also before anything is dismantled: the DDN poll thread uses pfcp_switch,
+   * the ITTI and the BAR maps, which are all freed soon after. Stop() joins
+   * the thread.
+   */
+  StopDdnConsumer();
 
   // Remove all sessions from singleton
   SessionProgramManager::GetInstance().RemoveAllSessions();

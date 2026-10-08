@@ -117,17 +117,37 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
   if (qer_it != qer_programs_map_.end()) {
     Logger::upf_app().debug(
         "Tearing down QER program for seid " SEID_FMT, seid);
-    qer_it->second->TearDown();
+    try {
+      qer_it->second->TearDown();
+    } catch (const std::exception& e) {
+      Logger::upf_app().error(
+          "QER program teardown failed for seid " SEID_FMT
+          ": %s — continuing with BPF map cleanup",
+          seid, e.what());
+    } catch (...) {
+      Logger::upf_app().error(
+          "QER program teardown failed for seid " SEID_FMT
+          ": unknown exception — continuing with BPF map cleanup",
+          seid);
+    }
     qer_programs_map_.erase(qer_it);
   }
 
   // Clean up rules_enabled entry from BPF map
   auto upf_xdp_program = UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
   if (upf_xdp_program) {
+    /*
+     * TryRemove(), not Remove(): teardown deletes per-session entries from
+     * maps this session may never have used (a session with no URR has no
+     * urr_config_map entry, one with no BAR has no bar_state entry), so an
+     * absent entry is normal here. Remove() throws on -ENOENT, which would
+     * skip the rest of this cleanup, including the bar_state_map erase, and
+     * leave a latched notification_sent for a re-established SEID to inherit.
+     */
     auto rules_en_map =
         upf_xdp_program->GetMapByName("session_rules_enabled_map");
     if (rules_en_map) {
-      rules_en_map->Remove(seid);
+      rules_en_map->TryRemove(seid);
     }
 
     // Clean up ETH-specific maps if this was an ETH PDU session
@@ -137,22 +157,31 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
         Logger::upf_app().debug(
             "Cleaning up ETH PDU maps for seid " SEID_FMT, seid);
         auto eth_pdrs = upf_xdp_program->GetMapByName("eth_session_pdrs_map");
-        if (eth_pdrs) eth_pdrs->Remove(seid);
+        if (eth_pdrs) eth_pdrs->TryRemove(seid);
       }
       session_pdu_type_map_.erase(pdu_type_it);
     }
 
-    // Clean up URR/BAR/MAR dedicated config + runtime state maps
+    // Clean up URR/BAR/MAR dedicated config + runtime state maps.
+    // BAR first: erasing bar_config_map and bar_state_map is what makes a
+    // re-established SEID start with a clear DDN (Downlink Data Notification)
+    // latch.
+    auto bar_prog = upf_xdp_program->GetBarProgram();
+    if (bar_prog) {
+      /* Owns both BAR maps; non-throwing (BARProgram::Remove). */
+      bar_prog->Remove(seid, 0 /* bar_id unused: both maps key on SEID */);
+    } else {
+      auto bar_cfg_map = upf_xdp_program->GetMapByName("bar_config_map");
+      if (bar_cfg_map) bar_cfg_map->TryRemove(seid);
+      auto bar_st_map = upf_xdp_program->GetMapByName("bar_state_map");
+      if (bar_st_map) bar_st_map->TryRemove(seid);
+    }
     auto urr_cfg_map = upf_xdp_program->GetMapByName("urr_config_map");
-    if (urr_cfg_map) urr_cfg_map->Remove(seid);
+    if (urr_cfg_map) urr_cfg_map->TryRemove(seid);
     auto urr_vol_map = upf_xdp_program->GetMapByName("urr_volume_counters_map");
-    if (urr_vol_map) urr_vol_map->Remove(seid);
-    auto bar_cfg_map = upf_xdp_program->GetMapByName("bar_config_map");
-    if (bar_cfg_map) bar_cfg_map->Remove(seid);
-    auto bar_st_map = upf_xdp_program->GetMapByName("bar_state_map");
-    if (bar_st_map) bar_st_map->Remove(seid);
+    if (urr_vol_map) urr_vol_map->TryRemove(seid);
     auto mar_map = upf_xdp_program->GetMapByName("mar_rules_map");
-    if (mar_map) mar_map->Remove(seid);
+    if (mar_map) mar_map->TryRemove(seid);
   }
 
   // Clean up ARP caches
@@ -171,6 +200,24 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
           pfcp_programs->begin(), pfcp_programs->end(),
           [seid](const PfcpProgramInfo& info) { return info.seid == seid; }),
       pfcp_programs->end());
+}
+
+//------------------------------------------------------------------------------
+/**
+ * @brief Clear the one-shot DDN latch of a session.
+ *
+ * @param seid Session Endpoint Identifier
+ * @return true if a bar_state entry existed and was zeroed.
+ *
+ * @see BARProgram::ResetBarState -- overwrites an existing entry only
+ *      (BPF_EXIST), never creates one for an unknown or stale SEID.
+ */
+bool SessionProgramManager::ResetBarState(uint64_t seid) {
+  auto upf_xdp_program = UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
+  if (!upf_xdp_program) return false;
+  auto bar_prog = upf_xdp_program->GetBarProgram();
+  if (!bar_prog) return false;
+  return bar_prog->ResetBarState(seid);
 }
 
 //------------------------------------------------------------------------------
@@ -386,7 +433,7 @@ void SessionProgramManager::StoreEthPduSessionInMap(
  * downstream tail call programs should be active for this session:
  *   - QER referenced by any PDR -> RULE_QER_ENABLED
  *   - URR referenced by any PDR -> RULE_URR_ENABLED
- *   - BAR associated with any FAR -> RULE_BAR_ENABLED
+ *   - BAR associated with any FAR, or any BUFF FAR -> RULE_BAR_ENABLED
  *   - MAR referenced by any PDR -> RULE_MAR_ENABLED
  *
  * The bitmask is stored in session_rules_enabled_map and cached in
@@ -419,8 +466,11 @@ uint32_t SessionProgramManager::ComputeRulesEnabledFlags(
       break;
     }
   }
+  // A BUFF FAR needs the BAR stage even when the session has no BAR: the SMF
+  // may send BUFF|NOCP (buffer, notify the CP) with no Create BAR, and
+  // BARProgram::SetupWithoutBar() then writes a default bar_config.
   for (const auto& far : session->fars) {
-    if (far->bar_id.first) {
+    if (far->bar_id.first || far->apply_action.buff) {
       flags |= RULE_BAR_ENABLED;
       break;
     }
@@ -598,11 +648,19 @@ void SessionProgramManager::SetupSessionEnforcementPrograms(
   }
 
   // BAR: populate bar_config_map + initialise bar_state_map.
-  if ((rules_flags & RULE_BAR_ENABLED) && !session->bars.empty()) {
+  // session->fars is passed because the BAR IE carries no Apply Action:
+  // bar_config.notify_cp, which gates DDN emission in the XDP BAR program,
+  // is derived from the FARs that reference the BAR ID and have
+  // apply_action.nocp set (NOCP, TS 29.244 Section 8.2.26).
+  // A session with a BUFF FAR but no BAR gets a default bar_config instead.
+  if (rules_flags & RULE_BAR_ENABLED) {
     auto bar = upf_xdp_program->GetBarProgram();
     if (bar) {
       logger.debug("Setup BARProgram for SEID=" SEID_FMT, seid);
-      bar->Setup(seid, session->bars);
+      if (!session->bars.empty())
+        bar->Setup(seid, session->bars, session->fars);
+      else
+        bar->SetupWithoutBar(seid, session->fars);
     }
   }
 

@@ -220,6 +220,22 @@ class SessionManager {
       itti_n4_session_modification_request* mod_req  = nullptr,
       itti_n4_session_deletion_request* del_req      = nullptr);
 
+  /**
+   * @brief Clear the one-shot DDN (Downlink Data Notification) latch of a
+   *        session in bar_state_map.
+   *
+   * Call it when a FAR leaves buffering, after the datapath is reprogrammed;
+   * otherwise a DL packet on the old BUFF FAR sets the latch again. Public so
+   * that pfcp_switch can use it without the XDP skeleton headers.
+   *
+   * @param seid UP SEID of a session believed to be still present. Never
+   *             creates a bar_state entry, so a stale SEID is a no-op.
+   * @return true if a bar_state entry existed and was zeroed.
+   *
+   * @note Takes no lock: safe to call while holding sessions_mutex_.
+   */
+  bool ResetBarState(uint64_t seid);
+
   // ==========================================================================
   // PDR Management
   // Reference: 3GPP TS 29.244 §5.2.1 — Packet Detection Rule
