@@ -109,23 +109,90 @@ define `struct iphdr` differently, so no translation unit may include both.
   filter is parsed once per session with the same `SdfFilterParser` the eBPF
   flavour uses, and matched with the same scoring, so both agree on what a
   filter means
-- QER gate status, and Maximum Bit Rate per direction with a token bucket
-  (`rte_meter` srTCM). The rate is charged on the UE's own packet, before the
-  tunnel headers are added or after they are stripped
+- QER gate status, and Maximum Bit Rate per direction policed with a token
+  bucket (`rte_meter` srTCM). The rate is charged on the UE's own packet, before
+  the tunnel headers are added or after they are stripped. This is policing,
+  not the HTB-style shaping the eBPF flavour does — see below
 - ARP replies for the UPF's own N3/N6 addresses
 - GTP-U Echo Request replies
 - Per-session traffic counters, per-lcore pipeline counters, port statistics
 
-### Notes on the QoS enforcement
+### QoS today: policing, not shaping
 
-The token buckets live in the session's rule set and are shared by every lcore
-that carries the session, so each check takes a spinlock for that QER and
-direction. With the usual one-lcore-per-port setup it is never contended. If a
-session is spread over several lcores by RSS the lock keeps the rate correct at
-the cost of that contention.
+This is the one place where the DPDK flavour differs from eBPF in kind, not
+just in degree, so it is worth being explicit.
 
-GBR is not enforced: only the MBR ceiling is. A QER with no MBR for a direction
-leaves that direction unmetered.
+The eBPF flavour does not queue packets itself. `qer_tc_kern.c` only
+*classifies*: it looks up (SEID, QFI) and writes `skb->tc_classid`, and the
+*kernel* shapes the traffic with the HTB hierarchy that `qer_tc_user.cpp`
+builds on the N3 interface:
+
+```
+tc qdisc  dev n3  root handle 1:0 htb default <d> r2q <r2q>
+└── class 1:<seid&0xffff>            rate = session AMBR        <- PDU session
+    ├── class 1:<minor(seid,qfi)>    rate/ceil = GBR/MBR        <- QoS flow per QFI
+    └── class 1:<default_minor>      rate/ceil = default class
+tc filter dev n3 parent 1:0 bpf obj qer_tc_kern.c.o direct-action
+```
+
+With DPDK the kernel is out of the path, so there is no qdisc to delegate to
+and no hierarchy yet. What exists instead is a **policer**: one `rte_meter`
+srTCM token bucket per QER per direction, kept in the session's rule set. A
+packet over the committed rate is dropped on the spot and counted as
+`over rate`. Nothing is ever held back to smooth a burst, so a bursty flow sees
+loss where HTB would have queued it, and GBR has no meaning at all — only the
+MBR ceiling is enforced.
+
+The buckets are shared by every lcore carrying the session, so each check takes
+a spinlock for that QER and direction. With one polling lcore per port it is
+never contended; if RSS spreads a session over several lcores, the lock is what
+keeps the rate correct instead of letting each lcore grant the full MBR.
+
+### Planned: the HTB hierarchy on `rte_sched`
+
+The intended end state is the same hierarchy as the eBPF flavour, built with
+DPDK's hierarchical scheduler (`rte_sched`, part of DPDK 21.11). The mapping:
+
+| eBPF / TC | DPDK |
+|---|---|
+| root HTB qdisc on the N3 egress | `rte_sched_port` on the N3 TX port, rate = link rate |
+| — | subport (one, later one per slice/DNN) |
+| class `1:<seid>`, session AMBR | **pipe**, one per PDU session; token bucket = AMBR |
+| class `1:<minor(seid,qfi)>`, MBR/GBR | **traffic class** in that pipe, one per QFI; TC rate = MBR |
+| TC-BPF writing `skb->tc_classid` | `rte_sched_port_pkt_write(port, mbuf, subport, pipe, tc, queue, color)` |
+| the kernel dequeueing and shaping | `rte_sched_port_enqueue()`, then `rte_sched_port_dequeue()` -> `rte_eth_tx_burst()` |
+| `quantum` / `r2q` | WRR weights across the 4 best-effort queues |
+| `generate_minor_id(seid, qfi)` | reused unchanged to pick the traffic class / queue |
+
+Decisions taken for that work:
+
+- **Downlink only**, mirroring eBPF: the scheduler sits on the N3 egress and
+  uplink keeps the policer. The eBPF flavour skips UL QER for the same reason
+  (see the comment in `xdp_far_apply_kern.c`: no TC HTB on the N6 egress).
+- **The N6-polling lcore owns the scheduler.** A `rte_sched_port` instance has
+  a single owner, so that lcore classifies, enqueues, dequeues and transmits on
+  N3. No extra core and no rings, at the price of one constraint: shaping
+  requires exactly one polling lcore on N6, which startup must validate and
+  refuse otherwise. The alternative, kept in reserve for when N6 needs several
+  lcores, is a dedicated traffic-manager lcore fed by an `rte_ring`.
+- This replaces run-to-completion on the downlink: today a worker does
+  RX -> process -> TX in one pass; with the scheduler it becomes
+  RX -> classify -> enqueue, then dequeue -> TX in the same loop.
+
+Constraints to design around:
+
+- 13 traffic classes per pipe (12 strict-priority plus a best-effort class with
+  4 WRR queues), so up to 12 QoS flows per session map one-to-one onto traffic
+  classes, as the per-QFI HTB classes do today.
+- Pipes come from a pool sized at init, so `max_pdu_sessions` sets the pipe
+  count, and the session store gains a SEID -> pipe-id allocator.
+- Each distinct rate needs a pipe profile. `rte_sched_subport_pipe_profile_add`
+  works at runtime but the count is capped, so profiles are cached per rate —
+  which fits an SMF handing out a handful of AMBR values.
+- `rte_sched` caps each traffic class and prioritises between them; it does not
+  *borrow* unused parent bandwidth the way HTB lends up to `ceil`. So
+  `rate`/`ceil` becomes "AMBR at the pipe, MBR at the traffic class, priority
+  instead of borrowing" — close in effect, not identical.
 
 ## Not implemented yet
 
@@ -133,7 +200,7 @@ leaves that direction unmetered.
 |---|---|
 | URR | The counters exist per session, but no usage report is sent |
 | BAR buffering | A non-forwarding FAR drops instead of buffering |
-| QER GBR | Only the MBR ceiling is enforced |
+| QoS shaping | Only policing: over-rate packets are dropped, never queued. GBR has no effect. See [Planned: the HTB hierarchy on `rte_sched`](#planned-the-htb-hierarchy-on-rte_sched) |
 | ARP requests | Next hops come from the configuration |
 | IPv6 | IPv4 only, in both the tunnel and the payload |
 | Fragmentation | An encapsulated full-size packet needs an MTU of 1544 on N3; the ports ask for it and warn when the device cannot |
