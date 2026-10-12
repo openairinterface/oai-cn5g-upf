@@ -103,10 +103,9 @@ itti_mw::~itti_mw() {
   logger_common::common().info("~itti()");
   // Join, never detach: a detached thread ends at a time nobody controls.
   //
-  // Test joinable() rather than `terminate`: the timer thread clears the flag
-  // when it exits, and any wake-up after send_terminate_msg() (a
-  // timer_remove(), a timer expiring) makes it exit early, so the flag cannot
-  // tell whether it still runs. Set the flag again and start a dummy timer to
+  // The timer thread clears `terminate` when it exits early, so `joinable()`,
+  // which stays true until join() even after the thread has exited, is the
+  // test for 'not joined yet'. Set the flag again and start a dummy timer to
   // wake the loop so that it exits.
   if (timer_thread.joinable()) {
     terminate           = true;

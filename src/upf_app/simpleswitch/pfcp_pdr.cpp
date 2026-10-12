@@ -18,7 +18,6 @@
 using namespace pfcp;
 using namespace oai::upf::app;
 
-extern upf_n4* upf_n4_inst;
 extern oai::config::upf_config upf_cfg;
 
 //------------------------------------------------------------------------------
@@ -147,12 +146,12 @@ bool pfcp_pdr::update(
 
 //------------------------------------------------------------------------------
 bool pfcp_pdr::buffering_requested(
-    oai::upf::dl_packet_buffer& store, const char* buffer,
+    oai::upf::dl_packet_buffer& dl_buffer, const char* buffer,
     const std::size_t num_bytes) {
   // With buffering off the caller drops the packet. Return before taking a
   // lock, allocating or even reading the clock.
-  if (!store.enabled()) return false;
-  const bool held = store.enqueue(
+  if (!dl_buffer.enabled()) return false;
+  const bool held = dl_buffer.enqueue(
       local_seid, rule_uid, pdr_id.rule_id,
       reinterpret_cast<const uint8_t*>(buffer), num_bytes);
   Logger::pfcp_switch().trace(
@@ -162,20 +161,18 @@ bool pfcp_pdr::buffering_requested(
 }
 
 //------------------------------------------------------------------------------
-// 3GPP TS 29.244 V17.10.0 §8.2.21 — Report Type IE, DLDR flag.
-// Sends a PFCP Session Report Request (Downlink Data Report, §7.5.8.2) to the
-// CP function when the first DL packet arrives and the CP has requested
-// notification (nocp flag).
+// Downlink Data Report on the first DL packet after the notification latch
+// was cleared: see notify_cp_requested() in pfcp_pdr.hpp.
 
 //------------------------------------------------------------------------------
 void pfcp_pdr::notify_cp_requested(
-    oai::upf::dl_packet_buffer& store,
+    oai::upf::dl_packet_buffer& dl_buffer,
     std::shared_ptr<pfcp::pfcp_session> session) {
-  // Several DL threads can match this PDR at once; exactly one claims the
-  // latch and reports. While the latch is held (the normal state during
-  // buffering), the plain load returns early and skips the compare-and-swap,
-  // which would take the cache line exclusive on every packet. Only the
-  // compare-and-swap claims the latch.
+  // Several DL threads can match this PDR at once; exactly one sets the
+  // notification latch and reports. While the latch is set (the normal state
+  // during buffering), the plain load returns early and skips the
+  // compare-and-swap, which would take the cache line exclusive on every
+  // packet. Only the compare-and-swap sets the latch.
   if (notified_cp.load(std::memory_order_relaxed)) return;
   bool expected = false;
   if (!notified_cp.compare_exchange_strong(expected, true)) return;
@@ -185,12 +182,15 @@ void pfcp_pdr::notify_cp_requested(
   // same message (see upf_dldr_report.hpp).
   pfcp::pfcp_session_report_request h = oai::upf::app::make_dldr_report(pdr_id);
 
-  if (upf_n4_inst->send_n4_msg(
-          session->cp_fseid, h, std::make_pair(local_seid, pdr_id.rule_id)))
+  if (upf_n4::enqueue_session_report_request(
+          session->cp_fseid, h,
+          dl_data_report_origin{local_seid, pdr_id.rule_id}) ==
+      session_report_enqueue_result::queued)
     return;
-  // The report was not queued (the reason is already logged). Keep the latch
-  // held, or every packet would retry and log. The DL buffer tick releases
-  // it. If the mark cannot be stored, release the latch now.
-  if (!store.mark_ddn_failed(local_seid, rule_uid, pdr_id.rule_id))
+  // The report was not queued (the reason is already logged). Keep the
+  // notification latch set, or every packet would retry and log; the next DL
+  // buffer tick re-arms it. If the retry mark cannot be stored, re-arm the
+  // latch now.
+  if (!dl_buffer.mark_report_failed(local_seid, pdr_id.rule_id))
     notified_cp.store(false);
 }

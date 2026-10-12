@@ -8,10 +8,12 @@
  *       src/upf_app/simpleswitch/test_dl_packet_buffer.cpp \
  *       -o /tmp/test_dl_packet_buffer && /tmp/test_dl_packet_buffer
  *
- * The DN is untrusted and the SMF never says stop, so what has to hold is
- * admission: nothing is held without a record and a current rule, every
- * bound is a hard ceiling however many threads race it, and every packet
- * that got in leaves through exactly one counter.
+ * The DN is untrusted, so what has to hold is admission: nothing is held
+ * without a record and a current rule, every bound is a hard ceiling however
+ * many threads race it, and every packet that got in leaves through exactly
+ * one counter.
+ *
+ * Bounds: see upf_config_yaml.hpp (DL buffering defaults).
  */
 
 #include <atomic>
@@ -20,8 +22,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <memory>
-#include <optional>
 #include <thread>
 #include <vector>
 
@@ -33,7 +33,6 @@ using oai::upf::dl_fifo;
 using oai::upf::dl_packet;
 using oai::upf::dl_packet_buffer;
 using oai::upf::dl_verdict;
-using oai::upf::find_rearm_target;
 
 namespace {
 
@@ -87,7 +86,7 @@ void test_enqueue_refused_without_record() {
   assert(off.stats() == dl_buffer_stats() && "counted with buffering off");
 }
 
-/// A uid that is not in `valid` is refused and leaves the FIFO empty.
+/// A uid that is not in `buffering_uids` is refused and leaves the FIFO empty.
 void test_stale_uid_opens_no_fifo() {
   dl_packet_buffer b(on());
   b.publish(SEID, {});
@@ -201,7 +200,7 @@ void test_reserve_rollback_threads() {
   assert(sum == s.stored && b.total_pkts() == sum && "global share leaked");
 
   for (uint64_t x = 1; x <= SESSIONS; x++)
-    b.detach_and_rearm(x, {}, dl_verdict::discard);
+    b.end_session_modification(x, {}, dl_verdict::discard);
   assert(b.total_pkts() == 0 && b.total_bytes() == 0 && "not released");
   assert_balanced(b);
 }
@@ -213,7 +212,7 @@ void test_headroom_preserved() {
   std::vector<uint8_t> p(PKT);
   for (size_t i = 0; i < p.size(); i++) p[i] = (uint8_t) i;
   assert(b.enqueue(SEID, UID, 9, p.data(), p.size()) && "refused");
-  dl_fifo out = b.detach_and_rearm(SEID, {}, dl_verdict::flush);
+  dl_fifo out = b.end_session_modification(SEID, {}, dl_verdict::flush);
   assert(out.size() == 1 && "not detached");
   const dl_packet& e = out.front();
   assert(e.data() - e.buf.get() == 64 && "headroom lost");
@@ -241,19 +240,26 @@ void test_tombstone_refuses_and_gc() {
   assert_balanced(b);
 }
 
-/// Detach on a Tombstone neither reopens it nor returns anything.
+/// End of a Session Modification on a tombstone neither makes it admit packets
+/// again nor returns anything.
 void test_detach_on_tombstone_is_noop() {
   dl_packet_buffer b(on());
   b.publish(SEID, {UID});
   b.tombstone(SEID);
   const uint64_t g = b.generation(SEID);
   assert(
-      b.detach_and_rearm(SEID, {UID}, dl_verdict::keep).empty() &&
+      b.end_session_modification(SEID, {UID}, dl_verdict::keep).empty() &&
       "detached from a Tombstone");
-  assert(b.generation(SEID) == g && "a Tombstone was re-armed");
-  assert(!put(b, SEID, UID) && "detach reopened a Tombstone");
+  assert(
+      b.generation(SEID) == g &&
+      "end_session_modification() counted a detach on a tombstoned record");
+  assert(
+      !put(b, SEID, UID) &&
+      "end_session_modification() made a tombstone admit packets");
   // On a missing record it creates nothing.
-  assert(b.detach_and_rearm(SEID + 1, {UID}, dl_verdict::flush).empty());
+  assert(
+      b.end_session_modification(SEID + 1, {UID}, dl_verdict::flush).empty() &&
+      "end_session_modification() returned packets for a missing record");
   assert(!b.has_record(SEID + 1) && "detach created a record");
 }
 
@@ -263,149 +269,94 @@ void test_publish_on_tombstone_is_noop() {
   b.publish(SEID, {});
   b.tombstone(SEID);
   b.publish(SEID, {UID});
-  assert(b.is_tombstone(SEID) && "publish reopened a Tombstone");
+  assert(
+      b.is_tombstone(SEID) &&
+      "publish turned a tombstone back into an Active record");
   assert(!put(b, SEID, UID) && "publish made a Tombstone admit");
 }
 
-/// T_guard (the maximum hold time) discards FIFOs whose oldest packet has
-/// waited long enough, and returns the uids to re-arm; younger FIFOs and the
-/// episode stay.
-void test_expire_returns_uids() {
+/// The maximum hold time discards FIFOs whose oldest packet has waited long
+/// enough, and returns each PDR ID once, so that the caller can re-arm those
+/// PDRs; younger FIFOs stay, and so does the buffering period.
+void test_expire_returns_pdr_ids() {
   dl_packet_buffer b(on());
   const auto t0 = clk::now();
   const auto p  = payload(PKT);
   b.publish(1, {10, 11});
   b.publish(2, {20});
   assert(b.enqueue(1, 10, 1, p.data(), PKT, t0) && "refused");
-  assert(b.enqueue(1, 11, 2, p.data(), PKT, t0 + milliseconds(5)) && "");
-  assert(b.enqueue(1, 10, 1, p.data(), PKT, t0 + milliseconds(6)) && "");
-  assert(b.enqueue(2, 20, 1, p.data(), PKT, t0 + milliseconds(500)) && "");
+  assert(
+      b.enqueue(1, 11, 2, p.data(), PKT, t0 + milliseconds(5)) &&
+      "packet of PDR 2 refused");
+  assert(
+      b.enqueue(1, 10, 1, p.data(), PKT, t0 + milliseconds(6)) &&
+      "second packet of PDR 1 refused");
+  assert(
+      b.enqueue(2, 20, 1, p.data(), PKT, t0 + milliseconds(500)) &&
+      "packet of session 2 refused");
 
-  assert(b.expire(t0 + milliseconds(999), milliseconds(1000)).empty());
+  assert(
+      b.expire(t0 + milliseconds(999), milliseconds(1000)).empty() &&
+      "a FIFO expired before the maximum hold time");
   auto x = b.expire(t0 + milliseconds(1000), milliseconds(1000));
   assert(x.size() == 1 && x[0].seid == 1 && "wrong FIFO expired");
   assert(x[0].discarded == 3 && "whole FIFO not discarded");
-  assert(x[0].uids.size() == 2 && "uids not deduplicated");
   assert(
-      ((x[0].uids[0] == 10 && x[0].uids[1] == 11) ||
-       (x[0].uids[0] == 11 && x[0].uids[1] == 10)) &&
-      "wrong uids");
-  assert(x[0].pdr_ids.size() == 2 && "one PDR ID per uid");
-  for (size_t i = 0; i < 2; i++)
-    assert(
-        x[0].pdr_ids[i] == (x[0].uids[i] == 10 ? 1 : 2) &&
-        "PDR ID not paired with its uid");
+      x[0].pdr_ids.size() == 2 &&
+      ((x[0].pdr_ids[0] == 1 && x[0].pdr_ids[1] == 2) ||
+       (x[0].pdr_ids[0] == 2 && x[0].pdr_ids[1] == 1)) &&
+      "PDR IDs not returned once each");
   assert(b.held_for(1) == 0 && b.held_for(2) == 1 && "wrong FIFO emptied");
   assert(b.stats().expired == 3 && "expired not counted");
   assert(b.session_pkts(1) == 0 && "not released");
-  // The episode stays open: the next packet is held again.
-  assert(put(b, 1, 10) && "expire closed the episode");
+  // The buffering period goes on: the next packet is held again.
+  assert(put(b, 1, 10) && "expiry ended the buffering period");
   assert_balanced(b);
 }
 
-/// A failed DDN (Downlink Data Notification) is retried once per take:
+/// A Downlink Data Report that could not be queued is retried once per take:
 /// deduplicated, drained whole, and dropped when the session is gone.
-void test_ddn_retry_once_per_take() {
+void test_report_retry_once_per_take() {
   dl_packet_buffer b(on());
   b.publish(1, {10});
   b.publish(2, {20});
-  // true means "the latch may stay held": a mark is stored, or none is
-  // needed. Only an allocation failure returns false.
-  bool held = b.mark_ddn_failed(1, 10, 1);
+  // true means "the notification latch may stay set": a mark is stored, or
+  // none is needed. Only an allocation failure returns false.
+  bool held = b.mark_report_failed(1, 1);
   assert(held && "first mark refused");
-  held = b.mark_ddn_failed(1, 10, 1);
+  held = b.mark_report_failed(1, 1);
   assert(held && "duplicate mark refused");
-  b.mark_ddn_failed(2, 20, 2);
-  auto r = b.take_ddn_retries();
-  assert(r.size() == 2 && "not deduplicated per (seid, uid)");
-  assert(b.take_ddn_retries().empty() && "not drained");
+  b.mark_report_failed(2, 2);
+  auto r = b.take_report_retries();
+  assert(r.size() == 2 && "not deduplicated per (seid, PDR ID)");
+  assert(b.take_report_retries().empty() && "not drained");
 
   // Marks on a missing record are dropped with buffering on...
-  held = b.mark_ddn_failed(99, 1, 0);
-  assert(held && "latch released for a missing record");
-  assert(b.take_ddn_retries().empty() && "mark kept for a missing record");
+  held = b.mark_report_failed(99, 0);
+  assert(held && "caller told to re-arm for a missing record");
+  assert(b.take_report_retries().empty() && "mark kept for a missing record");
   // ...on a Tombstone, and by tombstone() itself.
-  b.mark_ddn_failed(1, 10, 1);
+  b.mark_report_failed(1, 1);
   b.tombstone(1);
-  held = b.mark_ddn_failed(1, 10, 1);
-  assert(held && "latch released on a Tombstone");
-  assert(b.take_ddn_retries().empty() && "mark kept on a Tombstone");
+  held = b.mark_report_failed(1, 1);
+  assert(held && "caller told to re-arm on a tombstone");
+  assert(b.take_report_retries().empty() && "mark kept on a Tombstone");
   // Nothing is left for a SEID once tombstone() and gc() are through with it.
-  b.mark_ddn_failed(2, 20, 2);
+  b.mark_report_failed(2, 2);
   b.tombstone(2, clk::now() - milliseconds(2000));
   b.gc(clk::now());
-  assert(b.take_ddn_retries().empty() && "mark survived gc");
+  assert(b.take_report_retries().empty() && "mark survived gc");
 
   // With buffering off there are no records, and the marks still work.
   dl_packet_buffer off;
-  held = off.mark_ddn_failed(5, 50, 5);
+  held = off.mark_report_failed(5, 5);
   assert(held && "mark refused with buffering off");
-  off.mark_ddn_failed(5, 50, 5);
-  r = off.take_ddn_retries();
+  off.mark_report_failed(5, 5);
+  r = off.take_report_retries();
   assert(
-      r.size() == 1 && r[0].seid == 5 && r[0].uid == 50 && r[0].pdr_id == 5 &&
-      "off");
-  assert(off.take_ddn_retries().empty() && "not drained with buffering off");
-}
-
-/// Just the two fields find_rearm_target() reads, named as in pfcp_pdr.
-struct rule {
-  uint64_t rule_uid;
-  struct {
-    uint16_t rule_id;
-  } pdr_id;
-};
-
-/// An Update PDR replaces the rule by a copy with a fresh uid that inherits
-/// the held latch: a retry marked under the old uid still finds it, by PDR
-/// ID, as long as the uid itself is gone. With buffering off nothing else
-/// would ever release that latch.
-void test_rearm_target_falls_back_to_pdr_id() {
-  std::vector<std::shared_ptr<rule>> rules = {
-      nullptr, std::make_shared<rule>(rule{10, {1}}),
-      std::make_shared<rule>(rule{11, {2}})};
-  // The uid wins, even over another rule's PDR ID.
-  assert(find_rearm_target(rules, 11, uint16_t{1}) == rules[2].get());
-  assert(find_rearm_target(rules, 10, std::nullopt) == rules[1].get());
-  // The mark carries the PDR ID it was sent for.
-  dl_packet_buffer off;
-  off.mark_ddn_failed(SEID, 11, 2);
-  auto m = off.take_ddn_retries();
-  assert(m.size() == 1 && m[0].pdr_id == 2 && "PDR ID not kept");
-  // Update PDR: rule 2 is now a copy with uid 12.
-  rules[2] = std::make_shared<rule>(rule{12, {2}});
-  assert(
-      find_rearm_target(rules, m[0].uid, m[0].pdr_id) == rules[2].get() &&
-      "COW copy not found by PDR ID");
-  // Remove PDR: nothing to re-arm.
-  rules.pop_back();
-  assert(!find_rearm_target(rules, m[0].uid, m[0].pdr_id) && "stale match");
-  assert(!find_rearm_target(rules, 12, std::nullopt) && "unknown uid");
-}
-
-/// A rejected Session Modification Request can have applied an Update PDR to
-/// the paging PDR before a later IE failed: the copy (fresh uid) inherits the
-/// held latch while `valid` still lists the old uid. T_guard then has to find
-/// the copy by the PDR ID of what it discarded, or nothing would ever notify
-/// the SMF again.
-void test_expire_rearm_falls_back_to_pdr_id() {
-  dl_packet_buffer b(on());
-  const auto t0 = clk::now();
-  const auto p  = payload(PKT);
-  b.publish(1, {10});
-  assert(b.enqueue(1, 10, 5, p.data(), PKT, t0) && "refused");
-  // The rejected request: PDR 5 is now a copy with uid 11, and no detach ran.
-  std::vector<std::shared_ptr<rule>> rules = {
-      std::make_shared<rule>(rule{11, {5}})};
-  auto x = b.expire(t0 + milliseconds(1000), milliseconds(1000));
-  assert(x.size() == 1 && x[0].uids.size() == 1 && "not expired");
-  assert(x[0].uids[0] == 10 && x[0].pdr_ids[0] == 5 && "wrong key");
-  assert(
-      find_rearm_target(rules, x[0].uids[0], x[0].pdr_ids[0]) ==
-          rules[0].get() &&
-      "copy not found by PDR ID");
-  assert(!find_rearm_target(rules, x[0].uids[0], std::nullopt) && "uid only");
-  assert_balanced(b);
+      r.size() == 1 && r[0].seid == 5 && r[0].pdr_id == 5 &&
+      "mark lost with buffering off");
+  assert(off.take_report_retries().empty() && "not drained with buffering off");
 }
 
 /// Every packet that got in leaves through exactly one counter.
@@ -423,12 +374,12 @@ void test_counters_balance() {
   put(b, 1, 99);  // stale: counted, not stored
   assert_balanced(b);
 
-  dl_fifo f = b.detach_and_rearm(1, {}, dl_verdict::flush);
+  dl_fifo f = b.end_session_modification(1, {}, dl_verdict::flush);
   b.note_replay(oai::upf::dl_outcome::sent);
   b.note_replay(oai::upf::dl_outcome::dropped);
   b.note_replay(oai::upf::dl_outcome::rebuffered);
   assert(f.size() == 3 && "flush");
-  b.detach_and_rearm(2, {}, dl_verdict::discard);
+  b.end_session_modification(2, {}, dl_verdict::discard);
   b.tombstone(3);
   b.expire(clk::now(), milliseconds(20000));
   const dl_buffer_stats s = b.stats();
@@ -452,10 +403,8 @@ int main() {
   test_tombstone_refuses_and_gc();
   test_detach_on_tombstone_is_noop();
   test_publish_on_tombstone_is_noop();
-  test_expire_returns_uids();
-  test_ddn_retry_once_per_take();
-  test_rearm_target_falls_back_to_pdr_id();
-  test_expire_rearm_falls_back_to_pdr_id();
+  test_expire_returns_pdr_ids();
+  test_report_retry_once_per_take();
   test_counters_balance();
   printf("dl_packet_buffer: ok\n");
   return 0;

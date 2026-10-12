@@ -22,12 +22,12 @@
  *                            dl_notification_delay_50ms, notify_cp}
  * Size:  MAX_PDU_SESSIONS
  *
- * Written by BARProgram::Setup()/PopulateBarConfigMap() when a Create BAR IE
- * (§7.5.2.6) or Update BAR IE (§7.5.4.11) is present in a PFCP message.
+ * Written by BARProgram::Setup() (the session has a BAR) or
+ * BARProgram::SetupWithoutBar() (a BUFF FAR without a BAR), on every
+ * Establishment or Modification that leaves RULE_BAR_ENABLED set.
  *
- * @note The plain __u64 key holds exactly one BAR per SEID. BARProgram::Setup
- *       rejects a session with more than one BAR rather than letting the
- *       extras overwrite the first.
+ * @note Keyed by SEID, so one BAR per session: Setup() uses the first BAR
+ *       and logs and ignores the others.
  */
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
@@ -44,15 +44,19 @@ struct {
  * @brief Per-session DDN suppression and buffer overflow state.
  *
  * Key:   __u64             SEID
- * Value: struct bar_state  {notify_epoch_ns, buffered_pkt_count,
+ * Value: struct bar_state  {last_ddn_ns, buffered_pkt_count,
  *                           notification_sent}
  * Size:  MAX_PDU_SESSIONS
  *
- * Created (zeroed) by BARProgram::InitBarStateMap on session establishment.
- * Updated atomically by xdp_bar_apply_kern.c.
- * Zeroed by BARProgram::ResetBarState when buffering starts or ends, when
- * the SMF never answers a DL Data Report, and when the maximum buffering
- * time (T_guard) expires.
+ * Created (zeroed) by BARProgram::InitBarStateMap the first time the session
+ * is set up with the BAR stage (BPF_NOEXIST), or by xdp_bar_apply_kern.c if
+ * it is still missing. Updated atomically by xdp_bar_apply_kern.c.
+ * Zeroed by BARProgram::ResetBarState when buffering starts or ends, when a
+ * Downlink Data Report could not be queued (BarDdnConsumer), when the SMF
+ * never answers one, when the maximum hold time expires while packets are
+ * held, and at the next DL buffer tick after the report of a replayed packet
+ * could not be queued. Erased by BARProgram::Remove when the session is
+ * deleted.
  */
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
@@ -71,11 +75,14 @@ struct {
  * Key:   n/a   (ring buffer — no key)
  * Size:  64 KB
  *
- * Producer: xdp_bar_apply_kern.c — submits struct bar_ddn_event when
- *           the first DL packet for an idle UE arrives, or when the
- *           notification delay window expires.
- * Consumer: xdp_bar_apply_user.cpp — polls and constructs PFCP Session
- *           Report Requests (§7.5.8) for the SMF.
+ * Producer: xdp_bar_apply_kern.c submits a struct bar_ddn_event when a DL
+ *           packet reaches the BAR program with bar_config.notify_cp set
+ *           and the notification latch clear, or, with a non-zero
+ *           Downlink Data Notification Delay, at least that delay after
+ *           the last DDN.
+ * Consumer: control/BarDdnConsumer.cpp, which turns each well-formed
+ *           event of a live session into a PFCP Session Report Request
+ *           (§7.5.8) with a Downlink Data Report for the SMF.
  */
 struct {
   __uint(type, BPF_MAP_TYPE_RINGBUF);

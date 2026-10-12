@@ -8,8 +8,9 @@
  *
  * The frames come from the data network, and what the parser returns is
  * copied into the DL buffer and later walked by the lookup, which trusts the
- * IPv4 header lengths. So the cases that matter are the lies: an IHL below the
- * minimum, a Total Length shorter than the header, or longer than the frame.
+ * IPv4 header lengths. So the cases that matter are malformed lengths: an IHL
+ * below the minimum, a Total Length shorter than the header, or longer than
+ * the frame.
  */
 
 #include <cassert>

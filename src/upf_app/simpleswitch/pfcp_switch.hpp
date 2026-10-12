@@ -15,7 +15,6 @@
 #include <thread>
 #include <unordered_map>
 #include <memory>
-#include <optional>
 #include <variant>
 #include <vector>
 
@@ -99,7 +98,7 @@ class pfcp_switch {
 #define TASK_UPF_PFCP_SWITCH_MAX_COMMIT_INTERVAL (0)
 #define TASK_UPF_PFCP_SWITCH_MIN_COMMIT_INTERVAL (1)
 /// 1 s one-shot ITTI timer on TASK_UPF_APP, re-armed on every expiry: drives
-/// dl_buffer_tick().
+/// dl_buffer_tick(). Period: pfcp_switch::DL_BUFFER_TICK_PERIOD.
 #define TASK_UPF_PFCP_SWITCH_DL_BUFFER_TICK (2)
 
 #define PFCP_SWITCH_MAX_COMMIT_INTERVAL_MILLISECONDS 200
@@ -437,25 +436,28 @@ class pfcp_switch {
   oai::upf::dl_packet_buffer& dl_buffer() { return dl_buffer_; }
 
   //------------------------------------------------------------------------------
-  /** @brief Release the DL notification latch (pfcp_pdr::notified_cp) of one
-   *  PDR, so that its next DL packet sends a new Downlink Data Report.
+  /** @brief Re-arm the notification latch (pfcp_pdr::notified_cp) of one PDR,
+   *  so that its next DL packet sends a new Downlink Data Report.
    *
-   *  TASK_UPF_APP only. The PDR is found by `uid`, or by `pdr_id` after an
-   *  Update PDR (see find_rearm_target()). On eBPF it also clears the
-   *  session's kernel DDN latch. Does nothing for a deleted session.
-   *  @return true when a latch was released. */
-  bool rearm_dl_notification(
-      uint64_t up_seid, const std::optional<uint64_t>& uid,
-      const std::optional<uint16_t>& pdr_id = std::nullopt);
+   *  TASK_UPF_APP only. On the eBPF datapath with enable_bar it also re-arms
+   *  the session's notification latch in bar_state_map. Does nothing for a
+   *  deleted session or an unknown PDR ID.
+   *  @return true when a latch was re-armed. */
+  bool rearm_dl_notification(uint64_t up_seid, uint16_t pdr_id);
 
   //------------------------------------------------------------------------------
   /** @brief The DL buffer's 1 s tick (TASK_UPF_PFCP_SWITCH_DL_BUFFER_TICK).
    *
-   *  TASK_UPF_APP. Always releases the latches of DL Data Reports that could
-   *  not be sent. With buffering on, it also discards packets held longer
-   *  than default_buffering_duration_ms (T_guard), erases Tombstones and
-   *  logs changed counters. */
+   *  TASK_UPF_APP. Always re-arms the notification latch of Downlink Data
+   *  Reports that could not be queued. With buffering on, it also discards
+   *  the held packets of every session whose oldest packet has waited the
+   *  maximum hold time (dl_buffer_max_hold_ms), erases tombstones and logs
+   *  changed counters. */
   void dl_buffer_tick();
+
+  /// Period of the DL buffer tick. Also the minimum age gc() gives a
+  /// tombstone: far longer than any DL read section.
+  static constexpr std::chrono::seconds DL_BUFFER_TICK_PERIOD{1};
 
   //------------------------------------------------------------------------------
   /** @brief Resolve an UP SEID to the peer CP F-SEID (§8.2.37).
@@ -509,15 +511,13 @@ class pfcp_switch {
   //------------------------------------------------------------------------------
   /** @brief Handle a PFCP Session Modification Request (3GPP TS 29.244
    *  V17.10.0 §7.5.4).
-   *  @param flush  When non-null and the request is accepted with DL
-   *                buffering on, receives the DL buffer verdict and the
-   *                packets detached from the session, which the caller
-   *                replays (FLUSH) or frees after sending the response. Left
-   *                untouched otherwise. */
+   *  @param flush  Receives the DL buffer verdict and the packets detached from
+   *                the session when the request is accepted with DL buffering
+   *                on; the caller replays (FLUSH) or frees them after sending
+   *                the response. Left untouched otherwise. */
   void handle_pfcp_session_modification_request(
       std::shared_ptr<itti_n4_session_modification_request> sreq,
-      itti_n4_session_modification_response*,
-      oai::upf::dl_flush_result* flush = nullptr);
+      itti_n4_session_modification_response*, oai::upf::dl_flush_result& flush);
 
   //------------------------------------------------------------------------------
   /** @brief Handle a PFCP Session Deletion Request (3GPP TS 29.244

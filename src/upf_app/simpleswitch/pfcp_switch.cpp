@@ -48,7 +48,6 @@ using namespace std;
 extern itti_mw* itti_inst;
 extern upf_config upf_cfg;
 extern upf_n3* upf_n3_inst;
-extern upf_n4* upf_n4_inst;  // Usage Reports are sent over N4
 extern pfcp_switch* pfcp_switch_inst;
 
 namespace {
@@ -1268,7 +1267,7 @@ bool pfcp_switch::send_usage_report(
   session->reported_ul_packets = ulp;
   session->reported_dl_packets = dlp;
 
-  upf_n4_inst->send_n4_msg(session->cp_fseid, h);
+  upf_n4::enqueue_session_report_request(session->cp_fseid, h, std::nullopt);
 
   Logger::pfcp_switch().debug(
       "Usage Report seid 0x%lx: ul=%lu B (%lu pkt) dl=%lu B (%lu pkt)",
@@ -1482,21 +1481,22 @@ void pfcp_switch::remove_pfcp_session(const pfcp::fseid_t& cp_fseid) {
 }
 
 //------------------------------------------------------------------------------
-bool pfcp_switch::rearm_dl_notification(
-    uint64_t up_seid, const std::optional<uint64_t>& uid,
-    const std::optional<uint16_t>& pdr_id) {
+bool pfcp_switch::rearm_dl_notification(uint64_t up_seid, uint16_t pdr_id) {
   std::shared_ptr<pfcp::pfcp_session> session = {};
   if (!get_pfcp_session_by_up_seid(up_seid, session) || !session) return false;
-  pfcp::pfcp_pdr* pdr = oai::upf::find_rearm_target(session->pdrs, uid, pdr_id);
-  if (!pdr) return false;
+  // PDR IDs are unique within a session (pfcp_session::add() skips a
+  // duplicate), so the PDR ID alone finds the rule, also after an Update PDR
+  // replaced it.
+  std::shared_ptr<pfcp::pfcp_pdr> pdr;
+  if (!session->get(pdr_id, pdr) || !pdr) return false;
   bool rearmed = false;
   if (pdr->notified_cp.load()) {
     pdr->notified_cp.store(false);
     rearmed = true;
   }
-  // On eBPF the report came from XDP, whose latch is in bar_state_map, so
-  // clear that too. Otherwise the UE is not paged again until the FAR leaves
-  // BUFF.
+  // On the eBPF datapath the report normally came from the XDP BAR program,
+  // whose notification latch is in bar_state_map, so re-arm that too;
+  // otherwise it would stay set.
   if (upf_cfg.enable_bpf_datapath && upf_cfg.enable_bar && session_manager &&
       session_manager->ResetBarState(up_seid))
     rearmed = true;
@@ -1508,41 +1508,43 @@ void pfcp_switch::dl_buffer_tick() {
   const bool buffering = dl_buffer_.enabled();
   const auto now       = oai::upf::dl_packet_buffer::clock::now();
 
-  // T_guard (default_buffering_duration_ms): the SMF never said what to do
+  // Maximum hold time (dl_buffer_max_hold_ms): the SMF never said what to do
   // with these packets. Discard them and let the next DL packet notify the
   // SMF again, so that a lost paging attempt can be retried.
   if (buffering) {
-    for (const auto& x : dl_buffer_.expire(
-             now, std::chrono::milliseconds(
-                      upf_cfg.default_buffering_duration_ms))) {
+    for (const auto& expired_session : dl_buffer_.expire(
+             now, std::chrono::milliseconds(upf_cfg.dl_buffer_max_hold_ms))) {
       size_t rearmed = 0;
-      for (size_t i = 0; i < x.uids.size(); i++)
-        if (rearm_dl_notification(x.seid, x.uids[i], x.pdr_ids[i])) rearmed++;
+      for (const auto pdr_id : expired_session.pdr_ids)
+        if (rearm_dl_notification(expired_session.seid, pdr_id)) rearmed++;
       Logger::pfcp_switch().info(
           "DL buffer seid " SEID_FMT
-          ": T_guard expired, %zu discarded, latch re-armed on %zu PDR(s)",
-          x.seid, x.discarded, rearmed);
+          ": maximum hold time expired, %zu discarded, notification latch "
+          "re-armed on %zu PDR(s)",
+          expired_session.seid, expired_session.discarded, rearmed);
     }
   }
 
-  // DL Data Reports that could not be handed to TASK_UPF_N4 kept their latch
-  // held, so that a refusal is retried, and logged, at most once per tick.
-  // Silent: enqueue_session_report_request() logged the refusal.
-  for (const auto& m : dl_buffer_.take_ddn_retries())
-    rearm_dl_notification(m.seid, m.uid, m.pdr_id);
+  // Downlink Data Reports that could not be queued kept their notification
+  // latch set, so that a refusal is retried, and logged, at most once per
+  // tick. Silent: enqueue_session_report_request() logged the refusal.
+  for (const auto& failed_report : dl_buffer_.take_report_retries())
+    rearm_dl_notification(failed_report.seid, failed_report.pdr_id);
 
   if (!buffering) return;
   // One period is far longer than any DL read section, so no straggler can
   // still be on its way to an erased record.
-  dl_buffer_.gc(now, std::chrono::milliseconds(1000));
+  dl_buffer_.gc(now, DL_BUFFER_TICK_PERIOD);
 
   const oai::upf::dl_buffer_stats st = dl_buffer_.stats();
   if (st != dl_buffer_logged_stats_) {
     dl_buffer_logged_stats_ = st;
     Logger::pfcp_switch().info(
-        "DL buffer stats: stored %lu, held %lu, flushed %lu, discarded %lu, "
-        "expired %lu, dropped (stale %lu, tombstone %lu, no record %lu, "
-        "overflow %lu), replay (sent %lu, dropped %lu, rebuffered %lu)",
+        "DL buffer stats: stored %" PRIu64 ", held %" PRIu64
+        ", flushed %" PRIu64 ", discarded %" PRIu64 ", expired %" PRIu64
+        ", dropped (stale %" PRIu64 ", tombstone %" PRIu64
+        ", no record %" PRIu64 ", overflow %" PRIu64 "), replay (sent %" PRIu64
+        ", dropped %" PRIu64 ", rebuffered %" PRIu64 ")",
         st.stored, st.held, st.flushed, st.discarded, st.expired,
         st.stale_dropped, st.tombstone_dropped, st.no_record_dropped,
         st.overflow_dropped, st.replay_sent, st.replay_dropped,
@@ -1991,8 +1993,12 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         add_pfcp_session_by_up_seid(session->seid, s);
         resolve_pdr_qfis(s);
         apply_qos_mbr(s);
-        // Create the DL buffer record. Before it exists every DL packet of
-        // this session is refused, so do it once the session is reachable.
+        // Create the session's DL buffer record, admitting the rules that
+        // already buffer (normally none). Only an accepted establishment gets
+        // one; until it exists, DL packets of this session are refused, not
+        // buffered. Deleting the session later tombstones the record. The
+        // enabled() check only skips the buff_uids() walk: publish() does
+        // nothing when buffering is off.
         if (dl_buffer_.enabled())
           dl_buffer_.publish(session->get_up_seid(), buff_uids(*session));
         // start_timer_min_commit_interval();
@@ -2040,10 +2046,12 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
 void pfcp_switch::handle_pfcp_session_modification_request(
     std::shared_ptr<itti_n4_session_modification_request> sreq,
     itti_n4_session_modification_response* resp,
-    oai::upf::dl_flush_result* flush) {
+    oai::upf::dl_flush_result& flush) {
   bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
-  // What this message did to the buffering rules, for the DL buffer verdict.
-  // Each flag is set only once the change has been applied.
+  // What this message did to the buffering rules. Each flag is set only once
+  // the change has been applied, and whether or not DL buffering is on: the DL
+  // buffer verdict reads all three flags (with DL buffering on), and the eBPF
+  // re-arm after call_datapath() reads the two removal flags.
   const bool dl_buffering     = dl_buffer_.enabled();
   oai::upf::dl_signals dl_sig = {};
 
@@ -2073,13 +2081,14 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     resp->seid = session->cp_fseid.seid;
 
     /*
-     * Reset the eBPF DDN latch (bar_state_map) when buffering starts.
+     * Re-arm the eBPF notification latch (bar_state_map) when buffering starts.
      *
-     * A late packet of the previous episode can set the latch again after
-     * the reset done when that episode ended. Clearing it here removes that
-     * stale value. This must run before any call_datapath() of this request,
-     * so that no packet of the new episode has reached BAR yet. The check
-     * uses the request IEs; a reset for a rejected request is harmless.
+     * A late packet of the previous buffering period can set the latch again
+     * after the re-arm done when that period ended. Clearing it here removes
+     * that stale value. This must run before any call_datapath() of this
+     * request, so that no packet of the new buffering period has reached the
+     * XDP BAR program yet. The check uses the request IEs; a re-arm for a
+     * rejected request is harmless.
      */
     if (isBpfAccelerationEnabled && upf_cfg.enable_bar && session_manager) {
       bool had_buff = false;
@@ -2096,14 +2105,9 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         session_manager->ResetBarState(session->get_up_seid());
     }
 
-    // Set when a PDR whose FAR buffers, or a buffering FAR, is removed: the
-    // OAI SMF ends buffering with Remove PDR + Remove FAR + Create, never with
-    // an Update FAR. Tracked whether or not dl_buffering is on (that setting
-    // only gates dl_sig), because it also releases the eBPF DDN latch after
-    // call_datapath(), below.
-    bool buff_rule_removed = false;
-
     // ---- Remove PDRs --------------------------------------------------------
+    // The OAI SMF ends buffering with Remove PDR + Remove FAR + Create, never
+    // with an Update FAR.
     for (auto it : req->pfcp_ies.remove_pdrs) {
       if (isBpfAccelerationEnabled) {
         Logger::upf_app().info("Modify datapath: remove(pdr)");
@@ -2124,7 +2128,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
       const bool pdr_was_buff =
           spdr && spdr->far_id.first &&
           far_buffers(*session, spdr->far_id.second.far_id);
-      const bool pdr_buffered = dl_buffering && pdr_was_buff;
 
       if (not session->remove(pdr, cause, offending_ie.offending_ie)) {
         if (cause.cause_value ==
@@ -2135,8 +2138,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           break;
         }
       } else {
-        if (pdr_was_buff) buff_rule_removed = true;
-        if (pdr_buffered) dl_sig.buff_pdr_removed = true;
+        if (pdr_was_buff) dl_sig.buff_pdr_removed = true;
       }
     }
 
@@ -2153,7 +2155,6 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         remove_far& far = it;
         const bool far_was_buff =
             far.far_id.first && far_buffers(*session, far.far_id.second.far_id);
-        const bool far_buffered = dl_buffering && far_was_buff;
 
         if (not session->remove(far, cause, offending_ie.offending_ie)) {
           if (cause.cause_value ==
@@ -2164,8 +2165,7 @@ void pfcp_switch::handle_pfcp_session_modification_request(
             break;
           }
         } else {
-          if (far_was_buff) buff_rule_removed = true;
-          if (far_buffered) dl_sig.buff_far_removed = true;
+          if (far_was_buff) dl_sig.buff_far_removed = true;
         }
       }
     }
@@ -2394,14 +2394,17 @@ void pfcp_switch::handle_pfcp_session_modification_request(
         update_far& far     = it;
         uint8_t cause_value = CAUSE_VALUE_REQUEST_ACCEPTED;
 
-        std::shared_ptr<pfcp::pfcp_far> upd_far = {};
-        const bool far_known = session->get(far.far_id.far_id, upd_far);
+        std::shared_ptr<pfcp::pfcp_far> far_before_update = {};
+        const bool found_before_update =
+            session->get(far.far_id.far_id, far_before_update);
         const bool leaves_buffering =
-            far_known && upd_far &&
-            pfcp::far_update_leaves_buffering(*upd_far, far);
-        // TS 29.244 §5.2.4.2: BUFF -> FORW means the packets can go now.
+            found_before_update && far_before_update &&
+            pfcp::far_update_leaves_buffering(*far_before_update, far);
+        // TS 29.244 §5.2.4.2: "The UP function shall stop applying buffering
+        // when new instruction is received ... The buffered packets shall be
+        // either dropped or forwarded". BUFF -> FORW forwards them.
         const bool buff_to_forw =
-            dl_buffering && leaves_buffering && far.apply_action.second.forw;
+            leaves_buffering && far.apply_action.second.forw;
 
         if (not session->update(far, cause_value)) {
           cause.cause_value            = cause_value;
@@ -2410,28 +2413,35 @@ void pfcp_switch::handle_pfcp_session_modification_request(
           failed_rule.rule_id_value    = far.far_id.far_id;
           resp->pfcp_ies.set(failed_rule);
         } else if (leaves_buffering) {
-          // Covers both ways buffering ends: BUFF -> FORW (Service Request
-          // done, §7.5.4.3 with a refreshed Outer Header Creation) and
-          // BUFF -> DROP (paging failed, the SMF's stop-buffering Update FAR).
-          // Resetting only on FORW would leave the latch held after a failed
-          // paging and block the next idle -> paging cycle.
+          // A 3GPP SMF may also end buffering with an Update FAR: BUFF→FORW
+          // once the UE is reachable, or BUFF→DROP when paging fails (one way
+          // to carry out TS 23.502 §4.2.3.3 step 3c, 'stop buffering DL data
+          // and discard the buffered data'). The OAI SMF ends buffering with
+          // Remove PDR and Remove FAR instead (see above). Re-arm the
+          // notification latch in both cases; otherwise the next buffering
+          // period could stay silent.
           //
-          // update(far) is copy-on-write: upd_far still points at the old
-          // rule (Apply Action BUFF), so log the one now published instead.
-          std::shared_ptr<pfcp::pfcp_far> new_far = {};
-          const bool new_known =
-              session->get(far.far_id.far_id, new_far) && new_far;
+          // update(far) is copy-on-write: far_before_update still points at the
+          // old rule (Apply Action BUFF), so log the one now published instead.
+          std::shared_ptr<pfcp::pfcp_far> far_after_update = {};
+          const bool found_after_update =
+              session->get(far.far_id.far_id, far_after_update) &&
+              far_after_update;
           Logger::pfcp_switch().info(
               "FAR %u seid " SEID_FMT
-              ": Apply Action left BUFF (forw=%u drop=%u) — re-arming the DL "
-              "data notification one-shot",
+              ": Apply Action left BUFF (forw=%u drop=%u) — re-arming the "
+              "notification latch",
               far.far_id.far_id, session->get_up_seid(),
-              (new_known && new_far->apply_action.forw) ? 1U : 0U,
-              (new_known && new_far->apply_action.drop) ? 1U : 0U);
+              (found_after_update && far_after_update->apply_action.forw) ? 1U :
+                                                                            0U,
+              (found_after_update && far_after_update->apply_action.drop) ? 1U :
+                                                                            0U);
           far_left_buffering = true;
           if (buff_to_forw) dl_sig.buff_to_forw = true;
-          // pfcp_pdr::notified_cp is the simple-switch equivalent of
-          // bar_state.notification_sent: release it the same way.
+          // Re-arm the simple switch's notification latch
+          // (pfcp_pdr::notified_cp, one per PDR) for the PDRs of this FAR. On
+          // eBPF the latch is per session; it is cleared after call_datapath(),
+          // below.
           pfcp::rearm_notified_cp(session->pdrs, far.far_id.far_id);
         }
       }
@@ -2518,36 +2528,38 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     resolve_pdr_qfis(s);
     apply_qos_mbr(s);
 
-    // The DL buffer's single reopen point: decide what happens to the held
-    // packets, and admit exactly the uids that buffer under the new rules.
-    // The caller replays or frees `removed` once the response is on its way.
+    // End of an accepted Session Modification: decide what happens to the held
+    // packets, and admit exactly the uids that buffer under the new rules. The
+    // caller replays or frees `removed` once the response is on its way.
     if (dl_buffering && cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
       const uint64_t up_seid          = session->get_up_seid();
       std::vector<uint64_t> new_valid = buff_uids(*session);
       const oai::upf::dl_verdict v =
           oai::upf::verdict_of(dl_sig, !new_valid.empty());
       oai::upf::dl_fifo removed =
-          dl_buffer_.detach_and_rearm(up_seid, new_valid, v);
+          dl_buffer_.end_session_modification(up_seid, new_valid, v);
       if (dl_sig.buff_pdr_removed || dl_sig.buff_far_removed ||
           dl_sig.buff_to_forw || !removed.empty() || !new_valid.empty()) {
         Logger::pfcp_switch().info(
-            "DL buffer seid " SEID_FMT ": verdict %s, detached %zu, valid %zu",
+            "DL buffer seid " SEID_FMT
+            ": verdict %s, detached %zu, buffering PDRs %zu",
             up_seid, oai::upf::to_string(v), removed.size(), new_valid.size());
       }
-      if (flush) {
-        flush->verdict = v;
-        flush->removed = std::move(removed);
-      }
+      flush.verdict = v;
+      flush.removed = std::move(removed);
     }
 
     /*
-     * Clear the eBPF DDN latch (bar_state_map) when buffering ends: a FAR
-     * left BUFF, or a buffering PDR/FAR was removed (the OAI SMF ends
-     * buffering that way). Otherwise the next idle period would never report.
+     * Re-arm the eBPF notification latch (bar_state_map) when buffering ends: a
+     * FAR left BUFF, or a buffering PDR/FAR was removed (the OAI SMF ends
+     * buffering that way). Otherwise the next buffering period could stay
+     * silent.
      *
      * This must run after call_datapath(). Earlier, a DL packet could still
      * match the old BUFF FAR and set the latch again at once.
      */
+    const bool buff_rule_removed =
+        dl_sig.buff_pdr_removed || dl_sig.buff_far_removed;
     if ((far_left_buffering || buff_rule_removed) && isBpfAccelerationEnabled &&
         upf_cfg.enable_bar && session_manager) {
       session_manager->ResetBarState(session->get_up_seid());
@@ -2740,8 +2752,9 @@ pfcp_switch::dl_buffered_match pfcp_switch::classify_dl_buffered(
   const struct iphdr* iph = reinterpret_cast<const struct iphdr*>(ip);
   if (len < sizeof(struct iphdr) || iph->version != 4) return m;
 
-  // Same walk as the DL lookup below, so a packet is held under exactly the
-  // rule the simple switch would have used; only the side effects are gone.
+  // Same walk as pfcp_session_look_up_pack_in_core() below, so a packet is
+  // held under exactly the rule the simple switch would have used; only the
+  // side effects are gone. Keep the two walks in sync.
   oai::upf::rcu_guard rg(rcu_);
   uint32_t ue_ip     = be32toh(iph->daddr);
   const auto* pdrs_p = find_dl_pdrs(ue_ip);
@@ -2777,6 +2790,8 @@ pfcp_switch::dl_buffered_match pfcp_switch::classify_dl_buffered(
 // pfcp_session_look_up_pack_in_core — N6 downlink path.
 // Looks up the destination UE IP in ue_ipv4_hbo2pfcp_pdr, iterates PDRs in
 // precedence order, then calls pfcp_far::apply_forwarding_rules().
+// classify_dl_buffered() above repeats this PDR walk for packets captured on
+// the eBPF datapath; keep the two in sync.
 
 //------------------------------------------------------------------------------
 oai::upf::dl_outcome pfcp_switch::pfcp_session_look_up_pack_in_core(

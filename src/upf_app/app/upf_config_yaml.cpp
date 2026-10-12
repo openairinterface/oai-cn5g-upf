@@ -526,8 +526,8 @@ void upf_config_yaml::to_upf_config(upf_config& cfg) {
       static_cast<uint32_t>(datapath_cfg.get_dl_buffer_max_pkts_total());
   cfg.dl_buffer_max_kib_total =
       static_cast<uint32_t>(datapath_cfg.get_dl_buffer_max_kib_total());
-  cfg.default_buffering_duration_ms =
-      static_cast<uint32_t>(datapath_cfg.get_default_buffering_duration_ms());
+  cfg.dl_buffer_max_hold_ms =
+      static_cast<uint32_t>(datapath_cfg.get_dl_buffer_max_hold_ms());
   cfg.xsk_frame_size = static_cast<uint32_t>(datapath_cfg.get_xsk_frame_size());
   cfg.xsk_frames_per_queue =
       static_cast<uint32_t>(datapath_cfg.get_xsk_frames_per_queue());
@@ -800,8 +800,7 @@ upf_datapath_configuration::upf_datapath_configuration(
   // itself starts to leak. Both ends measured; see qos_mbr.hpp.
   m_qos_burst_ms.set_validation_interval(10, 5000);
 
-  // DL buffering (paging). Every bound is finite: the SMF never says stop and
-  // the DN can flood an idle UE, so 0 is out of range, never "unlimited".
+  // Bounds: see upf_config_yaml.hpp (DL buffering defaults).
   m_enable_dl_buffering = option_config_value(
       UPF_ENABLE_DL_BUFFERING_LABEL, UPF_DEFAULT_ENABLE_DL_BUFFERING);
   m_dl_buffer_max_pkts_per_session = int_config_value(
@@ -818,10 +817,9 @@ upf_datapath_configuration::upf_datapath_configuration(
   m_dl_buffer_max_kib_total = int_config_value(
       UPF_DL_BUFFER_MAX_KIB_TOTAL, UPF_DEFAULT_DL_BUFFER_MAX_KIB_TOTAL);
   m_dl_buffer_max_kib_total.set_validation_interval(256, 524288);
-  m_default_buffering_duration_ms = int_config_value(
-      UPF_DEFAULT_BUFFERING_DURATION_MS,
-      UPF_DEFAULT_DEFAULT_BUFFERING_DURATION_MS);
-  m_default_buffering_duration_ms.set_validation_interval(1000, 120000);
+  m_dl_buffer_max_hold_ms = int_config_value(
+      UPF_DL_BUFFER_MAX_HOLD_MS, UPF_DEFAULT_DL_BUFFER_MAX_HOLD_MS);
+  m_dl_buffer_max_hold_ms.set_validation_interval(1000, 120000);
   // AF_XDP capture (eBPF datapath). validate() also checks that the frame size
   // is exactly 2048 or 4096 and the frame count a power of two. The MiB cap is
   // checked when the AF_XDP consumer starts.
@@ -925,9 +923,8 @@ void upf_datapath_configuration::from_yaml(const YAML::Node& node) {
   if (node[UPF_DL_BUFFER_MAX_KIB_TOTAL]) {
     m_dl_buffer_max_kib_total.from_yaml(node[UPF_DL_BUFFER_MAX_KIB_TOTAL]);
   }
-  if (node[UPF_DEFAULT_BUFFERING_DURATION_MS]) {
-    m_default_buffering_duration_ms.from_yaml(
-        node[UPF_DEFAULT_BUFFERING_DURATION_MS]);
+  if (node[UPF_DL_BUFFER_MAX_HOLD_MS]) {
+    m_dl_buffer_max_hold_ms.from_yaml(node[UPF_DL_BUFFER_MAX_HOLD_MS]);
   }
   if (node[UPF_XSK_FRAME_SIZE]) {
     m_xsk_frame_size.from_yaml(node[UPF_XSK_FRAME_SIZE]);
@@ -1125,9 +1122,8 @@ std::string upf_datapath_configuration::to_string(
           inner_width, m_dl_buffer_max_kib_total.to_string("")));
   out.append(inner_indent)
       .append(fmt::format(
-          BASE_FORMATTER, INNER_LIST_ELEM,
-          UPF_DEFAULT_BUFFERING_DURATION_MS_LABEL, inner_width,
-          m_default_buffering_duration_ms.to_string("")));
+          BASE_FORMATTER, INNER_LIST_ELEM, UPF_DL_BUFFER_MAX_HOLD_MS_LABEL,
+          inner_width, m_dl_buffer_max_hold_ms.to_string("")));
   out.append(inner_indent)
       .append(fmt::format(
           BASE_FORMATTER, INNER_LIST_ELEM, UPF_XSK_FRAME_SIZE_LABEL,
@@ -1222,6 +1218,9 @@ void upf_datapath_configuration::validate() {
   logger::logger_registry::get_logger(LOGGER_NAME)
       .info("Validating UPF datapath configuration...");
 
+  // from_yaml does not range-check, so a 0 or out-of-range DL buffer bound
+  // must be caught here (it would otherwise mean "buffer nothing" or worse).
+
   //============================================================================
   // LAYER 1: Basic Range Validation (15 rules)
   //============================================================================
@@ -1240,13 +1239,11 @@ void upf_datapath_configuration::validate() {
   m_max_traffic_endpoints_per_session.validate();
   m_max_ethernet_packet_filters_per_session.validate();
   m_max_redundant_transmission_params_per_session.validate();
-  // from_yaml does not range-check, so a 0 or out-of-range DL buffer bound
-  // must be caught here (it would otherwise mean "buffer nothing" or worse).
   m_dl_buffer_max_pkts_per_session.validate();
   m_dl_buffer_max_kib_per_session.validate();
   m_dl_buffer_max_pkts_total.validate();
   m_dl_buffer_max_kib_total.validate();
-  m_default_buffering_duration_ms.validate();
+  m_dl_buffer_max_hold_ms.validate();
   m_xsk_frame_size.validate();
   m_xsk_frames_per_queue.validate();
   m_xsk_umem_max_mib_total.validate();
@@ -1269,7 +1266,7 @@ void upf_datapath_configuration::validate() {
         max_redirect, max_upf_if));
   }
 
-  // Rule 2.1b: a per-session DL buffer bound above the total one could never
+  // Rule 2.6: a per-session DL buffer bound above the total one could never
   // be reached, so it is a misconfiguration.
   if (m_dl_buffer_max_pkts_per_session.get_value() >
       m_dl_buffer_max_pkts_total.get_value()) {
@@ -1288,7 +1285,7 @@ void upf_datapath_configuration::validate() {
         m_dl_buffer_max_kib_total.get_value()));
   }
 
-  // Rule 2.1c: AF_XDP aligned mode takes a 2048 or 4096 B frame, and the
+  // Rule 2.7: AF_XDP aligned mode takes a 2048 or 4096 B frame, and the
   // frame count doubles as the ring size, which the kernel wants a power of 2.
   const int xsk_frame = m_xsk_frame_size.get_value();
   if (xsk_frame != 2048 && xsk_frame != 4096) {
@@ -1523,8 +1520,8 @@ int upf_datapath_configuration::get_dl_buffer_max_kib_total() const {
 }
 
 //------------------------------------------------------------------------------
-int upf_datapath_configuration::get_default_buffering_duration_ms() const {
-  return m_default_buffering_duration_ms.get_value();
+int upf_datapath_configuration::get_dl_buffer_max_hold_ms() const {
+  return m_dl_buffer_max_hold_ms.get_value();
 }
 
 //------------------------------------------------------------------------------

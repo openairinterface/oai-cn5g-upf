@@ -17,7 +17,6 @@
 #include "BPFProgram.h"
 #include "upf_network_config.h"
 #include <bar_types.h>
-#include <pfcp_bar.h>
 #include <pfcp_session.hpp>
 
 class BPFMaps;
@@ -27,7 +26,7 @@ using BarProgramLifeCycle = ProgramLifeCycle<xdp_bar_apply_kern_c>;
 
 /**
  * @typedef bar_state_t
- * @brief Per-BAR runtime buffering state maintained by the data plane.
+ * @brief Per-session runtime buffering state, maintained by the data plane.
  *
  * An alias of the kernel `struct bar_state` (bar_types.h), so that the XDP
  * and userspace layouts cannot differ.
@@ -57,8 +56,8 @@ static_assert(
 static_assert(sizeof(struct bar_state) == 16, "bar_state must stay 16 bytes");
 static_assert(alignof(struct bar_state) == 8, "bar_state must stay 8-aligned");
 static_assert(
-    offsetof(struct bar_state, notify_epoch_ns) == 0,
-    "bar_state.notify_epoch_ns @0 (64-bit __sync_* operand)");
+    offsetof(struct bar_state, last_ddn_ns) == 0,
+    "bar_state.last_ddn_ns @0 (64-bit __sync_* operand)");
 static_assert(
     offsetof(struct bar_state, buffered_pkt_count) == 8,
     "bar_state.buffered_pkt_count @8");
@@ -112,7 +111,6 @@ class BARProgram : public BPFProgram {
    * @brief Unload the XDP program.
    *
    * Delegates to lifecycle_->tearDown().
-   * @note Distinct from TearDown(seid, bars) which removes session map entries.
    */
   void TearDown();
 
@@ -176,10 +174,10 @@ class BARProgram : public BPFProgram {
   /**
    * @brief Configure a session that buffers without a BAR.
    *
-   * A BAR is optional (TS 29.244 §7.5.2.6), but the XDP BAR program drops
-   * packets of a session with no bar_config. So write a default one, with
-   * notify_cp set if a BUFF FAR has NOCP. (DeriveNotifyCp() skips FARs with
-   * no BAR ID, so it cannot be used here.)
+   * BAR ID is optional (O) in Create FAR (Table 7.5.2.3-1), but the XDP BAR
+   * program drops packets of a session with no bar_config. So write a default
+   * one, with notify_cp set if a BUFF FAR has NOCP. (DeriveNotifyCp() skips
+   * FARs with no BAR ID, so it cannot be used here.)
    *
    * @param seid  PFCP session identifier.
    * @param fars  FARs of the session (source of the BUFF and NOCP bits).
@@ -188,39 +186,14 @@ class BARProgram : public BPFProgram {
       uint64_t seid, const std::vector<std::shared_ptr<pfcp::pfcp_far>>& fars);
 
   /**
-   * @brief Update a single BAR for an existing session.
-   *
-   * Overwrites the config entry; bar_state_map is NOT touched so that DDN
-   * suppression state and buffered packet count are preserved.
-   *
-   * @param seid  PFCP session identifier.
-   * @param bar   Updated BAR IE from PFCP Session Modification Request.
-   * @param fars  FARs of the same session (source of the NOCP bit).
-   */
-  void Update(
-      uint64_t seid, const std::shared_ptr<pfcp::pfcp_bar>& bar,
-      const std::vector<std::shared_ptr<pfcp::pfcp_far>>& fars);
-
-  /**
    * @brief Remove the session BAR from all maps.
    *
-   * Both maps are keyed by SEID alone, so @p bar_id is used for logging only.
-   *
    * @param seid    PFCP session identifier.
-   * @param bar_id  BAR identifier to remove.
    */
-  void Remove(uint64_t seid, uint32_t bar_id);
+  void Remove(uint64_t seid);
 
   /**
-   * @brief Tear down all BARs for a session on deletion.
-   * @param seid  PFCP session identifier.
-   * @param bars  BARs to remove.
-   */
-  void TearDown(
-      uint64_t seid, const std::vector<std::shared_ptr<pfcp::pfcp_bar>>& bars);
-
-  /**
-   * @brief Populate bar_config_map for a single BAR (key: plain u64 SEID).
+   * @brief Populate bar_config_map for a single BAR (keyed by SEID).
    * @param seid       PFCP session identifier.
    * @param bar        BAR IE to convert and write.
    * @param notify_cp  Whether a FAR referencing this BAR has NOCP set (see
@@ -233,8 +206,8 @@ class BARProgram : public BPFProgram {
       uint64_t flags = BPF_ANY);
 
   /**
-   * @brief Whether the CP asked to be notified for this BAR (NOCP, §8.2.26
-   *        bit 3).
+   * @brief Whether the CP asked to be notified for this BAR
+   *        (Apply Action NOCP, §8.2.26).
    *
    * NOCP is set on the FAR, not the BAR. Returns true iff a FAR that
    * references @p bar_id has apply_action.nocp set.
@@ -249,12 +222,13 @@ class BARProgram : public BPFProgram {
   /**
    * @brief Initialise bar_state_map entry (BPF_NOEXIST: never overwrites).
    *
-   * Keyed by the plain u64 SEID; @p bar_id is used for logging only.
+   * Keyed by SEID; @p bar_id is used for logging only.
    *
    * Keeps an existing entry, so a BAR update while the UE is idle does not
    * lose the buffering state; -EEXIST is normal.
    *
-   * @warning This is not a reset. Use ResetBarState() to clear the latch.
+   * @warning This is not a reset. Use ResetBarState() to re-arm the
+   *          notification latch.
    *
    * @param seid    PFCP session identifier.
    * @param bar_id  BAR identifier.
@@ -262,32 +236,18 @@ class BARProgram : public BPFProgram {
   void InitBarStateMap(uint64_t seid, uint32_t bar_id);
 
   /**
-   * @brief Clear the one-shot DDN latch for a session (overwrite, BPF_EXIST).
+   * @brief Re-arm the notification latch of a session: overwrite its bar_state
+   *        entry with zeroes (BPF_EXIST), which also zeroes buffered_pkt_count.
    *
-   * Zeroes the existing entry, so the next idle period notifies again. It is
-   * the only way to re-arm a session.
+   * It never creates an entry: the session may already be gone, and a new entry
+   * would never be deleted. Only call it for a session that still exists. Never
+   * throws, since it runs during Session Modification.
    *
-   * It never creates an entry (BPF_EXIST): the session may already be gone,
-   * and a new entry would never be deleted. Only call it for a session that
-   * still exists. Never throws, since it runs during Session Modification.
-   *
-   * @param seid  PFCP session identifier.
+   * @param seid UP SEID.
    * @return true if an entry existed and was zeroed; false if there was no
-   *         entry (nothing latched) or the write failed.
+   *         entry or no BAR map, or if the write failed.
    */
   bool ResetBarState(uint64_t seid);
-
-  /**
-   * @brief Read current buffering state for a BAR.
-   *
-   * Keyed by the plain u64 SEID; @p bar_id is used for logging only.
-   *
-   * @param seid    PFCP session identifier.
-   * @param bar_id  BAR identifier.
-   * @param[out] state  Output state struct.
-   * @return true if entry found.
-   */
-  bool ReadBarState(uint64_t seid, uint32_t bar_id, bar_state_t& state) const;
 
  private:
   /**
@@ -307,12 +267,13 @@ class BARProgram : public BPFProgram {
 
   /**
    * @brief Translate a PFCP BAR IE into the bar_config_map value.
-   * @param ie         BAR IE.
-   * @param notify_cp  Pre-computed FAR->BAR NOCP join result (DeriveNotifyCp).
+   * @param bar        BAR IE.
+   * @param notify_cp  true if a FAR that references this BAR has NOCP
+   *                   (DeriveNotifyCp).
    * @param[out] cfg   Map value to fill.
    */
   static void ConvertBar(
-      const pfcp::pfcp_bar& ie, bool notify_cp, struct bar_config& cfg);
+      const pfcp::pfcp_bar& bar, bool notify_cp, struct bar_config& cfg);
 
   //----------------------------------------------------------------------------
   // Skeleton and lifecycle

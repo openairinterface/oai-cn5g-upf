@@ -2,8 +2,8 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-#ifndef XSK_CONSUMER_HPP_
-#define XSK_CONSUMER_HPP_
+#ifndef XSK_CONSUMER_H_
+#define XSK_CONSUMER_H_
 
 #include <atomic>
 #include <cstddef>
@@ -42,10 +42,12 @@ class XskConsumer {
     uint32_t frames_per_queue = 0;  ///< frames and ring slots per queue (2^n)
     uint64_t umem_max_bytes   = 0;  ///< cap on all UMEMs together
     uint32_t max_queues       = 0;  ///< xskmap slots
-    bool skb_mode             = false;  ///< XDP attached in SKB (generic) mode
+    bool skb_mode             = false;  ///< Selects the start-up log text
+                                        ///< only; binding is always XDP_COPY.
   };
 
-  /** @brief Snapshot of the consumer counters. */
+  /** @brief Snapshot of the consumer counters.
+   *  Used only inside this class (Start()/Stop()). */
   struct Counters {
     uint64_t received;       ///< frames taken off the RX rings
     uint64_t malformed;      ///< dropped: not Ethernet + valid IPv4
@@ -83,10 +85,12 @@ class XskConsumer {
   /** @brief True while the poll thread is alive. */
   bool IsRunning() const;
 
-  /** @brief Current counter values. */
+  /** @brief Current counter values.
+   *  Used only inside this class (Start()/Stop()). */
   Counters GetCounters() const;
 
-  /** @brief Number of RX queues of @p ifname from sysfs; -1 if unreadable. */
+  /** @brief Number of RX queues of @p ifname from sysfs; -1 if unreadable.
+   *  Used only inside this class (Start()/Stop()). */
   static int CountRxQueues(const std::string& ifname);
 
  private:
@@ -126,4 +130,4 @@ class XskConsumer {
 }  // namespace upf
 }  // namespace oai
 
-#endif  // XSK_CONSUMER_HPP_
+#endif  // XSK_CONSUMER_H_

@@ -16,7 +16,6 @@
 #include <memory>
 #include <mutex>
 #include <new>
-#include <optional>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -28,7 +27,8 @@ namespace oai::upf {
  * Session Modification.
  *
  * FLUSH replays them through the DL lookup against the new rules, DISCARD
- * frees them, KEEP leaves those still owned by a buffering rule in place.
+ * frees them, KEEP leaves those still owned by a buffering rule in place and
+ * discards the others.
  */
 enum class dl_verdict { keep, flush, discard };
 
@@ -38,31 +38,39 @@ inline const char* to_string(dl_verdict v) {
       return "FLUSH";
     case dl_verdict::discard:
       return "DISCARD";
-    default:
+    case dl_verdict::keep:
       return "KEEP";
   }
+  return "KEEP";
 }
 
 /// What one Session Modification did to the buffering rules. Each flag is set
 /// only after the matching removal or update has succeeded.
 struct dl_signals {
-  bool buff_pdr_removed = false;  ///< Remove PDR of a PDR whose FAR buffers
-  bool buff_far_removed = false;  ///< Remove FAR of a buffering FAR
-  bool buff_to_forw     = false;  ///< Update FAR BUFF -> FORW (§5.2.4.2)
+  /// a Remove PDR IE deleted a PDR whose FAR has Apply Action BUFF
+  bool buff_pdr_removed = false;
+  /// a Remove FAR IE deleted a FAR with Apply Action BUFF
+  bool buff_far_removed = false;
+  /// an Update FAR IE changed a FAR from BUFF to FORW (§5.2.4.2)
+  bool buff_to_forw = false;
 };
 
 /**
  * @brief The verdict, as a pure function of the signals.
  *
- * - FLUSH: the buffering FAR was removed or turned into FORW (TS 29.244
- *   §5.2.4.2). This wins over Remove PDR, which the OAI SMF sends in the
- *   same message.
- * - DISCARD: the buffering PDR was removed, or no buffering FAR is left.
+ * - FLUSH: an Update FAR turned the buffering FAR into FORW (TS 29.244
+ *   §5.2.4.2: buffered packets are dropped or forwarded), or the buffering FAR
+ *   was removed (OAI SMF convention: it removes the paging FAR and creates the
+ *   new rules in the same message). FLUSH wins over Remove PDR, which the OAI
+ *   SMF sends in the same message.
+ * - DISCARD: the buffering PDR was removed, or no buffering PDR is left.
  * - KEEP: anything else.
+ *
+ * @param buffering_pdr_left some PDR still uses a buffering FAR.
  */
-inline dl_verdict verdict_of(const dl_signals& s, bool buff_far_left) {
+inline dl_verdict verdict_of(const dl_signals& s, bool buffering_pdr_left) {
   if (s.buff_far_removed || s.buff_to_forw) return dl_verdict::flush;
-  if (s.buff_pdr_removed || !buff_far_left) return dl_verdict::discard;
+  if (s.buff_pdr_removed || !buffering_pdr_left) return dl_verdict::discard;
   return dl_verdict::keep;
 }
 
@@ -80,30 +88,40 @@ struct dl_packet {
   static constexpr size_t HEADROOM = 64;  ///< = ROOM_FOR_GTPV1U_G_PDU
 
   std::unique_ptr<uint8_t[]> buf;  ///< HEADROOM + len bytes
-  uint32_t len      = 0;
-  uint32_t charged  = 0;  ///< bytes charged against the bounds
+  uint32_t len = 0;
+  /// bytes charged against the bounds (allocated size, see charge_of())
+  uint32_t charged  = 0;
   uint64_t rule_uid = 0;
   uint16_t pdr_id   = 0;
+  /// when the packet was held; the maximum hold time is measured from the
+  /// oldest one
   std::chrono::steady_clock::time_point t_enq{};
 
   uint8_t* data() { return buf.get() + HEADROOM; }
   const uint8_t* data() const { return buf.get() + HEADROOM; }
 };
 
-/// A detached FIFO. A deque, so that FLUSH and DISCARD move it out in O(1).
+/// Held packets of one session, oldest first. A deque, so that detaching the
+/// whole FIFO is a swap.
 using dl_fifo = std::deque<dl_packet>;
 
 /// What the end of a Session Modification decided for a session's held
-/// packets: the verdict and the entries detach_and_rearm() moved out. The
-/// caller replays them (FLUSH) or frees them, after the response is sent.
+/// packets: the verdict, and the entries end_session_modification() moved out
+/// (for every verdict, not only FLUSH). The caller replays them (FLUSH) or
+/// frees them, after the response is sent.
 struct dl_flush_result {
   dl_verdict verdict = dl_verdict::keep;
   dl_fifo removed;
 };
 
-/// The bounds. Finite on purpose: the SMF never says stop, and the DN can
-/// flood an idle UE, so memory is only ever released by these and by T_guard
-/// (the maximum hold time, default_buffering_duration_ms).
+/// The DL buffer's bounds. All are finite (the configuration rejects 0),
+/// because the SMF may never end buffering while the DN keeps sending to an
+/// idle UE. Held packets leave at the end of a Session Modification (FLUSH,
+/// DISCARD, or KEEP for the packets whose rule no longer buffers), when the
+/// session is deleted, or when the maximum hold time expires. The member
+/// defaults serve the self-tests: in the UPF, dl_buffer_limits_from_config()
+/// (pfcp_switch.cpp) sets the bounds from the configuration and max_pkt_len
+/// from the DL receive buffer, to which a static_assert also pins the default.
 struct dl_buffer_limits {
   bool enabled                   = false;
   uint32_t max_pkts_per_session  = 64;
@@ -144,59 +162,26 @@ struct dl_buffer_stats {
   bool operator!=(const dl_buffer_stats& o) const { return !(*this == o); }
 };
 
-/// One session's FIFO discarded by expire(): the uids its packets were held
-/// under, so the caller can re-arm those PDRs' DL notification latch, and
-/// beside each its PDR ID (pdr_ids[i] goes with uids[i]).
-///
-/// The PDR ID finds the rule when an Update PDR replaced the uid but left it
-/// unlisted in `valid` (a Session Modification Request that was rejected
-/// after it had already applied the update), exactly as for a dl_ddn_mark.
-/// Without it that latch would stay held until the next Session Modification.
+/// One session's FIFO discarded by expire(), with each PDR ID its packets were
+/// held for, once, so that the caller can re-arm those PDRs' notification
+/// latches.
 struct dl_expired {
   uint64_t seid    = 0;
   size_t discarded = 0;
-  std::vector<uint64_t> uids;
   std::vector<uint16_t> pdr_ids;
 };
 
-/// A DL Data Report that could not be handed to TASK_UPF_N4: the latch of
-/// the rule it was sent for stays held until the tick takes this mark. The
-/// PDR ID is kept beside the uid because an Update PDR gives the rule a fresh
-/// uid (copy-on-write) that inherits the held latch: the uid alone would then
-/// find nothing to re-arm (see find_rearm_target()).
-struct dl_ddn_mark {
+/// A Downlink Data Report that could not be queued: the notification latch of
+/// its PDR stays set until the tick takes this mark.
+struct dl_report_retry {
   uint64_t seid   = 0;
-  uint64_t uid    = 0;
   uint16_t pdr_id = 0;
 };
 
-/**
- * @brief The rule whose DL notification latch a re-arm addresses.
- *
- * The rule with `uid`; if none, the rule with `pdr_id` (an Update PDR gives
- * the copy a new uid, but it keeps the latch). Templated so that the
- * self-check needs no pfcp types.
- * @return the rule, or nullptr.
- */
-template<typename Rule>
-Rule* find_rearm_target(
-    const std::vector<std::shared_ptr<Rule>>& rules,
-    const std::optional<uint64_t>& uid, const std::optional<uint16_t>& pdr_id) {
-  if (uid)
-    for (const auto& r : rules)
-      if (r && r->rule_uid == *uid) return r.get();
-  // PDR IDs are unique within a session, so this never reaches an unrelated
-  // rule. It can reach a rule re-created under the same PDR ID (Remove +
-  // Create) that has already latched for its own report: at worst one
-  // duplicate, harmless DL Data Report (the SMF starts paging only once).
-  if (pdr_id)
-    for (const auto& r : rules)
-      if (r && r->pdr_id.rule_id == *pdr_id) return r.get();
-  return nullptr;
-}
-
 /// A reservation taken by prepare_enqueue(). Holds no pointer into the store:
-/// the record may be tombstoned, or erased, before commit.
+/// the record may be tombstoned, or erased, before commit. Public so that
+/// test_dl_flush.cpp can interleave the phases with detach/tombstone/gc;
+/// production uses enqueue() only.
 struct dl_reservation {
   bool ok          = false;
   uint64_t seid    = 0;
@@ -211,23 +196,48 @@ struct dl_reservation {
  * Header-only and free of pfcp types and logging, like qos_mbr.hpp, so that
  * the self-check needs nothing but a compiler.
  *
- * Each session has a record: `valid` (the rule_uids that may buffer now), a
- * FIFO, its share of the bounds, and a state (Active or Tombstone). A packet
- * is admitted only if its uid is in `valid`. Only detach_and_rearm() changes
- * `valid` after establishment.
+ * Held packets live outside pfcp_session because the session's rules are
+ * copy-on-write and edited on TASK_UPF_APP while the DL threads and the AF_XDP
+ * consumer enqueue, and late packets must still be refused after the session
+ * object is gone.
  *
- * Threads: enqueue() runs on the DL threads, tombstone() also on
- * TASK_UPF_N4, the rest on TASK_UPF_APP. Records are split over 16 shards,
- * each with its own mutex. Never hold a shard lock while logging,
- * allocating or freeing a packet.
+ * This store applies no BAR IE: its bounds are the UPF's own (dl_buffer_* in
+ * the configuration). The simple switch applies no BAR IE at all. On the eBPF
+ * datapath, a BAR's Suggested Buffering Packets Count is applied earlier, by
+ * the XDP BAR program, before capture.
  *
- * Admission: reserve the bounds under the lock, copy the packet without it,
- * then link it under the lock after checking the record again. A refused
- * packet is counted once. Bytes are charged by allocated size.
+ * A buffering period runs from the moment a FAR of the session gets Apply
+ * Action BUFF until that FAR leaves BUFF or is removed, or the session is
+ * deleted. Expiry of the maximum hold time does not end it.
  *
- * With `enabled` false the records do nothing. The DDN (Downlink Data
- * Notification) retry marks still work, so a failed DL Data Report is
- * retried either way.
+ * Each session has a record: `buffering_uids` (the rule_uids that may buffer
+ * now), a FIFO, its share of the bounds, and a state (Active or Tombstone). A
+ * packet is admitted only if its uid is in `buffering_uids`. After
+ * establishment, only end_session_modification() changes `buffering_uids` of a
+ * live record; tombstone() clears it.
+ *
+ * Threads: enqueue() and mark_report_failed() run on the DL threads, and on
+ * TASK_UPF_APP while it replays held packets; enqueue() also runs on the
+ * AF_XDP consumer thread. prepare_enqueue(), commit_enqueue() and
+ * cancel_enqueue() run inside enqueue(). tombstone() runs on TASK_UPF_APP, and
+ * on TASK_UPF_N4 when the heartbeat gives up on the association. The other
+ * non-const members (publish(), end_session_modification(), expire(), gc(),
+ * take_report_retries() and note_replay()) run on TASK_UPF_APP. Records are
+ * split over 16 shards, each with its own mutex.
+ *
+ * No packet buffer is allocated, copied or freed while a shard lock is held,
+ * so that a DL thread never waits on another thread's malloc, free or copy of
+ * up to 2 KB. (Small container nodes, such as a deque chunk, a vector or a map
+ * node, may still be allocated or freed under the lock.)
+ *
+ * Admission has three phases: (1) reserve the bounds under the shard lock
+ * (prepare_enqueue), (2) copy the packet without the lock (make_packet), (3)
+ * link it under the lock after checking the record again (commit_enqueue). A
+ * refused packet is counted once. Bytes are charged by allocated size.
+ *
+ * With `enabled` false the records do nothing. The report retry marks also
+ * work with buffering off, so a Downlink Data Report that could not be queued
+ * is retried whether or not buffering is on.
  */
 class dl_packet_buffer {
  public:
@@ -251,9 +261,9 @@ class dl_packet_buffer {
 
   //----------------------------------------------------------------------------
   /**
-   * @brief Establishment: create the record with the uids that buffer now
-   * (normally none). Updates `valid` on an Active record; no-op on a
-   * Tombstone.
+   * @brief Establishment: create the session's DL buffer record, with the uids
+   * that buffer now (normally none). On an existing Active record it replaces
+   * `buffering_uids`. No-op when buffering is off or on a tombstone.
    */
   void publish(uint64_t seid, const std::vector<uint64_t>& uids) {
     if (!limits_.enabled) return;
@@ -261,12 +271,12 @@ class dl_packet_buffer {
     std::lock_guard<std::mutex> lk(sh.mu);
     auto it = sh.records.find(seid);
     if (it == sh.records.end()) {
-      record& r = sh.records[seid];
-      r.valid   = uids;
+      record& r        = sh.records[seid];
+      r.buffering_uids = uids;
       return;
     }
     if (it->second.tombstone) return;
-    it->second.valid = uids;
+    it->second.buffering_uids = uids;
   }
 
   //----------------------------------------------------------------------------
@@ -289,7 +299,9 @@ class dl_packet_buffer {
   }
 
   //----------------------------------------------------------------------------
-  /// Steps 1 and 2 of admission. A refusal is counted here.
+  /// Admission phase 1: reserve room for one packet of `len` bytes, or refuse
+  /// it and count why. Public so that test_dl_flush.cpp can interleave the
+  /// phases with detach/tombstone/gc; production uses enqueue() only.
   dl_reservation prepare_enqueue(uint64_t seid, uint64_t uid, size_t len) {
     dl_reservation res;
     if (!limits_.enabled) return res;
@@ -318,18 +330,18 @@ class dl_packet_buffer {
         bump(tombstone_dropped_);
         return res;
       }
-      if (!r.lists(uid)) {
+      if (!r.admits(uid)) {
         bump(stale_dropped_);
         return res;
       }
-      if (r.pkts + 1 > limits_.max_pkts_per_session ||
-          r.bytes + charge > limits_.max_bytes_per_session ||
+      if (r.reserved_pkts + 1 > limits_.max_pkts_per_session ||
+          r.reserved_bytes + charge > limits_.max_bytes_per_session ||
           !reserve_global(charge)) {
         bump(overflow_dropped_);
         return res;
       }
-      r.pkts += 1;
-      r.bytes += charge;
+      r.reserved_pkts += 1;
+      r.reserved_bytes += charge;
     }
     res.ok      = true;
     res.seid    = seid;
@@ -340,7 +352,11 @@ class dl_packet_buffer {
 
   //----------------------------------------------------------------------------
   /**
-   * @brief Step 4 of admission: link `p`, or refuse and roll back.
+   * @brief Admission phase 3: link the copied packet, or refuse it and give
+   * the reservation back.
+   *
+   * Public so that test_dl_flush.cpp can interleave the phases with
+   * detach/tombstone/gc; production uses enqueue() only.
    * @return true when linked (`p` is moved from). On false, `p` is untouched
    * and the caller frees it, outside every lock.
    */
@@ -357,7 +373,7 @@ class dl_packet_buffer {
       return false;
     }
     record& r = it->second;
-    if (r.tombstone || !r.lists(res.uid)) {
+    if (r.tombstone || !r.admits(res.uid)) {
       release_session(r, 1, res.charged);
       release_global(1, res.charged);
       bump(r.tombstone ? tombstone_dropped_ : stale_dropped_);
@@ -380,7 +396,9 @@ class dl_packet_buffer {
 
   //----------------------------------------------------------------------------
   /// Give back a reservation that will never be committed (allocation
-  /// failure). Counted as overflow_dropped.
+  /// failure). Counted as overflow_dropped. Public like prepare_enqueue() and
+  /// commit_enqueue(), but no self-test calls it; production uses enqueue()
+  /// only.
   void cancel_enqueue(dl_reservation& res) {
     if (!res) return;
     res.ok    = false;
@@ -396,15 +414,20 @@ class dl_packet_buffer {
 
   //----------------------------------------------------------------------------
   /**
-   * @brief End of a Session Modification: the single reopen point.
+   * @brief Replace the set of rule_uids that may buffer, and detach the held
+   * packets that the verdict releases.
    *
-   * Sets `valid = new_valid`. FLUSH and DISCARD return the whole FIFO. KEEP
-   * returns only the entries whose uid left `valid`, and keeps the rest in
-   * order. The caller replays or frees what is returned. No-op on a missing
-   * or Tombstone record.
+   * Called once at the end of every accepted Session Modification, when DL
+   * buffering is on. After establishment, this is the only place
+   * `buffering_uids` changes for a live record; tombstone() clears it when the
+   * session is deleted. FLUSH and DISCARD return the whole FIFO. KEEP returns
+   * the entries whose rule_uid is no longer in `buffering_uids`, and keeps the
+   * rest in order. The caller replays or frees what is returned. No-op on a
+   * missing or tombstoned record.
    */
-  dl_fifo detach_and_rearm(
-      uint64_t seid, const std::vector<uint64_t>& new_valid, dl_verdict v) {
+  dl_fifo end_session_modification(
+      uint64_t seid, const std::vector<uint64_t>& buffering_uids,
+      dl_verdict verdict) {
     dl_fifo out;
     if (!limits_.enabled) return out;
     shard& sh = shard_of(seid);
@@ -412,30 +435,32 @@ class dl_packet_buffer {
       std::lock_guard<std::mutex> lk(sh.mu);
       auto it = sh.records.find(seid);
       if (it == sh.records.end() || it->second.tombstone) return out;
-      record& r = it->second;
-      r.valid   = new_valid;
+      record& r        = it->second;
+      r.buffering_uids = buffering_uids;
       r.gen++;
-      if (v == dl_verdict::keep) {
+      if (verdict == dl_verdict::keep) {
         dl_fifo kept;
+        // An Update PDR gives the rule a new rule_uid, so its held packets are
+        // no longer listed and are dropped here (docs/PAGING.md, Limitations).
         for (auto& e : r.fifo)
-          (r.lists(e.rule_uid) ? kept : out).push_back(std::move(e));
+          (r.admits(e.rule_uid) ? kept : out).push_back(std::move(e));
         r.fifo.swap(kept);
       } else {
         out.swap(r.fifo);
       }
       release_entries(r, out);
     }
-    add(v == dl_verdict::flush ? flushed_ : discarded_, out.size());
+    add(verdict == dl_verdict::flush ? flushed_ : discarded_, out.size());
     return out;
   }
 
   //----------------------------------------------------------------------------
   /**
    * @brief Session end: discard the FIFO, refuse everything from now on, and
-   * drop the session's DDN retry marks. The record is erased by gc() once it
-   * is older than one tick, far longer than any DL read section, so a late
-   * packet finds a Tombstone and not a missing record. UP SEIDs are never
-   * reused, so a Tombstone never shadows a new session.
+   * drop the session's report retry marks. The record is kept for one tick so
+   * that late packets count as `tombstone_dropped` (session deleted), not
+   * `no_record_dropped`; gc() then erases it. UP SEIDs are never reused, so a
+   * tombstone never shadows a new session.
    * @return how many packets were discarded.
    */
   size_t tombstone(uint64_t seid, clock::time_point now = clock::now()) {
@@ -450,7 +475,7 @@ class dl_packet_buffer {
       record& r    = it->second;
       r.tombstone  = true;
       r.tomb_since = now;
-      r.valid.clear();
+      r.buffering_uids.clear();
       dead.swap(r.fifo);
       release_entries(r, dead);
     }
@@ -460,13 +485,13 @@ class dl_packet_buffer {
 
   //----------------------------------------------------------------------------
   /**
-   * @brief T_guard: discard every FIFO whose oldest packet has waited
-   * `t_guard` or longer. The episode stays open (`valid` is unchanged); the
-   * caller re-arms the notification latch on the returned uids (by PDR ID
-   * when the uid is gone), so the next packet notifies the SMF again.
+   * @brief Maximum hold time: discard every FIFO whose oldest packet has
+   * waited `max_hold_time` or longer. The buffering period goes on
+   * (`buffering_uids` is unchanged). The caller re-arms the notification latch
+   * of each returned PDR ID, so the next packet notifies the SMF again.
    */
   std::vector<dl_expired> expire(
-      clock::time_point now, std::chrono::milliseconds t_guard) {
+      clock::time_point now, std::chrono::milliseconds max_hold_time) {
     std::vector<dl_expired> result;
     if (!limits_.enabled) return result;
     for (auto& sh : shards_) {
@@ -476,14 +501,13 @@ class dl_packet_buffer {
         for (auto& kv : sh.records) {
           record& r = kv.second;
           if (r.tombstone || r.fifo.empty() ||
-              now - r.fifo.front().t_enq < t_guard)
+              now - r.fifo.front().t_enq < max_hold_time)
             continue;
           dl_expired x;
           x.seid = kv.first;
           for (const auto& e : r.fifo)
-            if (std::find(x.uids.begin(), x.uids.end(), e.rule_uid) ==
-                x.uids.end()) {
-              x.uids.push_back(e.rule_uid);
+            if (std::find(x.pdr_ids.begin(), x.pdr_ids.end(), e.pdr_id) ==
+                x.pdr_ids.end()) {
               x.pdr_ids.push_back(e.pdr_id);
             }
           dead.emplace_back();
@@ -523,22 +547,25 @@ class dl_packet_buffer {
 
   //----------------------------------------------------------------------------
   /**
-   * @brief A DL Data Report for (seid, uid) could not be enqueued. The latch
-   * stays held until the tick takes this mark. Ignored if the session is
-   * gone. DL threads; never throws.
-   * @return false if the mark could not be stored (out of memory); the
-   * caller must then release the latch itself.
+   * @brief A Downlink Data Report for (seid, pdr_id) could not be queued. The
+   * notification latch stays set until the tick takes this mark. Ignored when
+   * the session's record is a tombstone, or is missing while buffering is on
+   * (session deleted, or not yet published). DL threads, and TASK_UPF_APP
+   * during a replay; never throws.
+   * @return false only when out of memory: the caller must then re-arm the
+   * latch itself.
    */
-  bool mark_ddn_failed(uint64_t seid, uint64_t uid, uint16_t pdr_id) {
+  bool mark_report_failed(uint64_t seid, uint16_t pdr_id) {
     shard& sh = shard_of(seid);
     std::lock_guard<std::mutex> lk(sh.mu);
     auto it = sh.records.find(seid);
-    if (it != sh.records.end() ? it->second.tombstone : limits_.enabled)
-      return true;
+    const bool session_deleted =
+        it != sh.records.end() ? it->second.tombstone : limits_.enabled;
+    if (session_deleted) return true;
     for (const auto& m : sh.marks)
-      if (m.seid == seid && m.uid == uid) return true;
+      if (m.seid == seid && m.pdr_id == pdr_id) return true;
     try {
-      sh.marks.push_back(dl_ddn_mark{seid, uid, pdr_id});
+      sh.marks.push_back(dl_report_retry{seid, pdr_id});
     } catch (...) {
       return false;  // push_back is strong: marks is unchanged
     }
@@ -546,8 +573,8 @@ class dl_packet_buffer {
   }
 
   /// Drain every mark.
-  std::vector<dl_ddn_mark> take_ddn_retries() {
-    std::vector<dl_ddn_mark> out;
+  std::vector<dl_report_retry> take_report_retries() {
+    std::vector<dl_report_retry> out;
     for (auto& sh : shards_) {
       std::lock_guard<std::mutex> lk(sh.mu);
       out.insert(out.end(), sh.marks.begin(), sh.marks.end());
@@ -590,7 +617,7 @@ class dl_packet_buffer {
     return s;
   }
 
-  // ---- Diagnostics and tests -----------------------------------------------
+  // ---- Diagnostics for the self-tests; no production caller ----
 
   /// Reserved packets / bytes, linked or still between prepare and commit.
   uint64_t total_pkts() const {
@@ -613,10 +640,10 @@ class dl_packet_buffer {
     return inspect(seid, [](const record& r) { return r.gen; });
   }
   uint64_t session_pkts(uint64_t seid) const {
-    return inspect(seid, [](const record& r) { return r.pkts; });
+    return inspect(seid, [](const record& r) { return r.reserved_pkts; });
   }
   uint64_t session_bytes(uint64_t seid) const {
-    return inspect(seid, [](const record& r) { return r.bytes; });
+    return inspect(seid, [](const record& r) { return r.reserved_bytes; });
   }
   size_t held_for(uint64_t seid) const {
     return inspect(seid, [](const record& r) { return r.fifo.size(); });
@@ -624,32 +651,38 @@ class dl_packet_buffer {
 
  private:
   struct record {
-    std::vector<uint64_t> valid;  ///< a handful at most: linear search
-    uint64_t gen = 0;
+    std::vector<uint64_t> buffering_uids;  ///< a handful at most: linear search
+    uint64_t gen = 0;  ///< counts detaches; read only by the self-tests
     dl_fifo fifo;
-    uint64_t pkts  = 0;  ///< reserved: linked + in flight
-    uint64_t bytes = 0;
-    bool tombstone = false;
+    uint64_t reserved_pkts  = 0;  ///< reserved: linked + in flight
+    uint64_t reserved_bytes = 0;
+    bool tombstone          = false;
     clock::time_point tomb_since{};
 
-    bool lists(uint64_t uid) const {
-      return std::find(valid.begin(), valid.end(), uid) != valid.end();
+    bool admits(uint64_t uid) const {
+      return std::find(buffering_uids.begin(), buffering_uids.end(), uid) !=
+             buffering_uids.end();
     }
   };
 
   struct shard {
     mutable std::mutex mu;
     std::unordered_map<uint64_t, record> records;
-    /// DDN retry marks. Beside the records, not in them, so they work with
+    /// Report retry marks. Beside the records, not in them, so they work with
     /// buffering off. A few at most: linear dedup.
-    std::vector<dl_ddn_mark> marks;
+    std::vector<dl_report_retry> marks;
   };
 
+  static constexpr uint64_t FIBONACCI_HASH_MULTIPLIER = 0x9E3779B97F4A7C15ULL;
+  static_assert(SHARDS == 16, "the shard hash keeps log2(SHARDS) = 4 bits");
+
+  /// Shards stop DL threads that buffer for different sessions from
+  /// serialising on one lock.
   shard& shard_of(uint64_t seid) {
-    return shards_[(seid * 0x9E3779B97F4A7C15ULL) >> 60];
+    return shards_[(seid * FIBONACCI_HASH_MULTIPLIER) >> 60];
   }
   const shard& shard_of(uint64_t seid) const {
-    return shards_[(seid * 0x9E3779B97F4A7C15ULL) >> 60];
+    return shards_[(seid * FIBONACCI_HASH_MULTIPLIER) >> 60];
   }
 
   template<typename F>
@@ -664,7 +697,7 @@ class dl_packet_buffer {
     sh.marks.erase(
         std::remove_if(
             sh.marks.begin(), sh.marks.end(),
-            [seid](const dl_ddn_mark& m) { return m.seid == seid; }),
+            [seid](const dl_report_retry& m) { return m.seid == seid; }),
         sh.marks.end());
   }
 
@@ -706,8 +739,8 @@ class dl_packet_buffer {
   }
 
   static void release_session(record& r, uint64_t pkts, uint64_t bytes) {
-    r.pkts -= pkts;
-    r.bytes -= bytes;
+    r.reserved_pkts -= pkts;
+    r.reserved_bytes -= bytes;
   }
 
   /// Entries leaving a record: give back both shares and the held gauge.

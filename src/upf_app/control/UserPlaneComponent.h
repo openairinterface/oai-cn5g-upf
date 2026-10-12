@@ -133,8 +133,7 @@ class UserPlaneComponent : public ISessionObserver {
   /**
    * @brief Stop and join the DDN ring-buffer consumer. Idempotent.
    *
-   * Called early by TearDown(); public so that another shutdown path can stop
-   * the poll thread sooner if it needs to.
+   * Called early by TearDown().
    */
   void StopDdnConsumer();
 
