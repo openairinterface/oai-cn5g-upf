@@ -144,6 +144,7 @@ These features are correctly out-of-scope for:
 | 19     | PFCP Session Report:                                                |                    |                                             |
 |        | 1. Usage Reports                                                    | :large_orange_diamond: | Basic support                           |
 |        | 2. Event Reports                                                    | :large_orange_diamond: | Limited event reporting                 |
+|        | 3. Downlink Data Reports                                            | :large_orange_diamond: | See [PAGING](PAGING.md)                 |
 | 20     | PFCP Node Related messages (Node Report Request/Response)           | :large_orange_diamond: | On-going URR                            |
 
 ---
@@ -173,7 +174,7 @@ These features are correctly out-of-scope for:
 |        | 1. FORW (Forward)                                                   | :heavy_check_mark: | Packet forwarding to destination            |
 |        | 2. DROP                                                             | :heavy_check_mark: | Packet dropping based on policy             |
 |        | 3. BUFF (Buffer)                                                    | :large_orange_diamond: | Held and replayed with `enable_dl_buffering` |
-|        | 4. NOCP (Notify Control Plane)                                      | :large_orange_diamond:                | One DL Data Report per buffering episode |
+|        | 4. NOCP (Notify Control Plane)                                      | :large_orange_diamond: | Downlink Data Report on the first buffered DL packet |
 |        | 5. DUPL (Duplicate)                                                 | :heavy_check_mark: | Packet duplication for multi-path           |
 | 27     | Forwarding Parameters:                                              |                    |                                             |
 |        | 1. Destination Interface (ACCESS, CORE, CP-FUNCTION)                | :heavy_check_mark: | N3, N6, N4 interface forwarding             |

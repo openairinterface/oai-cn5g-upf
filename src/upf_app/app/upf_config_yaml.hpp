@@ -78,10 +78,9 @@ constexpr auto UPF_DL_BUFFER_MAX_PKTS_PER_SESSION =
     "dl_buffer_max_pkts_per_session";
 constexpr auto UPF_DL_BUFFER_MAX_KIB_PER_SESSION =
     "dl_buffer_max_kib_per_session";
-constexpr auto UPF_DL_BUFFER_MAX_PKTS_TOTAL = "dl_buffer_max_pkts_total";
-constexpr auto UPF_DL_BUFFER_MAX_KIB_TOTAL  = "dl_buffer_max_kib_total";
-constexpr auto UPF_DEFAULT_BUFFERING_DURATION_MS =
-    "default_buffering_duration_ms";
+constexpr auto UPF_DL_BUFFER_MAX_PKTS_TOTAL    = "dl_buffer_max_pkts_total";
+constexpr auto UPF_DL_BUFFER_MAX_KIB_TOTAL     = "dl_buffer_max_kib_total";
+constexpr auto UPF_DL_BUFFER_MAX_HOLD_MS       = "dl_buffer_max_hold_ms";
 constexpr auto UPF_XSK_FRAME_SIZE              = "xsk_frame_size";
 constexpr auto UPF_XSK_FRAMES_PER_QUEUE        = "xsk_frames_per_queue";
 constexpr auto UPF_XSK_UMEM_MAX_MIB_TOTAL      = "xsk_umem_max_mib_total";
@@ -126,8 +125,7 @@ constexpr auto UPF_DL_BUFFER_MAX_KIB_PER_SESSION_LABEL =
 constexpr auto UPF_DL_BUFFER_MAX_PKTS_TOTAL_LABEL =
     "DL buffer max packets total";
 constexpr auto UPF_DL_BUFFER_MAX_KIB_TOTAL_LABEL = "DL buffer max KiB total";
-constexpr auto UPF_DEFAULT_BUFFERING_DURATION_MS_LABEL =
-    "DL buffering duration (ms)";
+constexpr auto UPF_DL_BUFFER_MAX_HOLD_MS_LABEL = "DL buffer max hold time (ms)";
 constexpr auto UPF_XSK_FRAME_SIZE_LABEL = "DL buffer AF_XDP frame size (B)";
 constexpr auto UPF_XSK_FRAMES_PER_QUEUE_LABEL =
     "DL buffer AF_XDP frames per N6 RX queue";
@@ -170,9 +168,12 @@ constexpr int UPF_DEFAULT_QOS_BURST_MS    = 400;
 constexpr int UPF_DEFAULT_QOS_SHAPE_MS    = 0;
 constexpr int UPF_DEFAULT_QOS_SHAPE_UL_MS = 0;
 // DL buffering while the UE is idle (paging). Off by default: packets that hit
-// a BUFF (buffer) FAR are dropped. The bounds are finite on purpose -- the SMF
-// never says stop, and the DN can flood an idle UE -- so 0 is rejected, never
-// unlimited.
+// a BUFF (buffer) FAR are dropped. The UPF applies neither DL Buffering
+// Duration nor DROBU, and the simple switch applies no BAR IE (on eBPF, a BAR's
+// Suggested Buffering Packets Count also caps what is captured). The SMF may
+// never end buffering, for example when paging fails, while the DN keeps
+// sending to an idle UE. So these local bounds always apply, and 0 is rejected
+// (it does not mean unbounded).
 constexpr bool UPF_DEFAULT_ENABLE_DL_BUFFERING           = false;
 constexpr int UPF_DEFAULT_DL_BUFFER_MAX_PKTS_PER_SESSION = 64;
 constexpr int UPF_DEFAULT_DL_BUFFER_MAX_KIB_PER_SESSION  = 128;
@@ -180,7 +181,7 @@ constexpr int UPF_DEFAULT_DL_BUFFER_MAX_PKTS_TOTAL       = 16384;
 constexpr int UPF_DEFAULT_DL_BUFFER_MAX_KIB_TOTAL        = 32768;
 // Longer than paging can take: T3513 and its retries at the AMF, the Service
 // Request, then the SMF's N4 Session Modification.
-constexpr int UPF_DEFAULT_DEFAULT_BUFFERING_DURATION_MS = 20000;
+constexpr int UPF_DEFAULT_DL_BUFFER_MAX_HOLD_MS = 20000;
 // AF_XDP capture of buffered DL packets (eBPF datapath): one UMEM (packet
 // memory shared with the kernel) per N6 RX queue, 2048 x 4096 B = 8 MiB each,
 // and at most 256 MiB for all of them.
@@ -689,7 +690,7 @@ class upf_datapath_configuration : public config_type {
   int_config_value m_dl_buffer_max_kib_per_session{};
   int_config_value m_dl_buffer_max_pkts_total{};
   int_config_value m_dl_buffer_max_kib_total{};
-  int_config_value m_default_buffering_duration_ms{};
+  int_config_value m_dl_buffer_max_hold_ms{};
 
   /**
    * @brief AF_XDP capture of buffered DL packets (eBPF datapath only).
@@ -971,7 +972,7 @@ class upf_datapath_configuration : public config_type {
   [[nodiscard]] int get_dl_buffer_max_kib_per_session() const;
   [[nodiscard]] int get_dl_buffer_max_pkts_total() const;
   [[nodiscard]] int get_dl_buffer_max_kib_total() const;
-  [[nodiscard]] int get_default_buffering_duration_ms() const;
+  [[nodiscard]] int get_dl_buffer_max_hold_ms() const;
   [[nodiscard]] int get_xsk_frame_size() const;
   [[nodiscard]] int get_xsk_frames_per_queue() const;
   [[nodiscard]] int get_xsk_umem_max_mib_total() const;

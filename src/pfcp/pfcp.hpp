@@ -58,6 +58,8 @@ class pfcp_procedure {
 
 enum pfcp_transaction_action { DELETE_TX = 0, CONTINUE_TX };
 
+// PFCP transaction timers use arg1 values far above the task-local TIME_OUT
+// values (TASK_UPF_N4_* = 0..2), so upf_n4_task() can tell them apart.
 #define PFCP_TIMER_ARG1_BASE (0x50464350ULL) /* 'P' 'F' 'C' 'P' */
 #define PFCP_TIMER_ARG1_MSG_RETRY (PFCP_TIMER_ARG1_BASE + 1)
 #define PFCP_TIMER_ARG1_PROC_CLEANUP (PFCP_TIMER_ARG1_BASE + 2)
@@ -119,6 +121,9 @@ class pfcp_l4_stack : public udp_application {
   virtual void handle_receive(
       char* recv_buffer, const std::size_t bytes_transferred,
       endpoint& remote_endpoint);
+  /// Locks trx_mutex_ itself and releases it on return, so the caller can call
+  /// another entry point (for example send_response()) afterwards without
+  /// nesting the lock.
   void handle_receive_message_cb(
       const pfcp_msg& msg, const endpoint& remote_endpoint,
       const task_id_t& task_id, bool& error, uint64_t& trxn_id);

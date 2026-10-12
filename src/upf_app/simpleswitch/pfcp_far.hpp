@@ -13,8 +13,7 @@ namespace pfcp {
 /**
  * @brief True iff an Apply Action change leaves buffering (BUFF -> !BUFF).
  *
- * @param before Apply Action before the Update FAR. Save it before calling
- *               update(), which overwrites it in place.
+ * @param before Apply Action of the FAR before the Update FAR is applied.
  * @param after  Apply Action after the Update FAR was applied.
  */
 inline bool apply_action_leaves_buffering(

@@ -18,8 +18,9 @@ struct xsk_ipv4 {
   explicit operator bool() const { return data != nullptr; }
 };
 
-/// Ethernet II header length. 802.1Q frames never reach BAR (parse_eth hands
-/// them to the kernel), so there is exactly one header to strip.
+/// Ethernet II header length. 802.1Q frames never reach the XDP BAR program
+/// (parse_eth hands them to the kernel), so there is exactly one header to
+/// strip.
 constexpr size_t XSK_ETH_HLEN = 14;
 /// Smallest frame that can hold an Ethernet header and an IPv4 header.
 constexpr size_t XSK_MIN_FRAME = XSK_ETH_HLEN + 20;

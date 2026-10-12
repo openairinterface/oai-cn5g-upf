@@ -4,7 +4,7 @@
 
 #include "UserPlaneComponent.h"
 #include "BarDdnConsumer.h"
-#include "XskConsumer.hpp"
+#include "XskConsumer.h"
 #include "SessionManager.h"
 #include "SessionProgramManager.h"
 #include "SignalHandler.h"

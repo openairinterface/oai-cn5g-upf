@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  */
 
-#include "XskConsumer.hpp"
+#include "XskConsumer.h"
 
 #include <bpf/bpf.h>
 #include <dirent.h>
@@ -43,7 +43,7 @@ struct XskConsumer::Queue {
 };
 
 //------------------------------------------------------------------------------
-XskConsumer::XskConsumer() {}
+XskConsumer::XskConsumer() = default;
 
 //------------------------------------------------------------------------------
 XskConsumer::~XskConsumer() {
@@ -91,32 +91,33 @@ bool XskConsumer::Start(
   Stop();
 
   std::string why;
-  const int map_fd = xskmap ? xskmap->GetFd() : -1;
-  const int n      = CountRxQueues(cfg.ifname);
+  const int map_fd         = xskmap ? xskmap->GetFd() : -1;
+  const int rx_queue_count = CountRxQueues(cfg.ifname);
   const uint64_t per_queue =
       (uint64_t) cfg.frames_per_queue * (uint64_t) cfg.frame_size;
 
   if (map_fd < 0) {
     why = "xskmap is not loaded";
-  } else if (n <= 0) {
+  } else if (rx_queue_count <= 0) {
     why = fmt::format(
         "cannot read the RX queues of {} (/sys/class/net/{}/queues)",
         cfg.ifname, cfg.ifname);
-  } else if ((uint32_t) n > cfg.max_queues) {
+  } else if ((uint32_t) rx_queue_count > cfg.max_queues) {
     why = fmt::format(
-        "{} has {} RX queues, xskmap has {} slots", cfg.ifname, n,
+        "{} has {} RX queues, xskmap has {} slots", cfg.ifname, rx_queue_count,
         cfg.max_queues);
-  } else if (per_queue * (uint64_t) n > cfg.umem_max_bytes) {
+  } else if (per_queue * (uint64_t) rx_queue_count > cfg.umem_max_bytes) {
     why = fmt::format(
         "{} RX queues x {} frames x {} B = {} MiB exceeds "
         "xsk_umem_max_mib_total ({} MiB)",
-        n, cfg.frames_per_queue, cfg.frame_size,
-        (per_queue * (uint64_t) n) >> 20, cfg.umem_max_bytes >> 20);
+        rx_queue_count, cfg.frames_per_queue, cfg.frame_size,
+        (per_queue * (uint64_t) rx_queue_count) >> 20,
+        cfg.umem_max_bytes >> 20);
   }
 
   // One UMEM per queue, each ring sized to hold every frame: the fill ring
   // can then always take back what the RX ring hands over.
-  for (int i = 0; why.empty() && i < n; ++i) {
+  for (int i = 0; why.empty() && i < rx_queue_count; ++i) {
     auto q      = std::make_unique<Queue>();
     q->id       = (uint32_t) i;
     q->area_len = (size_t) per_queue;
@@ -130,7 +131,7 @@ bool XskConsumer::Start(
     }
     q->area = area;
     queues_.push_back(std::move(q));
-    Queue& cur = *queues_.back();
+    Queue& queue = *queues_.back();
 
     struct xsk_umem_config ucfg = {};
     ucfg.fill_size              = cfg.frames_per_queue;
@@ -139,9 +140,10 @@ bool XskConsumer::Start(
     ucfg.frame_headroom         = 0;
     ucfg.flags                  = 0;
     int ret                     = xsk_umem__create(
-        &cur.umem, cur.area, cur.area_len, &cur.fill, &cur.comp, &ucfg);
+        &queue.umem, queue.area, queue.area_len, &queue.fill, &queue.comp,
+        &ucfg);
     if (ret != 0) {
-      cur.umem = nullptr;
+      queue.umem = nullptr;
       why = fmt::format("queue {}: xsk_umem__create: {}", i, strerror(-ret));
       break;
     }
@@ -158,11 +160,11 @@ bool XskConsumer::Start(
     // the whole N6 queue (forwarded DL too) on this UMEM and this thread.
     scfg.bind_flags = XDP_COPY;
     ret             = xsk_socket__create(
-        &cur.xsk, cfg.ifname.c_str(), cur.id, cur.umem, &cur.rx, nullptr,
-        &scfg);
+        &queue.xsk, cfg.ifname.c_str(), queue.id, queue.umem, &queue.rx,
+        nullptr, &scfg);
     if (ret != 0) {
-      cur.xsk = nullptr;
-      why     = fmt::format(
+      queue.xsk = nullptr;
+      why       = fmt::format(
           "queue {}: xsk_socket__create on {}: {}", i, cfg.ifname,
           strerror(-ret));
       break;
@@ -170,15 +172,15 @@ bool XskConsumer::Start(
 
     // Post every frame to the fill ring, so the kernel can use all of them.
     uint32_t idx = 0;
-    if (xsk_ring_prod__reserve(&cur.fill, cfg.frames_per_queue, &idx) !=
+    if (xsk_ring_prod__reserve(&queue.fill, cfg.frames_per_queue, &idx) !=
         cfg.frames_per_queue) {
       why = fmt::format("queue {}: cannot post the fill ring", i);
       break;
     }
     for (uint32_t f = 0; f < cfg.frames_per_queue; ++f)
-      *xsk_ring_prod__fill_addr(&cur.fill, idx + f) =
+      *xsk_ring_prod__fill_addr(&queue.fill, idx + f) =
           (uint64_t) f * cfg.frame_size;
-    xsk_ring_prod__submit(&cur.fill, cfg.frames_per_queue);
+    xsk_ring_prod__submit(&queue.fill, cfg.frames_per_queue);
   }
 
   // Publish only once every queue has a socket: all or nothing.
@@ -221,7 +223,7 @@ bool XskConsumer::Start(
   Logger::upf_app().info(
       "DL buffer AF_XDP capture on %s: %d RX queue(s), %u frames x %u B each "
       "(%s)",
-      cfg.ifname.c_str(), n, cfg.frames_per_queue, cfg.frame_size,
+      cfg.ifname.c_str(), rx_queue_count, cfg.frames_per_queue, cfg.frame_size,
       cfg.skb_mode ? "copy, SKB mode" : "copy, native mode");
   return true;
 }
@@ -306,8 +308,7 @@ void XskConsumer::PollLoop() {
       why = fmt::format("poll failed: {}", strerror(errno));
     }
     for (size_t i = 0; why.empty() && ret > 0 && i < fds.size(); ++i) {
-      // An AF_XDP socket does not report these today; treat them as fatal
-      // anyway.
+      // Not expected on an AF_XDP RX socket; handled defensively.
       if (fds[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
         why = fmt::format(
             "queue {}: poll revents 0x{:x}", queues_[i]->id,
@@ -346,6 +347,9 @@ void XskConsumer::DrainQueue(Queue& q) {
     std::this_thread::yield();
   }
 
+  // frame_size is 2048 or 4096, a power of two (checked by the configuration).
+  // In aligned UMEM mode the RX address lies past the frame start by the
+  // headroom; the fill ring is given the frame start, as in Start().
   const uint64_t frame_mask = ~((uint64_t) frame_size_ - 1);
   for (uint32_t i = 0; i < n; ++i) {
     const struct xdp_desc* d = xsk_ring_cons__rx_desc(&q.rx, rx_idx + i);
@@ -377,14 +381,15 @@ void XskConsumer::HandleFrame(const uint8_t* frame, uint32_t len) {
     not_buffering_.fetch_add(1, std::memory_order_relaxed);
     return;
   }
-  // Lookup only: XDP already counted the packet and sent the DL Data Report.
-  const auto m = sw->classify_dl_buffered(pkt.data, pkt.len);
-  if (!m.is_buff) {
+  // Lookup only: the XDP BAR program has already counted the packet and, if
+  // one was due, submitted the DDN event.
+  const auto match = sw->classify_dl_buffered(pkt.data, pkt.len);
+  if (!match.is_buff) {
     not_buffering_.fetch_add(1, std::memory_order_relaxed);
     return;
   }
   if (sw->dl_buffer().enqueue(
-          m.up_seid, m.rule_uid, m.pdr_id, pkt.data, pkt.len)) {
+          match.up_seid, match.rule_uid, match.pdr_id, pkt.data, pkt.len)) {
     stored_.fetch_add(1, std::memory_order_relaxed);
   } else {
     refused_.fetch_add(1, std::memory_order_relaxed);

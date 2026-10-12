@@ -109,15 +109,9 @@ class SessionProgramManager {
   void RemoveSession(uint64_t seid);
 
   /**
-   * @brief Clear the one-shot DDN (Downlink Data Notification) latch of a
-   *        session in bar_state_map.
+   * @brief Re-arm the notification latch of a session.
    *
-   * Forwards to BARProgram::ResetBarState(): an existing entry is overwritten
-   * with a zeroed bar_state, and a missing one is never created (BPF_EXIST),
-   * so a stale UP SEID cannot bring back a deleted map entry.
-   *
-   * @param seid Session Endpoint Identifier
-   * @return true if an entry existed and was zeroed.
+   * @see BARProgram::ResetBarState
    */
   bool ResetBarState(uint64_t seid);
 
@@ -394,13 +388,14 @@ class SessionProgramManager {
   /**
    * @brief Convert PFCP BAR to BPF BAR structure
    *
-   * Translates Buffering Action Rule IE (3GPP TS 29.244 Section 8.2.6)
+   * Translates a Create BAR IE (3GPP TS 29.244 Table 7.5.2.6-1)
    * into BPF-compatible structure for DL buffering and DDN generation.
    *
    * Key fields converted:
-   * - BAR ID (3GPP TS 29.244 Section 8.2.49)
-   * - Suggested Buffering Packets Count (3GPP TS 29.244 Section 8.2.50)
-   * - DL Data Notification Delay (3GPP TS 29.244 Section 8.2.28)
+   * - BAR ID (3GPP TS 29.244 Section 8.2.57)
+   * - Suggested Buffering Packets Count (3GPP TS 29.244 Section 8.2.100)
+   * - Downlink Data Notification Delay (3GPP TS 29.244 Section 8.2.28),
+   *   in units of 50 ms
    *
    * BAR is referenced from FAR (via bar_id) when apply_action.buff=1,
    * not directly from PDR.
@@ -408,8 +403,8 @@ class SessionProgramManager {
    * @param bar PFCP BAR object (nullptr returns zeroed struct)
    * @return BPF BAR structure
    *
-   * @see 3GPP TS 29.244 Section 8.2.6 - Create BAR IE
-   * @see 3GPP TS 29.244 Section 8.2.49 - BAR ID
+   * @see 3GPP TS 29.244 Table 7.5.2.6-1 - Create BAR IE
+   * @see 3GPP TS 29.244 Section 8.2.57 - BAR ID
    */
   struct pfcp_bar ConvertBar(std::shared_ptr<pfcp::pfcp_bar> bar) const;
 
@@ -531,8 +526,8 @@ class SessionProgramManager {
    * @param seid Session Endpoint Identifier (map key)
    * @param bar_config Converted BAR configuration to store
    *
-   * @see 3GPP TS 29.244 Section 8.2.49-50 - BAR IEs
-   * @see 3GPP TS 29.244 Section 8.2.28 - DL Data Notification Delay
+   * @see 3GPP TS 29.244 Sections 8.2.57, 8.2.100, 8.2.28 - BAR IEs
+   * @see 3GPP TS 29.244 Section 8.2.28 - Downlink Data Notification Delay
    */
   void PopulateBarConfigMap(
       std::shared_ptr<UPF_XDPProgram> xdp_program, uint64_t seid,

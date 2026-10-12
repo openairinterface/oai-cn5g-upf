@@ -53,18 +53,10 @@ BarDdnConsumer::BarDdnConsumer()
       }),
       dispatch_dldr_([](const pfcp::fseid_t& cp_fseid,
                         const pfcp::pfcp_session_report_request& report,
-                        uint64_t up_seid, uint16_t pdr_id) {
-        // Send an itti_n4_session_report_request to TASK_UPF_N4, tagged with
-        // (UP SEID, PDR ID) so that the latch is re-armed if the SMF never
-        // answers.
-        bool association_found = false;
-        if (upf_n4::enqueue_session_report_request(
-                cp_fseid, report, association_found,
-                std::make_pair(up_seid, pdr_id))) {
-          return DldrDispatch::kEnqueued;
-        }
-        return association_found ? DldrDispatch::kEnqueueFailed :
-                                   DldrDispatch::kNoAssociation;
+                        const dl_data_report_origin& origin) {
+        // Hand the report to TASK_UPF_N4 with its origin, so that the
+        // notification latch can be re-armed if the SMF never answers.
+        return upf_n4::enqueue_session_report_request(cp_fseid, report, origin);
       }),
       rearm_bar_state_([](uint64_t up_seid) {
         return SessionProgramManager::GetInstance().ResetBarState(up_seid);
@@ -117,14 +109,14 @@ bool BarDdnConsumer::IsRunning() const {
 //------------------------------------------------------------------------------
 BarDdnConsumer::Counters BarDdnConsumer::GetCounters() const {
   Counters c;
-  c.received       = events_received_.load(std::memory_order_relaxed);
-  c.malformed      = events_malformed_.load(std::memory_order_relaxed);
-  c.resolved       = events_resolved_.load(std::memory_order_relaxed);
-  c.stale_seid     = events_stale_seid_.load(std::memory_order_relaxed);
-  c.dispatched     = events_dispatched_.load(std::memory_order_relaxed);
-  c.no_association = events_no_association_.load(std::memory_order_relaxed);
-  c.enqueue_failed = events_enqueue_failed_.load(std::memory_order_relaxed);
-  c.rearmed        = latch_rearmed_.load(std::memory_order_relaxed);
+  c.received        = events_received_.load(std::memory_order_relaxed);
+  c.malformed       = events_malformed_.load(std::memory_order_relaxed);
+  c.resolved        = events_resolved_.load(std::memory_order_relaxed);
+  c.stale_seid      = events_stale_seid_.load(std::memory_order_relaxed);
+  c.dispatched      = events_dispatched_.load(std::memory_order_relaxed);
+  c.no_peer_address = events_no_peer_address_.load(std::memory_order_relaxed);
+  c.enqueue_failed  = events_enqueue_failed_.load(std::memory_order_relaxed);
+  c.rearmed         = events_rearmed_.load(std::memory_order_relaxed);
   return c;
 }
 
@@ -213,10 +205,10 @@ void BarDdnConsumer::Stop() {
     const Counters c = GetCounters();
     Logger::upf_app().info(
         "DDN ring-buffer consumer stopped (received=%lu, malformed=%lu, "
-        "resolved=%lu, stale_seid=%lu, dispatched=%lu, no_association=%lu, "
+        "resolved=%lu, stale_seid=%lu, dispatched=%lu, no_peer_address=%lu, "
         "enqueue_failed=%lu, rearmed=%lu)",
         c.received, c.malformed, c.resolved, c.stale_seid, c.dispatched,
-        c.no_association, c.enqueue_failed, c.rearmed);
+        c.no_peer_address, c.enqueue_failed, c.rearmed);
   }
 }
 
@@ -290,17 +282,19 @@ int BarDdnConsumer::HandleEvent(const void* data, size_t size) {
 
   // Make a DLDR report
   pfcp::pdr_id_t pdr_id = {};
-  pdr_id.rule_id        = static_cast<uint16_t>(evt.pdr_id);
+  // PDR ID is 16 bits (§8.2.36); the event carries it in a `__u32`.
+  pdr_id.rule_id = static_cast<uint16_t>(evt.pdr_id);
 
   const pfcp::pfcp_session_report_request report = make_dldr_report(pdr_id);
 
-  const DldrDispatch outcome =
-      dispatch_dldr_ ?
-          dispatch_dldr_(cp_fseid, report, evt.seid, pdr_id.rule_id) :
-          DldrDispatch::kEnqueueFailed;
+  const session_report_enqueue_result outcome =
+      dispatch_dldr_ ? dispatch_dldr_(
+                           cp_fseid, report,
+                           dl_data_report_origin{evt.seid, pdr_id.rule_id}) :
+                       session_report_enqueue_result::itti_refused;
 
   switch (outcome) {
-    case DldrDispatch::kEnqueued:
+    case session_report_enqueue_result::queued:
       events_dispatched_.fetch_add(1, std::memory_order_relaxed);
       Logger::upf_app().info(
           "DLDR queued on TASK_UPF_N4: CP-F-SEID " SEID_FMT
@@ -309,16 +303,16 @@ int BarDdnConsumer::HandleEvent(const void* data, size_t size) {
           cp_fseid.seid, pdr_id.rule_id, evt.seid, ue_ip.c_str());
       break;
 
-    case DldrDispatch::kNoAssociation:
-      events_no_association_.fetch_add(1, std::memory_order_relaxed);
+    case session_report_enqueue_result::no_peer_address:
+      events_no_peer_address_.fetch_add(1, std::memory_order_relaxed);
       Logger::upf_app().warn(
-          "DLDR NOT sent: no PFCP association for CP-F-SEID " SEID_FMT
+          "DLDR NOT sent: no usable PFCP peer address for CP-F-SEID " SEID_FMT
           " (UP-SEID " SEID_FMT ", PDR-ID=%u)",
           cp_fseid.seid, evt.seid, pdr_id.rule_id);
-      RearmLatch(evt.seid, "no PFCP association");
+      RearmLatch(evt.seid, "no usable PFCP peer address");
       break;
 
-    case DldrDispatch::kEnqueueFailed:
+    case session_report_enqueue_result::itti_refused:
       events_enqueue_failed_.fetch_add(1, std::memory_order_relaxed);
       Logger::upf_app().error(
           "DLDR NOT queued on TASK_UPF_N4 for CP-F-SEID " SEID_FMT
@@ -333,22 +327,25 @@ int BarDdnConsumer::HandleEvent(const void* data, size_t size) {
 
 //------------------------------------------------------------------------------
 void BarDdnConsumer::RearmLatch(uint64_t up_seid, const char* reason) {
-  latch_rearmed_.fetch_add(1, std::memory_order_relaxed);
+  events_rearmed_.fetch_add(1, std::memory_order_relaxed);
 
   if (!rearm_bar_state_) {
     Logger::upf_app().error(
-        "Cannot re-arm the DDN latch of UP-SEID " SEID_FMT
-        " (%s): no re-arm hook -- this downlink burst is lost",
+        "Cannot re-arm the notification latch of UP-SEID " SEID_FMT
+        " (%s): no re-arm hook -- the latch was not cleared",
         up_seid, reason);
     return;
   }
 
   const bool cleared = rearm_bar_state_(up_seid);
   Logger::upf_app().info(
-      "Re-armed the DDN latch of UP-SEID " SEID_FMT " after %s (%s)", up_seid,
-      reason,
-      cleared ? "latch cleared, next DL packet re-triggers" :
-                "no bar_state entry -- session gone or never latched");
+      "Re-armed the notification latch of UP-SEID " SEID_FMT " after %s (%s)",
+      up_seid, reason,
+      cleared ?
+          "notification latch cleared, the next DL packet on the buffering "
+          "rule reports again" :
+          "bar_state not cleared -- session gone, its BAR state never "
+          "created, or the reset failed");
 }
 
 }  // namespace app

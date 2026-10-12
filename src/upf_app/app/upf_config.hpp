@@ -139,7 +139,9 @@ class upf_config {
   uint32_t dl_buffer_max_kib_per_session;
   uint32_t dl_buffer_max_pkts_total;
   uint32_t dl_buffer_max_kib_total;
-  uint32_t default_buffering_duration_ms;  ///< T_guard: max hold time
+  uint32_t dl_buffer_max_hold_ms;  ///< maximum hold time (ms): UPF-local bound;
+                                   ///< not the DL Buffering Duration IE
+                                   ///< (§8.2.29), which this UPF does not apply
   /// AF_XDP capture of buffered DL packets (eBPF datapath): one UMEM (the
   /// packet memory shared with the kernel) of xsk_frames_per_queue x
   /// xsk_frame_size per N6 RX queue, all of them together at most
@@ -243,7 +245,7 @@ class upf_config {
     dl_buffer_max_kib_per_session                 = 128;
     dl_buffer_max_pkts_total                      = 16384;
     dl_buffer_max_kib_total                       = 32768;
-    default_buffering_duration_ms                 = 20000;
+    dl_buffer_max_hold_ms                         = 20000;
     xsk_frame_size                                = 4096;
     xsk_frames_per_queue                          = 2048;
     xsk_umem_max_mib_total                        = 256;

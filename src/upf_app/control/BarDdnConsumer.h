@@ -15,6 +15,7 @@
 #include <bar_types.h>
 
 #include "3gpp_29.244.h"
+#include "dl_data_report.hpp"
 #include "msg_pfcp.hpp"
 
 class BPFMap;
@@ -23,12 +24,6 @@ struct ring_buffer;
 namespace oai {
 namespace upf {
 namespace app {
-
-enum class DldrDispatch {
-  kEnqueued,       ///< itti send_msg() == RETURNok; N4 task owns it now
-  kNoAssociation,  ///< no usable PFCP association for this CP F-SEID
-  kEnqueueFailed   ///< association fine, ITTI refused the message
-};
 
 /**
  * @class BarDdnConsumer
@@ -45,29 +40,34 @@ class BarDdnConsumer {
   /** @brief UP SEID -> CP F-SEID resolution.
    *
    * Defaults to pfcp_switch::get_cp_fseid_by_up_seid() on the live
-   * pfcp_switch. It is a member rather than a direct call so that a test can
-   * drive the resolved and stale-SEID branches without a pfcp_switch, which
-   * owns tun interfaces and worker threads.
+   * pfcp_switch. Test-only hook: lets a unit test drive the resolved and
+   * stale-SEID branches without a pfcp_switch. No such test exists in this
+   * repository; production uses the default set in the constructor.
    */
   using CpFseidResolver = std::function<bool(uint64_t, pfcp::fseid_t&)>;
 
-  /** @brief Hand-off of a DLDR (Downlink Data Report) to TASK_UPF_N4.
+  /** @brief Hand-off of a Downlink Data Report (DLDR) to TASK_UPF_N4.
    *
-   * Arguments: (cp_fseid, report, up_seid, pdr_id). Defaults to the static
-   * upf_n4::enqueue_session_report_request(), which does not use upf_n4_inst
-   * (~upf_app() deletes it without setting it to null). (up_seid, pdr_id)
-   * goes with the report, so that TASK_UPF_N4 can release the latch if the
-   * SMF never answers. A member so that a test can replace it.
+   * Arguments: (cp_fseid, report, origin). The origin goes with the report, so
+   * that the notification latch can be re-armed if the SMF never answers
+   * (TASK_UPF_N4 then asks TASK_UPF_APP to do it). Test-only hook: lets a unit
+   * test replace the hand-off to TASK_UPF_N4. No such test exists in this
+   * repository; production uses the default set in the constructor, which calls
+   * upf_n4::enqueue_session_report_request(). That function is static, so it
+   * does not dereference upf_n4_inst, which ~upf_app() deletes without setting
+   * it to null.
    */
-  using DldrDispatcher = std::function<DldrDispatch(
-      const pfcp::fseid_t&, const pfcp::pfcp_session_report_request&, uint64_t,
-      uint16_t)>;
+  using DldrDispatcher = std::function<session_report_enqueue_result(
+      const pfcp::fseid_t&, const pfcp::pfcp_session_report_request&,
+      const dl_data_report_origin&)>;
 
-  /** @brief Release the kernel one-shot DDN latch of a session.
+  /** @brief Re-arm of a session's notification latch (eBPF).
    *
    * Defaults to SessionProgramManager::ResetBarState() ->
    * BARProgram::ResetBarState(), which writes with BPF_EXIST and so can only
-   * overwrite an entry, never create one.
+   * overwrite an entry, never create one. Test-only hook: lets a unit test
+   * replace the re-arm of the notification latch. No such test exists in this
+   * repository; production uses the default set in the constructor.
    *
    * @warning Only called for a session that resolved, i.e. is still present.
    *          A stale UP SEID must be dropped and counted -- see the re-arm
@@ -82,17 +82,21 @@ class BarDdnConsumer {
     uint64_t resolved;    ///< Records whose UP SEID mapped to a live session
     uint64_t stale_seid;  ///< Records dropped: UP SEID unknown / torn down
     uint64_t dispatched;  ///< DLDRs accepted by TASK_UPF_N4 (RETURNok)
-    uint64_t no_association;  ///< Hand-off failed: no PFCP association
-    uint64_t enqueue_failed;  ///< Hand-off failed: ITTI refused the message
-    uint64_t rearmed;         ///< Latch releases attempted after a failure
+    uint64_t no_peer_address;  ///< Hand-off failed: no usable PFCP peer address
+                               ///< (no association, or an association without
+                               ///< an address)
+    uint64_t enqueue_failed;   ///< Hand-off failed: ITTI down or refused the
+                               ///< message
+    uint64_t rearmed;          ///< Notification latch re-arms attempted after
+                               ///< a failed hand-off
   };
 
   /** @brief ring_buffer__poll() seam: (timeout_ms) -> libbpf return code.
    *
    * Defaults to ring_buffer__poll(ring_, timeout_ms), guarded against a null
-   * ring_. It is a member so that a test can reach the poll loop's
-   * fatal-error exit, which must clear running_: making the real
-   * ring_buffer__poll() fail needs a loaded map and CAP_BPF.
+   * ring_. Test-only hook: lets a unit test reach the poll loop's fatal-error
+   * exit without a loaded map. No such test exists in this repository;
+   * production uses the default set in the constructor.
    */
   using RingPoller = std::function<int(int)>;
 
@@ -114,8 +118,7 @@ class BarDdnConsumer {
    * the old thread and ring are cleaned up first.
    *
    * @param ddn_ringbuf bar_ddn_ringbuf_map, from
-   *        UPF_XDPProgram::GetBarProgram()->GetBarDdnRingbuf()
-   *        (GetMapByName() does not know the ring).
+   *        UPF_XDPProgram::GetBarProgram()->GetBarDdnRingbuf().
    * @return true if the poll thread is running.
    */
   bool Start(const std::shared_ptr<BPFMap>& ddn_ringbuf);
@@ -144,28 +147,28 @@ class BarDdnConsumer {
   /**
    * @brief Handle one ring record.
    *
-   * Public because it holds all the decision logic of this class and a test
-   * can drive it directly; production reaches it through OnDdnEvent().
+   * Public only so that a unit test can call it directly; no such test exists
+   * in this repository. Production reaches it through OnDdnEvent().
    *
    * @par Re-arm contract
-   * The XDP program takes the latch when it produces the event, so a DDN that
-   * is not turned into a report silences the session unless the latch is
-   * released. There are four outcomes:
+   * The XDP BAR program sets the notification latch when it produces the
+   * event, so a DDN that is not turned into a report silences the session
+   * unless the latch is re-armed. There are four outcomes:
    *
-   *   | outcome                     | report sent | ResetBarState |
-   *   |-----------------------------|-------------|---------------|
-   *   | enqueued (RETURNok)         | yes (N4)    | NO (see below)|
-   *   | ITTI enqueue refused        | no          | YES           |
-   *   | no PFCP association         | no          | YES           |
-   *   | stale / unknown UP-SEID     | no          | NEVER         |
+   *   | outcome (session_report_enqueue_result) | report sent | ResetBarState |
+   *   |-----------------------------------------|-------------|---------------|
+   *   | queued                                  | yes (N4)    | NO (see below)|
+   *   | itti_refused                            | no          | YES           |
+   *   | no_peer_address                         | no          | YES           |
+   *   | stale / unknown UP-SEID (never enqueued)| no          | NEVER         |
    *
    * A stale SEID must never be re-armed: writing bar_state_map for a deleted
    * session would create an entry that nothing deletes.
    *
    * An enqueued report is not re-armed here. The PFCP layer retransmits it;
    * if the SMF never answers, upf_n4::notify_ul_error() asks TASK_UPF_APP to
-   * release the latch. If the report is answered, the Session Modification
-   * that ends buffering releases it.
+   * re-arm the latch. If the report is answered, the Session Modification
+   * that ends buffering re-arms it.
    *
    * @param data Start of the record as handed over by libbpf.
    * @param size Record size in bytes, as reserved by the datapath.
@@ -213,7 +216,7 @@ class BarDdnConsumer {
   void PollLoop();
 
   /**
-   * @brief Release the one-shot DDN latch after a failed hand-off.
+   * @brief Re-arm the notification latch after a failed hand-off.
    *
    * @param up_seid UP SEID of a session that RESOLVED a moment ago.
    * @param reason  Why the hand-off failed (log text only).
@@ -234,9 +237,9 @@ class BarDdnConsumer {
   std::atomic<uint64_t> events_resolved_{0};
   std::atomic<uint64_t> events_stale_seid_{0};
   std::atomic<uint64_t> events_dispatched_{0};
-  std::atomic<uint64_t> events_no_association_{0};
+  std::atomic<uint64_t> events_no_peer_address_{0};
   std::atomic<uint64_t> events_enqueue_failed_{0};
-  std::atomic<uint64_t> latch_rearmed_{0};
+  std::atomic<uint64_t> events_rearmed_{0};
 };
 
 }  // namespace app

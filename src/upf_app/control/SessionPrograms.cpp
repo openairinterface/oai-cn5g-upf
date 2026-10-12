@@ -29,10 +29,6 @@ SessionPrograms::~SessionPrograms() {
 
   // 1. Tear down per-session QER TC-BPF program (rate shaping classes)
   //    This removes HTB qdisc classes and TC filters for this session
-  //
-  //    Guarded: QERTCProgram::TearDown() can throw, and an exception leaving
-  //    this destructor calls std::terminate(). It would also skip
-  //    CleanupBpfMapEntries() and leave a stale DDN latch behind.
   if (qer_program_) {
     Logger::upf_app().debug(
         "  Tearing down QER TC-BPF program for SEID=0x%016lx", seid_);
@@ -147,17 +143,11 @@ void SessionPrograms::CleanupBpfMapEntries() {
     return;
   }
 
-  /*
-   * TryRemove(), not Remove(): Remove() throws on -ENOENT, and an entry may
-   * be missing here even when its rule flag is set. This runs from a
-   * destructor, so a throw would call std::terminate().
-   */
-
   // --- URR maps (config + volume counters) ---
   if (IsURREnabled()) {
     auto urr_cfg_map = upf_xdp_program_->GetMapByName("urr_config_map");
     if (urr_cfg_map) {
-      urr_cfg_map->TryRemove(seid_);
+      urr_cfg_map->Remove(seid_);
       Logger::upf_app().debug(
           "  Removed urr_config_map entry for SEID=0x%016lx", seid_);
     }
@@ -165,7 +155,7 @@ void SessionPrograms::CleanupBpfMapEntries() {
     auto urr_vol_map =
         upf_xdp_program_->GetMapByName("urr_volume_counters_map");
     if (urr_vol_map) {
-      urr_vol_map->TryRemove(seid_);
+      urr_vol_map->Remove(seid_);
       Logger::upf_app().debug(
           "  Removed urr_volume_counters_map entry for SEID=0x%016lx", seid_);
     }
@@ -175,14 +165,14 @@ void SessionPrograms::CleanupBpfMapEntries() {
   if (IsBAREnabled()) {
     auto bar_cfg_map = upf_xdp_program_->GetMapByName("bar_config_map");
     if (bar_cfg_map) {
-      bar_cfg_map->TryRemove(seid_);
+      bar_cfg_map->Remove(seid_);
       Logger::upf_app().debug(
           "  Removed bar_config_map entry for SEID=0x%016lx", seid_);
     }
 
     auto bar_st_map = upf_xdp_program_->GetMapByName("bar_state_map");
     if (bar_st_map) {
-      bar_st_map->TryRemove(seid_);
+      bar_st_map->Remove(seid_);
       Logger::upf_app().debug(
           "  Removed bar_state_map entry for SEID=0x%016lx", seid_);
     }
@@ -192,7 +182,7 @@ void SessionPrograms::CleanupBpfMapEntries() {
   if (IsMAREnabled()) {
     auto mar_map = upf_xdp_program_->GetMapByName("mar_rules_map");
     if (mar_map) {
-      mar_map->TryRemove(seid_);
+      mar_map->Remove(seid_);
       Logger::upf_app().debug(
           "  Removed mar_rules_map entry for SEID=0x%016lx", seid_);
     }
@@ -201,7 +191,7 @@ void SessionPrograms::CleanupBpfMapEntries() {
   // --- Session rules_enabled bitmask (always present for active sessions) ---
   auto rules_map = upf_xdp_program_->GetMapByName("session_rules_enabled_map");
   if (rules_map) {
-    rules_map->TryRemove(seid_);
+    rules_map->Remove(seid_);
     Logger::upf_app().debug(
         "  Removed session_rules_enabled_map entry for SEID=0x%016lx", seid_);
   }

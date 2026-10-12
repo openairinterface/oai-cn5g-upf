@@ -32,11 +32,6 @@ class pfcp_session;
  */
 class pfcp_pdr {
  public:
-  /// The mutex also makes pfcp_pdr non-assignable (std::mutex deletes copy
-  /// and move assignment), so a rule is never overwritten in place and never
-  /// keeps an old rule_uid. The user-declared copy constructor below
-  /// suppresses the implicit move constructor, so a move is a copy too, and
-  /// every copy takes a fresh rule_uid.
   mutable std::mutex lock;
 
   // ---- Key -----------------------------------------------------------------
@@ -94,9 +89,15 @@ class pfcp_pdr {
   /// is set: parsing it per packet would cost more than forwarding it.
   oai::upf::sdf_rule sdf;
 
-  /// true after a CP-Notify has been sent for this PDR. Atomic because the
-  /// DL threads set it (notify_cp_requested()) while TASK_UPF_APP clears it
-  /// (rearm_notified_cp()).
+  /// Notification latch for Apply Action NOCP (§8.2.26), one per PDR: set by
+  /// the DL packet that sends the Downlink Data Report, so that later packets
+  /// do not report again until it is re-armed. Re-armed (cleared) on
+  /// TASK_UPF_APP when the PDR's FAR leaves BUFF (rearm_notified_cp()), and by
+  /// pfcp_switch::rearm_dl_notification() when the maximum hold time expires
+  /// with packets held, when a report could not be queued, or when the SMF
+  /// never answered it. notify_cp_requested() also clears it if a failed
+  /// report cannot be remembered. Atomic because DL threads set it while
+  /// TASK_UPF_APP clears it.
   std::atomic<bool> notified_cp;
 
   /// Process-wide unique identity of this rule instance, used by the DL
@@ -106,6 +107,12 @@ class pfcp_pdr {
   /// reused and never copied: the copy made by an Update PDR (copy-on-write)
   /// gets a new value. Unlike the PDR's address, which a later allocation can
   /// reuse, it can never be mistaken for another rule.
+  ///
+  /// Because rule_uid is const, a pfcp_pdr cannot be assigned, so a rule is
+  /// never overwritten in place and never keeps an old rule_uid. The
+  /// user-declared copy constructor below suppresses the implicit move
+  /// constructor, so a move is a copy too, and every copy takes a fresh
+  /// rule_uid.
   const uint64_t rule_uid;
 
   /// Next rule_uid. Starts at 1; 64 bits never wrap in practice.
@@ -169,6 +176,8 @@ class pfcp_pdr {
         qos(c.qos),
         tx_qfi(c.tx_qfi),
         sdf(c.sdf),
+        // The copy made by an Update PDR keeps the latch, so an Update PDR
+        // during buffering does not by itself cause a second report.
         notified_cp(c.notified_cp.load()),
         rule_uid(next_rule_uid()) {
     local_seid = c.local_seid;
@@ -371,22 +380,25 @@ class pfcp_pdr {
   //------------------------------------------------------------------------------
   /** @brief Hold a copy of a downlink packet while the UE is paged.
    *
-   *  DL threads. Hands the packet to `store`, which decides whether to keep
-   *  it. Never throws.
+   *  DL threads. Hands the packet to `dl_buffer`, which decides whether to
+   *  keep it. Never throws.
    *  @return true when the packet is now held. */
   bool buffering_requested(
-      oai::upf::dl_packet_buffer& store, const char* buffer,
+      oai::upf::dl_packet_buffer& dl_buffer, const char* buffer,
       const std::size_t num_bytes);
 
   //------------------------------------------------------------------------------
-  /** @brief Send a Downlink Data Report to the CP function (3GPP TS 29.244
-   *  V17.10.0 §8.2.21 — Report Type IE, DLDR flag), once per episode.
+  /** @brief Send a Downlink Data Report to the CP function (TS 29.244
+   *  §7.5.8; Report Type DLDR, §8.2.21) for the first DL packet after the
+   *  notification latch was last cleared.
    *
-   *  DL threads. The first caller claims notified_cp. If the report cannot be
-   *  queued, the latch stays held and the next DL buffer tick releases it,
-   *  so there is at most one attempt per tick. */
+   *  Runs on the DL threads, and on TASK_UPF_APP during a replay. The caller
+   *  that sets notified_cp sends the report. If the report cannot be queued,
+   *  the latch stays set and the next DL buffer tick re-arms it, so there is
+   *  at most one attempt per tick. If the failure cannot be recorded (out of
+   *  memory), the latch is cleared at once instead. */
   void notify_cp_requested(
-      oai::upf::dl_packet_buffer& store,
+      oai::upf::dl_packet_buffer& dl_buffer,
       std::shared_ptr<pfcp::pfcp_session> session);
 
   //------------------------------------------------------------------------------
@@ -398,28 +410,25 @@ class pfcp_pdr {
 
 //------------------------------------------------------------------------------
 /**
- * @brief Re-arm the one-shot CP notification latch of every PDR of a FAR.
+ * @brief Re-arm the notification latch of every PDR of a FAR.
  *
- * Called when a FAR leaves buffering, so that the next idle period reports
- * again. Simple-switch counterpart of BARProgram::ResetBarState(). Other
- * re-arms go through pfcp_switch::rearm_dl_notification().
+ * Called when a FAR leaves BUFF, so that the next buffering period reports
+ * again. Simple-switch counterpart of BARProgram::ResetBarState(). The other
+ * re-arms go through pfcp_switch::rearm_dl_notification(), except the
+ * out-of-memory case in notify_cp_requested().
  *
  * @param pdrs    The session's PDRs (null entries are ignored).
  * @param far_id  FAR that left buffering; only PDRs using it are re-armed.
- * @return Number of PDRs whose latch was actually cleared.
  */
-inline size_t rearm_notified_cp(
+inline void rearm_notified_cp(
     const std::vector<std::shared_ptr<pfcp_pdr>>& pdrs, uint32_t far_id) {
-  size_t rearmed = 0;
   for (const auto& pdr : pdrs) {
     if (!pdr) continue;
     if (!pdr->far_id.first) continue; /* PDR references no FAR */
     if (pdr->far_id.second.far_id != far_id) continue;
-    if (!pdr->notified_cp.load()) continue; /* nothing latched */
+    if (!pdr->notified_cp.load()) continue; /* latch already clear */
     pdr->notified_cp.store(false);
-    ++rearmed;
   }
-  return rearmed;
 }
 }  // namespace pfcp
 

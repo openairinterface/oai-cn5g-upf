@@ -2,7 +2,8 @@
  * SPDX-License-Identifier: LicenseRef-CSSL-1.0
  *
  * Self-check for the end of a Session Modification: the verdict, and
- * detach_and_rearm(), the one place an episode reopens. Header-only:
+ * end_session_modification(), the one place a live session's set of
+ * buffering rules changes after establishment. Header-only:
  *
  *   g++ -std=c++17 -O2 -pthread src/upf_app/simpleswitch/test_dl_flush.cpp \
  *       -o /tmp/test_dl_flush && /tmp/test_dl_flush
@@ -76,33 +77,66 @@ void assert_balanced(const dl_packet_buffer& b) {
       "flushed != replay_sent + replay_dropped + replay_rebuffered");
 }
 
-/// All 8 signal combinations, with and without a buffering FAR left.
+/// The verdict for all 16 signal combinations, as documented in verdict_of().
 void test_verdict_table() {
-  for (int m = 0; m < 8; m++) {
-    for (int left = 0; left < 2; left++) {
-      dl_signals s;
-      s.buff_pdr_removed = m & 1;
-      s.buff_far_removed = m & 2;
-      s.buff_to_forw     = m & 4;
-      dl_verdict want;
-      if (s.buff_far_removed || s.buff_to_forw)
-        want = dl_verdict::flush;
-      else if (s.buff_pdr_removed || !left)
-        want = dl_verdict::discard;
-      else
-        want = dl_verdict::keep;
-      assert(verdict_of(s, left) == want && "verdict table");
-    }
+  struct row {
+    bool pdr_removed, far_removed, to_forw, left;
+    dl_verdict want;
+    const char* why;
+  };
+  static const row rows[] = {
+      // pdr_removed, far_removed, to_forw, left
+      {false, true, false, false, dl_verdict::flush,
+       "FLUSH: buffering FAR removed or turned into FORW"},
+      {false, true, false, true, dl_verdict::flush,
+       "FLUSH: buffering FAR removed or turned into FORW"},
+      {false, true, true, false, dl_verdict::flush,
+       "FLUSH: buffering FAR removed or turned into FORW"},
+      {false, true, true, true, dl_verdict::flush,
+       "FLUSH: buffering FAR removed or turned into FORW"},
+      {true, true, false, false, dl_verdict::flush,
+       "FLUSH: buffering FAR removed or turned into FORW"},
+      {true, true, false, true, dl_verdict::flush,
+       "FLUSH: buffering FAR removed or turned into FORW"},
+      {true, true, true, false, dl_verdict::flush,
+       "FLUSH: buffering FAR removed or turned into FORW"},
+      {true, true, true, true, dl_verdict::flush,
+       "FLUSH: buffering FAR removed or turned into FORW"},
+      {false, false, true, false, dl_verdict::flush,
+       "FLUSH: buffering FAR removed or turned into FORW"},
+      {false, false, true, true, dl_verdict::flush,
+       "FLUSH: buffering FAR removed or turned into FORW"},
+      {true, false, true, false, dl_verdict::flush,
+       "FLUSH: buffering FAR removed or turned into FORW"},
+      {true, false, true, true, dl_verdict::flush,
+       "FLUSH: buffering FAR removed or turned into FORW"},
+      {true, false, false, false, dl_verdict::discard,
+       "DISCARD: buffering PDR removed"},
+      {true, false, false, true, dl_verdict::discard,
+       "DISCARD: buffering PDR removed"},
+      {false, false, false, false, dl_verdict::discard,
+       "DISCARD: no buffering PDR left"},
+      {false, false, false, true, dl_verdict::keep,
+       "KEEP: buffering continues"},
+  };
+  for (const row& r : rows) {
+    dl_signals s;
+    s.buff_pdr_removed = r.pdr_removed;
+    s.buff_far_removed = r.far_removed;
+    s.buff_to_forw     = r.to_forw;
+    assert(verdict_of(s, r.left) == r.want && r.why);
   }
 }
 
-/// The Session Modification that ends buffering ("M4" in the assert text
-/// below) removes the paging PDR and its FAR in one message: FLUSH.
+/// The Session Modification that completes the Service Request (removes the
+/// paging PDR and FAR, creates the DL rules) ends buffering: FLUSH.
 void test_flush_beats_remove_pdr() {
   dl_signals s;
   s.buff_pdr_removed = true;
   s.buff_far_removed = true;
-  assert(verdict_of(s, false) == dl_verdict::flush && "M4 is not a flush");
+  assert(
+      verdict_of(s, false) == dl_verdict::flush &&
+      "the Session Modification that ends buffering did not FLUSH");
   dl_signals t;
   t.buff_pdr_removed = true;
   t.buff_to_forw     = true;
@@ -111,24 +145,32 @@ void test_flush_beats_remove_pdr() {
 
 /// Nothing buffers any more and nothing can deliver: DISCARD.
 void test_discard_when_no_buff_far_left() {
-  assert(verdict_of(dl_signals(), false) == dl_verdict::discard);
+  assert(
+      verdict_of(dl_signals(), false) == dl_verdict::discard &&
+      "no buffering PDR left, but no DISCARD");
   dl_signals s;
   s.buff_pdr_removed = true;
   assert(verdict_of(s, true) == dl_verdict::discard && "Remove PDR alone");
 }
 
-/// The Session Modification of a network-triggered Service Request that only
-/// creates UL rules ("M3" in the assert text) leaves the episode running.
+/// A Session Modification that only creates UL rules (part of a
+/// network-triggered Service Request) leaves the buffering period running:
+/// KEEP.
 void test_keep_when_only_unrelated_rules_change() {
-  assert(verdict_of(dl_signals(), true) == dl_verdict::keep && "M3 not KEEP");
+  assert(
+      verdict_of(dl_signals(), true) == dl_verdict::keep &&
+      "a UL-only Session Modification did not KEEP");
 }
 
 /// FLUSH hands out the whole FIFO, in arrival order, and empties the record.
 void test_flush_detaches_all_in_order() {
   dl_packet_buffer b(on());
   b.publish(SEID, {PAGING_UID});
-  for (uint32_t i = 0; i < 10; i++) assert(put_seq(b, SEID, PAGING_UID, i));
-  dl_fifo out = b.detach_and_rearm(SEID, {}, dl_verdict::flush);
+  for (uint32_t i = 0; i < 10; i++)
+    assert(
+        put_seq(b, SEID, PAGING_UID, i) &&
+        "packet refused while its rule is listed");
+  dl_fifo out = b.end_session_modification(SEID, {}, dl_verdict::flush);
   assert(out.size() == 10 && "not all detached");
   for (uint32_t i = 0; i < 10; i++)
     assert(seq_of(out[i]) == i && "flush reordered");
@@ -144,7 +186,7 @@ void test_discard_detaches_all() {
   b.publish(SEID, {PAGING_UID, OTHER_UID});
   for (uint32_t i = 0; i < 4; i++)
     put_seq(b, SEID, i % 2 ? OTHER_UID : PAGING_UID, i);
-  dl_fifo out = b.detach_and_rearm(SEID, {}, dl_verdict::discard);
+  dl_fifo out = b.end_session_modification(SEID, {}, dl_verdict::discard);
   assert(out.size() == 4 && "not all detached");
   assert(b.stats().discarded == 4 && b.stats().flushed == 0 && "counters");
   assert(b.total_pkts() == 0 && b.total_bytes() == 0 && "not released");
@@ -158,14 +200,15 @@ void test_keep_filters_in_place_order_kept() {
   b.publish(SEID, {PAGING_UID, OTHER_UID});
   for (uint32_t i = 0; i < 8; i++)
     put_seq(b, SEID, i % 2 ? OTHER_UID : PAGING_UID, i);
-  dl_fifo out = b.detach_and_rearm(SEID, {PAGING_UID}, dl_verdict::keep);
+  dl_fifo out =
+      b.end_session_modification(SEID, {PAGING_UID}, dl_verdict::keep);
   assert(out.size() == 4 && "wrong entries removed");
   for (const auto& e : out) assert(e.rule_uid == OTHER_UID && "kept removed");
   assert(b.held_for(SEID) == 4 && "wrong entries kept");
   assert(b.stats().discarded == 4 && "KEEP-removed not counted");
 
   // What stayed is still in order: flush it and look.
-  dl_fifo rest = b.detach_and_rearm(SEID, {}, dl_verdict::flush);
+  dl_fifo rest = b.end_session_modification(SEID, {}, dl_verdict::flush);
   assert(rest.size() == 4 && "kept entries lost");
   for (uint32_t i = 0; i < 4; i++)
     assert(seq_of(rest[i]) == 2 * i && "KEEP reordered");
@@ -176,37 +219,43 @@ void test_detach_retires_stale_uids() {
   dl_packet_buffer b(on());
   b.publish(SEID, {PAGING_UID});
   put_seq(b, SEID, PAGING_UID, 0);
-  b.detach_and_rearm(SEID, {}, dl_verdict::flush);
+  b.end_session_modification(SEID, {}, dl_verdict::flush);
   assert(!put_seq(b, SEID, PAGING_UID, 1) && "a retired uid admitted");
   assert(b.held_for(SEID) == 0 && "a stale uid opened a FIFO");
   assert(b.stats().stale_dropped == 1 && "stale not counted");
 }
 
-/// The next episode's uid is admitted once detach_and_rearm lists it.
-void test_new_uid_accepted_after_rearm() {
+/// A rule_uid is admitted once end_session_modification() lists it.
+void test_new_uid_accepted_after_session_modification() {
   dl_packet_buffer b(on());
   b.publish(SEID, {});
-  assert(!put_seq(b, SEID, NEW_UID, 0) && "admitted before the re-arm");
-  b.detach_and_rearm(SEID, {NEW_UID}, dl_verdict::keep);
-  assert(put_seq(b, SEID, NEW_UID, 1) && "new uid refused after the re-arm");
+  assert(
+      !put_seq(b, SEID, NEW_UID, 0) &&
+      "uid admitted before end_session_modification() listed it");
+  b.end_session_modification(SEID, {NEW_UID}, dl_verdict::keep);
+  assert(
+      put_seq(b, SEID, NEW_UID, 1) &&
+      "uid refused after end_session_modification() listed it");
   assert(b.held_for(SEID) == 1 && "not held");
 }
 
 /// A replayed packet that matches a BUFF PDR again (the UE went idle again
-/// in the same message) joins the new episode, and cannot loop: the FIFO
-/// being replayed was already detached.
+/// in the same message) is held in the new buffering period, and cannot loop:
+/// the FIFO being replayed was already detached.
 void test_reidle_during_replay_joins_new_episode() {
   dl_packet_buffer b(on());
   b.publish(SEID, {PAGING_UID});
   for (uint32_t i = 0; i < 3; i++) put_seq(b, SEID, PAGING_UID, i);
-  dl_fifo out = b.detach_and_rearm(SEID, {NEW_UID}, dl_verdict::flush);
+  dl_fifo out = b.end_session_modification(SEID, {NEW_UID}, dl_verdict::flush);
   for (const auto& e : out) {
     // The re-lookup lands on the new BUFF PDR, whose uid is NEW_UID.
     const bool held = b.enqueue(SEID, NEW_UID, 2, e.data(), e.len);
-    assert(held && "re-idle refused");
+    assert(held && "replayed packet refused by the new buffering rule");
     b.note_replay(dl_outcome::rebuffered);
   }
-  assert(b.held_for(SEID) == 3 && "not in the new episode");
+  assert(
+      b.held_for(SEID) == 3 &&
+      "replayed packet not held in the new buffering period");
   assert(out.size() == 3 && "the replay grew its own list");
   const dl_buffer_stats s = b.stats();
   assert(s.replay_rebuffered == 3 && s.stored == 6 && "counters");
@@ -218,14 +267,14 @@ void test_gen_bumps_on_each_detach() {
   dl_packet_buffer b(on());
   b.publish(SEID, {PAGING_UID});
   const uint64_t g0 = b.generation(SEID);
-  b.detach_and_rearm(SEID, {PAGING_UID}, dl_verdict::keep);
-  b.detach_and_rearm(SEID, {}, dl_verdict::flush);
-  b.detach_and_rearm(SEID, {}, dl_verdict::discard);
+  b.end_session_modification(SEID, {PAGING_UID}, dl_verdict::keep);
+  b.end_session_modification(SEID, {}, dl_verdict::flush);
+  b.end_session_modification(SEID, {}, dl_verdict::discard);
   assert(b.generation(SEID) == g0 + 3 && "generation not bumped");
 }
 
-/// DL threads enqueue while TASK_UPF_APP flushes and re-arms in a loop: no
-/// packet is handed out twice or lost, and the counters close.
+/// DL threads enqueue while TASK_UPF_APP ends Session Modifications (FLUSH)
+/// in a loop: no packet is handed out twice or lost, and the counters close.
 void test_enqueue_races_detach() {
   dl_buffer_limits l     = on();
   l.max_pkts_per_session = 1024;
@@ -253,9 +302,9 @@ void test_enqueue_races_detach() {
     }
   };
   while (running.load() > 0)
-    drain(b.detach_and_rearm(SEID, {PAGING_UID}, dl_verdict::flush));
+    drain(b.end_session_modification(SEID, {PAGING_UID}, dl_verdict::flush));
   for (auto& t : ts) t.join();
-  drain(b.detach_and_rearm(SEID, {PAGING_UID}, dl_verdict::flush));
+  drain(b.end_session_modification(SEID, {PAGING_UID}, dl_verdict::flush));
 
   assert(seen.size() == accepted.load() && "a linked packet was lost");
   const dl_buffer_stats s = b.stats();
@@ -263,6 +312,9 @@ void test_enqueue_races_detach() {
   assert(b.total_pkts() == 0 && b.session_pkts(SEID) == 0 && "leaked");
   assert_balanced(b);
 }
+
+// These tests build the packet by hand, as the private make_packet() does, so
+// that each admission phase can be run separately.
 
 /// A reservation that straddles a FLUSH which retires its uid is refused at
 /// commit, and gives both shares back.
@@ -279,7 +331,7 @@ void test_commit_after_detach_refused() {
   p.charged  = r.charged;
   p.rule_uid = r.uid;
 
-  b.detach_and_rearm(SEID, {NEW_UID}, dl_verdict::flush);
+  b.end_session_modification(SEID, {NEW_UID}, dl_verdict::flush);
   assert(!b.commit_enqueue(r, std::move(p)) && "linked under a retired uid");
   assert(p.buf && "refused packet was taken");
   assert(b.stats().stale_dropped == 1 && "not counted as stale");
@@ -336,7 +388,7 @@ int main() {
   test_discard_detaches_all();
   test_keep_filters_in_place_order_kept();
   test_detach_retires_stale_uids();
-  test_new_uid_accepted_after_rearm();
+  test_new_uid_accepted_after_session_modification();
   test_reidle_during_replay_joins_new_episode();
   test_gen_bumps_on_each_detach();
   test_enqueue_races_detach();

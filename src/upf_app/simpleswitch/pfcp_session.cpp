@@ -1095,7 +1095,8 @@ bool pfcp_session::update(
       const std::shared_ptr<pfcp::pfcp_pdr> old_pdr = slot;
       auto existing_pdr = std::make_shared<pfcp::pfcp_pdr>(*old_pdr);
       // The copy is a new rule to the DL buffer (fresh rule_uid), so packets
-      // held under the old one no longer match it.
+      // held under the old one no longer match it and are dropped at the next
+      // KEEP (docs/PAGING.md, Limitations).
       Logger::upf_n4().debug(
           "     • rule_uid: %" PRIu64 " → %" PRIu64, old_pdr->rule_uid,
           existing_pdr->rule_uid);

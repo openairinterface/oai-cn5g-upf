@@ -221,18 +221,12 @@ class SessionManager {
       itti_n4_session_deletion_request* del_req      = nullptr);
 
   /**
-   * @brief Clear the one-shot DDN (Downlink Data Notification) latch of a
-   *        session in bar_state_map.
+   * @brief Re-arm the notification latch of a session (eBPF).
    *
-   * Call it when a FAR leaves buffering, after the datapath is reprogrammed;
-   * otherwise a DL packet on the old BUFF FAR sets the latch again. Public so
-   * that pfcp_switch can use it without the XDP skeleton headers.
-   *
-   * @param seid UP SEID of a session believed to be still present. Never
-   *             creates a bar_state entry, so a stale SEID is a no-op.
-   * @return true if a bar_state entry existed and was zeroed.
+   * Public so that pfcp_switch can call it without the XDP skeleton headers.
    *
    * @note Takes no lock: safe to call while holding sessions_mutex_.
+   * @see BARProgram::ResetBarState
    */
   bool ResetBarState(uint64_t seid);
 

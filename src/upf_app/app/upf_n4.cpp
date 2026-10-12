@@ -262,9 +262,7 @@ void upf_n4::handle_receive_heartbeat_request(
       return;
     }
     Logger::upf_n4().info("Received SX HEARTBEAT REQUEST");
-    // Runs on the UDP receive thread. send_response() takes trx_mutex_ itself,
-    // which is safe: handle_receive_message_cb() has already returned and
-    // released it, so the two locks are taken one after the other, not nested.
+    // Runs on the UDP receive thread.
     send_heartbeat_response(remote_endpoint, trxn_id);
   }
 }
@@ -385,9 +383,7 @@ void upf_n4::handle_receive_association_setup_request(
       a.pfcp_ies.set(enterprise_specific);
       if (node_id.node_id_type != pfcp::NODE_ID_TYPE_IPV6_ADDRESS) {
         a.r_endpoint = remote_endpoint;
-        // Runs on the UDP receive thread. send_n4_msg() -> send_response()
-        // takes trx_mutex_ itself, after handle_receive_message_cb() has
-        // returned and released it, so the locks are not nested.
+        // Runs on the UDP receive thread.
         send_n4_msg(a);
       } else {
         Logger::upf_n4().warn(
@@ -494,8 +490,7 @@ void upf_n4::handle_receive_session_report_response(
 
   handle_receive_message_cb(msg, remote_endpoint, TASK_UPF_N4, error, trxn_id);
   if (!error) {
-    // The report was answered, so there is no latch to re-arm. trx_mutex_ is
-    // already released here, and dldr_mutex_ is never nested inside it.
+    // The report was answered, so there is no notification latch to re-arm.
     size_t pending = 0;
     bool was_dldr  = false;
     {
@@ -604,16 +599,17 @@ void upf_n4::handle_itti_msg(itti_n4_session_deletion_response& msg) {
 }
 //------------------------------------------------------------------------------
 void upf_n4::handle_itti_msg(itti_n4_session_report_request& msg) {
-  if (msg.has_dldr_meta) {
+  if (msg.dl_report_origin) {
     // Record the transaction before sending, so that a fast response always
     // finds it.
     {
       std::lock_guard<std::mutex> lk(dldr_mutex_);
-      dldr_trxn_[msg.trxn_id] = std::make_pair(msg.up_seid, msg.dl_pdr_id);
+      dldr_trxn_[msg.trxn_id] = *msg.dl_report_origin;
     }
+    // seid is the UP SEID.
     Logger::upf_n4().info(
         "Sending SESSION REPORT REQUEST (DLDR) seid " SEID_FMT " pdr %u",
-        msg.up_seid, msg.dl_pdr_id);
+        msg.dl_report_origin->up_seid, msg.dl_report_origin->pdr_id);
   }
   send_n4_msg(msg);
 }
@@ -621,15 +617,17 @@ void upf_n4::handle_itti_msg(itti_n4_session_report_request& msg) {
 // notify_ul_error -- the peer never answered a request we sent. Runs on
 // TASK_UPF_N4, with trx_mutex_ released.
 //
-// For a Downlink Data Report, the PDR's notification latch is still held, so
-// no new DL packet would report and the UE would not be paged again. Ask
-// TASK_UPF_APP, which owns the rules, to release the latch. A late response
-// only causes one extra report, which the SMF ignores.
+// For a Downlink Data Report, the notification latch that the report set
+// (per PDR on the simple switch, per session on eBPF) is still set, so no
+// new DL packet would report and the UE would not be paged again. Ask
+// TASK_UPF_APP, which owns the rules, to re-arm the latch. A late response
+// only causes one extra report, which the OAI SMF ignores while it is still
+// paging the UE.
 //------------------------------------------------------------------------------
 void upf_n4::notify_ul_error(
     const pfcp::pfcp_procedure& p, const ::cause_value_e cause) {
   pfcp_l4_stack::notify_ul_error(p, cause);
-  std::pair<uint64_t, uint16_t> dldr = {};
+  dl_data_report_origin dldr = {};
   {
     std::lock_guard<std::mutex> lk(dldr_mutex_);
     auto it = dldr_trxn_.find(p.trxn_id);
@@ -639,10 +637,9 @@ void upf_n4::notify_ul_error(
   }
   Logger::upf_n4().warn(
       "DLDR trxn %" PRIu64 " seid " SEID_FMT ": peer not responding, re-arming",
-      p.trxn_id, dldr.first);
+      p.trxn_id, dldr.up_seid);
   auto m = std::make_shared<itti_n4_dl_notify_rearm>(TASK_UPF_N4, TASK_UPF_APP);
-  m->up_seid = dldr.first;
-  m->pdr_id  = dldr.second;
+  m->dl_report_origin = dldr;
   if (itti_inst->send_msg(m) != RETURNok) {
     Logger::upf_n4().error(
         "Could not send ITTI message %s to task TASK_UPF_APP",
@@ -698,32 +695,20 @@ void upf_n4::start_association(const pfcp::node_id_t& node_id) {
   }
 }
 //------------------------------------------------------------------------------
-bool upf_n4::send_n4_msg(
+session_report_enqueue_result upf_n4::enqueue_session_report_request(
     const pfcp::fseid_t& cp_fseid, const pfcp::pfcp_session_report_request& s,
-    std::optional<std::pair<uint64_t, uint16_t>> dldr) {
-  // Callers run on DL datapath, usage-report and TASK_UPF_APP threads, so the
-  // request goes through TASK_UPF_N4 instead of calling send_request() here.
-  bool association_found = false;
-  return enqueue_session_report_request(cp_fseid, s, association_found, dldr);
-}
-//------------------------------------------------------------------------------
-bool upf_n4::enqueue_session_report_request(
-    const pfcp::fseid_t& cp_fseid, const pfcp::pfcp_session_report_request& s,
-    bool& association_found,
-    std::optional<std::pair<uint64_t, uint16_t>> dldr) {
-  association_found = false;
-
+    std::optional<dl_data_report_origin> dl_report_origin) {
   std::shared_ptr<pfcp_association> sa = {};
   if (!pfcp_associations::get_instance().get_association(cp_fseid, sa) || !sa) {
     Logger::upf_n4().warn(
         "Could not enqueue PFCP_SESSION_REPORT_REQUEST, cause association not "
         "found for cp_fseid " SEID_FMT,
         cp_fseid.seid);
-    return false;
+    return session_report_enqueue_result::no_peer_address;
   }
 
-  // An IPv4 Node ID is its own address. Any other Node ID (an FQDN) cannot go
-  // in a sockaddr, so use the address the association came from.
+  // An IPv4 Node ID is the peer address. For any other Node ID (FQDN or IPv6),
+  // use the address the association came from (peer_addr).
   const pfcp::node_id_t& peer_node_id = sa->peer_node_id();
   endpoint r_endpoint                 = {};
   if (peer_node_id.node_id_type == pfcp::NODE_ID_TYPE_IPV4_ADDRESS) {
@@ -735,43 +720,40 @@ bool upf_n4::enqueue_session_report_request(
         "Could not enqueue PFCP_SESSION_REPORT_REQUEST for cp_fseid " SEID_FMT
         ", no address known for peer %s",
         cp_fseid.seid, peer_node_id.toString().c_str());
-    return false;
+    return session_report_enqueue_result::no_peer_address;
   }
-  association_found = true;
 
+  // itti_inst is reset to null at shutdown (main.cpp), while DL threads may
+  // still report.
   if (!itti_inst) {
     Logger::upf_n4().error(
         "Could not enqueue PFCP_SESSION_REPORT_REQUEST for cp_fseid " SEID_FMT
         ", ITTI is not up",
         cp_fseid.seid);
-    return false;
+    return session_report_enqueue_result::itti_refused;
   }
 
   auto isrr = std::make_shared<itti_n4_session_report_request>(
       TASK_UPF_N4, TASK_UPF_N4);
-  isrr->trxn_id    = generate_trxn_id();
-  isrr->pfcp_ies   = s;
-  isrr->seid       = cp_fseid.seid;
-  isrr->r_endpoint = r_endpoint;
-  if (dldr) {
-    isrr->has_dldr_meta = true;
-    isrr->up_seid       = dldr->first;
-    isrr->dl_pdr_id     = dldr->second;
-  }
+  isrr->trxn_id          = generate_trxn_id();
+  isrr->pfcp_ies         = s;
+  isrr->seid             = cp_fseid.seid;
+  isrr->r_endpoint       = r_endpoint;
+  isrr->dl_report_origin = dl_report_origin;
 
   if (itti_inst->send_msg(isrr) != RETURNok) {
     Logger::upf_n4().error(
         "Could not enqueue PFCP_SESSION_REPORT_REQUEST to TASK_UPF_N4 for "
         "cp_fseid " SEID_FMT " (trxn_id %" PRIu64 ")",
         cp_fseid.seid, isrr->trxn_id);
-    return false;
+    return session_report_enqueue_result::itti_refused;
   }
 
   Logger::upf_n4().debug(
       "Queued PFCP_SESSION_REPORT_REQUEST on TASK_UPF_N4, seid " SEID_FMT
       " (CP F-SEID) trxn_id %" PRIu64,
       isrr->seid, isrr->trxn_id);
-  return true;
+  return session_report_enqueue_result::queued;
 }
 //------------------------------------------------------------------------------
 void upf_n4::send_heartbeat_request(std::shared_ptr<pfcp_association>& a) {

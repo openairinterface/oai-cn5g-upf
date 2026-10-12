@@ -482,7 +482,7 @@ int far_apply(struct xdp_md* ctx) {
   u8 action = *((u8*) &far->apply_action);
 
   /* -------------------------------------------------------------- */
-  /*  Priority 1: DROP (§8.2.26 bit 0)                              */
+  /*  Priority 1: DROP (Apply Action, §8.2.26)                      */
   /* -------------------------------------------------------------- */
   if (action & PFCP_APPLY_ACTION_DROP) {
     bpf_debug("Apply Action: DROP ( SEID = %llu )", seid);
@@ -496,7 +496,7 @@ int far_apply(struct xdp_md* ctx) {
   }
 
   /* -------------------------------------------------------------- */
-  /*  Priority 2: FORWARD (§8.2.26 bit 1)                           */
+  /*  Priority 2: FORW (Apply Action, §8.2.26)                      */
   /* -------------------------------------------------------------- */
   if (action & PFCP_APPLY_ACTION_FORW) {
     if (IS_ETH_PDU(pctx->session_type) && IS_UPLINK(pctx->session_type)) {
@@ -614,7 +614,7 @@ int far_apply(struct xdp_md* ctx) {
   }
 
   /* -------------------------------------------------------------- */
-  /*  Priority 3: BUFFER (§8.2.26 bit 2) → BAR                     */
+  /*  Priority 3: BUFF (Apply Action, §8.2.26) → XDP BAR program    */
   /* -------------------------------------------------------------- */
   if (action & PFCP_APPLY_ACTION_BUFF) {
     bpf_debug("Apply Action: BUFF ( SEID = %llu )", seid);
@@ -632,16 +632,23 @@ int far_apply(struct xdp_md* ctx) {
   }
 
   /* -------------------------------------------------------------- */
-  /*  Priority 4: NOTIFY_CP (§8.2.26 bit 3) — handled by the BAR    */
+  /*  Priority 4: NOCP (Apply Action, §8.2.26)                      */
   /* -------------------------------------------------------------- */
   /*
-   * Nothing to do here: the BAR program sends the DDN on the BUFF path,
-   * using bar_config.notify_cp. Sending one here too would notify the SMF
-   * twice. NOCP without BUFF does nothing.
+   * NOCP is acted on only together with BUFF: when the BAR stage is
+   * enabled, the BUFF branch above hands the packet to the BAR program,
+   * which submits a DDN event if bar_config.notify_cp is set (user space
+   * then sends the Downlink Data Report). This point is reached only when
+   * DROP, FORW and BUFF are all clear, so a FAR with NOCP alone gets no
+   * DDN and falls through to the default XDP_PASS below. A FAR with DROP
+   * or FORW and NOCP was dropped or forwarded above, also without a DDN.
+   * TS 29.244 §8.2.26 allows NOCP only together with BUFF. The simple
+   * switch sends a Downlink Data Report in these cases; see
+   * docs/PAGING.md, Limitations.
    */
 
   /* -------------------------------------------------------------- */
-  /*  Priority 5: DUPLICATE (§8.2.26 bit 4)                         */
+  /*  Priority 5: DUPL (Apply Action, §8.2.26)                      */
   /* -------------------------------------------------------------- */
   if (action & PFCP_APPLY_ACTION_DUPL) {
     bpf_debug(

@@ -56,7 +56,7 @@ static __always_inline bool bar_submit_ddn(
   if (!evt) {
     bpf_debug(
         "BAR: Ringbuf full — DDN dropped "
-        "SEID=%llu (§7.2.5)",
+        "SEID=%llu",
         seid);
     return false;
   }
@@ -85,20 +85,23 @@ static __always_inline bool bar_submit_ddn(
  *        only place a DDN is produced.
  *
  *   1. No DDN if no FAR asked to notify the CP (NOCP, §8.2.26).
- *   2. A DDN is due if none was sent yet, or if the DL Data Notification
- *      Delay (§8.2.28) has passed since the last one.
+ *   2. A DDN is due if the notification latch is clear, or if a non-zero
+ *      Downlink Data Notification Delay (§8.2.28) has passed since the
+ *      last DDN.
  *   3. A compare-and-swap to NOTIFY_CLAIMED lets exactly one CPU send it.
  *   4. On success the send time is stored. If the ring is full, the old
  *      value is restored so that the next packet tries again.
+ *
+ * The delay is used as a repeat gap, not as a delay before the first DDN
+ * (see bar_config.dl_notification_delay_50ms).
  *
  * @param seid   PFCP session ID
  * @param cfg    BAR configuration (map value)
  * @param state  Per-session BAR runtime state (map value)
  * @param pctx   Packet context (for pdr_id, ue_ip)
  * @param now_ns Current timestamp
- * @return true iff this packet produced a DDN
  */
-static __always_inline bool bar_notify_if_due(
+static __always_inline void bar_notify_if_due(
     __u64 seid, struct bar_config* cfg, struct bar_state* state,
     struct packet_context* pctx, __u64 now_ns) {
   /* (1) NOCP gate — BUFF without NOCP buffers silently (§8.2.26). */
@@ -107,59 +110,66 @@ static __always_inline bool bar_notify_if_due(
         "BAR: notify_cp=0 for SEID=%llu — "
         "buffering silently, no DDN (§8.2.26)",
         seid);
-    return false;
+    return;
   }
 
-  /* (2) Which value of the claim word are we allowed to take over? */
-  __u64 cur = state->notify_epoch_ns;
-  __u64 from;
+  /* (2) Is a DDN due? Remember the value the compare-and-swap must replace. */
+  __u64 last_ddn = state->last_ddn_ns;
+  __u64 expected;
 
-  if (cur == NOTIFY_FREE) {
-    /* First DDN of the idle burst. */
-    from = NOTIFY_FREE;
+  if (last_ddn == NOTIFY_FREE) {
+    /* Notification latch clear: no DDN since the entry was created or last
+     * re-armed. */
+    expected = NOTIFY_FREE;
   } else if (
-      (cur & NOTIFY_CLAIMED) == 0 && cfg->dl_notification_delay_50ms != 0 &&
-      (now_ns - cur) >= (__u64) cfg->dl_notification_delay_50ms * 50000000ULL) {
-    /* Committed epoch, no submit in flight, delay window expired (§8.2.28:
-     * the IE is in 50 ms units, 1 unit = 50 000 000 ns) — re-notify. */
-    from = cur;
+      (last_ddn & NOTIFY_CLAIMED) == 0 &&
+      cfg->dl_notification_delay_50ms != 0 &&
+      (now_ns - last_ddn) >=
+          (__u64) cfg->dl_notification_delay_50ms * 50000000ULL) {
+    /* A DDN was sent, none is in flight, and the non-zero delay has passed
+     * since it (§8.2.28: the IE is in 50 ms units, 1 unit = 50 000 000 ns):
+     * send a repeat DDN. */
+    expected = last_ddn;
   } else {
     bpf_debug(
         "BAR: DDN suppressed for SEID=%llu — "
         "already delivered or in flight (§8.2.28)",
         seid);
-    return false;
+    return;
   }
 
-  /* (3) Single-winner claim. */
+  /* (3) Only the CPU whose compare-and-swap succeeds submits the DDN event. */
   if (__sync_val_compare_and_swap(
-          &state->notify_epoch_ns, from, NOTIFY_CLAIMED) != from) {
+          &state->last_ddn_ns, expected, NOTIFY_CLAIMED) != expected) {
     bpf_debug(
-        "BAR: DDN claim lost for SEID=%llu — "
-        "another CPU owns this notification window",
+        "BAR: DDN not sent for SEID=%llu — "
+        "notification latch changed meanwhile",
         seid);
-    return false;
+    return;
   }
 
-  /* The word now reads NOTIFY_CLAIMED, which is not a committed epoch, so the
-   * derived mirror must read 0 for as long as the submit is in flight. */
+  /* While the submit is in flight, last_ddn_ns holds NOTIFY_CLAIMED, not a
+   * send time, so notification_sent, which mirrors the latch for bpftool
+   * readers only, reads 0. */
   state->notification_sent = 0;
 
-  /* (4) Commit only on a successful submit, otherwise release the claim. */
+  /* (4) Store the send time only if the submit succeeded; otherwise restore
+   * the previous value, so that the next DL packet tries again. */
   if (bar_submit_ddn(seid, cfg, pctx, now_ns)) {
-    state->notify_epoch_ns   = now_ns & ~NOTIFY_CLAIMED;
-    state->notification_sent = 1; /* derived mirror */
-    return true;
+    /* Bit 63 is kept clear so that a send time never equals NOTIFY_CLAIMED. */
+    state->last_ddn_ns       = now_ns & ~NOTIFY_CLAIMED;
+    state->notification_sent = 1;
+    return;
   }
 
-  state->notify_epoch_ns   = from;
-  state->notification_sent = (from == NOTIFY_FREE) ? 0 : 1; /* derived mirror */
+  state->last_ddn_ns       = expected;
+  state->notification_sent = (expected == NOTIFY_FREE) ? 0 : 1;
 
   bpf_debug(
-      "BAR: DDN claim released for SEID=%llu — "
-      "ring full, next DL packet retries (§7.2.5)",
+      "BAR: notification latch restored for SEID=%llu — "
+      "ring full, next DL packet retries",
       seid);
-  return false;
+  return;
 }
 
 /* ========================================================================== */
@@ -180,7 +190,8 @@ int bar_apply(struct xdp_md* ctx) {
   u64 seid = pctx->seid;
 
   /* ---------------------------------------------------------------- */
-  /*  Step 1: Lookup BAR configuration (§8.2.49)                      */
+  /*  Step 1: Look up the BAR configuration                           */
+  /*  (Create BAR, Table 7.5.2.6-1)                                   */
   /* ---------------------------------------------------------------- */
   struct bar_config* cfg = bpf_map_lookup_elem(&bar_config_map, &seid);
 
@@ -193,15 +204,14 @@ int bar_apply(struct xdp_md* ctx) {
      */
     bpf_debug(
         "BAR: No BAR config for SEID=%llu — "
-        "cannot buffer, dropping (§8.2.49)",
+        "cannot buffer, dropping",
         seid);
     return xdp_stats_record_action(ctx, XDP_DROP);
   }
 
   bpf_debug(
-      "BAR: BAR-ID=%u, buf_pkt_cnt=%u, ddn_delay=%u x50ms "
-      "(§8.2.49, §8.2.50, §8.2.28)",
-      cfg->bar_id, cfg->suggested_buf_pkt_cnt, cfg->dl_notification_delay_50ms);
+      "BAR: BAR-ID=%u, buf_pkt_cnt=%u, ddn_delay=%u x50ms", cfg->bar_id,
+      cfg->suggested_buf_pkt_cnt, cfg->dl_notification_delay_50ms);
 
   /* ---------------------------------------------------------------- */
   /*  Step 2: Lookup or initialize buffering state                    */
@@ -212,9 +222,9 @@ int bar_apply(struct xdp_md* ctx) {
     /*
      * No state entry — the control plane should have pre-created it
      * (BARProgram::InitBarStateMap). Create a zeroed entry here: without one
-     * there is no claim word, and every DL packet of the burst would send its
-     * own DDN. BPF_NOEXIST keeps an entry that another CPU created meanwhile,
-     * and any latch it holds, intact.
+     * there is no notification latch, and every DL packet would send its own
+     * DDN. BPF_NOEXIST keeps an entry that another CPU created meanwhile, and
+     * its notification latch, intact.
      */
     struct bar_state fresh = {};
 
@@ -223,10 +233,8 @@ int bar_apply(struct xdp_md* ctx) {
 
     if (!state) {
       /*
-       * Fail closed: the state entry could not be created (bar_state_map
-       * full, or the update was rejected). Drop the packet and count it
-       * under XDP_ABORTED in mc_stats_map so userspace can notice. Never fall
-       * back to one DDN per packet.
+       * Fail closed: without a state entry there is no notification latch;
+       * drop and count under XDP_ABORTED (mc_stats_map).
        */
       bpf_debug(
           "BAR: Cannot establish state for SEID=%llu — "
@@ -244,39 +252,38 @@ int bar_apply(struct xdp_md* ctx) {
   __u64 now_ns = bpf_ktime_get_ns();
 
   /* ---------------------------------------------------------------- */
-  /*  Step 3: DDN notification — NOCP gate + atomic claim (§8.2.28)  */
+  /*  Step 3: DDN, if due (NOCP gate and notification latch, §8.2.28) */
   /* ---------------------------------------------------------------- */
-  /*
-   * Both the normal path and the missing-state path above reach this single
-   * call, so the NOCP gate and the one-shot latch apply identically to both.
-   */
   bar_notify_if_due(seid, cfg, state, pctx, now_ns);
 
   /* ---------------------------------------------------------------- */
-  /*  Step 4: Buffer overflow check (§8.2.50)                        */
+  /*  Step 4: Buffer limit                                            */
+  /*  (Suggested Buffering Packets Count, §8.2.100)                   */
   /* ---------------------------------------------------------------- */
   if (cfg->suggested_buf_pkt_cnt > 0) {
-    __u32 current_count = state->buffered_pkt_count;      // plain read
-    __sync_fetch_and_add(&state->buffered_pkt_count, 1);  // atomic increment
+    /*
+     * Concurrent CPUs can each read a count below the limit, so up to
+     * (number of CPUs − 1) packets beyond the Suggested Buffering Packets Count
+     * can pass this check, although TS 29.244 Table 7.5.2.6-1 says that excess
+     * packets shall be discarded.
+     */
+    __u32 current_count = state->buffered_pkt_count;
+    __sync_fetch_and_add(&state->buffered_pkt_count, 1);
 
     if (current_count >= cfg->suggested_buf_pkt_cnt) {
-      /*
-       * Buffer full — drop excess packets. The suggested count
-       * is a hint from SMF (§8.2.50); exceeding it means the UE
-       * has not responded to paging yet.
-       */
+      /* Over the limit: drop. */
       bpf_debug(
           "BAR: Buffer full (%u >= %u) SEID=%llu — "
-          "dropping excess (§8.2.50)",
+          "dropping excess",
           current_count, cfg->suggested_buf_pkt_cnt, seid);
       return xdp_stats_record_action(ctx, XDP_DROP);
     }
 
     bpf_debug(
-        "BAR: Buffering packet %u/%u for SEID=%llu (§8.2.50)",
-        current_count + 1, cfg->suggested_buf_pkt_cnt, seid);
+        "BAR: Buffering packet %u/%u for SEID=%llu", current_count + 1,
+        cfg->suggested_buf_pkt_cnt, seid);
   } else {
-    /* No buffer limit configured — count anyway for stats */
+    /* No limit configured: count anyway, for bpftool inspection. */
     __sync_fetch_and_add(&state->buffered_pkt_count, 1);
 
     bpf_debug(
