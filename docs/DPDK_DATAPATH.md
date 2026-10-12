@@ -101,22 +101,39 @@ define `struct iphdr` differently, so no translation unit may include both.
 
 ## What works
 
-- Uplink: GTP-U decapsulation, PDR match by TEID, FAR apply action, forward to N6
+- Uplink: GTP-U decapsulation, PDR match, FAR apply action, forward to N6
 - Downlink: UE IP lookup, GTP-U encapsulation with the PDU Session Container
   carrying the QFI (same wire format as the eBPF flavour)
-- QER gate status (a closed gate drops)
+- PDR selection by SDF filter: the most specific matching filter wins, ties are
+  settled by precedence, and a PDR without a filter is the catch-all. The
+  filter is parsed once per session with the same `SdfFilterParser` the eBPF
+  flavour uses, and matched with the same scoring, so both agree on what a
+  filter means
+- QER gate status, and Maximum Bit Rate per direction with a token bucket
+  (`rte_meter` srTCM). The rate is charged on the UE's own packet, before the
+  tunnel headers are added or after they are stripped
 - ARP replies for the UPF's own N3/N6 addresses
 - GTP-U Echo Request replies
 - Per-session traffic counters, per-lcore pipeline counters, port statistics
+
+### Notes on the QoS enforcement
+
+The token buckets live in the session's rule set and are shared by every lcore
+that carries the session, so each check takes a spinlock for that QER and
+direction. With the usual one-lcore-per-port setup it is never contended. If a
+session is spread over several lcores by RSS the lock keeps the rate correct at
+the cost of that contention.
+
+GBR is not enforced: only the MBR ceiling is. A QER with no MBR for a direction
+leaves that direction unmetered.
 
 ## Not implemented yet
 
 | Missing | Effect |
 |---|---|
-| SDF filters | The first PDR by precedence wins, so a session with several service data flows treats them all alike |
-| QER MBR/GBR | The gate is enforced, the rate is not |
 | URR | The counters exist per session, but no usage report is sent |
 | BAR buffering | A non-forwarding FAR drops instead of buffering |
+| QER GBR | Only the MBR ceiling is enforced |
 | ARP requests | Next hops come from the configuration |
 | IPv6 | IPv4 only, in both the tunnel and the payload |
 | Fragmentation | An encapsulated full-size packet needs an MTU of 1544 on N3; the ports ask for it and warn when the device cannot |
@@ -128,7 +145,7 @@ counts, link state), the next hops, the table capacity and one line per worker
 lcore. On shutdown every worker prints its counters.
 
 If no traffic flows, the per-lcore counters say which stage dropped it:
-`no session` (no PFCP session for that TEID or UE IP), `no rule` (no matching
-PDR, or its FAR is missing), `action` (FAR drop or a closed QER gate),
-`no next hop` (`next_hop_mac` not configured), `malformed` (too short, not
-IPv4, or not addressed to us).
+`no session` (no PFCP session for that TEID or UE IP), `no rule` (no PDR
+matched, or its FAR is missing), `action` (FAR drop or a closed QER gate),
+`over rate` (above the QER's MBR), `no next hop` (`next_hop_mac` not
+configured), `malformed` (too short, not IPv4, or not addressed to us).

@@ -6,6 +6,9 @@
 
 #include <rte_arp.h>
 #include <rte_byteorder.h>
+#include <rte_cycles.h>
+#include <rte_meter.h>
+#include <rte_tcp.h>
 #include <rte_ether.h>
 #include <rte_gtp.h>
 #include <rte_ip.h>
@@ -202,11 +205,24 @@ DpdkPipeline::Egress DpdkPipeline::HandleUplink(
     return Egress::Drop;
   }
 
-  const struct pfcp_pdr* pdr = MatchUplinkPdr(*rules, teid);
-  if (pdr == nullptr) {
+  // The SDF filter applies to the UE's own packet, which starts right after
+  // the tunnel headers.
+  const uint16_t tunnel_length = static_cast<uint16_t>(
+      cursor - rte_pktmbuf_mtod(packet, const uint8_t*));
+  PacketTuple tuple;
+  if (cursor + sizeof(rte_ipv4_hdr) > packet_end ||
+      !ExtractTuple(
+          reinterpret_cast<const rte_ipv4_hdr*>(cursor), packet_end, tuple)) {
+    stats_.dropped_malformed++;
+    return Egress::Drop;
+  }
+
+  const DpdkPdrEntry* entry = MatchPdr(rules->uplink_pdrs, tuple, teid, true);
+  if (entry == nullptr) {
     stats_.dropped_no_rule++;
     return Egress::Drop;
   }
+  const struct pfcp_pdr* pdr = &entry->pdr;
 
   const struct pfcp_far* far = rules->FindFar(pdr->far_id.far_id);
   if (far == nullptr) {
@@ -217,9 +233,19 @@ DpdkPipeline::Egress DpdkPipeline::HandleUplink(
     stats_.dropped_action++;
     return Egress::Drop;
   }
-  if (!GateIsOpen(*rules, *pdr, true)) {
-    stats_.dropped_action++;
-    return Egress::Drop;
+
+  DpdkQerEntry* qer = rules->FindQer(pdr->qer_id.qer_id);
+  if (qer != nullptr) {
+    if (!GateIsOpen(qer->qer, true)) {
+      stats_.dropped_action++;
+      return Egress::Drop;
+    }
+    // The MBR applies to the UE's traffic, so charge the inner packet only.
+    if (!MeterAllows(
+            *qer, true, rte_pktmbuf_pkt_len(packet) - tunnel_length)) {
+      stats_.dropped_rate++;
+      return Egress::Drop;
+    }
   }
   if (!to_data_network_.has_next_hop) {
     stats_.dropped_no_next_hop++;
@@ -228,9 +254,7 @@ DpdkPipeline::Egress DpdkPipeline::HandleUplink(
 
   // Everything up to the inner packet goes away, then a fresh L2 header for
   // the data network.
-  const uint16_t outer_length = static_cast<uint16_t>(
-      cursor - rte_pktmbuf_mtod(packet, const uint8_t*));
-  if (rte_pktmbuf_adj(packet, outer_length) == nullptr) {
+  if (rte_pktmbuf_adj(packet, tunnel_length) == nullptr) {
     stats_.dropped_malformed++;
     return Egress::Drop;
   }
@@ -264,11 +288,20 @@ DpdkPipeline::Egress DpdkPipeline::HandleDownlink(
     return Egress::Drop;
   }
 
-  const struct pfcp_pdr* pdr = MatchDownlinkPdr(*rules);
-  if (pdr == nullptr) {
+  PacketTuple tuple;
+  const uint8_t* packet_end =
+      rte_pktmbuf_mtod(packet, const uint8_t*) + rte_pktmbuf_data_len(packet);
+  if (!ExtractTuple(inner_ip, packet_end, tuple)) {
+    stats_.dropped_malformed++;
+    return Egress::Drop;
+  }
+
+  const DpdkPdrEntry* entry = MatchPdr(rules->downlink_pdrs, tuple, 0, false);
+  if (entry == nullptr) {
     stats_.dropped_no_rule++;
     return Egress::Drop;
   }
+  const struct pfcp_pdr* pdr = &entry->pdr;
 
   const struct pfcp_far* far = rules->FindFar(pdr->far_id.far_id);
   if (far == nullptr) {
@@ -280,9 +313,20 @@ DpdkPipeline::Egress DpdkPipeline::HandleDownlink(
     stats_.dropped_action++;
     return Egress::Drop;
   }
-  if (!GateIsOpen(*rules, *pdr, false)) {
-    stats_.dropped_action++;
-    return Egress::Drop;
+
+  DpdkQerEntry* qer = rules->FindQer(pdr->qer_id.qer_id);
+  if (qer != nullptr) {
+    if (!GateIsOpen(qer->qer, false)) {
+      stats_.dropped_action++;
+      return Egress::Drop;
+    }
+    // Charge the UE's packet, before the tunnel headers are added.
+    if (!MeterAllows(
+            *qer, false,
+            rte_pktmbuf_pkt_len(packet) - sizeof(rte_ether_hdr))) {
+      stats_.dropped_rate++;
+      return Egress::Drop;
+    }
   }
 
   const struct outer_header_creation& ohc =
@@ -496,30 +540,148 @@ DpdkPipeline::Egress DpdkPipeline::HandleGtpEcho(
 }
 
 //------------------------------------------------------------------------------
-const struct pfcp_pdr* DpdkPipeline::MatchUplinkPdr(
-    const DpdkSessionRules& rules, uint32_t teid) {
-  // Already sorted by precedence, so the first match wins (§8.2.11).
-  // TODO(dpdk): apply the PDI SDF filter before accepting the PDR.
-  for (const auto& pdr : rules.uplink_pdrs) {
-    if (pdr.pdi.fteid.teid == teid) return &pdr;
+bool DpdkPipeline::ExtractTuple(
+    const rte_ipv4_hdr* ip, const uint8_t* packet_end, PacketTuple& tuple) {
+  const uint8_t* layer4 =
+      reinterpret_cast<const uint8_t*>(ip) + rte_ipv4_hdr_len(ip);
+  if (layer4 > packet_end) return false;
+
+  tuple.source_address      = ip->src_addr;
+  tuple.destination_address = ip->dst_addr;
+  tuple.protocol            = ip->next_proto_id;
+
+  // Only TCP and UDP carry ports; for anything else they stay 0, which is what
+  // a filter with no port range expects.
+  if (ip->next_proto_id == IPPROTO_UDP) {
+    if (layer4 + sizeof(rte_udp_hdr) > packet_end) return false;
+    const auto* udp        = reinterpret_cast<const rte_udp_hdr*>(layer4);
+    tuple.source_port      = rte_be_to_cpu_16(udp->src_port);
+    tuple.destination_port = rte_be_to_cpu_16(udp->dst_port);
+  } else if (ip->next_proto_id == IPPROTO_TCP) {
+    if (layer4 + sizeof(rte_tcp_hdr) > packet_end) return false;
+    const auto* tcp        = reinterpret_cast<const rte_tcp_hdr*>(layer4);
+    tuple.source_port      = rte_be_to_cpu_16(tcp->src_port);
+    tuple.destination_port = rte_be_to_cpu_16(tcp->dst_port);
   }
-  return nullptr;
+
+  return true;
+}
+
+namespace {
+
+/**
+ * @brief Does the packet fall inside this SDF filter?
+ *
+ * The parser keeps the address in the low 32 bits of its 128-bit field and the
+ * prefix mask in the high 32 bits, both in host order, so they are converted
+ * before meeting the packet's network-order addresses. This is the same
+ * arithmetic the eBPF flavour performs, so both agree on what a filter means.
+ */
+bool SdfMatches(
+    const struct sdf_filtr& sdf, const DpdkPipeline::PacketTuple& tuple) {
+  const uint32_t filter_source_address =
+      rte_cpu_to_be_32(static_cast<uint32_t>(sdf.src_addr.ip));
+  const uint32_t filter_source_mask =
+      rte_cpu_to_be_32(static_cast<uint32_t>(sdf.src_addr.mask >> 96));
+  const uint32_t filter_destination_address =
+      rte_cpu_to_be_32(static_cast<uint32_t>(sdf.dst_addr.ip));
+  const uint32_t filter_destination_mask =
+      rte_cpu_to_be_32(static_cast<uint32_t>(sdf.dst_addr.mask >> 96));
+
+  return (sdf.protocol == 0 || sdf.protocol == tuple.protocol) &&
+         (tuple.source_address & filter_source_mask) == filter_source_address &&
+         (tuple.destination_address & filter_destination_mask) ==
+             filter_destination_address &&
+         tuple.source_port >= sdf.src_port.lower_bound &&
+         tuple.source_port <= sdf.src_port.upper_bound &&
+         tuple.destination_port >= sdf.dst_port.lower_bound &&
+         tuple.destination_port <= sdf.dst_port.upper_bound;
+}
+
+/**
+ * @brief How narrow a filter is, so the tightest match wins.
+ *
+ * Same scoring as the eBPF flavour: an exact protocol counts most, then the
+ * bits set in the address masks, then how narrow the port ranges are.
+ */
+uint32_t SdfSpecificity(const struct sdf_filtr& sdf, uint8_t packet_protocol) {
+  uint32_t score = sdf.protocol == 0                 ? 100
+                   : sdf.protocol == packet_protocol ? 300
+                                                     : 50;
+
+  score += __builtin_popcount(static_cast<uint32_t>(sdf.src_addr.mask >> 96));
+  score += __builtin_popcount(static_cast<uint32_t>(sdf.dst_addr.mask >> 96));
+
+  const uint16_t source_span =
+      sdf.src_port.upper_bound - sdf.src_port.lower_bound;
+  const uint16_t destination_span =
+      sdf.dst_port.upper_bound - sdf.dst_port.lower_bound;
+  if (source_span < UINT16_MAX) score += (UINT16_MAX - source_span) / 1000;
+  if (destination_span < UINT16_MAX) {
+    score += (UINT16_MAX - destination_span) / 1000;
+  }
+
+  return score;
+}
+
+}  // namespace
+
+//------------------------------------------------------------------------------
+const DpdkPdrEntry* DpdkPipeline::MatchPdr(
+    const std::vector<DpdkPdrEntry>& candidates, const PacketTuple& tuple,
+    uint32_t teid, bool uplink) {
+  const DpdkPdrEntry* best      = nullptr;
+  uint32_t best_specificity     = 0;
+  const DpdkPdrEntry* catch_all = nullptr;
+
+  for (const auto& entry : candidates) {
+    // An uplink PDR is tied to the tunnel the packet arrived on.
+    if (uplink && entry.pdr.pdi.fteid.teid != 0 &&
+        entry.pdr.pdi.fteid.teid != teid) {
+      continue;
+    }
+
+    if (!entry.has_sdf) {
+      // The list is precedence-ordered, so the first one is the best catch-all.
+      if (catch_all == nullptr) catch_all = &entry;
+      continue;
+    }
+
+    if (!SdfMatches(entry.sdf, tuple)) continue;
+
+    const uint32_t specificity = SdfSpecificity(entry.sdf, tuple.protocol);
+    if (best == nullptr || specificity > best_specificity) {
+      best             = &entry;
+      best_specificity = specificity;
+    }
+  }
+
+  return best != nullptr ? best : catch_all;
 }
 
 //------------------------------------------------------------------------------
-const struct pfcp_pdr* DpdkPipeline::MatchDownlinkPdr(
-    const DpdkSessionRules& rules) {
-  // TODO(dpdk): apply the PDI SDF filter to pick between several PDRs.
-  return rules.downlink_pdrs.empty() ? nullptr : &rules.downlink_pdrs.front();
-}
-
-//------------------------------------------------------------------------------
-bool DpdkPipeline::GateIsOpen(
-    const DpdkSessionRules& rules, const struct pfcp_pdr& pdr, bool uplink) {
-  const struct pfcp_qer* qer = rules.FindQer(pdr.qer_id.qer_id);
-  if (qer == nullptr) return true;  // No QER: nothing to enforce.
-
-  // TODO(dpdk): enforce the MBR of the QER with a token bucket per direction.
-  return (uplink ? qer->gate_status.ul_gate : qer->gate_status.dl_gate) ==
+bool DpdkPipeline::GateIsOpen(const struct pfcp_qer& qer, bool uplink) {
+  return (uplink ? qer.gate_status.ul_gate : qer.gate_status.dl_gate) ==
          kGateOpen;
+}
+
+//------------------------------------------------------------------------------
+bool DpdkPipeline::MeterAllows(
+    DpdkQerEntry& qer, bool uplink, uint32_t packet_length) {
+  const bool metered = uplink ? qer.meters_uplink : qer.meters_downlink;
+  if (!metered) return true;  // This direction has no MBR.
+
+  rte_meter_srtcm_profile& profile =
+      uplink ? qer.uplink_profile : qer.downlink_profile;
+  rte_meter_srtcm& meter = uplink ? qer.uplink_meter : qer.downlink_meter;
+  rte_spinlock_t& lock   = uplink ? qer.uplink_lock : qer.downlink_lock;
+
+  // The bucket is shared with any other lcore carrying this session, and a
+  // check both reads and refills it.
+  rte_spinlock_lock(&lock);
+  const rte_color color = rte_meter_srtcm_color_blind_check(
+      &meter, &profile, rte_rdtsc(), packet_length);
+  rte_spinlock_unlock(&lock);
+
+  return color == RTE_COLOR_GREEN;
 }

@@ -6,7 +6,9 @@
 #define DPDK_SESSION_TABLES_H_
 
 #include <rte_hash.h>
+#include <rte_meter.h>
 #include <rte_rcu_qsbr.h>
+#include <rte_spinlock.h>
 
 #include <cstdint>
 #include <map>
@@ -16,6 +18,7 @@
 
 #include "IDatapathBackend.h"
 #include "RuleConverter.h"
+#include "sdf_types.h"  // struct sdf_filtr, produced by SdfFilterParser
 
 /**
  * @struct DpdkSessionRules
@@ -29,14 +32,54 @@
  * PDRs are split by direction and sorted by ascending precedence, so matching
  * is a linear scan that stops at the first hit (§8.2.11).
  */
+/**
+ * @struct DpdkPdrEntry
+ * @brief A PDR together with its parsed Service Data Flow filter.
+ *
+ * The PFCP SDF filter travels as a flow-description string; parsing it once
+ * here keeps the fast path to a handful of comparisons. A PDR without an SDF
+ * matches every packet of its direction and acts as the catch-all.
+ *
+ * @see 3GPP TS 29.244 §8.2.5 — SDF Filter
+ */
+struct DpdkPdrEntry {
+  struct pfcp_pdr pdr {};
+  bool has_sdf = false;
+  struct sdf_filtr sdf {};
+};
+
+/**
+ * @struct DpdkQerEntry
+ * @brief A QER and the token buckets enforcing its Maximum Bit Rate.
+ *
+ * One bucket per direction (TS 29.244 §8.2.9). The buckets are shared by every
+ * lcore that carries the session, so each check takes the matching spinlock:
+ * with the usual one-lcore-per-port setup it is uncontended, and it keeps the
+ * rate correct when several lcores do carry the same session.
+ */
+struct DpdkQerEntry {
+  struct pfcp_qer qer {};
+
+  bool meters_uplink   = false;
+  bool meters_downlink = false;
+
+  rte_meter_srtcm_profile uplink_profile {};
+  rte_meter_srtcm uplink_meter {};
+  rte_spinlock_t uplink_lock {};
+
+  rte_meter_srtcm_profile downlink_profile {};
+  rte_meter_srtcm downlink_meter {};
+  rte_spinlock_t downlink_lock {};
+};
+
 struct DpdkSessionRules {
   uint64_t seid    = 0;
   uint32_t ue_ipv4 = 0;  ///< Network byte order; 0 when the session has none
 
-  std::vector<struct pfcp_pdr> uplink_pdrs;    ///< ACCESS PDRs, by precedence
-  std::vector<struct pfcp_pdr> downlink_pdrs;  ///< CORE PDRs, by precedence
+  std::vector<DpdkPdrEntry> uplink_pdrs;    ///< ACCESS PDRs, by precedence
+  std::vector<DpdkPdrEntry> downlink_pdrs;  ///< CORE PDRs, by precedence
   std::vector<struct pfcp_far> fars;
-  std::vector<struct pfcp_qer> qers;
+  std::vector<DpdkQerEntry> qers;
   std::vector<struct pfcp_urr> urrs;
 
   /// Traffic counters, updated by the lcores (per session, both directions).
@@ -48,7 +91,8 @@ struct DpdkSessionRules {
   } stats;
 
   [[nodiscard]] const struct pfcp_far* FindFar(uint32_t far_id) const;
-  [[nodiscard]] const struct pfcp_qer* FindQer(uint32_t qer_id) const;
+  /// Non-const: metering updates the token buckets of the QER it returns.
+  [[nodiscard]] DpdkQerEntry* FindQer(uint32_t qer_id) const;
 };
 
 /**

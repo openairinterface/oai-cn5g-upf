@@ -29,6 +29,7 @@ include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 include_directories(${SRC_TOP_DIR}/upf_app/control)
 include_directories(${SRC_TOP_DIR}/upf_app/include)
+include_directories(${SRC_TOP_DIR}/upf_app/helpers)   # SdfFilterParser
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/upf_app/framed_routing)
 # Shared rule structs (kernel/pfcp/*.h) used by the fast-path tables

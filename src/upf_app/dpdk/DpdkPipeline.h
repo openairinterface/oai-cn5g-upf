@@ -41,6 +41,7 @@ struct PipelineStats {
   uint64_t dropped_no_session = 0;  ///< No PFCP session for TEID / UE IP
   uint64_t dropped_no_rule   = 0;  ///< No matching PDR, or its FAR is missing
   uint64_t dropped_action    = 0;  ///< FAR says drop, or the QER gate is shut
+  uint64_t dropped_rate      = 0;  ///< Over the QER's Maximum Bit Rate
   uint64_t dropped_no_room   = 0;  ///< Not enough head room to encapsulate
   uint64_t dropped_no_next_hop = 0;  ///< Egress next-hop MAC not known yet
   uint64_t arp_replies       = 0;  ///< ARP requests answered
@@ -64,6 +65,20 @@ struct PipelineStats {
  */
 class DpdkPipeline {
  public:
+  /**
+   * @brief The packet fields an SDF filter is matched against (§8.2.5).
+   *
+   * Addresses stay in network byte order; ports are host order, as the parsed
+   * filter stores them.
+   */
+  struct PacketTuple {
+    uint32_t source_address      = 0;
+    uint32_t destination_address = 0;
+    uint16_t source_port         = 0;
+    uint16_t destination_port    = 0;
+    uint8_t protocol             = 0;
+  };
+
   DpdkPipeline(
       const DpdkSessionTables& tables, const DpdkEgress& to_ran,
       const DpdkEgress& to_data_network);
@@ -110,16 +125,33 @@ class DpdkPipeline {
       rte_mbuf* packet, rte_ether_hdr* ethernet, rte_ipv4_hdr* outer_ip,
       const rte_gtp_hdr* request);
 
-  /// First PDR of @p candidates whose TEID matches (already precedence-sorted).
-  static const struct pfcp_pdr* MatchUplinkPdr(
-      const DpdkSessionRules& rules, uint32_t teid);
-  /// First downlink PDR; the UE IP already selected the session.
-  static const struct pfcp_pdr* MatchDownlinkPdr(
-      const DpdkSessionRules& rules);
+  /// Read the 5-tuple of an IPv4 packet; false if it is truncated.
+  static bool ExtractTuple(
+      const rte_ipv4_hdr* ip, const uint8_t* packet_end, PacketTuple& tuple);
+
+  /**
+   * @brief Pick the PDR that applies to a packet.
+   *
+   * Candidates are the PDRs of one direction, already ordered by precedence,
+   * whose TEID matches (uplink; the UE IP has already selected the session on
+   * the downlink). Among them the most specific matching SDF filter wins, and
+   * equal specificity is settled by precedence (§8.2.11). A PDR without an SDF
+   * filter matches anything and serves as the catch-all, which is what an SMF
+   * installs for "all traffic" rules.
+   */
+  static const DpdkPdrEntry* MatchPdr(
+      const std::vector<DpdkPdrEntry>& candidates, const PacketTuple& tuple,
+      uint32_t teid, bool uplink);
 
   /// False when the QER shuts the gate for this direction (§8.2.7).
-  static bool GateIsOpen(
-      const DpdkSessionRules& rules, const struct pfcp_pdr& pdr, bool uplink);
+  static bool GateIsOpen(const struct pfcp_qer& qer, bool uplink);
+
+  /**
+   * @brief Charge a packet against the QER's Maximum Bit Rate (§8.2.9).
+   * @return false when the packet is over the limit and must be dropped.
+   */
+  static bool MeterAllows(
+      DpdkQerEntry& qer, bool uplink, uint32_t packet_length);
 
   const DpdkSessionTables& tables_;
   const DpdkEgress& to_ran_;            ///< N3 side: towards the gNB

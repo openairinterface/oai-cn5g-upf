@@ -75,12 +75,12 @@ void DpdkWorker::Run() {
   Logger::upf_app().info(
       "DPDK: lcore %u stopped — rx %lu, uplink %lu, downlink %lu, arp %lu, "
       "gtp echo %lu, dropped (malformed %lu, no session %lu, no rule %lu, "
-      "action %lu, no room %lu, no next hop %lu), punted %lu",
+      "action %lu, over rate %lu, no room %lu, no next hop %lu), punted %lu",
       assignment_.lcore_id, stats().received, stats().uplink_forwarded,
       stats().downlink_forwarded, stats().arp_replies,
       stats().gtp_echo_replies, stats().dropped_malformed,
       stats().dropped_no_session, stats().dropped_no_rule,
-      stats().dropped_action, stats().dropped_no_room,
+      stats().dropped_action, stats().dropped_rate, stats().dropped_no_room,
       stats().dropped_no_next_hop, stats().punted);
 }
 

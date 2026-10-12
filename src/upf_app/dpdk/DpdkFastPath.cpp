@@ -184,7 +184,8 @@ void DpdkFastPath::LogStatistics() const {
         stats.downlink_forwarded,
         stats.dropped_malformed + stats.dropped_no_session +
             stats.dropped_no_rule + stats.dropped_action +
-            stats.dropped_no_room + stats.dropped_no_next_hop);
+            stats.dropped_rate + stats.dropped_no_room +
+            stats.dropped_no_next_hop);
   }
 }
 

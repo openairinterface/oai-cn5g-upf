@@ -5,12 +5,14 @@
 #include "DpdkSessionTables.h"
 
 #include <rte_errno.h>
+#include <rte_ether.h>
 #include <rte_jhash.h>
 #include <rte_malloc.h>
 
 #include <algorithm>
 #include <stdexcept>
 
+#include "SdfFilterParser.hpp"
 #include "logger.hpp"
 #include "pfcp_session.hpp"
 
@@ -19,6 +21,46 @@ namespace {
 /// 3GPP TS 29.244 §8.2.2 — Source Interface values used to split directions.
 constexpr uint8_t kSourceInterfaceAccess = 0;
 constexpr uint8_t kSourceInterfaceCore   = 1;
+
+/// PFCP carries the MBR in kbit/s (§8.2.9); a token bucket wants bytes/s.
+constexpr uint64_t kKilobitsToBytesPerSecond = 1000 / 8;
+
+/// Burst allowance: 10 ms of the committed rate, never below two full frames,
+/// otherwise a single large packet could never pass.
+uint64_t BurstSizeFor(uint64_t bytes_per_second) {
+  constexpr uint64_t kMinimumBurst = 2 * RTE_ETHER_MAX_LEN;
+  return RTE_MAX(bytes_per_second / 100, kMinimumBurst);
+}
+
+/**
+ * @brief Set up one direction's token bucket from an MBR in kbit/s.
+ * @return false when the QER states no limit for this direction.
+ */
+bool ConfigureMeter(
+    uint64_t mbr_kbps, rte_meter_srtcm_profile& profile, rte_meter_srtcm& meter,
+    rte_spinlock_t& lock, uint64_t seid, uint32_t qer_id, const char* direction) {
+  if (mbr_kbps == 0) return false;
+
+  rte_meter_srtcm_params params{};
+  params.cir = mbr_kbps * kKilobitsToBytesPerSecond;
+  params.cbs = BurstSizeFor(params.cir);
+  params.ebs = params.cbs;
+
+  if (rte_meter_srtcm_profile_config(&profile, &params) != 0 ||
+      rte_meter_srtcm_config(&meter, &profile) != 0) {
+    Logger::upf_app().warn(
+        "DPDK: cannot build the %s rate limiter of QER %u (session 0x%lx) for "
+        "%lu kbit/s; that direction stays unlimited",
+        direction, qer_id, seid, mbr_kbps);
+    return false;
+  }
+
+  rte_spinlock_init(&lock);
+  Logger::upf_app().debug(
+      "DPDK: QER %u of session 0x%lx limits %s to %lu kbit/s", qer_id, seid,
+      direction, mbr_kbps);
+  return true;
+}
 
 rte_hash* CreateTable(const char* name, uint32_t entries) {
   rte_hash_parameters params{};
@@ -50,9 +92,13 @@ const struct pfcp_far* DpdkSessionRules::FindFar(uint32_t far_id) const {
 }
 
 //------------------------------------------------------------------------------
-const struct pfcp_qer* DpdkSessionRules::FindQer(uint32_t qer_id) const {
-  for (const auto& qer : qers) {
-    if (qer.qer_id.qer_id == qer_id) return &qer;
+DpdkQerEntry* DpdkSessionRules::FindQer(uint32_t qer_id) const {
+  for (const auto& entry : qers) {
+    if (entry.qer.qer_id.qer_id == qer_id) {
+      // The rule set itself is immutable once published; the token buckets
+      // inside it are the one part the fast path updates, under their lock.
+      return const_cast<DpdkQerEntry*>(&entry);
+    }
   }
   return nullptr;
 }
@@ -150,34 +196,56 @@ std::unique_ptr<DpdkSessionRules> DpdkSessionTables::BuildRules(
   built->seid = session->get_up_seid();
 
   for (const auto& pdr : session->pdrs) {
-    const struct pfcp_pdr flat = rules::ConvertPdr(pdr);
+    DpdkPdrEntry entry;
+    entry.pdr = rules::ConvertPdr(pdr);
 
-    switch (flat.pdi.source_interface.interface_value) {
+    // The SDF filter arrives as a flow description string; parse it now so the
+    // fast path only compares numbers (§8.2.5).
+    pfcp::pdi pdi                 = {};
+    pfcp::sdf_filter_t sdf_filter = {};
+    if (pdr->get(pdi) && pdi.get(sdf_filter) && sdf_filter.fd &&
+        sdf_filter.length_of_flow_description > 0) {
+      auto parsed = SdfFilterParser::ParseSdfFilter(sdf_filter.flow_description);
+      if (parsed) {
+        entry.sdf             = *parsed;
+        entry.sdf.session.seid = built->seid;
+        entry.sdf.session.qfi  = entry.pdr.pdi.qfi.qfi;
+        entry.has_sdf          = true;
+      } else {
+        Logger::upf_app().warn(
+            "DPDK: cannot parse the SDF filter of PDR %u (session 0x%lx): "
+            "'%s'; the PDR will match all traffic of its direction",
+            entry.pdr.pdr_id.rule_id, built->seid,
+            sdf_filter.flow_description.c_str());
+      }
+    }
+
+    switch (entry.pdr.pdi.source_interface.interface_value) {
       case kSourceInterfaceAccess:
-        built->uplink_pdrs.push_back(flat);
+        built->uplink_pdrs.push_back(entry);
         break;
       case kSourceInterfaceCore:
-        built->downlink_pdrs.push_back(flat);
         // rules::ConvertPdr copies the address but not the v4/v6 flags, so a
         // non-zero address is what tells us the PDI carries a UE IPv4.
-        if (flat.pdi.ue_ip_address.ipv4_address.s_addr != 0) {
-          built->ue_ipv4 = flat.pdi.ue_ip_address.ipv4_address.s_addr;
+        if (entry.pdr.pdi.ue_ip_address.ipv4_address.s_addr != 0) {
+          built->ue_ipv4 = entry.pdr.pdi.ue_ip_address.ipv4_address.s_addr;
         }
+        built->downlink_pdrs.push_back(entry);
         break;
       default:
         Logger::upf_app().warn(
             "DPDK: PDR %u of session 0x%lx has an unsupported source "
             "interface %u; ignoring it",
-            flat.pdr_id.rule_id, built->seid,
-            flat.pdi.source_interface.interface_value);
+            entry.pdr.pdr_id.rule_id, built->seid,
+            entry.pdr.pdi.source_interface.interface_value);
         break;
     }
   }
 
-  // Lowest precedence value wins, so the fast path stops at the first match.
-  const auto by_precedence = [](const struct pfcp_pdr& left,
-                                const struct pfcp_pdr& right) {
-    return left.precedence.precedence < right.precedence.precedence;
+  // Lowest precedence value wins, so matching walks the list in order.
+  const auto by_precedence = [](const DpdkPdrEntry& left,
+                                const DpdkPdrEntry& right) {
+    return left.pdr.precedence.precedence < right.pdr.precedence.precedence;
   };
   std::sort(
       built->uplink_pdrs.begin(), built->uplink_pdrs.end(), by_precedence);
@@ -187,9 +255,24 @@ std::unique_ptr<DpdkSessionRules> DpdkSessionTables::BuildRules(
   for (const auto& far : session->fars) {
     built->fars.push_back(rules::ConvertFar(far));
   }
+
+  built->qers.reserve(session->qers.size());
   for (const auto& qer : session->qers) {
-    built->qers.push_back(rules::ConvertQer(qer));
+    DpdkQerEntry entry;
+    entry.qer = rules::ConvertQer(qer);
+
+    entry.meters_uplink = ConfigureMeter(
+        entry.qer.maximum_bitrate.ul_mbr, entry.uplink_profile,
+        entry.uplink_meter, entry.uplink_lock, built->seid,
+        entry.qer.qer_id.qer_id, "uplink");
+    entry.meters_downlink = ConfigureMeter(
+        entry.qer.maximum_bitrate.dl_mbr, entry.downlink_profile,
+        entry.downlink_meter, entry.downlink_lock, built->seid,
+        entry.qer.qer_id.qer_id, "downlink");
+
+    built->qers.push_back(entry);
   }
+
   for (const auto& urr : session->urrs) {
     built->urrs.push_back(rules::ConvertUrr(urr));
   }
@@ -199,8 +282,8 @@ std::unique_ptr<DpdkSessionRules> DpdkSessionTables::BuildRules(
 
 //------------------------------------------------------------------------------
 void DpdkSessionTables::PublishKeys(DpdkSessionRules* rules) {
-  for (const auto& pdr : rules->uplink_pdrs) {
-    const uint32_t teid = pdr.pdi.fteid.teid;
+  for (const auto& entry : rules->uplink_pdrs) {
+    const uint32_t teid = entry.pdr.pdi.fteid.teid;
     if (teid == 0) continue;
     if (rte_hash_add_key_data(teid_table_, &teid, rules) < 0) {
       Logger::upf_app().error(
@@ -219,8 +302,8 @@ void DpdkSessionTables::PublishKeys(DpdkSessionRules* rules) {
 
 //------------------------------------------------------------------------------
 void DpdkSessionTables::WithdrawKeys(const DpdkSessionRules* rules) {
-  for (const auto& pdr : rules->uplink_pdrs) {
-    const uint32_t teid = pdr.pdi.fteid.teid;
+  for (const auto& entry : rules->uplink_pdrs) {
+    const uint32_t teid = entry.pdr.pdi.fteid.teid;
     if (teid != 0) rte_hash_del_key(teid_table_, &teid);
   }
   if (rules->ue_ipv4 != 0) {
