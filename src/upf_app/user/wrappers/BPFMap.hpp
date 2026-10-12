@@ -183,15 +183,12 @@ class BPFMap {
    * - 0: Success, entry removed
    * - -ENOENT: Key not found (not an error for idempotent deletes)
    *
-   * @throws std::runtime_error on failure
+   * @throws std::runtime_error on any failure other than -ENOENT
    *
    * Usage:
    * @code
-   * try {
-   *   map.Remove(ue_ip);
-   *   Logger::upf_app().info("Session removed");
-   * } catch (const std::runtime_error& e) {
-   *   Logger::upf_app().warn("Session not found");
+   * if (map.Remove(ue_ip) == -ENOENT) {
+   *   Logger::upf_app().debug("Session already removed");
    * }
    * @endcode
    */
@@ -258,6 +255,12 @@ int BPFMap::Remove(KeyType& key) {
   int ret = bpf_map_delete_elem(map_fd, &key);
 
   if (ret != 0) {
+    if (errno == ENOENT) {
+      // Already absent: deletes are idempotent
+      Logger::upf_app().debug(
+          "Key not present in map '%s', nothing to remove", name_.c_str());
+      return -ENOENT;
+    }
     Logger::upf_app().error(
         "Failed to remove key from map '%s': errno=%d (%s)", name_.c_str(),
         errno, strerror(errno));
