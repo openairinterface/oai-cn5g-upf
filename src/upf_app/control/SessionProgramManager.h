@@ -103,6 +103,7 @@ class SessionProgramManager {
    * - QER TC-BPF program (if instantiated)
    * - rules_match_pdr_map / eth_rules_match_pdr_map, sdf_filters_map, and
    *   the per-session PDR array (pdrs_per_session_map / eth_session_pdrs_map)
+   * - session_by_ue_ip_map (only if this SEID still owns the entry)
    * - ARP caches for N3/N6 endpoints
    *
    * @param seid Session Endpoint Identifier
@@ -137,9 +138,11 @@ class SessionProgramManager {
    * Updates the session_by_ue_ip_map with UE IP, TEIDs, and SEID.
    * For IP PDU sessions only — ETH PDU uses StoreEthPduSessionInMap().
    *
-   * If an entry already exists for this UE IP, missing TEIDs are
-   * filled in (supports split Create/Modify where UL and DL TEIDs
-   * arrive in separate PFCP messages).
+   * If an entry already exists for this UE IP *and* the same SEID, missing
+   * TEIDs are filled in (supports split Create/Modify where UL and DL TEIDs
+   * arrive in separate PFCP messages). An entry for a different SEID is
+   * fully overwritten -- that means the previous owner was deleted and this
+   * session is reclaiming the address.
    *
    * @param xdp_program XDP program containing the maps
    * @param ue_ip UE IP address
@@ -795,6 +798,20 @@ class SessionProgramManager {
       bool is_eth_pdu, const std::set<uint16_t>& stale_pdr_ids,
       const std::set<uint32_t>& stale_qfis);
 
+  /**
+   * @brief Remove a session_by_ue_ip_map entry if it still names this SEID
+   *
+   * Leaves the entry alone if a newer session has already reclaimed the
+   * address. Does not lock mutex_; the caller must hold it.
+   *
+   * @param upf_xdp_program XDP program owning session_by_ue_ip_map
+   * @param ue_ip_key UE IP in map-key byte order
+   * @param seid Session Endpoint Identifier expected to own the entry
+   */
+  void RemoveUeIpMappingIfOwned(
+      std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t ue_ip_key,
+      uint64_t seid);
+
   // ==========================================================================
   // Member Variables
   // ==========================================================================
@@ -828,6 +845,10 @@ class SessionProgramManager {
   std::map<uint64_t, std::set<uint32_t>> session_n3_arp_cache_;
   /// Track PDU session type per SEID for cleanup and map routing
   std::map<uint64_t, PduSessionType> session_pdu_type_map_;
+  /// Track the session_by_ue_ip_map keys (UE IP, in map-key byte order) per
+  /// SEID, so ModifyPipeline() can drop a replaced IP and RemoveSession()
+  /// can clear them all (issue #12).
+  std::map<uint64_t, std::set<uint32_t>> session_ue_ip_key_map_;
 };
 
 #endif  // SESSION_PROGRAM_MANAGER_H_
