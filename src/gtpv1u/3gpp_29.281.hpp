@@ -237,17 +237,33 @@ class gtpv1u_msg_header : public stream_serializable {
 
   uint16_t get_message_length() const { return message_length; }
 
+  /** @name The optional header block (3GPP TS 29.281 §5.1).
+   *
+   *  Sequence Number, N-PDU Number and Next Extension Header Type are one
+   *  indivisible 4-octet block: "if any of the S, PN and E flags are set, the
+   *  fields ... are present". Writing only the field whose flag was set puts a
+   *  10-octet header on the wire where the peer expects 12, and it then reads
+   *  two bytes of the first IE as the N-PDU and Next Extension Header fields.
+   *  @{ */
+  static constexpr uint16_t OPTIONAL_FIELDS_BYTES = 4;
+  static constexpr uint8_t S_PN_E_MASK            = 0x07;
+  bool has_optional_fields() const { return (u1.b & S_PN_E_MASK) != 0; }
+  /// @}
+
   // get payload length without extra header length
   uint16_t get_message_length_wo_xheader() const {
     uint16_t ml = message_length;
-    if (u1.bf.s) {
-      ml -= sizeof(sequence_number);
+    if (has_optional_fields()) {
+      ml -= OPTIONAL_FIELDS_BYTES;
     }
     return ml;
   }
 
   void set_sequence_number(const uint16_t& s) {
-    message_length += sizeof(sequence_number);
+    // The block is counted once, no matter how many of S/PN/E end up set.
+    if (!has_optional_fields()) {
+      message_length += OPTIONAL_FIELDS_BYTES;
+    }
     sequence_number = s;
     u1.bf.s         = 1;
   }
@@ -266,13 +282,11 @@ class gtpv1u_msg_header : public stream_serializable {
     auto be_teid = htobe32(teid);
     os.write(reinterpret_cast<const char*>(&be_teid), sizeof(be_teid));
 
-    if (u1.bf.s) {
+    if (has_optional_fields()) {
       auto be_sequence_number = htobe16(sequence_number);
       os.write(
           reinterpret_cast<const char*>(&be_sequence_number),
           sizeof(be_sequence_number));
-    }
-    if (u1.b & 0x05) {
       os.write(
           reinterpret_cast<const char*>(&npdu_number), sizeof(npdu_number));
       os.write(
@@ -298,13 +312,13 @@ class gtpv1u_msg_header : public stream_serializable {
     //         default:;
     //       }
     //     }
-    if (u1.bf.s) {
+    // Symmetric with dump_to(): the block is all or nothing, so reading only
+    // the field whose flag is set would leave the stream two octets short and
+    // the first IE would be decoded from the wrong offset.
+    if (has_optional_fields()) {
       is.read(
           reinterpret_cast<char*>(&sequence_number), sizeof(sequence_number));
       sequence_number = be16toh(sequence_number);
-    }
-
-    if (u1.b & 0x05) {
       is.read(reinterpret_cast<char*>(&npdu_number), sizeof(npdu_number));
       is.read(
           reinterpret_cast<char*>(&next_extension_header_type),

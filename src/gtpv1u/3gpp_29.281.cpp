@@ -82,6 +82,13 @@ gtpv1u_msg::gtpv1u_msg(const gtpv1u_error_indication& gtp_ies)
     : gtpv1u_msg_header() {
   ies = {};
   set_message_type(GTPU_ERROR_INDICATION);
+  // 3GPP TS 29.281 §5.1: "For Error Indication the S flag shall be set to
+  // '1'." The value is ignored by the receiver, so zero will do -- what
+  // matters is that the flag, and with it the optional header block, is there.
+  // Set here rather than in report_error_indication() because every Error
+  // Indication needs it, and a caller that forgets sends a message the peer is
+  // entitled to reject as malformed.
+  set_sequence_number(0);
   if (gtp_ies.tunnel_endpoint_identifier_data_i.first) {
     std::shared_ptr<gtpv1u_tunnel_endpoint_identifier_data_i_ie> sie(
         new gtpv1u_tunnel_endpoint_identifier_data_i_ie(
