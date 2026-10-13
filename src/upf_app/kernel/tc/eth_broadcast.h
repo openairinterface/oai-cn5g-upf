@@ -23,6 +23,8 @@
 
 #include "utils/logger.h"
 #include "utils/types.h"
+#include "utils/csum.h"
+#include "utils/mac_resolution.h"
 #include "protocols/gtpu.h"
 #include "eth_pdu_types.h"
 #include "eth_pdu_maps.h"
@@ -93,6 +95,12 @@ static long broadcast_callback_fn(
   void* data            = (void*) (long) skb->data;
   void* data_end        = (void*) (long) skb->data_end;
 
+  struct ethhdr* eth_outer = (struct ethhdr*) data;
+  if ((void*) (eth_outer + 1) > data_end) {
+    bpf_debug("eth_broadcast: invalid outer Ethernet header");
+    return RET_SUCCESS; /* continue to next */
+  }
+
   struct iphdr* iph = (struct iphdr*) ((void*) data + sizeof(struct ethhdr));
   if ((void*) (iph + 1) > data_end) {
     bpf_debug("eth_broadcast: invalid IPv4 packet");
@@ -116,10 +124,37 @@ static long broadcast_callback_fn(
       ctx->pdu_sessions[v] = pdu_session->teid_dl;
       ctx->size += 1;
 
-      /* Rewrite outer GTP-U TEID + outer dst-IP for this session, then
-       * clone the packet out the egress (N3) interface. */
-      gtpuh->teid = pdu_session->teid_dl;
-      iph->daddr  = pdu_session->ipv4_address;
+      /* Resolve the outer dst MAC for this session's gNB IP BEFORE
+       * touching any header field: ARP first, FIB fallback. */
+      __u32 new_daddr   = pdu_session->ipv4_address;
+      bool mac_resolved = resolve_mac_via_arp(new_daddr, eth_outer->h_dest);
+
+      if (!mac_resolved) {
+        int fib_rc = resolve_mac_via_fib(
+            skb, iph, new_daddr, *ctx->ifindex, BPF_FIB_LOOKUP_OUTPUT,
+            eth_outer->h_dest, NULL, NULL);
+        if (fib_rc == BPF_FIB_LKUP_RET_SUCCESS) {
+          mac_resolved = true;
+        } else {
+          bpf_debug(
+              "eth_broadcast: no ARP entry and FIB miss (rc=%d) for gNB "
+              "%pI4 -- skipping this clone",
+              fib_rc, &new_daddr);
+        }
+      }
+
+      if (!mac_resolved) break;
+
+      /* Rewrite outer GTP-U TEID + outer dst-IP for this session (dst
+       * MAC already written above), fix up the IPv4 header checksum for
+       * the daddr change, then clone the packet out the egress (N3)
+       * interface. */
+      __u32 old_daddr = iph->daddr;
+      gtpuh->teid     = pdu_session->teid_dl;
+      iph->daddr      = new_daddr;
+
+      bpf_l3_csum_replace(
+          skb, IP_CSUM_OFFSET, old_daddr, new_daddr, sizeof(new_daddr));
 
       int ret = bpf_clone_redirect(skb, *ctx->ifindex, 0);
       if (ret < 0) {
@@ -127,8 +162,8 @@ static long broadcast_callback_fn(
         return RET_PASS; /* stop iteration */
       }
       bpf_debug(
-          "eth_broadcast: cloned to PDU session TEID=0x%x",
-          bpf_ntohl(pdu_session->teid_dl));
+          "eth_broadcast: cloned to PDU session TEID=0x%x dst_mac=%pM",
+          bpf_ntohl(pdu_session->teid_dl), eth_outer->h_dest);
       break;
     }
   }
