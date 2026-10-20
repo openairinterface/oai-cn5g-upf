@@ -5,6 +5,7 @@
 #include "qer_tc_user.h"
 #include <bpf/bpf.h>
 #include <algorithm>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <wrappers/BPFMap.hpp>
@@ -295,9 +296,8 @@ void QERTCProgram::Setup(
     }
 
     // Attach TC redirect to UDP interface
-    Logger::upf_app().info("Attach Section tc_redirect to udp interface");
     try {
-      lifecycle_->tcAttachIngress("tc_redirect_traffic", udp_iface.c_str());
+      AttachN6Redirect(udp_iface);
     } catch (const std::exception& e) {
       fail(
           0, fmt::format(
@@ -325,6 +325,15 @@ void QERTCProgram::Setup(
   if (failure) {
     throw *failure;
   }
+}
+
+//------------------------------------------------------------------------------
+void QERTCProgram::AttachN6Redirect(const std::string& udp_iface) {
+  static std::once_flag attached;
+  std::call_once(attached, [&] {
+    Logger::upf_app().info("Attach Section tc_redirect to udp interface");
+    lifecycle_->tcAttachIngress("tc_redirect_traffic", udp_iface.c_str());
+  });
 }
 
 //------------------------------------------------------------------------------
