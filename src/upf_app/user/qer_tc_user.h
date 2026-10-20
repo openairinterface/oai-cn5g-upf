@@ -223,6 +223,13 @@ class QERTCProgram : public BPFProgram {
   std::shared_ptr<pfcp::pfcp_pdr> GetPdrByQerId(uint32_t qer_id) const;
 
   /**
+   * @brief Attach tc_redirect_traffic to N6 ingress, once per process
+   *
+   * @throws std::runtime_error if the attach fails; a later call retries
+   */
+  void AttachN6Redirect(const std::string& udp_iface);
+
+  /**
    * @brief One HTB class of this session, as Setup() wants it or created it
    */
   struct TcClass {
