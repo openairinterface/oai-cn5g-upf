@@ -383,8 +383,8 @@ static __always_inline u32 gtpu_decap_ipv4(
     return RET_DROP;
   }
 
-  __u32 nh_ip; /* Always written; may hold the next-hop gateway on a miss. */
-  int fib_rc = resolve_mac_via_fib(
+  __u32 nh_ip = 0; /* May hold the next-hop gateway on a FIB miss. */
+  int fib_rc  = resolve_mac_via_fib(
       ctx, inner_iph, inner_iph->daddr, ctx->ingress_ifindex, 0,
       eth_inner->h_dest, eth_inner->h_source, &nh_ip);
   if (!nh_ip) nh_ip = inner_iph->daddr;
@@ -392,7 +392,8 @@ static __always_inline u32 gtpu_decap_ipv4(
   if (fib_rc == BPF_FIB_LKUP_RET_SUCCESS) {
     /* Routing resolved the next-hop (handles routed dst across an L2 network
      * between the UPF and the N6 gateway). */
-    bpf_debug("N6 next-hop: FIB hit, dst MAC %pM", eth_inner->h_dest);
+    bpf_debug(
+        "N6 next-hop: FIB hit, dst MAC %012llx", mac_to_u64(eth_inner->h_dest));
   } else {
     /* FIB miss -> arp_table_map fallback ("arping"), keyed by the resolved
      * next-hop gateway IP, then the inner destination as a last resort. */
@@ -404,8 +405,8 @@ static __always_inline u32 gtpu_decap_ipv4(
       return RET_FAILURE;
     }
     bpf_debug(
-        "N6 next-hop: FIB miss (rc=%d), ARP fallback dst MAC %pM", fib_rc,
-        eth_inner->h_dest);
+        "N6 next-hop: FIB miss (rc=%d), ARP fallback dst MAC %012llx", fib_rc,
+        mac_to_u64(eth_inner->h_dest));
   }
 
   /* Strip outer headers */
@@ -421,18 +422,18 @@ static __always_inline u32 gtpu_decap_ipv4(
 }
 
 /* ========================================================================== */
-/*         GTP-U DECAPSULATION — UPLINK, ETHERNET PDU (TS 23.501 §5.6.10.3)   */
+/*         GTP-U DECAPSULATION — UPLINK, ETHERNET PDU (TS 23.501 §5.6.10.2)   */
 /* ========================================================================== */
 
 /**
  * @brief Remove GTP-U outer headers from an Ethernet PDU session uplink
  *        frame, exposing the UE's inner Ethernet frame unchanged.
  *
- * Applies Outer Header Removal (TS 29.244 §8.2.57) for the ETH PDU case.
+ * Applies Outer Header Removal (TS 29.244 §8.2.64) for the ETH PDU case.
  * Unlike gtpu_decap_ipv4(), the inner payload here is a complete Ethernet
  * frame the UE built (its own src/dst MAC, its own EtherType -- IPv4,
  * IPv6, or a non-IP L2 protocol such as PROFINET/gPTP). An Ethernet PDU
- * session is pure L2 transit (TS 23.501 §5.6.10.3).
+ * session is pure L2 transit (TS 23.501 §5.6.10.2).
  *
  * Packet transformation:
  *   Before: [ETH][IP-outer][UDP:2152][GTP-U][PDU-Sess-Container][inner
@@ -462,7 +463,7 @@ static __always_inline u32 gtpu_decap_eth(
     return RET_DROP;
   }
 
-  /* Verify FAR has forward action (§8.2.26 bit 1) */
+  /* Verify FAR has forward action (§8.2.26 octet 5 bit 2) */
   if (!far->apply_action.forw) {
     bpf_debug("Apply Action: FORW bit not set");
     return RET_FAILURE;
@@ -490,6 +491,37 @@ static __always_inline u32 gtpu_decap_eth(
   }
 
   bpf_debug("GTP-U decapsulation complete (ETH PDU)");
+  return RET_SUCCESS;
+}
+
+/* ========================================================================== */
+/*         ETH PDU UPLINK BROADCAST — OUTER SRC MAC FOR THE TC FAN-OUT        */
+/* ========================================================================== */
+
+/**
+ * @brief Set the outer src MAC of an ETH PDU UL broadcast frame to the N3 MAC
+ *        before the TC fan-out (the src IP is rewritten in TC).
+ *
+ * @param ctx XDP context
+ * @return RET_SUCCESS, or RET_DROP if N3 is unconfigured or the frame is short
+ */
+static __always_inline u32 set_eth_ul_fanout_src_mac(struct xdp_md* ctx) {
+  reference_point_t n3_key = N3_INTERFACE;
+  struct interface_config* n3 =
+      bpf_map_lookup_elem(&upf_interface_map, &n3_key);
+
+  if (!n3) {
+    bpf_debug("ETH PDU UL fan-out: N3 not in upf_interface_map");
+    return RET_DROP;
+  }
+
+  void* data     = (void*) (long) ctx->data;
+  void* data_end = (void*) (long) ctx->data_end;
+
+  struct ethhdr* eth = data;
+  if ((void*) (eth + 1) > data_end) return RET_DROP;
+
+  __builtin_memcpy(eth->h_source, n3->mac_address, ETH_ALEN);
   return RET_SUCCESS;
 }
 
@@ -586,6 +618,10 @@ int far_apply(struct xdp_md* ctx) {
         bpf_debug(
             "ETH PDU UL FORW: Broadcast/multicast "
             "detected, pass to TC for fan-out");
+
+        /* Before dispatch_after_far(), which may tail-call away. */
+        if (set_eth_ul_fanout_src_mac(ctx) != RET_SUCCESS)
+          return xdp_stats_record_action(ctx, XDP_DROP);
 
         pctx->final_action = FINAL_ACTION_PASS_TO_TC;
         dispatch_after_far(ctx, flags, false);

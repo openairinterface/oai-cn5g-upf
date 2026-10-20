@@ -3,6 +3,7 @@
  */
 
 #include "upf_xdp_user.h"
+#include "GetNicInformation.hpp"
 #include "startup_banner.hpp"
 #include "tail_call_types.h"
 #include "xdp_hook_section.h"
@@ -11,6 +12,7 @@
 #include <net/if.h>
 #include <stdexcept>
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <unordered_map>
@@ -45,6 +47,16 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   const bool is_eth = (flags.pdu_type == PduSessionType::Ethernet);
 
   Logger::upf_app().info("PDU Session type: %s", is_eth ? "Ethernet" : "IP");
+
+  /* The ETH path writes the N3 MAC as outer src MAC; an all-zero MAC would
+   * silently black-hole traffic. Fail before anything is attached. */
+  if (is_eth) {
+    uint8_t n3_mac[IF_MAC_LEN] = {};
+    if (!NicInformationGetter::retrieveMac(gtp_interface_, n3_mac))
+      throw std::runtime_error(
+          "Ethernet PDU: cannot read MAC address of N3 interface " +
+          gtp_interface_);
+  }
 
   /*  Step 1: Instantiate entry programs
    * Exactly one pair is created based on pdu_type.
@@ -301,7 +313,13 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
    * *_maps.h header, or a new BPF object including one, without adding it
    * to every relevant share list): every program is loaded now, so cross-
    * check that shared map names actually resolve to the same kernel map. */
-  VerifySharedMapIdentity();
+  try {
+    VerifySharedMapIdentity();
+  } catch (...) {
+    /* Step 6 already attached XDP/TC programs: detach before propagating. */
+    TearDown();
+    throw;
+  }
 
   /* ── Step 7: Wrap the primary skeleton's 4 infrastructure maps.
    * tail_call_progs_map, packet_context_map, session_rules_enabled_map,
@@ -525,12 +543,15 @@ void UPF_XDPProgram::VerifySharedMapIdentity() const {
                 return std::strcmp(name, priv_name) == 0;
               }) != std::end(kIntentionallyPrivateMaps))
         continue;
-      int fd = bpf_map__fd(map);
-      if (fd < 0) continue;
-
+      int fd                   = bpf_map__fd(map);
       struct bpf_map_info info = {};
       __u32 info_len           = sizeof(info);
-      if (bpf_map_get_info_by_fd(fd, &info, &info_len) != 0) continue;
+      if (fd < 0 || bpf_map_get_info_by_fd(fd, &info, &info_len) != 0) {
+        Logger::upf_app().warn(
+            "Map identity check: cannot inspect '%s' in %s -- not verified",
+            name, c.label);
+        continue;
+      }
 
       instances_by_name[name].push_back({c.label, info.id});
     }
@@ -661,6 +682,9 @@ void UPF_XDPProgram::TearDown() {
   sl_eth_ = nullptr;
   sl_ip_  = nullptr;
 
+  /* TC fan-out (attached on N3/N6) -- detach before the entry programs */
+  eth_broadcast_tc_ = nullptr;
+
   /* Tear down entry programs -- lifecycle_ destructor calls tearDown() */
   n6_eth_ = nullptr;
   n3_eth_ = nullptr; /* ETH primary -- destroy after secondary */
@@ -725,14 +749,32 @@ void UPF_XDPProgram::CreateUpfInterfaceMapEntry(reference_point_t s) {
     return std::string(buf);
   };
 
+  /* Helper: fill iface.mac_address (all-zero on failure). */
+  auto fill_mac = [&iface](const char* ref) -> std::string {
+    if (!NicInformationGetter::retrieveMac(iface.if_name, iface.mac_address)) {
+      Logger::upf_app().warn(
+          "  %s: cannot read MAC of iface=%s, leaving it all-zero", ref,
+          iface.if_name);
+    }
+    char buf[18];
+    const uint8_t* mac = iface.mac_address;
+    snprintf(
+        buf, sizeof(buf), "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1],
+        mac[2], mac[3], mac[4], mac[5]);
+    return std::string(buf);
+  };
+
+  std::string mac;
   switch (s) {
     case N3_INTERFACE:
       iface.ipv4_address = upf::GetN3Ip();
       iface.port         = upf::GetN3Port();
       strncpy(iface.if_name, upf::GetN3Iface().c_str(), IF_NAME_MAX_LEN - 1);
+      mac = fill_mac("N3");
       Logger::upf_app().debug(
-          "  N3: ip=%s  port=%u  iface=%s", ip_str(iface.ipv4_address).c_str(),
-          iface.port, iface.if_name);
+          "  N3: ip=%s  port=%u  iface=%s  mac=%s",
+          ip_str(iface.ipv4_address).c_str(), iface.port, iface.if_name,
+          mac.c_str());
       m->Update(s, iface, BPF_ANY);
       Logger::upf_app().debug("  N3: upf_interface_map updated OK");
       break;
@@ -740,9 +782,11 @@ void UPF_XDPProgram::CreateUpfInterfaceMapEntry(reference_point_t s) {
       iface.ipv4_address = upf::GetN4Ip();
       iface.port         = upf::GetN4Port();
       strncpy(iface.if_name, upf::GetN4Iface().c_str(), IF_NAME_MAX_LEN - 1);
+      mac = fill_mac("N4");
       Logger::upf_app().debug(
-          "  N4: ip=%s  port=%u  iface=%s", ip_str(iface.ipv4_address).c_str(),
-          iface.port, iface.if_name);
+          "  N4: ip=%s  port=%u  iface=%s  mac=%s",
+          ip_str(iface.ipv4_address).c_str(), iface.port, iface.if_name,
+          mac.c_str());
       m->Update(s, iface, BPF_ANY);
       Logger::upf_app().debug("  N4: upf_interface_map updated OK");
       break;
@@ -750,9 +794,11 @@ void UPF_XDPProgram::CreateUpfInterfaceMapEntry(reference_point_t s) {
       iface.ipv4_address = upf::GetN6Ip();
       iface.port         = 0;
       strncpy(iface.if_name, upf::GetN6Iface().c_str(), IF_NAME_MAX_LEN - 1);
+      mac = fill_mac("N6");
       Logger::upf_app().debug(
-          "  N6: ip=%s  port=%u  iface=%s", ip_str(iface.ipv4_address).c_str(),
-          iface.port, iface.if_name);
+          "  N6: ip=%s  port=%u  iface=%s  mac=%s",
+          ip_str(iface.ipv4_address).c_str(), iface.port, iface.if_name,
+          mac.c_str());
       m->Update(s, iface, BPF_ANY);
 
       Logger::upf_app().debug("  N6: upf_interface_map updated OK");

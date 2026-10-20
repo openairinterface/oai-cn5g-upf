@@ -18,7 +18,7 @@
  * @brief UPF reference-point interface configuration.
  *
  * Key:   reference_point_t        N3_INTERFACE / N6_INTERFACE / ...
- * Value: struct interface_config  {ipv4_address, port, if_name}
+ * Value: struct interface_config  {ipv4_address, port, if_name, mac_address}
  * Size:  MAX_UPF_INTERFACES (typically 4-5, set at runtime)
  *
  * Written once by userspace before BPF program load.

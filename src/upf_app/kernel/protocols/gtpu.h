@@ -88,7 +88,7 @@ struct gtpuhdr {
  */
 struct gtpu_extn_pdu_session_container {
   uint8_t message_length; /**< Extension header length in 4-octet units   */
-  uint8_t pdu_type;       /**< PDU Type (0 = UL, 1 = DL)                  */
+  uint8_t pdu_type;       /**< PDU Type, high nibble: 0 = DL, 1 = UL      */
   uint8_t qfi;            /**< QoS Flow Identifier (§8.2.89)              */
   uint8_t next_ext_type;  /**< Next Extension Header Type (0x00 = none)   */
 };
@@ -162,7 +162,8 @@ static __always_inline void* parse_gtpu_ext_hdr(
     return NULL;
   }
 
-  *qfi = (*gtpu_ext_out)->qfi;
+  /* QFI is the low 6 bits; bits 7-8 are flags (TS 38.415 §5.5.2) */
+  *qfi = (*gtpu_ext_out)->qfi & 0x3F;
   return (void*) (*gtpu_ext_out + 1);
 }
 

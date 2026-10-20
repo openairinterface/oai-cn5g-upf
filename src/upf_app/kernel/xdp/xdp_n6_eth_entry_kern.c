@@ -101,6 +101,10 @@ static __always_inline __u32 create_outer_header_gtpu_ethernet(
 
   ethh->h_proto = bpf_htons(ETH_P_IP);
 
+  /* Outer src MAC = N3 MAC; the ARP fallback and the broadcast placeholder
+   * don't set it. */
+  __builtin_memcpy(ethh->h_source, n3->mac_address, ETH_ALEN);
+
   /* ---------------------------------------------------------- */
   /*  Outer IPv4 header                                         */
   /* ---------------------------------------------------------- */
@@ -128,7 +132,7 @@ static __always_inline __u32 create_outer_header_gtpu_ethernet(
      * meaningless "hit" against dst 0.0.0.0/whatever default route exists
      */
     bpf_debug(
-        "N6 ETH: broadcast placeholder -- MAC left unresolved here, "
+        "N6 ETH: broadcast placeholder -- dst MAC left unresolved here, "
         "resolved per-clone by TC fan-out");
   }
 
