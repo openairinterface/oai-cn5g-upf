@@ -76,3 +76,16 @@ uint32_t NicInformationGetter::retrieveBurst(std::string interface) {
 uint32_t NicInformationGetter::retrieveCBurst(std::string interface) {
   return 0;
 }
+
+/*---------------------------------------------------------------------------------------------------------------*/
+bool NicInformationGetter::retrieveMac(
+    const std::string& interface, uint8_t mac[6]) {
+  std::string address =
+      readValueFromFile("/sys/class/net/" + interface + "/address");
+
+  struct ether_addr parsed;
+  if (address.empty() || !ether_aton_r(address.c_str(), &parsed)) return false;
+
+  std::memcpy(mac, parsed.ether_addr_octet, sizeof(parsed.ether_addr_octet));
+  return true;
+}

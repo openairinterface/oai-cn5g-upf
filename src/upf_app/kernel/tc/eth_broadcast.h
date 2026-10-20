@@ -56,8 +56,14 @@
  * @field skb           The TC-ingress skb being broadcasted.
  * @field ifindex       Pointer to the egress ifindex (kept indirected so the
  *                      caller can resolve it once outside the loop).
- * @field pdu_sessions  Dedup array: TEIDs already cloned to during this call.
- * @field size          Current population of pdu_sessions[].
+ * @field pdu_sessions  Dedup array: low 32 bits of the UP SEID of each session
+ *                      already visited. UL seeds slot 0 with the source
+ *                      session, so it is never cloned to. Keyed on SEID, not
+ *                      DL TEID: DL TEIDs are allocated per gNB (TS 29.281
+ *                      §3.1) and may repeat across gNBs.
+ * @field size          Sessions visited so far, cloned or not. Keep it alone
+ *                      in its 8-byte stack slot, or the verifier loses its
+ *                      value and the unrolled loop exceeds 1M insns.
  */
 struct callback_ctx {
   struct __sk_buff* skb;
@@ -72,7 +78,7 @@ struct callback_ctx {
 
 /**
  * @brief bpf_for_each_map_elem() callback that clones the current skb out to
- *        a single ETH PDU session and records the visited TEID for dedup.
+ *        a single ETH PDU session and records the visited session for dedup.
  *
  * Iteration semantics (kernel docs):
  *   return 0 (RET_SUCCESS) → continue to next map element
@@ -90,6 +96,11 @@ struct callback_ctx {
 static long broadcast_callback_fn(
     struct bpf_map* map, void* key, void* value, struct callback_ctx* ctx) {
   struct eth_session_id* pdu_session = (struct eth_session_id*) value;
+
+  /* Establishment stores placeholders (teid_dl / gNB IP = 0) until the DL
+   * F-TEID is known: never clone to them. */
+  if (!pdu_session->teid_dl || !pdu_session->ipv4_address)
+    return RET_SUCCESS; /* continue to next */
 
   struct __sk_buff* skb = (struct __sk_buff*) ctx->skb;
   void* data            = (void*) (long) skb->data;
@@ -117,15 +128,19 @@ static long broadcast_callback_fn(
 
   /* TODO: replace #pragma clang loop unroll with bpf_for() (kernel >= 6.3,
    * libbpf >= 1.3) once the project's verifier baseline is bumped. */
+  /* UL: the source session is pre-seeded, so it breaks out here
+   * (TS 23.501 §5.8.2.5.3). */
+  __u32 sid = (__u32) pdu_session->seid;
 #pragma clang loop unroll(full)
   for (int v = 0; v < MAX_BROADCAST_FANOUT; v++) {
-    if (ctx->pdu_sessions[v] == pdu_session->teid_dl) break;
+    if (ctx->pdu_sessions[v] == sid) break;
     if (v == ctx->size) {
-      ctx->pdu_sessions[v] = pdu_session->teid_dl;
+      ctx->pdu_sessions[v] = sid;
       ctx->size += 1;
 
       /* Resolve the outer dst MAC for this session's gNB IP BEFORE
-       * touching any header field: ARP first, FIB fallback. */
+       * touching any header field: ARP first, FIB fallback. The outer src
+       * MAC/IP are already the UPF's N3 addresses. */
       __u32 new_daddr   = pdu_session->ipv4_address;
       bool mac_resolved = resolve_mac_via_arp(new_daddr, eth_outer->h_dest);
 
@@ -145,25 +160,39 @@ static long broadcast_callback_fn(
 
       if (!mac_resolved) break;
 
+      bpf_debug(
+          "eth_broadcast: cloning to PDU session TEID=0x%x dst_mac=%012llx",
+          bpf_ntohl(pdu_session->teid_dl), mac_to_u64(eth_outer->h_dest));
+
       /* Rewrite outer GTP-U TEID + outer dst-IP for this session (dst
-       * MAC already written above), fix up the IPv4 header checksum for
-       * the daddr change, then clone the packet out the egress (N3)
-       * interface. */
+       * MAC already written above), then update the IPv4 and UDP
+       * checksums (a zero UDP checksum stays zero). The helpers invalidate
+       * packet pointers. */
       __u32 old_daddr = iph->daddr;
-      gtpuh->teid     = pdu_session->teid_dl;
+      __u32 old_teid  = gtpuh->teid;
+      __u32 new_teid  = pdu_session->teid_dl;
+      gtpuh->teid     = new_teid;
       iph->daddr      = new_daddr;
 
-      bpf_l3_csum_replace(
-          skb, IP_CSUM_OFFSET, old_daddr, new_daddr, sizeof(new_daddr));
+      /* TEID first: holding the packed old_teid across a helper call
+       * overflows the debug build's 512-byte stack. */
+      if (bpf_l4_csum_replace(
+              skb, UDP_CSUM_OFFSET, old_teid, new_teid,
+              BPF_F_MARK_MANGLED_0 | sizeof(new_teid)) ||
+          bpf_l3_csum_replace(
+              skb, IP_CSUM_OFFSET, old_daddr, new_daddr, sizeof(new_daddr)) ||
+          bpf_l4_csum_replace(
+              skb, UDP_CSUM_OFFSET, old_daddr, new_daddr,
+              BPF_F_MARK_MANGLED_0 | BPF_F_PSEUDO_HDR | sizeof(new_daddr))) {
+        bpf_debug("eth_broadcast: checksum update failed -- stopping fan-out");
+        return RET_PASS; /* stop iteration */
+      }
 
       int ret = bpf_clone_redirect(skb, *ctx->ifindex, 0);
       if (ret < 0) {
         bpf_debug("eth_broadcast: bpf_clone_redirect failed (ret=%d)", ret);
         return RET_PASS; /* stop iteration */
       }
-      bpf_debug(
-          "eth_broadcast: cloned to PDU session TEID=0x%x dst_mac=%pM",
-          bpf_ntohl(pdu_session->teid_dl), eth_outer->h_dest);
       break;
     }
   }
