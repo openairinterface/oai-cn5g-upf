@@ -6,6 +6,7 @@
 #include "SessionManager.h"
 #include "SessionPrograms.h"
 #include "UserPlaneComponent.h"
+#include "rule_apply_error.h"
 #include "upf_xdp_limits.h"
 #include <upf_xdp_user.h>
 #include <qer_tc_user.h>
@@ -636,30 +637,42 @@ void SessionProgramManager::SetupSessionEnforcementPrograms(
   // QER-TC: per-session HTB class setup (rate shaping via TC BPF).
   // Requires downlink QER rules and RULE_QER_ENABLED in rules_flags.
   //
-  // Tear down the previous program first, even if no new one is set up: its
-  // classes use the same (SEID, QFI)-derived ids, so the new Setup() would
-  // collide with them, and a modification that removes every QER must still
-  // release them.
+  // A session keeps one program for its lifetime. Setup() on it brings the
+  // classes in line with the current QERs: a new rate is changed in place,
+  // and only the classes of removed QERs are deleted. The program is torn
+  // down once the session has no QERs left to enforce.
+  //
+  // A QER that could not be applied is re-raised after URR/BAR/MAR, so it
+  // does not keep them from being set up.
+  std::exception_ptr qer_tc_error;
+  std::shared_ptr<QERTCProgram> qer_program;
   {
     std::lock_guard<std::mutex> lock(mutex_);
     auto qer_it = qer_programs_map_.find(seid);
     if (qer_it != qer_programs_map_.end()) {
-      logger.debug(
-          "Tearing down previous QERTCProgram for SEID=" SEID_FMT, seid);
-      qer_it->second->TearDown();
-      qer_programs_map_.erase(qer_it);
+      qer_program = qer_it->second;
     }
   }
 
   if ((rules_flags & RULE_QER_ENABLED) && !session->qers_downlink.empty()) {
-    logger.debug("Setup QERTCProgram for SEID=" SEID_FMT, seid);
-    std::shared_ptr<QERTCProgram> qer_program =
-        std::make_shared<QERTCProgram>();
-    qer_program->Setup(seid, session->qers_downlink, session->pdrs_downlink);
-    {
+    if (!qer_program) {
+      // Tracked before Setup(), so the classes it creates are released on
+      // deletion even if it fails, and the next modification retries the rest
+      qer_program = std::make_shared<QERTCProgram>();
       std::lock_guard<std::mutex> lock(mutex_);
       qer_programs_map_[seid] = qer_program;
     }
+    logger.debug("Setup QERTCProgram for SEID=" SEID_FMT, seid);
+    try {
+      qer_program->Setup(seid, session->qers_downlink, session->pdrs_downlink);
+    } catch (const RuleApplyError&) {
+      qer_tc_error = std::current_exception();
+    }
+  } else if (qer_program) {
+    logger.debug("Tearing down QERTCProgram for SEID=" SEID_FMT, seid);
+    std::lock_guard<std::mutex> lock(mutex_);
+    qer_program->TearDown();
+    qer_programs_map_.erase(seid);
   }
 
   // URR: populate urr_config_map + initialise urr_volume_counters_map.
@@ -687,6 +700,10 @@ void SessionProgramManager::SetupSessionEnforcementPrograms(
       logger.debug("Setup MARProgram for SEID=" SEID_FMT, seid);
       mar->Setup(seid, session->mars);
     }
+  }
+
+  if (qer_tc_error) {
+    std::rethrow_exception(qer_tc_error);
   }
 }
 
@@ -1250,8 +1267,16 @@ void SessionProgramManager::ModifyPipeline(
     // programs need to be (re)initialised. This mirrors the pipeline-level
     // Setup() in UPF_XDPProgram which only loads the XDP programs;
     // per-session map population is done here.
+    //
+    // A rule that could not be applied is re-raised once the rest of the
+    // pipeline is programmed, rather than leaving the session's PDRs unwritten.
     // ─────────────────────────────────────────────────────────────────────────
-    SetupSessionEnforcementPrograms(session, upf_xdp_program, rules_flags);
+    std::exception_ptr enforcement_error;
+    try {
+      SetupSessionEnforcementPrograms(session, upf_xdp_program, rules_flags);
+    } catch (const RuleApplyError&) {
+      enforcement_error = std::current_exception();
+    }
 
     // Each TEID is listed once: PDRs that share an F-TEID (CHOOSE ID,
     // §5.2.3.1), or FARs that point at the same gNB tunnel, are one tunnel.
@@ -1505,6 +1530,10 @@ void SessionProgramManager::ModifyPipeline(
     }
     PruneStaleRuleEntries(
         upf_xdp_program, seid, is_eth_pdu, stale_pdr_ids, stale_qfis);
+
+    if (enforcement_error) {
+      std::rethrow_exception(enforcement_error);
+    }
 
     logger.info(
         "[eBPF] Modify Pipeline - Pipeline modified for session " SEID_FMT

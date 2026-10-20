@@ -1650,7 +1650,7 @@ bool pfcp_switch::create_packet_in_access(
 // against N4 modification events on the live session object.
 
 //------------------------------------------------------------------------------
-void pfcp_switch::call_datapath(
+SessionOperationResult pfcp_switch::call_datapath(
     itti_n4_session_establishment_request* establishment_request,
     itti_n4_session_modification_request* modification_request,
     itti_n4_session_deletion_request* deletion_request, pfcp::pfcp_session* s,
@@ -1672,6 +1672,7 @@ void pfcp_switch::call_datapath(
         "Datapath operation failed: %s (SEID: 0x%lx)", result.message.c_str(),
         result.seid);
   }
+  return result;
 }
 
 // =============================================================================
@@ -2266,9 +2267,20 @@ void pfcp_switch::handle_pfcp_session_modification_request(
 
     if (isBpfAccelerationEnabled) {
       Logger::upf_app().info("Modify datapath");
-      call_datapath(
+      const SessionOperationResult datapath = call_datapath(
           nullptr, req, nullptr, session, session_manager,
           &SessionManager::ModifySession);
+
+      // The rules are stored, but one the datapath could not apply must not
+      // be answered with "Request accepted" (§8.2.1 cause 73, §8.2.80).
+      // TODO: roll the session back to its state before this request.
+      if (!datapath.success && datapath.has_failed_rule &&
+          cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+        cause.cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+        failed_rule.rule_id_type  = datapath.failed_rule_type;
+        failed_rule.rule_id_value = datapath.failed_rule_id;
+        resp->pfcp_ies.set(failed_rule);
+      }
     }
 
     // Re-programme the rate limiters. This is the hook that matters in

@@ -402,8 +402,10 @@ class pfcp_switch {
    *  @param s                      Active pfcp_session (snapshot copy).
    *  @param obj                    SessionManager instance.
    *  @param crud_func              Member function pointer to call.
+   *  @return What the datapath did, so a rule it could not apply can be
+   *          reported to the CP function.
    */
-  void call_datapath(
+  SessionOperationResult call_datapath(
       itti_n4_session_establishment_request* establishment_request,
       itti_n4_session_modification_request* modification_request,
       itti_n4_session_deletion_request* deletion_req, pfcp::pfcp_session* s,

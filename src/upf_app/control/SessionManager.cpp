@@ -4,6 +4,7 @@
 
 #include "SessionManager.h"
 #include "SessionProgramManager.h"
+#include "rule_apply_error.h"
 #include <upf_xdp_user.h>
 #include <algorithm>
 #include <inttypes.h>
@@ -255,6 +256,16 @@ SessionOperationResult SessionManager::UpdateSession(
 
     return SessionOperationResult(true, "Session updated", seid);
 
+  } catch (const RuleApplyError& e) {
+    Logger::upf_app().error(
+        "[N4] Update Session: seid " SEID_FMT
+        " - Rule (type %u) %u not applied: %s",
+        seid, e.rule_type(), e.rule_id(), e.what());
+    SessionOperationResult result(false, e.what(), seid);
+    result.has_failed_rule  = true;
+    result.failed_rule_type = e.rule_type();
+    result.failed_rule_id   = e.rule_id();
+    return result;
   } catch (const std::exception& e) {
     Logger::upf_app().error(
         "[N4] Update Session: seid " SEID_FMT " - Exception: %s", seid,
@@ -1216,10 +1227,27 @@ size_t SessionManager::HandleQerRemoval(
 
   for (const auto& remove_qer : mod_req->pfcp_ies.remove_qers) {
     pfcp::qer_id_t qer_id;
-    if (remove_qer.get(qer_id)) {
-      if (RemoveQerUnlocked(session->get_up_seid(), qer_id.qer_id)) {
-        removed_count++;
-      }
+    if (!remove_qer.get(qer_id)) continue;
+
+    const auto remove_from = [&qer_id](auto& vec) {
+      const auto before = vec.size();
+      vec.erase(
+          std::remove_if(
+              vec.begin(), vec.end(),
+              [&qer_id](const auto& q) {
+                return q->qer_id.second.qer_id == qer_id.qer_id;
+              }),
+          vec.end());
+      return vec.size() != before;
+    };
+
+    remove_from(session->qers_uplink);
+    remove_from(session->qers_downlink);
+    if (remove_from(session->qers)) {
+      Logger::upf_app().info(
+          "Removed QER %u from session " SEID_FMT, qer_id.qer_id,
+          session->get_up_seid());
+      removed_count++;
     }
   }
 
@@ -1410,13 +1438,8 @@ size_t SessionManager::HandlePdrUpdates(
     updated_count++;
   }  // end for (update_pdr)
 
-  // Re-categorize and update BPF maps once for all updated PDRs
-  if (updated_count > 0) {
-    CategorizePdrs(session);
-    SortPdrs(session->pdrs_uplink);
-    SortPdrs(session->pdrs_downlink);
-    session_program_manager_->ModifyPipeline(session);
-  }
+  // BPF maps are rebuilt once, by UpdateSession() at the end of
+  // ModifySession(), after every IE of the request has been applied
 
   return updated_count;
 }
@@ -1583,10 +1606,8 @@ size_t SessionManager::HandleFarUpdates(
     updated_count++;
   }
 
-  // Update BPF maps
-  if (updated_count > 0) {
-    session_program_manager_->ModifyPipeline(session);
-  }
+  // BPF maps are rebuilt once, by UpdateSession() at the end of
+  // ModifySession(), after every IE of the request has been applied
 
   return updated_count;
 }
@@ -1645,11 +1666,8 @@ size_t SessionManager::HandleQerUpdates(
     updated_count++;
   }
 
-  // Re-categorize and update BPF maps
-  if (updated_count > 0) {
-    CategorizePdrs(session);
-    session_program_manager_->ModifyPipeline(session);
-  }
+  // BPF maps are rebuilt once, by UpdateSession() at the end of
+  // ModifySession(), after every IE of the request has been applied
 
   return updated_count;
 }
@@ -2150,10 +2168,8 @@ size_t SessionManager::HandleUrrUpdates(
     updated_count++;
   }
 
-  // Update BPF urr_config_map (volume counters preserved via BPF_NOEXIST)
-  if (updated_count > 0) {
-    session_program_manager_->ModifyPipeline(session);
-  }
+  // BPF maps are rebuilt once, by UpdateSession() at the end of
+  // ModifySession(), after every IE of the request has been applied
 
   return updated_count;
 }
@@ -2213,10 +2229,8 @@ size_t SessionManager::HandleBarUpdates(
     }
   }
 
-  // Update BPF bar_config_map (bar_state_map preserved via BPF_NOEXIST)
-  if (updated_count > 0) {
-    session_program_manager_->ModifyPipeline(session);
-  }
+  // BPF maps are rebuilt once, by UpdateSession() at the end of
+  // ModifySession(), after every IE of the request has been applied
 
   return updated_count;
 }
@@ -2337,10 +2351,8 @@ size_t SessionManager::HandleMarUpdates(
     updated_count++;
   }
 
-  // Update BPF mar_rules_map
-  if (updated_count > 0) {
-    session_program_manager_->ModifyPipeline(session);
-  }
+  // BPF maps are rebuilt once, by UpdateSession() at the end of
+  // ModifySession(), after every IE of the request has been applied
 
   return updated_count;
 }
