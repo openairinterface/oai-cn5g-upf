@@ -1227,10 +1227,27 @@ size_t SessionManager::HandleQerRemoval(
 
   for (const auto& remove_qer : mod_req->pfcp_ies.remove_qers) {
     pfcp::qer_id_t qer_id;
-    if (remove_qer.get(qer_id)) {
-      if (RemoveQerUnlocked(session->get_up_seid(), qer_id.qer_id)) {
-        removed_count++;
-      }
+    if (!remove_qer.get(qer_id)) continue;
+
+    const auto remove_from = [&qer_id](auto& vec) {
+      const auto before = vec.size();
+      vec.erase(
+          std::remove_if(
+              vec.begin(), vec.end(),
+              [&qer_id](const auto& q) {
+                return q->qer_id.second.qer_id == qer_id.qer_id;
+              }),
+          vec.end());
+      return vec.size() != before;
+    };
+
+    remove_from(session->qers_uplink);
+    remove_from(session->qers_downlink);
+    if (remove_from(session->qers)) {
+      Logger::upf_app().info(
+          "Removed QER %u from session " SEID_FMT, qer_id.qer_id,
+          session->get_up_seid());
+      removed_count++;
     }
   }
 
