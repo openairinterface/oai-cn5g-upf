@@ -55,6 +55,12 @@ struct SessionOperationResult {
   uint64_t
       seid;  ///< Session Endpoint Identifier (3GPP TS 29.244 Section 8.2.37)
 
+  /// Set when a rule could not be applied to the datapath, so the PFCP
+  /// response can name it in a Failed Rule ID (3GPP TS 29.244 §8.2.80)
+  bool has_failed_rule     = false;
+  uint8_t failed_rule_type = 0;  ///< pfcp::FAILED_RULE_ID_TYPE_*
+  uint32_t failed_rule_id  = 0;
+
   SessionOperationResult() : success(false), message(""), seid(0) {}
 
   SessionOperationResult(bool s, const std::string& msg, uint64_t id)
