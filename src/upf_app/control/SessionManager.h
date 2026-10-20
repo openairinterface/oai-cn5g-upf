@@ -614,10 +614,11 @@ class SessionManager {
    * hold sessions_mutex_).
    *
    * ModifySession() holds sessions_mutex_ for its whole body and calls
-   * HandlePdrRemoval()/HandleFarRemoval()/HandleQerRemoval()/
-   * HandleUrrRemoval()/HandleBarRemoval(), which must call these instead of
-   * the public, self-locking Remove* methods to avoid a self-deadlock on the
-   * (non-recursive) sessions_mutex_.
+   * HandlePdrRemoval()/HandleFarRemoval()/HandleUrrRemoval()/
+   * HandleBarRemoval(), which must call these instead of the public,
+   * self-locking Remove* methods to avoid a self-deadlock on the
+   * (non-recursive) sessions_mutex_. HandleQerRemoval() removes from the
+   * session it is given instead.
    */
   bool RemovePdrUnlocked(uint64_t seid, uint16_t pdr_id);
   bool RemoveFarUnlocked(uint64_t seid, uint32_t far_id);
@@ -678,6 +679,11 @@ class SessionManager {
 
   /**
    * @brief Handle QER removal from modification request
+   *
+   * Removes the QERs from @p session itself, without rebuilding the
+   * datapath: UpdateSession() stores and rebuilds it once at the end of
+   * ModifySession().
+   *
    * @param session Session to modify
    * @param mod_req Modification request containing QERs to remove
    * @return Number of QERs removed
