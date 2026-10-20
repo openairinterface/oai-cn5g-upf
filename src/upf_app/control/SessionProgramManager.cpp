@@ -178,6 +178,23 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
       }
       session_ue_ip_key_map_.erase(ue_ip_it);
     }
+    // Clean up eth_session_mapping_map so the TC broadcast fan-out stops
+    // cloning to this session's gNB / DL TEID.
+    auto eth_teid_it = session_eth_teid_key_map_.find(seid);
+    if (eth_teid_it != session_eth_teid_key_map_.end()) {
+      auto eth_session_map =
+          upf_xdp_program->GetMapByName("eth_session_mapping_map");
+      if (eth_session_map) {
+        for (uint32_t teid_key : eth_teid_it->second) {
+          struct eth_session_id existing = {0};
+          if (eth_session_map->Lookup(teid_key, &existing) == 0 &&
+              existing.seid == seid) {
+            eth_session_map->Remove(teid_key);
+          }
+        }
+      }
+      session_eth_teid_key_map_.erase(eth_teid_it);
+    }
   }
 
   // Clean up ARP caches
@@ -225,6 +242,7 @@ void SessionProgramManager::RemoveAllSessions() {
   // Clear PDU session type and UE-IP key tracking
   session_pdu_type_map_.clear();
   session_ue_ip_key_map_.clear();
+  session_eth_teid_key_map_.clear();
 
   // Remove session programs
   session_programs_map_.clear();
@@ -408,9 +426,22 @@ void SessionProgramManager::RemoveUeIpMappingIfOwned(
 void SessionProgramManager::StoreEthPduSessionInMap(
     std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t teid_ul,
     uint32_t teid_dl, uint32_t gnb_ip, uint64_t seid) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  StoreEthPduSessionInMapUnlocked(
+      upf_xdp_program, teid_ul, teid_dl, gnb_ip, seid);
+}
+
+//------------------------------------------------------------------------------
+/**
+ * @brief StoreEthPduSessionInMap() without locking mutex_
+ * @see SessionProgramManager::StoreEthPduSessionInMapUnlocked (header)
+ */
+bool SessionProgramManager::StoreEthPduSessionInMapUnlocked(
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t teid_ul,
+    uint32_t teid_dl, uint32_t gnb_ip, uint64_t seid) {
   if (!upf_xdp_program) {
     Logger::upf_app().error("StoreEthPduSessionInMap: null XDP program");
-    return;
+    return false;
   }
 
   try {
@@ -419,7 +450,7 @@ void SessionProgramManager::StoreEthPduSessionInMap(
     if (!eth_session_map) {
       Logger::upf_app().error(
           "eth_session_mapping_map not found - ETH PDU not supported");
-      return;
+      return false;
     }
 
     // Map key is host byte order matching pctx->pkt_teid on the XDP
@@ -436,14 +467,18 @@ void SessionProgramManager::StoreEthPduSessionInMap(
       Logger::upf_app().error(
           "Failed to update eth_session_mapping_map TEID=0x%x (ret=%d)",
           teid_ul, ret);
-      return;
+      return false;
     }
+    // Track this session's map key so RemoveSession() can clear it later.
+    session_eth_teid_key_map_[seid].insert(key);
 
     Logger::upf_app().debug(
         "Stored ETH PDU session: TEID_UL=0x%x TEID_DL=0x%x SEID=" SEID_FMT,
         teid_ul, teid_dl, seid);
+    return true;
   } catch (const std::exception& e) {
     Logger::upf_app().error("StoreEthPduSessionInMap failed: %s", e.what());
+    return false;
   }
 }
 
@@ -1285,9 +1320,26 @@ void SessionProgramManager::ModifyPipeline(
       uint32_t primary_teid_dl = downlink_teids.empty() ? 0 : downlink_teids[0];
 
       if (is_eth_pdu) {
-        // ETH PDU: TEID-keyed mapping with gNB IP for DL encap
-        StoreEthPduSessionInMap(
-            upf_xdp_program, primary_teid_ul, primary_teid_dl, gnb_ip, seid);
+        // ETH PDU: TEID-keyed mapping with gNB IP for DL encap. Store the
+        // new key and drop replaced UL TEIDs under one lock, as for IP.
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (StoreEthPduSessionInMapUnlocked(
+                upf_xdp_program, primary_teid_ul, primary_teid_dl, gnb_ip,
+                seid) &&
+            primary_teid_ul != 0) {
+          auto eth_session_map =
+              upf_xdp_program->GetMapByName("eth_session_mapping_map");
+          auto& tracked_keys = session_eth_teid_key_map_[seid];
+          for (const uint32_t old_key : tracked_keys) {
+            struct eth_session_id existing = {0};
+            if (old_key != primary_teid_ul && eth_session_map &&
+                eth_session_map->Lookup(old_key, &existing) == 0 &&
+                existing.seid == seid) {
+              eth_session_map->Remove(old_key);
+            }
+          }
+          tracked_keys = {primary_teid_ul};
+        }
       } else {
         // IP PDU: UE IP-keyed mapping. Store the new key and drop replaced
         // ones under one lock, so RemoveSession() can't interleave.

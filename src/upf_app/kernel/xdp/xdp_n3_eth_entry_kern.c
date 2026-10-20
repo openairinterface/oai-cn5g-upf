@@ -169,6 +169,20 @@ int xdp_n3_eth_entry(struct xdp_md* ctx) {
   /*  Container. Validate bounds and extract src/dst MACs and   */
   /*  EtherType for MAC learning and broadcast detection.       */
   /* ---------------------------------------------------------- */
+  /* gtpu_decap_eth() and the TC fan-out strip a fixed
+   * ETH + GTP_ENCAPSULATED_SIZE: only admit that layout (IHL 5, one 4-octet
+   * PDU Session Container, TS 29.281 §5.2.1) so N6 never gets a misframed
+   * inner frame. */
+  if (ip_outer->ihl != 5 || !gtpu->e ||
+      gtpu->next_ext_type != GTP_NEXT_EXT_TYPE ||
+      gtpu_ext->message_length != GTP_EXT_MSG_LEN ||
+      gtpu_ext->next_ext_type != GTP_EXT_NEXT_EXT_TYPE) {
+    bpf_debug(
+        "N3 ETH: unsupported GTP-U framing (ihl=%u ext_len=%u) -- drop",
+        ip_outer->ihl, gtpu_ext->message_length);
+    return xdp_stats_record_action(ctx, XDP_DROP);
+  }
+
   struct ethhdr* eth_inner = inner;
 
   if ((void*) (eth_inner + 1) > data_end) {
