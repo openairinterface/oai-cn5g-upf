@@ -340,13 +340,12 @@ static __always_inline struct pfcp_pdr* match_pdr_n6(
     /* Retrieve UE IP from PDI */
     u32 ipaddr = bpf_htonl(pdi.ue_ip_address.ipv4_address.s_addr);
 
-    /* UE IP Address must match for DL */
-    if (ipaddr != pkt_ue_ip) continue;
-    /* Check UE IP */
-    /* TODO:
-     * Check if this is correct
-     * in case of framed_routing
+    /* UE IP Address must match for DL.
+     * Framed-Route destinations (RFC 2865) are handled upstream in
+     * session_lookup_ip, which rewrites pctx->ue_ip to the owning UE's IP
+     * before this stage — so an exact match here is correct in that case too.
      */
+    if (ipaddr != pkt_ue_ip) continue;
 
     /* Source Interface must be CORE (N6) */
     u32 source_interface = pdi.source_interface.interface_value;
