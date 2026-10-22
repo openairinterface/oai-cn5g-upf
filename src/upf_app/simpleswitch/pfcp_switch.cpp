@@ -805,6 +805,15 @@ int pfcp_switch::tun_open(char* devname, int flags, bool multi_queue) {
   // Each open with IFF_MULTI_QUEUE attaches another queue to the same device.
   // The device itself must have been created with multi_queue or this fails.
   if (multi_queue) ifr.ifr_flags |= IFF_MULTI_QUEUE;
+  if (upf_cfg.tun_backpressure) {
+#ifdef IFF_BACKPRESSURE
+    ifr.ifr_flags |= IFF_BACKPRESSURE;
+#else
+    Logger::pfcp_switch().warn(
+        "tun_backpressure ignored: IFF_BACKPRESSURE missing from kernel "
+        "headers at build time");
+#endif
+  }
   strncpy(ifr.ifr_name, devname, IFNAMSIZ);  // devname = tunX
 
   if ((err = ioctl(fd, TUNSETIFF, (void*) &ifr)) == -1) {

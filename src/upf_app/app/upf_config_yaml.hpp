@@ -70,6 +70,7 @@ constexpr auto UPF_MAX_SDF_FILTER_STRING_LENGTH =
 constexpr auto UPF_MAX_UPF_INTERFACES          = "max_upf_interfaces";
 constexpr auto UPF_N3_RX_THREADS               = "n3_rx_threads";
 constexpr auto UPF_DL_RX_QUEUES                = "dl_rx_queues";
+constexpr auto UPF_TUN_BACKPRESSURE            = "tun_backpressure";
 constexpr auto UPF_QOS_BURST_MS                = "qos_burst_ms";
 constexpr auto UPF_QOS_SHAPE_MS                = "qos_shape_ms";
 constexpr auto UPF_QOS_SHAPE_UL_MS             = "qos_shape_ul_ms";
@@ -102,6 +103,7 @@ constexpr auto UPF_MAX_SDF_FILTER_STRING_LENGTH_LABEL =
 constexpr auto UPF_MAX_UPF_INTERFACES_LABEL = "Max UPF Interfaces";
 constexpr auto UPF_N3_RX_THREADS_LABEL      = "N3 RX Threads (UL)";
 constexpr auto UPF_DL_RX_QUEUES_LABEL       = "TUN RX Queues (DL)";
+constexpr auto UPF_TUN_BACKPRESSURE_LABEL   = "TUN Backpressure (DL)";
 constexpr auto UPF_QOS_BURST_MS_LABEL       = "QoS policer burst (ms)";
 constexpr auto UPF_QOS_SHAPE_MS_LABEL       = "QoS shaper queue, DL (ms)";
 constexpr auto UPF_QOS_SHAPE_UL_MS_LABEL    = "QoS shaper queue, UL (ms)";
@@ -626,6 +628,9 @@ class upf_datapath_configuration : public config_type {
    * 1 keeps the single-queue datapath.
    */
   int_config_value m_dl_rx_queues{};
+
+  /// @brief Set IFF_BACKPRESSURE on tun0 (Linux 7.3+). Off by default.
+  option_config_value m_tun_backpressure{};
   int_config_value m_qos_burst_ms{};
   int_config_value m_qos_shape_ms{};
   int_config_value m_qos_shape_ul_ms{};
@@ -890,6 +895,7 @@ class upf_datapath_configuration : public config_type {
   [[nodiscard]] int get_max_upf_interfaces() const;
   [[nodiscard]] int get_n3_rx_threads() const;
   [[nodiscard]] int get_dl_rx_queues() const;
+  [[nodiscard]] bool get_tun_backpressure() const;
   [[nodiscard]] int get_qos_burst_ms() const;
   [[nodiscard]] int get_qos_shape_ms() const;
   [[nodiscard]] int get_qos_shape_ul_ms() const;
