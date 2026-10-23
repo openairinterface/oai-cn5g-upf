@@ -32,6 +32,7 @@
 
 /* Maps and dispatch */
 #include "tail_call_dispatcher.h"
+#include "eth_session_maps.h" /* owned here: created before sl_eth_ loads */
 
 /* Statistics */
 #include "stats_maps.h"
@@ -49,11 +50,11 @@
  *   2. Outer IPv4      — validate outer L3
  *   3. Outer UDP       — validate L4, confirm GTP-U port (2152)
  *   4. GTP-U header    — confirm G-PDU, extract F-TEID
- *   5. PDU Session Ctr — extract QFI; returns pointer to inner payload
- *   6. PDU type detect — inspect version nibble of inner byte:
- *        0x4/0x6 → IP PDU  → tail-call PROG_SESSION_LOOKUP_IP
- *        else    → ETH PDU → validate inner ETH + tail-call
- * PROG_SESSION_LOOKUP_ETH
+ *   5. Extension hdrs  — extract QFI; returns pointer to inner payload
+ *   6. PDU type        — look the F-TEID up in eth_session_mapping_map:
+ *        found     → ETH PDU → validate inner ETH + tail-call
+ *                              PROG_SESSION_LOOKUP_ETH
+ *        not found → IP PDU  → tail-call PROG_SESSION_LOOKUP_IP
  *
  * @param ctx XDP metadata context.
  * @return XDP verdict (via tail call, or fallback on error).
@@ -106,31 +107,21 @@ int xdp_n3_eth_entry(struct xdp_md* ctx) {
   }
 
   /* ---------------------------------------------------------- */
-  /*  Parse PDU Session Container (TS 29.281 §5.5.3.3)         */
-  /*  Extract QFI; returns pointer to inner Ethernet frame      */
+  /*  Walk the extension headers (TS 29.281 §5.2.1)            */
+  /*  Extract QFI; returns pointer to the inner frame           */
   /* ---------------------------------------------------------- */
-  struct gtpu_extn_pdu_session_container* gtpu_ext;
   u8 qfi;
 
-  void* inner = parse_gtpu_ext_hdr(gtpu, data_end, &gtpu_ext, &qfi);
+  void* inner = parse_gtpu_ext_hdr(gtpu, data_end, &qfi);
   if (!inner) return xdp_stats_record_action(ctx, XDP_DROP);
 
   /* ---------------------------------------------------------- */
-  /*  Detect inner PDU type: IP or Ethernet                     */
-  /*                                                            */
-  /*  Inspect the version nibble of the first byte after the   */
-  /*  GTP-U extension header:                                   */
-  /*    0x4x → IPv4 inner packet  (IP PDU session, TS 23.501)  */
-  /*    0x6x → IPv6 inner packet  (IP PDU session, TS 23.501)  */
-  /*    else  → Ethernet frame    (ETH PDU session, TS 23.501) */
+  /*  PDU type: Ethernet if the F-TEID belongs to an ETH PDU    */
+  /*  session, IP otherwise. The payload can't tell: an inner   */
+  /*  Ethernet frame whose dst MAC starts with 0x4_ or 0x6_     */
+  /*  looks like an IP version nibble.                          */
   /* ---------------------------------------------------------- */
-  const u8* inner_byte = (const u8*) inner;
-  if ((void*) (inner_byte + 1) > data_end)
-    return xdp_stats_record_action(ctx, XDP_DROP);
-
-  u8 inner_version = (*inner_byte) >> 4;
-
-  if (inner_version == 4 || inner_version == 6) {
+  if (!bpf_map_lookup_elem(&eth_session_mapping_map, &pkt_teid)) {
     /* -------------------------------------------------------- */
     /*  IP PDU session — parse inner IPv4, dispatch to IP lookup*/
     /* -------------------------------------------------------- */
@@ -165,21 +156,16 @@ int xdp_n3_eth_entry(struct xdp_md* ctx) {
   /* ---------------------------------------------------------- */
   /*  Ethernet PDU session — parse inner ETH frame              */
   /*                                                            */
-  /*  The inner frame starts immediately after the PDU Session  */
-  /*  Container. Validate bounds and extract src/dst MACs and   */
-  /*  EtherType for MAC learning and broadcast detection.       */
+  /*  The inner frame follows the GTP-U extension headers.      */
+  /*  Validate bounds and extract src/dst MACs and EtherType    */
+  /*  for MAC learning and broadcast detection.                 */
   /* ---------------------------------------------------------- */
-  /* gtpu_decap_eth() and the TC fan-out strip a fixed
-   * ETH + GTP_ENCAPSULATED_SIZE: only admit that layout (IHL 5, one 4-octet
-   * PDU Session Container, TS 29.281 §5.2.1) so N6 never gets a misframed
-   * inner frame. */
-  if (ip_outer->ihl != 5 || !gtpu->e ||
-      gtpu->next_ext_type != GTP_NEXT_EXT_TYPE ||
-      gtpu_ext->message_length != GTP_EXT_MSG_LEN ||
-      gtpu_ext->next_ext_type != GTP_EXT_NEXT_EXT_TYPE) {
+  /* gtpu_decap_eth() and the TC fan-out re-walk the extension headers
+   * (gtpu_inner_offset()) but assume a 20-byte outer IPv4 header. */
+  if (ip_outer->ihl != 5) {
     bpf_debug(
-        "N3 ETH: unsupported GTP-U framing (ihl=%u ext_len=%u) -- drop",
-        ip_outer->ihl, gtpu_ext->message_length);
+        "N3 ETH: outer IPv4 options unsupported (ihl=%u) -- drop",
+        ip_outer->ihl);
     return xdp_stats_record_action(ctx, XDP_DROP);
   }
 
