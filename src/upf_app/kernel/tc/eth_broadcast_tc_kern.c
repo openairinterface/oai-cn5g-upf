@@ -126,10 +126,17 @@ int handle_broadcast(struct __sk_buff* skb) {
   }
 
   /* ---------------------------------------------------------- */
-  /*  Inner Ethernet (immediately after the GTP-U stack)        */
+  /*  Inner Ethernet (after the GTP-U extension headers)        */
+  /*                                                            */
+  /*  Non-G-PDU GTP-U (Echo, Error Indication, ...) is          */
+  /*  XDP_PASSed and reaches this hook too: leave it alone.     */
   /* ---------------------------------------------------------- */
-  eth = (struct ethhdr*) ((void*) data + sizeof(struct ethhdr) +
-                          GTP_ENCAPSULATED_SIZE);
+  int inner_off = gtpu_inner_offset(data, data_end);
+  if (inner_off < 0) {
+    bpf_debug("eth_broadcast_tc: not an N3 G-PDU this UPF parses -- skip");
+    goto out;
+  }
+  eth = (struct ethhdr*) ((void*) data + inner_off);
   if ((void*) (eth + 1) > data_end) {
     bpf_debug("eth_broadcast_tc: malformed inner Ethernet");
     goto out;
@@ -177,6 +184,17 @@ int handle_broadcast(struct __sk_buff* skb) {
       skb->ifindex, skb->ingress_ifindex, *ifindex);
   bool is_uplink = (*ifindex == skb->ifindex);
   if (is_uplink) {
+    /* The DL clones reuse the UL container, rewritten in place, so they need
+     * it alone and 4 octets. Other layouts (QoS monitoring fields, extra
+     * extension headers) still go to N6 below, without clones. */
+    if (inner_off != (int) (sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE) ||
+        gtpuh->next_ext_type != GTP_NEXT_EXT_TYPE) {
+      bpf_debug(
+          "eth_broadcast_tc: UL extension headers not 4 octets -- N6 only");
+      action = TC_ACT_SHOT;
+      goto n6;
+    }
+
     /* Skip the source session: pre-seed its SEID in the dedup array. A UL
      * TEID with no session is dropped. */
     __u32 src_teid = bpf_ntohl(gtpuh->teid);
@@ -207,7 +225,7 @@ int handle_broadcast(struct __sk_buff* skb) {
 
     /* The clones go DL: turn the UL PDU Session Container into a DL one
      * (TS 38.415 §5.5.2.1: PDU Type 0, no optional fields; octet 2 is
-     * PPP | RQI | QFI). xdp_n3_eth_entry only admits 4-octet containers. */
+     * PPP | RQI | QFI). */
     data     = (void*) (long) skb->data;
     data_end = (void*) (long) skb->data_end;
     struct gtpu_extn_pdu_session_container* ext =
@@ -251,6 +269,7 @@ int handle_broadcast(struct __sk_buff* skb) {
   /* ---------------------------------------------------------- */
   /*  UL: also forward the original up to N6 (DN-side)          */
   /* ---------------------------------------------------------- */
+n6:
   if (is_uplink) {
     key = UPLINK; /* N6 (DN-facing) egress — redirect UL broadcast to the DN */
     ifindex = bpf_map_lookup_elem(&eth_egress_ifindex_map, &key);
@@ -259,7 +278,7 @@ int handle_broadcast(struct __sk_buff* skb) {
       goto out;
     }
 
-    int roomlen = sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE;
+    int roomlen = inner_off;
     data        = (void*) (long) skb->data;
     data_end    = (void*) (long) skb->data_end;
     if (data + roomlen > data_end) {

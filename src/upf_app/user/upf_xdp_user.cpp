@@ -71,8 +71,9 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
    * ETH PDU:
    *   n3_eth_ is primary (GTP interface). Same maps -- it also includes
    *   tail_call_dispatcher.h and stats_maps.h. n3_ is NOT instantiated.
-   *   n3_eth_ detects the inner PDU type at runtime (IP version nibble) and
-   *   tail-calls either PROG_SESSION_LOOKUP_IP or PROG_SESSION_LOOKUP_ETH.
+   *   n3_eth_ classifies each G-PDU by its F-TEID (ETH PDU if it is in
+   *   eth_session_mapping_map, which n3_eth_ therefore owns) and tail-calls
+   *   either PROG_SESSION_LOOKUP_ETH or PROG_SESSION_LOOKUP_IP.
    *   n6_eth_ handles ETH PDU DL and IP PDU DL via the same runtime check.
    *   n6_eth_ shares those maps via bpf_map__reuse_fd.
    */
@@ -90,7 +91,7 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   /* Step 2: Instantiate stage programs
    * sl_ip_ is always instantiated — IP PDU sessions must work regardless of
    * enable_eth_pdu, and the unified n3_eth_entry dispatches to either lookup
-   * based on the inner PDU type detected at runtime (version nibble heuristic).
+   * by the session type of the G-PDU's F-TEID.
    * sl_eth_ is additionally instantiated in ETH mode for ETH PDU sessions.
    * PDR and FAR are always present.
    * QER, URR, BAR, MAR are conditional on feature flags.
@@ -169,7 +170,13 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   else
     ShareMapsOwned(primary, n6_eth_->GetBpfObject(), n3_owned);
   if (sl_ip_) ShareMapsOwned(primary, sl_ip_->GetBpfObject(), n3_owned);
-  if (sl_eth_) ShareMapsOwned(primary, sl_eth_->GetBpfObject(), n3_owned);
+  if (sl_eth_) {
+    ShareMapsOwned(primary, sl_eth_->GetBpfObject(), n3_owned);
+    /* n3_eth_ classifies G-PDUs by F-TEID, so it creates
+     * eth_session_mapping_map; sl_eth_ forwards it in Step 4a'. */
+    ShareMapsOwned(
+        primary, sl_eth_->GetBpfObject(), {"eth_session_mapping_map"});
+  }
   ShareMapsOwned(primary, pdr_->GetBpfObject(), n3_owned);
   if (qer_) ShareMapsOwned(primary, qer_->GetBpfObject(), n3_owned);
   if (urr_) ShareMapsOwned(primary, urr_->GetBpfObject(), n3_owned);
@@ -223,7 +230,8 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
    *   that nothing on the kernel side ever reads -- the control plane
    *   would write session state into a dead map.
    *
-   *   n3_eth_ does NOT include eth_pdu_maps.h, so no share for it.
+   *   Exception: eth_session_mapping_map is created by n3_eth_ (loaded in
+   *   Step 2) and reached sl_eth_ in Step 3, so this forwards n3_eth_'s map.
    */
   if (sl_eth_) {
     sl_eth_->GetLifeCycle()->load();

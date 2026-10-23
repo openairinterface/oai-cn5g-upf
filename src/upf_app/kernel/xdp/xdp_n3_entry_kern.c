@@ -109,13 +109,12 @@ int xdp_n3_entry(struct xdp_md* ctx) {
   }
 
   /* ---------------------------------------------------------- */
-  /*  Parse PDU Session Container (TS 29.281 §5.5.3.3)         */
+  /*  Walk the extension headers (TS 29.281 §5.2.1)            */
   /*  Extract QFI (§8.2.89)                                     */
   /* ---------------------------------------------------------- */
-  struct gtpu_extn_pdu_session_container* gtpu_ext;
   u8 qfi;
 
-  void* inner = parse_gtpu_ext_hdr(gtpu, data_end, &gtpu_ext, &qfi);
+  void* inner = parse_gtpu_ext_hdr(gtpu, data_end, &qfi);
   if (!inner) return xdp_stats_record_action(ctx, XDP_DROP);
 
   /* ---------------------------------------------------------- */

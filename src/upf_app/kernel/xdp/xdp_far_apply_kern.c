@@ -347,8 +347,17 @@ static __always_inline u32 gtpu_decap_ipv4(
 
   bpf_debug("Outer Header Removal: GTP-U decapsulation");
 
+  /* Strip everything between the outer Ethernet header and the inner IP
+   * packet; the GTP-U extension headers vary in length. */
+  int strip_len =
+      gtpu_inner_offset(data, data_end) - (int) sizeof(struct ethhdr);
+  if (strip_len < 0) {
+    bpf_debug("Error: unsupported GTP-U framing");
+    return RET_DROP;
+  }
+
   /* Get inner ethernet header position */
-  struct ethhdr* eth_inner = (void*) (data + GTP_ENCAPSULATED_SIZE);
+  struct ethhdr* eth_inner = (void*) (data + strip_len);
 
   if ((void*) (eth_inner + 1) > data_end) {
     bpf_debug("Error: Invalid Ethernet copy header");
@@ -410,7 +419,7 @@ static __always_inline u32 gtpu_decap_ipv4(
   }
 
   /* Strip outer headers */
-  if (bpf_xdp_adjust_head(ctx, GTP_ENCAPSULATED_SIZE)) {
+  if (bpf_xdp_adjust_head(ctx, strip_len)) {
     bpf_debug(
         "Outer Header Removal: "
         "Failed to adjust head");
@@ -471,8 +480,13 @@ static __always_inline u32 gtpu_decap_eth(
 
   bpf_debug("Outer Header Removal: GTP-U decapsulation (ETH PDU)");
 
-  /* Bounds-check the inner Ethernet header before committing to the strip. */
-  const __u32 strip_len = (__u32) sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE;
+  /* Bounds-check the inner Ethernet header before committing to the strip;
+   * the GTP-U extension headers vary in length. */
+  int strip_len = gtpu_inner_offset(data, data_end);
+  if (strip_len < 0) {
+    bpf_debug("Error: unsupported GTP-U framing");
+    return RET_DROP;
+  }
   struct ethhdr* eth_inner = (void*) (data + strip_len);
 
   if ((void*) (eth_inner + 1) > data_end) {
@@ -606,7 +620,7 @@ int far_apply(struct xdp_md* ctx) {
     if (IS_ETH_PDU(pctx->session_type) && IS_UPLINK(pctx->session_type)) {
       /* ================================================ */
       /*  ETH PDU UL: Broadcast/Multicast or GTP strip    */
-      /*  (TS 23.501 section 5.6.10.3)                    */
+      /*  (TS 23.501 section 5.8.2.5.3)                   */
       /* ================================================ */
 
       /*
