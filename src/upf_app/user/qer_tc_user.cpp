@@ -462,6 +462,7 @@ std::shared_ptr<BPFMaps> QERTCProgram::GetMaps() {
 void QERTCProgram::TearDown() {
   DeleteTcClasses();
   lifecycle_->tearDown();
+  skeleton_ = nullptr;
 }
 
 //------------------------------------------------------------------------------

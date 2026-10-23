@@ -158,6 +158,7 @@ void EthBroadcastTCProgram::Setup() {
 /* -------------------------------------------------------------------------- */
 void EthBroadcastTCProgram::TearDown() {
   lifecycle_->tearDown();
+  skeleton_ = nullptr;
 }
 
 /* -------------------------------------------------------------------------- */
