@@ -52,6 +52,17 @@ class NicInformationGetter {
   static uint32_t retrieveCBurst(std::string interface);
 
   /*---------------------------------------------------------------------------------------------------------------*/
+  /**
+   * @brief Retrieve the MAC address of the NIC from
+   * /sys/class/net/<interface>/address
+   *
+   * @param interface Linux netdev name
+   * @param mac       Output: 6-byte MAC address, untouched on failure
+   * @return true on success, false if the file is missing or unparsable
+   */
+  static bool retrieveMac(const std::string& interface, uint8_t mac[6]);
+
+  /*---------------------------------------------------------------------------------------------------------------*/
 
  private:
   // static const std::string INTERFACE_DIR = "/sys/class/net/";

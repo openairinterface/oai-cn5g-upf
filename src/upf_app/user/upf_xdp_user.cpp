@@ -3,6 +3,7 @@
  */
 
 #include "upf_xdp_user.h"
+#include "GetNicInformation.hpp"
 #include "startup_banner.hpp"
 #include "tail_call_types.h"
 #include "xdp_hook_section.h"
@@ -10,7 +11,12 @@
 #include <bpf/libbpf.h>
 #include <net/if.h>
 #include <stdexcept>
+#include <algorithm>
+#include <cstdio>
 #include <cstring>
+#include <string>
+#include <unordered_map>
+#include <vector>
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
 #include "logger.hpp"
@@ -42,6 +48,16 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
 
   Logger::upf_app().info("PDU Session type: %s", is_eth ? "Ethernet" : "IP");
 
+  /* The ETH path writes the N3 MAC as outer src MAC; an all-zero MAC would
+   * silently black-hole traffic. Fail before anything is attached. */
+  if (is_eth) {
+    uint8_t n3_mac[IF_MAC_LEN] = {};
+    if (!NicInformationGetter::retrieveMac(gtp_interface_, n3_mac))
+      throw std::runtime_error(
+          "Ethernet PDU: cannot read MAC address of N3 interface " +
+          gtp_interface_);
+  }
+
   /*  Step 1: Instantiate entry programs
    * Exactly one pair is created based on pdu_type.
    * The first program in each pair becomes "primary" -- it is loaded first
@@ -55,8 +71,9 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
    * ETH PDU:
    *   n3_eth_ is primary (GTP interface). Same maps -- it also includes
    *   tail_call_dispatcher.h and stats_maps.h. n3_ is NOT instantiated.
-   *   n3_eth_ detects the inner PDU type at runtime (IP version nibble) and
-   *   tail-calls either PROG_SESSION_LOOKUP_IP or PROG_SESSION_LOOKUP_ETH.
+   *   n3_eth_ classifies each G-PDU by its F-TEID (ETH PDU if it is in
+   *   eth_session_mapping_map, which n3_eth_ therefore owns) and tail-calls
+   *   either PROG_SESSION_LOOKUP_ETH or PROG_SESSION_LOOKUP_IP.
    *   n6_eth_ handles ETH PDU DL and IP PDU DL via the same runtime check.
    *   n6_eth_ shares those maps via bpf_map__reuse_fd.
    */
@@ -74,7 +91,7 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   /* Step 2: Instantiate stage programs
    * sl_ip_ is always instantiated — IP PDU sessions must work regardless of
    * enable_eth_pdu, and the unified n3_eth_entry dispatches to either lookup
-   * based on the inner PDU type detected at runtime (version nibble heuristic).
+   * by the session type of the G-PDU's F-TEID.
    * sl_eth_ is additionally instantiated in ETH mode for ETH PDU sessions.
    * PDR and FAR are always present.
    * QER, URR, BAR, MAR are conditional on feature flags.
@@ -153,7 +170,13 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   else
     ShareMapsOwned(primary, n6_eth_->GetBpfObject(), n3_owned);
   if (sl_ip_) ShareMapsOwned(primary, sl_ip_->GetBpfObject(), n3_owned);
-  if (sl_eth_) ShareMapsOwned(primary, sl_eth_->GetBpfObject(), n3_owned);
+  if (sl_eth_) {
+    ShareMapsOwned(primary, sl_eth_->GetBpfObject(), n3_owned);
+    /* n3_eth_ classifies G-PDUs by F-TEID, so it creates
+     * eth_session_mapping_map; sl_eth_ forwards it in Step 4a'. */
+    ShareMapsOwned(
+        primary, sl_eth_->GetBpfObject(), {"eth_session_mapping_map"});
+  }
   ShareMapsOwned(primary, pdr_->GetBpfObject(), n3_owned);
   if (qer_) ShareMapsOwned(primary, qer_->GetBpfObject(), n3_owned);
   if (urr_) ShareMapsOwned(primary, urr_->GetBpfObject(), n3_owned);
@@ -207,14 +230,14 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
    *   that nothing on the kernel side ever reads -- the control plane
    *   would write session state into a dead map.
    *
-   *   n3_eth_ does NOT include eth_pdu_maps.h, so no share for it.
+   *   Exception: eth_session_mapping_map is created by n3_eth_ (loaded in
+   *   Step 2) and reached sl_eth_ in Step 3, so this forwards n3_eth_'s map.
    */
   if (sl_eth_) {
     sl_eth_->GetLifeCycle()->load();
 
     const std::initializer_list<const char*> eth_session_owned = {
-        "session_by_mac_map",     "eth_session_mapping_map",
-        "eth_session_pdrs_map",   "eth_rules_match_pdr_map",
+        "session_by_mac_map", "eth_session_mapping_map",
         "eth_egress_ifindex_map", "mac_pdu_session_map"};
     struct bpf_object* sl_eth_obj = sl_eth_->GetBpfObject();
     if (n6_eth_)
@@ -248,6 +271,8 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   if (urr_) ShareMapsOwned(far_obj, urr_->GetBpfObject(), far_owned);
   if (bar_) ShareMapsOwned(far_obj, bar_->GetBpfObject(), far_owned);
   if (mar_) ShareMapsOwned(far_obj, mar_->GetBpfObject(), far_owned);
+  if (eth_broadcast_tc_)
+    ShareMapsOwned(far_obj, eth_broadcast_tc_->GetBpfObject(), far_owned);
   /* n3_ is already loaded by Step 2, so reuse_fd against it is no longer
    * possible. That is harmless here: xdp_n3_entry_kern.c does not include
    * interfaces_maps.h or arp_maps.h and therefore declares none of
@@ -291,6 +316,18 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
 
   DisplayPipelineLoadTree(BuildPipelineLoadInfo(flags));
   Logger::upf_app().info("UPF_XDPProgram: all programs loaded");
+
+  /* Systemic guard against the ShareMapsOwned() bug class (a map added to a
+   * *_maps.h header, or a new BPF object including one, without adding it
+   * to every relevant share list): every program is loaded now, so cross-
+   * check that shared map names actually resolve to the same kernel map. */
+  try {
+    VerifySharedMapIdentity();
+  } catch (...) {
+    /* Step 6 already attached XDP/TC programs: detach before propagating. */
+    TearDown();
+    throw;
+  }
 
   /* ── Step 7: Wrap the primary skeleton's 4 infrastructure maps.
    * tail_call_progs_map, packet_context_map, session_rules_enabled_map,
@@ -395,7 +432,13 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
 //------------------------------------------------------------------------------
 void UPF_XDPProgram::ShareMaps(
     struct bpf_object* src_obj, struct bpf_object* dst_obj) {
-  if (!src_obj || !dst_obj) return;
+  if (!src_obj || !dst_obj) {
+    Logger::upf_app().warn(
+        "ShareMaps: %s bpf_object is null -- skipping share (a program's "
+        "skeleton_ may not be synced yet; see ProgramLifeCycle open_fn)",
+        !src_obj ? "src" : "dst");
+    return;
+  }
   struct bpf_map* dst_map;
   bpf_object__for_each_map(dst_map, dst_obj) {
     const char* name    = bpf_map__name(dst_map);
@@ -412,7 +455,15 @@ void UPF_XDPProgram::ShareMaps(
 void UPF_XDPProgram::ShareMapsOwned(
     struct bpf_object* src, struct bpf_object* dst,
     const std::initializer_list<const char*>& owned_maps) {
-  if (!src || !dst) return;
+  if (!src || !dst) {
+    Logger::upf_app().warn(
+        "ShareMapsOwned: %s bpf_object is null -- skipping share of %zu "
+        "map(s) (first: '%s'). A program's skeleton_ may not be synced yet "
+        "-- see ProgramLifeCycle open_fn convention.",
+        !src ? "src" : "dst", owned_maps.size(),
+        owned_maps.size() ? *owned_maps.begin() : "?");
+    return;
+  }
   for (const char* name : owned_maps) {
     struct bpf_map* src_map = bpf_object__find_map_by_name(src, name);
     if (!src_map) continue;
@@ -422,6 +473,139 @@ void UPF_XDPProgram::ShareMapsOwned(
     if (!dst_map) continue;
     if (bpf_map__reuse_fd(dst_map, fd) != 0)
       Logger::upf_app().warn("ShareMapsOwned: reuse_fd failed for '%s'", name);
+  }
+}
+
+//------------------------------------------------------------------------------
+void UPF_XDPProgram::VerifySharedMapIdentity() const {
+  struct LabeledObject {
+    const char* label;
+    struct bpf_object* obj;
+  };
+
+  /* Every program whose bpf_object is loaded by the time Setup() reaches
+   * this point. qer_tc_ is intentionally excluded -- its lifecycle is
+   * driven per-session by SessionProgramManager, not by this Setup(). */
+  const LabeledObject candidates[] = {
+      {"n3", n3_ ? n3_->GetBpfObject() : nullptr},
+      {"n6", n6_ ? n6_->GetBpfObject() : nullptr},
+      {"n3_eth", n3_eth_ ? n3_eth_->GetBpfObject() : nullptr},
+      {"n6_eth", n6_eth_ ? n6_eth_->GetBpfObject() : nullptr},
+      {"sl_ip", sl_ip_ ? sl_ip_->GetBpfObject() : nullptr},
+      {"sl_eth", sl_eth_ ? sl_eth_->GetBpfObject() : nullptr},
+      {"pdr", pdr_ ? pdr_->GetBpfObject() : nullptr},
+      {"far", far_ ? far_->GetBpfObject() : nullptr},
+      {"qer", qer_ ? qer_->GetBpfObject() : nullptr},
+      {"urr", urr_ ? urr_->GetBpfObject() : nullptr},
+      {"bar", bar_ ? bar_->GetBpfObject() : nullptr},
+      {"mar", mar_ ? mar_->GetBpfObject() : nullptr},
+      {"eth_broadcast_tc",
+       eth_broadcast_tc_ ? eth_broadcast_tc_->GetBpfObject() : nullptr},
+  };
+
+  static constexpr const char* kEthOnlySessionMaps[] = {
+      "session_by_mac_map", "eth_session_mapping_map", "eth_egress_ifindex_map",
+      "mac_pdu_session_map"};
+  const bool eth_pipeline_active = (sl_eth_ != nullptr);
+
+  /* Per-CPU scratch maps that are private to each BPF object by design,
+   * so there is no shared identity to check. */
+  static constexpr const char* kIntentionallyPrivateMaps[] = {
+      "fib_lookup_scratch_map"};
+
+  struct Instance {
+    const char* label;
+    __u32 id;
+  };
+  std::unordered_map<std::string, std::vector<Instance>> instances_by_name;
+
+  for (const auto& c : candidates) {
+    if (!c.obj) continue;
+    struct bpf_map* map;
+    bpf_object__for_each_map(map, c.obj) {
+      /* .rodata/.bss/.data-backed maps are compiler-synthesized, one
+       * private copy per BPF object BY DESIGN (each object's own string
+       * literals / constants) -- they are never meant to be shared, and
+       * flagging them here is a false positive on every single startup.
+       * bpf_map__is_internal() is the principled way to exclude them: a
+       * property of the map itself, not a name pattern to keep in sync
+       * (a prefix check on ".rodata" would miss libbpf-composed names
+       * like "xdp_sess.rodata", and an explicit allowlist of "the real
+       * maps" would just reintroduce the hand-maintained-list staleness
+       * this check exists to catch). */
+      if (bpf_map__is_internal(map)) continue;
+
+      const char* name = bpf_map__name(map);
+      if (!name) continue;
+      if (!eth_pipeline_active &&
+          std::find_if(
+              std::begin(kEthOnlySessionMaps), std::end(kEthOnlySessionMaps),
+              [name](const char* eth_name) {
+                return std::strcmp(name, eth_name) == 0;
+              }) != std::end(kEthOnlySessionMaps))
+        continue;
+      if (std::find_if(
+              std::begin(kIntentionallyPrivateMaps),
+              std::end(kIntentionallyPrivateMaps),
+              [name](const char* priv_name) {
+                return std::strcmp(name, priv_name) == 0;
+              }) != std::end(kIntentionallyPrivateMaps))
+        continue;
+      int fd                   = bpf_map__fd(map);
+      struct bpf_map_info info = {};
+      __u32 info_len           = sizeof(info);
+      if (fd < 0 || bpf_map_get_info_by_fd(fd, &info, &info_len) != 0) {
+        Logger::upf_app().warn(
+            "Map identity check: cannot inspect '%s' in %s -- not verified",
+            name, c.label);
+        continue;
+      }
+
+      instances_by_name[name].push_back({c.label, info.id});
+    }
+  }
+
+  std::vector<std::string> violations;
+
+  for (const auto& [name, instances] : instances_by_name) {
+    if (instances.size() < 2) continue;
+
+    __u32 first_id = instances.front().id;
+    bool mismatch  = false;
+    for (const auto& inst : instances) {
+      if (inst.id != first_id) {
+        mismatch = true;
+        break;
+      }
+    }
+    if (!mismatch) continue;
+
+    violations.push_back(name);
+
+    std::string detail;
+    for (const auto& inst : instances) {
+      detail += std::string(inst.label) + "=" + std::to_string(inst.id) + " ";
+    }
+    Logger::upf_app().error(
+        "Map identity check FAILED for '%s': programs disagree on the "
+        "kernel map (id per program: %s) -- one or more of them is reading "
+        "a private, unpopulated copy instead of the shared map. Check that "
+        "'%s' is included in every relevant ShareMapsOwned() call in "
+        "UPF_XDPProgram::Setup().",
+        name.c_str(), detail.c_str(), name.c_str());
+  }
+
+  if (!violations.empty()) {
+    std::string joined;
+    for (const auto& name : violations) joined += name + " ";
+    Logger::upf_app().error(
+        "UPF_XDPProgram: %zu shared BPF map(s) failed identity "
+        "verification (%s) -- the affected PDU session path(s) would "
+        "silently drop traffic. Refusing to continue startup.",
+        violations.size(), joined.c_str());
+    throw std::runtime_error(
+        "Shared BPF map identity verification failed -- see log for "
+        "affected map name(s)");
   }
 }
 
@@ -506,6 +690,9 @@ void UPF_XDPProgram::TearDown() {
   sl_eth_ = nullptr;
   sl_ip_  = nullptr;
 
+  /* TC fan-out (attached on N3/N6) -- detach before the entry programs */
+  eth_broadcast_tc_ = nullptr;
+
   /* Tear down entry programs -- lifecycle_ destructor calls tearDown() */
   n6_eth_ = nullptr;
   n3_eth_ = nullptr; /* ETH primary -- destroy after secondary */
@@ -570,14 +757,32 @@ void UPF_XDPProgram::CreateUpfInterfaceMapEntry(reference_point_t s) {
     return std::string(buf);
   };
 
+  /* Helper: fill iface.mac_address (all-zero on failure). */
+  auto fill_mac = [&iface](const char* ref) -> std::string {
+    if (!NicInformationGetter::retrieveMac(iface.if_name, iface.mac_address)) {
+      Logger::upf_app().warn(
+          "  %s: cannot read MAC of iface=%s, leaving it all-zero", ref,
+          iface.if_name);
+    }
+    char buf[18];
+    const uint8_t* mac = iface.mac_address;
+    snprintf(
+        buf, sizeof(buf), "%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1],
+        mac[2], mac[3], mac[4], mac[5]);
+    return std::string(buf);
+  };
+
+  std::string mac;
   switch (s) {
     case N3_INTERFACE:
       iface.ipv4_address = upf::GetN3Ip();
       iface.port         = upf::GetN3Port();
       strncpy(iface.if_name, upf::GetN3Iface().c_str(), IF_NAME_MAX_LEN - 1);
+      mac = fill_mac("N3");
       Logger::upf_app().debug(
-          "  N3: ip=%s  port=%u  iface=%s", ip_str(iface.ipv4_address).c_str(),
-          iface.port, iface.if_name);
+          "  N3: ip=%s  port=%u  iface=%s  mac=%s",
+          ip_str(iface.ipv4_address).c_str(), iface.port, iface.if_name,
+          mac.c_str());
       m->Update(s, iface, BPF_ANY);
       Logger::upf_app().debug("  N3: upf_interface_map updated OK");
       break;
@@ -585,9 +790,11 @@ void UPF_XDPProgram::CreateUpfInterfaceMapEntry(reference_point_t s) {
       iface.ipv4_address = upf::GetN4Ip();
       iface.port         = upf::GetN4Port();
       strncpy(iface.if_name, upf::GetN4Iface().c_str(), IF_NAME_MAX_LEN - 1);
+      mac = fill_mac("N4");
       Logger::upf_app().debug(
-          "  N4: ip=%s  port=%u  iface=%s", ip_str(iface.ipv4_address).c_str(),
-          iface.port, iface.if_name);
+          "  N4: ip=%s  port=%u  iface=%s  mac=%s",
+          ip_str(iface.ipv4_address).c_str(), iface.port, iface.if_name,
+          mac.c_str());
       m->Update(s, iface, BPF_ANY);
       Logger::upf_app().debug("  N4: upf_interface_map updated OK");
       break;
@@ -595,9 +802,11 @@ void UPF_XDPProgram::CreateUpfInterfaceMapEntry(reference_point_t s) {
       iface.ipv4_address = upf::GetN6Ip();
       iface.port         = 0;
       strncpy(iface.if_name, upf::GetN6Iface().c_str(), IF_NAME_MAX_LEN - 1);
+      mac = fill_mac("N6");
       Logger::upf_app().debug(
-          "  N6: ip=%s  port=%u  iface=%s", ip_str(iface.ipv4_address).c_str(),
-          iface.port, iface.if_name);
+          "  N6: ip=%s  port=%u  iface=%s  mac=%s",
+          ip_str(iface.ipv4_address).c_str(), iface.port, iface.if_name,
+          mac.c_str());
       m->Update(s, iface, BPF_ANY);
 
       Logger::upf_app().debug("  N6: upf_interface_map updated OK");
@@ -641,10 +850,6 @@ std::shared_ptr<BPFMap> UPF_XDPProgram::GetMapByName(const std::string& n) {
     return sl_eth_ ? sl_eth_->GetMacPduSessionMap() : nullptr;
   if (n == "eth_session_mapping_map")
     return sl_eth_ ? sl_eth_->GetEthSessionMappingMap() : nullptr;
-  if (n == "eth_session_pdrs_map")
-    return sl_eth_ ? sl_eth_->GetEthSessionPdrsMap() : nullptr;
-  if (n == "eth_rules_match_pdr_map")
-    return sl_eth_ ? sl_eth_->GetEthRulesMatchPdrMap() : nullptr;
   if (n == "eth_egress_ifindex_map")
     return sl_eth_ ? sl_eth_->GetEthEgressIfindexMap() : nullptr;
 
