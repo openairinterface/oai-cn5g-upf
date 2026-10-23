@@ -17,6 +17,7 @@ include(${SRC_TOP_DIR}/upf_app/cmake/toolchain.cmake)
 #                           sdf_types.h       / sdf_maps.h                        #
 #                           pipeline_types.h  / pipeline_maps.h                   #
 #                           eth_pdu_types.h   / eth_pdu_maps.h                    #
+#                           eth_session_maps.h (in eth_pdu_maps.h)                #
 #                           tail_call_types.h / tail_call_maps.h                  #
 #                           tail_call_dispatcher.h                                #
 #                           stats_types.h     / stats_maps.h                      #
@@ -155,6 +156,7 @@ function(xdp_program source_stem)
       ${inc_dir}/arp_maps.h
       ${inc_dir}/eth_pdu_types.h
       ${inc_dir}/eth_pdu_maps.h
+      ${inc_dir}/eth_session_maps.h
       ${inc_dir}/stats_types.h
       ${inc_dir}/stats_maps.h
   )
