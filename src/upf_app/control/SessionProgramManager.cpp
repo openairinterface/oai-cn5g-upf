@@ -976,7 +976,9 @@ void SessionProgramManager::CreatePipeline(
 
       // Store session mapping (IP or ETH PDU)
       if (is_eth_pdu) {
-        StoreEthPduSessionInMap(upf_xdp_program, fteid.teid, 0, 0, seid);
+        // DL PDRs carry no F-TEID: skip them, or they would all share key 0.
+        if (fteid.teid != 0)
+          StoreEthPduSessionInMap(upf_xdp_program, fteid.teid, 0, 0, seid);
       } else {
         StorePduSessionInMap(
             upf_xdp_program, ue_ip_address.ipv4_address.s_addr, fteid.teid, 0,
