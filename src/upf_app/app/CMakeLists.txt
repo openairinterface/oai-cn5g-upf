@@ -22,6 +22,7 @@ include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/http)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/logger)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/model)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/pfcp)
+include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/sba)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils)
 
 include(${SRC_TOP_DIR}/${MOUNTED_COMMON}/utils/utils.cmake)
