@@ -1691,12 +1691,12 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
   bool isBpfAccelerationEnabled = upf_cfg.enable_bpf_datapath;
 
   itti_n4_session_establishment_request* req = sreq.get();
+  std::shared_ptr<pfcp::pfcp_session> s      = {};
   pfcp::fseid_t fseid                        = {};
   pfcp::cause_t cause = {.cause_value = CAUSE_VALUE_REQUEST_ACCEPTED};
   pfcp::offending_ie_t offending_ie = {};
 
   if (req->pfcp_ies.get(fseid)) {  // CP F-SEID §8.2.37 — mandatory IE
-    std::shared_ptr<pfcp::pfcp_session> s = {};
     bool exist            = get_pfcp_session_by_cp_fseid(fseid, s);
     pfcp_session* session = nullptr;
     if (not exist) {
@@ -1874,12 +1874,11 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
     resp->pfcp_ies.set(offending_ie);
   }
 
-  if (Logger::should_log(spdlog::level::debug)) {
-    // Print PDU session rules table
-    up_seid2pfcp_sessions.for_each(
-        [](const uint64_t&, const std::shared_ptr<pfcp::pfcp_session>& v) {
-          std::cout << v->to_string();
-        });
+  if (Logger::should_log(spdlog::level::debug) && s &&
+      cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+    // Print only the session affected by this request. Dumping every session
+    // here makes debug output grow quadratically with the number of UEs.
+    std::cout << s->to_string();
   }
 }
 
@@ -2285,12 +2284,10 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     resp->pfcp_ies.set(offending_ie);
   }
 
-  if (Logger::should_log(spdlog::level::debug)) {
-    // Print PDU session rules table
-    up_seid2pfcp_sessions.for_each(
-        [](const uint64_t&, const std::shared_ptr<pfcp::pfcp_session>& v) {
-          std::cout << v->to_string();
-        });
+  if (Logger::should_log(spdlog::level::debug) && s) {
+    // Print only the session affected by this request. Dumping every session
+    // here makes debug output grow quadratically with the number of UEs.
+    std::cout << s->to_string();
   }
 }
 
@@ -2323,19 +2320,15 @@ void pfcp_switch::handle_pfcp_session_deletion_request(
           &SessionManager::RemoveSession);
     }
 
+    if (Logger::should_log(spdlog::level::debug)) {
+      // Log the affected session before removal clears its rules.
+      std::cout << s->to_string();
+    }
     remove_pfcp_session(s);
   }
 
   pfcp_associations::get_instance().notify_del_session(fseid);
   resp->pfcp_ies.set(cause);
-
-  if (Logger::should_log(spdlog::level::debug)) {
-    // Print PDU session rules table
-    up_seid2pfcp_sessions.for_each(
-        [](const uint64_t&, const std::shared_ptr<pfcp::pfcp_session>& v) {
-          std::cout << v->to_string();
-        });
-  }
 }
 
 // =============================================================================
