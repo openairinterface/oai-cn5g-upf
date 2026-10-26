@@ -11,9 +11,10 @@
 #include <mutex>
 #include "endpoint.hpp"
 #include "msg_pfcp.hpp"  // must precede FramedRouting.hpp (pfcp::framed_route_s)
-#include "framed_routing/FramedRouting.hpp"
+#include "FramedRouting.hpp"
 #include "qos_mbr.hpp"
 #include "sdf_filter.hpp"
+#include "msg_pfcp.hpp"
 
 namespace pfcp {
 
