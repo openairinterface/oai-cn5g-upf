@@ -160,6 +160,16 @@ SessionOperationResult SessionManager::CreateSession(
         seid);
     return SessionOperationResult(true, "Session created", seid);
 
+  } catch (const RuleApplyError& e) {
+    Logger::upf_app().error(
+        "[N4] Create Session: seid " SEID_FMT
+        " - Rule (type %u) %u not applied: %s",
+        seid, e.rule_type(), e.rule_id(), e.what());
+    SessionOperationResult result(false, e.what(), seid);
+    result.has_failed_rule  = true;
+    result.failed_rule_type = e.rule_type();
+    result.failed_rule_id   = e.rule_id();
+    return result;
   } catch (const std::exception& e) {
     Logger::upf_app().error(
         "[N4] Create Session: seid 0x%lx - Exception: %s", seid, e.what());

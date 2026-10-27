@@ -1836,9 +1836,23 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         Logger::upf_app().info(
             "Establish datapath: create(pdr(s), far(s), qer(s), urr(s), "
             "bar(s), mar(s))");
-        call_datapath(
+        const SessionOperationResult datapath = call_datapath(
             req, nullptr, nullptr, session, session_manager,
             &SessionManager::EstablishSession);
+
+        // A rule the datapath could not apply rejects the request, and no
+        // session context is kept (§6.3.2.3, §8.2.1 cause 73, §8.2.80)
+        if (!datapath.success && datapath.has_failed_rule &&
+            cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+          session_manager->DeleteSession(session->get_up_seid());
+          session->cleanup();
+          delete session;
+          cause.cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
+          failed_rule_id_t failed_rule = {};
+          failed_rule.rule_id_type     = datapath.failed_rule_type;
+          failed_rule.rule_id_value    = datapath.failed_rule_id;
+          resp->pfcp_ies.set(failed_rule);
+        }
       }
 
       if (cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
