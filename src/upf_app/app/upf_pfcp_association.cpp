@@ -38,15 +38,17 @@ void pfcp_association::notify_del_session(const pfcp::fseid_t& cp_fseid) {
   sessions.erase(cp_fseid);
 }
 //------------------------------------------------------------------------------
+std::set<pfcp::fseid_t> pfcp_association::take_sessions() {
+  std::set<pfcp::fseid_t> taken = {};
+  std::unique_lock<std::mutex> l(m_sessions);
+  taken.swap(sessions);
+  return taken;
+}
+//------------------------------------------------------------------------------
 void pfcp_association::del_sessions() {
   // Do not hold m_sessions while removing: with URR, remove_pfcp_session()
   // sends a final usage report, and its association look-up locks m_sessions.
-  std::set<pfcp::fseid_t> to_delete = {};
-  {
-    std::unique_lock<std::mutex> l(m_sessions);
-    to_delete.swap(sessions);
-  }
-  for (const auto& cp_fseid : to_delete) {
+  for (const auto& cp_fseid : take_sessions()) {
     pfcp_switch_inst->remove_pfcp_session(cp_fseid);
   }
 }
