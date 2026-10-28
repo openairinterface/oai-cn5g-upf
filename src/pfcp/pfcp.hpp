@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <memory>
 #include <string>
 #include <utility>
@@ -76,6 +77,10 @@ class pfcp_l4_stack : public udp_application {
   std::map<timer_id_t, uint32_t> proc_cleanup_timers;
   std::map<timer_id_t, uint32_t> msg_out_retry_timers;
   std::map<uint32_t, pfcp_procedure> pending_procedures;
+  // The receive threads of both sockets and the N4 task (and, for Session
+  // Reports, the switch threads) all send and receive through this stack.
+  // m_stack guards seq_num and the four maps above it.
+  std::mutex m_stack;
 
   static const char* msg_type2cstr[256];
 
