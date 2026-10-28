@@ -101,7 +101,7 @@ bool upf_sbi::send_update_nf_instance(
   Logger::upf_app().debug("Send NF Update to NRF (Msg body %s)", body.c_str());
   Logger::upf_app().debug("Send NF Update to NRF (NRF URL %s)", url.c_str());
 
-  oai::sba::sbi_http_request http_request =
+  oai::sba::request http_request =
       http_client_inst_->prepare_json_request(url, body);
   auto http_response = send_with_policy(
       oai::sba::nrf_call_kind::heartbeat, oai::common::sbi::method_e::PATCH,
@@ -225,15 +225,14 @@ uint64_t upf_sbi::nrf_registration_retry_seconds() const {
 }
 
 //---------------------------------------------------------------------------------------------
-bool upf_sbi::registration_succeeded(
-    const oai::sba::sbi_http_response& response) const {
+bool upf_sbi::registration_succeeded(const oai::sba::response& response) const {
   return response.status_code == oai::common::sbi::http_status_code::OK or
          response.status_code == oai::common::sbi::http_status_code::CREATED;
 }
 
 //---------------------------------------------------------------------------------------------
 void upf_sbi::on_registration_outcome(
-    bool success, const oai::sba::sbi_http_response& response) {
+    bool success, const oai::sba::response& response) {
   if (success) {
     json response_data = {};
     try {

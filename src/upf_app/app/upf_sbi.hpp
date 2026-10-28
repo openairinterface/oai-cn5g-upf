@@ -37,9 +37,9 @@ class upf_sbi : public oai::sba::nf_service {
   bool nrf_registration_enabled() const override;
   uint64_t nrf_registration_retry_seconds() const override;
   bool registration_succeeded(
-      const oai::sba::sbi_http_response& response) const override;
+      const oai::sba::response& response) const override;
   void on_registration_outcome(
-      bool success, const oai::sba::sbi_http_response& response) override;
+      bool success, const oai::sba::response& response) override;
 
  private:
   void get_nrf_api_root(std::string& api_root) const;
