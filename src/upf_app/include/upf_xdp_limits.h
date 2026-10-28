@@ -25,7 +25,6 @@
  *   `bpf_for` (kernel >= 6.3, libbpf >= 1.3) — see the comment at
  *   xdp_pdr_match_kern.c:279.
  */
-#define MAX_CPUS 12
 #define MAX_TAIL_CALL_PROGS 16
 #define MAX_PDRS_PER_PDU_SESSION_LIMIT 16
 #define MAX_PDRS_PER_ETH_PDU_SESSION_LIMIT 16
