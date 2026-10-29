@@ -80,6 +80,7 @@ struct eth_session_id {
   u32 teid_ul;      /**< Uplink F-TEID (RAN -> UPF)               */
   u32 teid_dl;      /**< Downlink F-TEID (UPF -> RAN)             */
   u32 ipv4_address; /**< gNB IPv4 address for DL encapsulation    */
+  u8 qfi_dl;        /**< DL QFI for broadcast clones; 0 = unknown */
   u64 seid;         /**< PFCP Session Endpoint Identifier         */
 };
 

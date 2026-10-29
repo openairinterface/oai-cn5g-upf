@@ -418,6 +418,7 @@ void SessionProgramManager::RemoveUeIpMappingIfOwned(
  *                matches pctx->pkt_teid as read by the XDP datapath)
  * @param teid_dl Downlink TEID (for GTP-U encap toward gNB)
  * @param gnb_ip gNodeB IPv4 address (for DL outer header creation)
+ * @param qfi_dl DL QFI for broadcast clones; 0 if unknown
  * @param seid Session Endpoint Identifier
  * @return true if the map entry was written
  *
@@ -426,10 +427,10 @@ void SessionProgramManager::RemoveUeIpMappingIfOwned(
  */
 bool SessionProgramManager::StoreEthPduSessionInMap(
     std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t teid_ul,
-    uint32_t teid_dl, uint32_t gnb_ip, uint64_t seid) {
+    uint32_t teid_dl, uint32_t gnb_ip, uint8_t qfi_dl, uint64_t seid) {
   std::lock_guard<std::mutex> lock(mutex_);
   return StoreEthPduSessionInMapUnlocked(
-      upf_xdp_program, teid_ul, teid_dl, gnb_ip, seid);
+      upf_xdp_program, teid_ul, teid_dl, gnb_ip, qfi_dl, seid);
 }
 
 //------------------------------------------------------------------------------
@@ -439,7 +440,7 @@ bool SessionProgramManager::StoreEthPduSessionInMap(
  */
 bool SessionProgramManager::StoreEthPduSessionInMapUnlocked(
     std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t teid_ul,
-    uint32_t teid_dl, uint32_t gnb_ip, uint64_t seid) {
+    uint32_t teid_dl, uint32_t gnb_ip, uint8_t qfi_dl, uint64_t seid) {
   if (!upf_xdp_program) {
     Logger::upf_app().error("StoreEthPduSessionInMap: null XDP program");
     return false;
@@ -461,6 +462,7 @@ bool SessionProgramManager::StoreEthPduSessionInMapUnlocked(
     eth_session.teid_ul = likely(IsLittleEndian()) ? htonl(teid_ul) : teid_ul;
     eth_session.teid_dl = likely(IsLittleEndian()) ? htonl(teid_dl) : teid_dl;
     eth_session.ipv4_address = gnb_ip;
+    eth_session.qfi_dl       = qfi_dl;
     eth_session.seid         = seid;
 
     int ret = eth_session_map->Update(key, eth_session, BPF_ANY);
@@ -473,9 +475,19 @@ bool SessionProgramManager::StoreEthPduSessionInMapUnlocked(
     // Track this session's map key so RemoveSession() can clear it later.
     session_eth_teid_key_map_[seid].insert(key);
 
+    // Clones only go to entries with a DL tunnel (eth_broadcast.h).
+    if (teid_dl != 0 && gnb_ip != 0 && qfi_dl == 0) {
+      Logger::upf_app().warn(
+          "ETH PDU session " SEID_FMT
+          ": no DL QFI (no QER with a QFI on a DL PDR), broadcast clones to "
+          "it keep the QFI of the frame they copy",
+          seid);
+    }
+
     Logger::upf_app().debug(
-        "Stored ETH PDU session: TEID_UL=0x%x TEID_DL=0x%x SEID=" SEID_FMT,
-        teid_ul, teid_dl, seid);
+        "Stored ETH PDU session: TEID_UL=0x%x TEID_DL=0x%x QFI_DL=%u "
+        "SEID=" SEID_FMT,
+        teid_ul, teid_dl, qfi_dl, seid);
     return true;
   } catch (const std::exception& e) {
     Logger::upf_app().error("StoreEthPduSessionInMap failed: %s", e.what());
@@ -980,8 +992,8 @@ void SessionProgramManager::CreatePipeline(
         // DL PDRs carry no F-TEID: skip them, or they would all share key 0.
         // A missing entry sends this tunnel's G-PDUs down the IP path, so a
         // failed store must fail the session.
-        if (fteid.teid != 0 &&
-            !StoreEthPduSessionInMap(upf_xdp_program, fteid.teid, 0, 0, seid))
+        if (fteid.teid != 0 && !StoreEthPduSessionInMap(
+                                   upf_xdp_program, fteid.teid, 0, 0, 0, seid))
           throw std::runtime_error(
               "eth_session_mapping_map update failed for PDR " +
               std::to_string(pdr_id));
@@ -1131,7 +1143,8 @@ void SessionProgramManager::CreatePipeline(
     // (TS 23.501 Section 5.6.10.3 - ETH sessions keyed by TEID, not UE IP)
     if (is_eth_pdu && eth_ul_teid != 0 &&
         !StoreEthPduSessionInMap(
-            upf_xdp_program, eth_ul_teid, eth_dl_teid, eth_gnb_ip, seid)) {
+            upf_xdp_program, eth_ul_teid, eth_dl_teid, eth_gnb_ip,
+            RetrieveEthDlQfi(session), seid)) {
       throw std::runtime_error(
           "eth_session_mapping_map update failed for UL TEID " +
           std::to_string(eth_ul_teid));
@@ -1335,11 +1348,13 @@ void SessionProgramManager::ModifyPipeline(
         // F-TEID stays a live key (the XDP entry classifies ETH vs IP by
         // it), so store all of them and drop only TEIDs that are gone,
         // under one lock, as for IP.
+        const uint8_t qfi_dl = RetrieveEthDlQfi(session);
         std::lock_guard<std::mutex> lock(mutex_);
         bool all_stored = !uplink_teids.empty();
         for (const uint32_t teid_ul : uplink_teids) {
           if (!StoreEthPduSessionInMapUnlocked(
-                  upf_xdp_program, teid_ul, primary_teid_dl, gnb_ip, seid))
+                  upf_xdp_program, teid_ul, primary_teid_dl, gnb_ip, qfi_dl,
+                  seid))
             all_stored = false;
         }
         if (all_stored) {
@@ -2628,6 +2643,33 @@ uint32_t SessionProgramManager::RetrieveGnbIp(
 
   // Return 0 if no matching FAR was found
   return 0;
+}
+
+//------------------------------------------------------------------------------
+/**
+ * @brief Retrieve the DL QFI of an Ethernet PDU session
+ * @see SessionProgramManager::RetrieveEthDlQfi (header)
+ */
+uint8_t SessionProgramManager::RetrieveEthDlQfi(
+    std::shared_ptr<pfcp::pfcp_session> session) const {
+  if (!session) return 0;
+
+  uint8_t first_qfi = 0;
+  pfcp::pdi pdi;
+  pfcp::ethernet_pdu_session_information_t eth_info;
+
+  for (const auto& pdr : session->pdrs_downlink) {
+    std::shared_ptr<pfcp::pfcp_qer> qer;
+    if (!GetQerForPdr(session, pdr, qer) || !qer->qos_flow_id.first ||
+        qer->qos_flow_id.second.qfi == 0)
+      continue;
+
+    const uint8_t qfi = qer->qos_flow_id.second.qfi;
+    if (pdr->get(pdi) && pdi.get(eth_info) && eth_info.ethi) return qfi;
+    if (first_qfi == 0) first_qfi = qfi;
+  }
+
+  return first_qfi;
 }
 
 //------------------------------------------------------------------------------
