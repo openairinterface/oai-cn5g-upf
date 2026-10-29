@@ -18,7 +18,8 @@
  *
  * Key:   u32                     uplink GTP-U TEID (host byte order
  *                                 matches pctx->pkt_teid on the IP PDU path)
- * Value: struct eth_session_id  {teid_ul, teid_dl, ipv4_address, seid}
+ * Value: struct eth_session_id  {teid_ul, teid_dl, ipv4_address, qfi_dl,
+ *                                 seid}
  * Size:  MAX_PDU_SESSIONS
  *
  * Populated by SessionProgramManager during PFCP Session Establishment.
