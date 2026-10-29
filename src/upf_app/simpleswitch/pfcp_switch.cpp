@@ -1709,6 +1709,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         if (not session->create(cr_far, cause, offending_ie.offending_ie)) {
           session->cleanup();
           delete session;
+          session = nullptr;
           break;
         }
       }
@@ -1729,6 +1730,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             offending_ie.offending_ie = PFCP_IE_FAR_ID;
             session->cleanup();
             delete session;
+            session = nullptr;
             break;
           }
           // create pdr after create far
@@ -1739,6 +1741,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
             offending_ie.offending_ie = PFCP_IE_CREATE_FAR;
             session->cleanup();
             delete session;
+            session = nullptr;
             break;
           }
 
@@ -1762,6 +1765,7 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
                   cr_pdr, cause, offending_ie.offending_ie, allocated_fteid)) {
             session->cleanup();
             delete session;
+            session = nullptr;
             if (cause.cause_value == CAUSE_VALUE_CONDITIONAL_IE_MISSING) {
               resp->pfcp_ies.set(offending_ie);
             }
@@ -1832,7 +1836,8 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         }
       }
 
-      if (isBpfAccelerationEnabled) {
+      if (isBpfAccelerationEnabled &&
+          cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
         Logger::upf_app().info(
             "Establish datapath: create(pdr(s), far(s), qer(s), urr(s), "
             "bar(s), mar(s))");
@@ -1842,11 +1847,11 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
 
         // A rule the datapath could not apply rejects the request, and no
         // session context is kept (§6.3.2.3, §8.2.1 cause 73, §8.2.80)
-        if (!datapath.success && datapath.has_failed_rule &&
-            cause.cause_value == CAUSE_VALUE_REQUEST_ACCEPTED) {
+        if (!datapath.success && datapath.has_failed_rule) {
           session_manager->DeleteSession(session->get_up_seid());
           session->cleanup();
           delete session;
+          session           = nullptr;
           cause.cause_value = CAUSE_VALUE_RULE_CREATION_MODIFICATION_FAILURE;
           failed_rule_id_t failed_rule = {};
           failed_rule.rule_id_type     = datapath.failed_rule_type;
@@ -1873,6 +1878,10 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
         pfcp::node_id_t node_id = {};
         req->pfcp_ies.get(node_id);  // Node ID §8.2.38 — optional in response
         pfcp_associations::get_instance().notify_add_session(node_id, fseid);
+      } else if (session) {
+        session->cleanup();
+        delete session;
+        session = nullptr;
       }
     } else {
       cause.cause_value = CAUSE_VALUE_REQUEST_REJECTED;
@@ -1883,6 +1892,10 @@ void pfcp_switch::handle_pfcp_session_establishment_request(
     offending_ie.offending_ie = PFCP_IE_F_SEID;
   }
 
+  // Created PDR is only sent with "Request accepted" (§7.5.3.1)
+  if (cause.cause_value != CAUSE_VALUE_REQUEST_ACCEPTED) {
+    resp->pfcp_ies.created_pdrs.clear();
+  }
   resp->pfcp_ies.set(cause);
   if ((cause.cause_value == CAUSE_VALUE_MANDATORY_IE_MISSING) ||
       (cause.cause_value == CAUSE_VALUE_CONDITIONAL_IE_MISSING)) {
@@ -2305,6 +2318,10 @@ void pfcp_switch::handle_pfcp_session_modification_request(
     apply_qos_mbr(s);
   }
 
+  // Created PDR is only sent with "Request accepted" (§7.5.5.1)
+  if (cause.cause_value != CAUSE_VALUE_REQUEST_ACCEPTED) {
+    resp->pfcp_ies.created_pdrs.clear();
+  }
   resp->pfcp_ies.set(cause);
   if ((cause.cause_value == CAUSE_VALUE_MANDATORY_IE_MISSING) ||
       (cause.cause_value == CAUSE_VALUE_CONDITIONAL_IE_MISSING)) {

@@ -230,8 +230,15 @@ void QERTCProgram::Setup(
     Logger::upf_app().info(
         "  └─ N3 Interface (GTP):     %s", gtp_iface.c_str());
 
-    // Configure Root Qdisc if not already present
-    if (NoHtbRootQdisc(gtp_iface)) {
+    // Configure Root Qdisc if not already present. The check parses tc
+    // output with std::stoi, which throws on anything unexpected.
+    bool no_root_qdisc = false;
+    try {
+      no_root_qdisc = NoHtbRootQdisc(gtp_iface);
+    } catch (const std::exception& e) {
+      fail(0, fmt::format("root HTB qdisc not checked: {}", e.what()));
+    }
+    if (no_root_qdisc) {
       Logger::upf_app().info(
           "  ┌─ Creating Root HTB Qdisc on %s", gtp_iface.c_str());
       Logger::upf_app().info(
@@ -282,7 +289,13 @@ void QERTCProgram::Setup(
 
   if (!qers.empty()) {
     // Attach TC BPF filter (silent)
-    if (NoTcFilterBpf(gtp_iface)) {
+    bool no_tc_filter = false;
+    try {
+      no_tc_filter = NoTcFilterBpf(gtp_iface);
+    } catch (const std::exception& e) {
+      fail(0, fmt::format("TC BPF filter not checked: {}", e.what()));
+    }
+    if (no_tc_filter) {
       Logger::upf_app().info(
           "Attach Section tc_filter_traffic to gtp interface");
       const std::string cmd = fmt::format(
@@ -476,13 +489,12 @@ std::set<uint32_t> QERTCProgram::ApplyTcClasses(
   }
 
   // Every class was recorded after its parent, so walking backwards deletes
-  // children first. One that fails to go stays recorded, for TearDown().
+  // children first. One that fails to go stays recorded, for TearDown(). It
+  // is not reported: its QER may have just been removed, and a wanted class
+  // left under its old parent is reported below.
   std::vector<TcClass> kept;
   for (auto it = classes_.rbegin(); it != classes_.rend(); ++it) {
-    if (doomed.count(it->minor)) {
-      if (DeleteTcClass(*it)) continue;
-      failed_qer_ids.insert(it->qer_id);
-    }
+    if (doomed.count(it->minor) && DeleteTcClass(*it)) continue;
     kept.push_back(*it);
   }
   classes_.assign(kept.rbegin(), kept.rend());
