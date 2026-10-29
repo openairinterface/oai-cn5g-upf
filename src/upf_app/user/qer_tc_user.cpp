@@ -230,8 +230,15 @@ void QERTCProgram::Setup(
     Logger::upf_app().info(
         "  └─ N3 Interface (GTP):     %s", gtp_iface.c_str());
 
-    // Configure Root Qdisc if not already present
-    if (NoHtbRootQdisc(gtp_iface)) {
+    // Configure Root Qdisc if not already present. The check parses tc
+    // output with std::stoi, which throws on anything unexpected.
+    bool no_root_qdisc = false;
+    try {
+      no_root_qdisc = NoHtbRootQdisc(gtp_iface);
+    } catch (const std::exception& e) {
+      fail(0, fmt::format("root HTB qdisc not checked: {}", e.what()));
+    }
+    if (no_root_qdisc) {
       Logger::upf_app().info(
           "  ┌─ Creating Root HTB Qdisc on %s", gtp_iface.c_str());
       Logger::upf_app().info(
@@ -282,7 +289,13 @@ void QERTCProgram::Setup(
 
   if (!qers.empty()) {
     // Attach TC BPF filter (silent)
-    if (NoTcFilterBpf(gtp_iface)) {
+    bool no_tc_filter = false;
+    try {
+      no_tc_filter = NoTcFilterBpf(gtp_iface);
+    } catch (const std::exception& e) {
+      fail(0, fmt::format("TC BPF filter not checked: {}", e.what()));
+    }
+    if (no_tc_filter) {
       Logger::upf_app().info(
           "Attach Section tc_filter_traffic to gtp interface");
       const std::string cmd = fmt::format(
@@ -346,9 +359,7 @@ std::vector<QERTCProgram::TcClass> QERTCProgram::BuildTcClasses(
   const uint16_t casted_seid = static_cast<uint16_t>(seid);
   const uint64_t rate_bytes  = ((uint64_t) session_rate_kbps * 1000) / 8;
   const uint32_t pdu_quantum = rate_bytes / GetR2qRoot();
-  classes.push_back(
-      {casted_seid, 0, session_rate_kbps, 0, pdu_quantum, 0,
-       "PDU session class"});
+  classes.push_back({casted_seid, 0, session_rate_kbps, 0, pdu_quantum, 0});
 
   std::shared_ptr<pfcp::pfcp_qer> default_qer =
       RetrieveDefaultQerWithDefaultQfi(qers);
@@ -383,10 +394,10 @@ std::vector<QERTCProgram::TcClass> QERTCProgram::BuildTcClasses(
 
       classes.push_back(
           {default_minor, casted_seid, GetDefaultClassRate(),
-           GetDefaultClassCeil(), default_quantum, qer_id, "default class"});
+           GetDefaultClassCeil(), default_quantum, qer_id});
       classes.push_back(
           {minor, default_minor, GetDefaultClassRate(), GetDefaultClassCeil(),
-           default_quantum, qer_id, "PFIFO default class"});
+           default_quantum, qer_id});
 
       QosFlowInfo flow;
       flow.qer_id           = qer_id;
@@ -413,8 +424,7 @@ std::vector<QERTCProgram::TcClass> QERTCProgram::BuildTcClasses(
         Logger::upf_app().warn("QoS Flow missing GBR: set it to 0.8 x MBR");
       }
 
-      classes.push_back(
-          {minor, casted_seid, dl_rate, dl_ceil, 0, qer_id, "QoS flow class"});
+      classes.push_back({minor, casted_seid, dl_rate, dl_ceil, 0, qer_id});
 
       QosFlowInfo flow;
       flow.qer_id    = qer_id;
@@ -476,13 +486,12 @@ std::set<uint32_t> QERTCProgram::ApplyTcClasses(
   }
 
   // Every class was recorded after its parent, so walking backwards deletes
-  // children first. One that fails to go stays recorded, for TearDown().
+  // children first. One that fails to go stays recorded, for TearDown(). It
+  // is not reported: its QER may have just been removed, and a wanted class
+  // left under its old parent is reported below.
   std::vector<TcClass> kept;
   for (auto it = classes_.rbegin(); it != classes_.rend(); ++it) {
-    if (doomed.count(it->minor)) {
-      if (DeleteTcClass(*it)) continue;
-      failed_qer_ids.insert(it->qer_id);
-    }
+    if (doomed.count(it->minor) && DeleteTcClass(*it)) continue;
     kept.push_back(*it);
   }
   classes_.assign(kept.rbegin(), kept.rend());
@@ -492,9 +501,8 @@ std::set<uint32_t> QERTCProgram::ApplyTcClasses(
   for (const auto& tc_class : wanted) {
     if (!seen.insert(tc_class.minor).second) {
       Logger::upf_app().error(
-          "  └─ ✗ %s 1:%x of QER %u collides with another class of this "
-          "session",
-          tc_class.role.c_str(), tc_class.minor, tc_class.qer_id);
+          "  └─ ✗ %s collides with another class of this session",
+          TcClassName(tc_class).c_str());
       failed_qer_ids.insert(tc_class.qer_id);
       continue;
     }
@@ -543,9 +551,10 @@ bool QERTCProgram::WriteTcClass(const TcClass& tc_class, bool update) {
     cmd += fmt::format(" quantum {}", tc_class.quantum);
   }
 
+  const std::string name = TcClassName(tc_class);
   Logger::upf_app().info(
-      "  ┌─ %s %s 1:%x, child of %s (QER %u)", update ? "Updating" : "Creating",
-      tc_class.role.c_str(), tc_class.minor, parent.c_str(), tc_class.qer_id);
+      "  ┌─ %s %s, child of %s", update ? "Updating" : "Creating", name.c_str(),
+      parent.c_str());
   Logger::upf_app().info(
       "  │  • Rate: %s kbps", FormatNumber(tc_class.rate_kbps).c_str());
   if (tc_class.ceil_kbps) {
@@ -555,15 +564,25 @@ bool QERTCProgram::WriteTcClass(const TcClass& tc_class, bool update) {
 
   if (system(cmd.c_str()) != 0) {
     Logger::upf_app().error(
-        "  └─ ✗ Failed to %s %s 1:%x: %s", update ? "update" : "create",
-        tc_class.role.c_str(), tc_class.minor, cmd.c_str());
+        "  └─ ✗ Failed to %s %s: %s", update ? "update" : "create",
+        name.c_str(), cmd.c_str());
     return false;
   }
 
   Logger::upf_app().info(
-      "  └─ ✓ %s 1:%x %s successfully", tc_class.role.c_str(), tc_class.minor,
+      "  └─ ✓ %s %s successfully", name.c_str(),
       update ? "updated" : "created");
   return true;
+}
+
+//------------------------------------------------------------------------------
+std::string QERTCProgram::TcClassName(const TcClass& tc_class) {
+  // Only the PDU session class hangs off the root qdisc
+  if (!tc_class.parent) {
+    return fmt::format("PDU session class 1:{:x}", tc_class.minor);
+  }
+  return fmt::format(
+      "QoS flow class 1:{:x} of QER {}", tc_class.minor, tc_class.qer_id);
 }
 
 //------------------------------------------------------------------------------
@@ -597,9 +616,7 @@ bool QERTCProgram::DeleteTcClass(const TcClass& tc_class) {
         tc_iface_.c_str());
     return false;
   }
-  Logger::upf_app().info(
-      "  ✓ %s 1:%x deleted (QER %u)", tc_class.role.c_str(), tc_class.minor,
-      tc_class.qer_id);
+  Logger::upf_app().info("  ✓ %s deleted", TcClassName(tc_class).c_str());
   return true;
 }
 

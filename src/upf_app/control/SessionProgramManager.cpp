@@ -669,6 +669,8 @@ void SessionProgramManager::SetupSessionEnforcementPrograms(
       qer_tc_error = std::current_exception();
     }
   } else if (qer_program) {
+    // The session has no downlink QER left (or QoS is off): release its
+    // classes. Any other modification keeps the program, through Setup() above.
     logger.debug("Tearing down QERTCProgram for SEID=" SEID_FMT, seid);
     std::lock_guard<std::mutex> lock(mutex_);
     qer_program->TearDown();

@@ -16,12 +16,12 @@
 #include <wrappers/BPFMap.hpp>
 #include <BPFProgram.h>
 #include <pfcp_session.hpp>
-#include "startup_banner.hpp"    // QosFlowInfo
 #include "upf_network_config.h"  // upf::g_net_cfg — no upf_config.hpp
 
 // Forward declarations
 class BPFMaps;
 class BPFMap;
+struct QosFlowInfo;
 
 /* ==========================================================================
  * Type alias
@@ -239,12 +239,18 @@ class QERTCProgram : public BPFProgram {
     uint64_t ceil_kbps;  ///< HTB ceil, 0 to leave it to HTB (= rate)
     uint32_t quantum;    ///< HTB quantum, 0 to leave it to r2q
     uint32_t qer_id;     ///< QER it enforces, 0 for the PDU session class
-    std::string role;    ///< What it is, for the logs
   };
+
+  /**
+   * @brief How @p tc_class is named in the logs
+   */
+  static std::string TcClassName(const TcClass& tc_class);
 
   /**
    * @brief The classes a session with these QERs needs, parents first
    *
+   * @param session_rate_kbps Rate of the PDU session class, the parent of the
+   *        QoS flow classes: the N3 link speed
    * @param flows Filled with one row per QoS flow, for the flow table
    */
   std::vector<TcClass> BuildTcClasses(
