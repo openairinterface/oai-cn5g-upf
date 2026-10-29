@@ -133,7 +133,8 @@ static long broadcast_callback_fn(
   __u32 sid = (__u32) pdu_session->seid;
 #pragma clang loop unroll(full)
   for (int v = 0; v < MAX_BROADCAST_FANOUT; v++) {
-    if (ctx->pdu_sessions[v] == sid) break;
+    /* Only filled slots may match: unused ones are zero. */
+    if (v < ctx->size && ctx->pdu_sessions[v] == sid) break;
     if (v == ctx->size) {
       ctx->pdu_sessions[v] = sid;
       ctx->size += 1;

@@ -170,11 +170,12 @@ class SessionProgramManager {
    * @param teid_dl Downlink TEID (for GTP-U encap toward gNB)
    * @param gnb_ip gNodeB IPv4 address (for DL outer header creation)
    * @param seid Session Endpoint Identifier
+   * @return true if the map entry was written
    *
    * @see 3GPP TS 23.501 Section 5.6.10.3 - Ethernet PDU Session Type
    * @see 3GPP TS 29.281 - GTPv1-U
    */
-  void StoreEthPduSessionInMap(
+  bool StoreEthPduSessionInMap(
       std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t teid_ul,
       uint32_t teid_dl, uint32_t gnb_ip, uint64_t seid);
 
