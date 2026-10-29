@@ -55,6 +55,12 @@ struct SessionOperationResult {
   uint64_t
       seid;  ///< Session Endpoint Identifier (3GPP TS 29.244 Section 8.2.37)
 
+  /// Set when a rule could not be applied to the datapath, so the PFCP
+  /// response can name it in a Failed Rule ID (3GPP TS 29.244 §8.2.80)
+  bool has_failed_rule     = false;
+  uint8_t failed_rule_type = 0;  ///< pfcp::FAILED_RULE_ID_TYPE_*
+  uint32_t failed_rule_id  = 0;
+
   SessionOperationResult() : success(false), message(""), seid(0) {}
 
   SessionOperationResult(bool s, const std::string& msg, uint64_t id)
@@ -608,10 +614,11 @@ class SessionManager {
    * hold sessions_mutex_).
    *
    * ModifySession() holds sessions_mutex_ for its whole body and calls
-   * HandlePdrRemoval()/HandleFarRemoval()/HandleQerRemoval()/
-   * HandleUrrRemoval()/HandleBarRemoval(), which must call these instead of
-   * the public, self-locking Remove* methods to avoid a self-deadlock on the
-   * (non-recursive) sessions_mutex_.
+   * HandlePdrRemoval()/HandleFarRemoval()/HandleUrrRemoval()/
+   * HandleBarRemoval(), which must call these instead of the public,
+   * self-locking Remove* methods to avoid a self-deadlock on the
+   * (non-recursive) sessions_mutex_. HandleQerRemoval() removes from the
+   * session it is given instead.
    */
   bool RemovePdrUnlocked(uint64_t seid, uint16_t pdr_id);
   bool RemoveFarUnlocked(uint64_t seid, uint32_t far_id);
@@ -672,6 +679,11 @@ class SessionManager {
 
   /**
    * @brief Handle QER removal from modification request
+   *
+   * Removes the QERs from @p session itself, without rebuilding the
+   * datapath: UpdateSession() stores and rebuilds it once at the end of
+   * ModifySession().
+   *
    * @param session Session to modify
    * @param mod_req Modification request containing QERs to remove
    * @return Number of QERs removed

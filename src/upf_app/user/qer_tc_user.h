@@ -8,6 +8,7 @@
 #include <ProgramLifeCycle.hpp>
 #include <linux/bpf.h>
 #include <memory>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -15,6 +16,7 @@
 #include <wrappers/BPFMap.hpp>
 #include <BPFProgram.h>
 #include <pfcp_session.hpp>
+#include "startup_banner.hpp"    // QosFlowInfo
 #include "upf_network_config.h"  // upf::g_net_cfg — no upf_config.hpp
 
 // Forward declarations
@@ -89,20 +91,27 @@ class QERTCProgram : public BPFProgram {
   virtual ~QERTCProgram();
 
   /**
-   * @brief Setup TC-BPF program for a PDU session
+   * @brief Setup or update the TC-BPF QoS enforcement of a PDU session
    *
-   * Creates the complete TC hierarchy for QoS enforcement:
+   * Brings the TC hierarchy in line with @p qers:
    * 1. Root HTB qdisc (if not exists)
    * 2. PDU session class
    * 3. QoS flow classes for each QER
    * 4. TC-BPF filter for classification
    *
+   * Call it again for the same session whenever its QERs change. Classes
+   * that are still wanted are changed in place (`tc class replace`, which
+   * also re-creates one deleted from outside the UPF), so a new rate
+   * applies without the flow losing its class; new ones are added and ones
+   * no longer wanted are deleted, children first.
+   *
    * @param seid Session Endpoint Identifier (used as class ID)
    * @param qers Vector of QERs for this session
    * @param pdrs Vector of PDRs (for QER-PDR mapping)
    *
-   * @throws std::runtime_error if TC command fails
-   * @throws std::runtime_error if interface not found
+   * @throws RuleApplyError if any part of the enforcement could not be
+   *         applied, naming the QER it failed for. The rest is still
+   *         applied, and the next call retries what failed.
    *
    * Usage:
    * @code
@@ -214,6 +223,53 @@ class QERTCProgram : public BPFProgram {
   std::shared_ptr<pfcp::pfcp_pdr> GetPdrByQerId(uint32_t qer_id) const;
 
   /**
+   * @brief Attach tc_redirect_traffic to N6 ingress, once per process
+   *
+   * @throws std::runtime_error if the attach fails; a later call retries
+   */
+  void AttachN6Redirect(const std::string& udp_iface);
+
+  /**
+   * @brief One HTB class of this session, as Setup() wants it or created it
+   */
+  struct TcClass {
+    uint16_t minor;      ///< classid 1:minor
+    uint16_t parent;     ///< parent classid 1:parent, 0 for the root qdisc
+    uint64_t rate_kbps;  ///< HTB rate
+    uint64_t ceil_kbps;  ///< HTB ceil, 0 to leave it to HTB (= rate)
+    uint32_t quantum;    ///< HTB quantum, 0 to leave it to r2q
+    uint32_t qer_id;     ///< QER it enforces, 0 for the PDU session class
+    std::string role;    ///< What it is, for the logs
+  };
+
+  /**
+   * @brief The classes a session with these QERs needs, parents first
+   *
+   * @param flows Filled with one row per QoS flow, for the flow table
+   */
+  std::vector<TcClass> BuildTcClasses(
+      uint64_t seid, const std::vector<std::shared_ptr<pfcp::pfcp_qer>>& qers,
+      uint32_t session_rate_kbps, std::vector<QosFlowInfo>& flows);
+
+  /**
+   * @brief Change, add and delete classes until they match @p wanted
+   *
+   * @return IDs of the QERs whose class could not be brought in line,
+   *         0 standing for the PDU session class
+   */
+  std::set<uint32_t> ApplyTcClasses(const std::vector<TcClass>& wanted);
+
+  /**
+   * @brief Run `tc class add`, or `tc class replace` if @p update
+   */
+  bool WriteTcClass(const TcClass& tc_class, bool update);
+
+  /**
+   * @brief Run `tc class del` for one class
+   */
+  bool DeleteTcClass(const TcClass& tc_class);
+
+  /**
    * @brief Delete the tc classes recorded by Setup(), children first
    *
    * Only classes whose `tc class add` succeeded are recorded, so a class id
@@ -246,8 +302,8 @@ class QERTCProgram : public BPFProgram {
   // ==========================================================================
   // tc classes created by Setup(), released by TearDown()
   // ==========================================================================
-  std::string tc_iface_;                    ///< Interface the classes live on
-  std::vector<uint16_t> created_classids_;  ///< Minor ids, in creation order
+  std::string tc_iface_;          ///< Interface the classes live on
+  std::vector<TcClass> classes_;  ///< In creation order, parents first
 };
 
 #endif  // QER_TC_USER_H_
