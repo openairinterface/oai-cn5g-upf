@@ -233,6 +233,16 @@ int xdp_n6_eth_entry(struct xdp_md* ctx) {
   if (pdu_sess) {
     bpf_debug("N6 ETH: known MAC -> DL TEID=0x%x", bpf_ntohl(pdu_sess->teid));
 
+    /* TODO: QFI 1 is OAI SMF's default QoS flow, not this frame's DL QFI
+     * (the QER of the DL PDR it matches, TS 29.244 §5.4.2), and the frame
+     * skips the DL PDR/QER/URR. eth_session_id.qfi_dl is the catch-all
+     * flow's QFI: right for frames no dedicated flow's DL PDR claims. Either
+     * copy it into mac_pdu_session_value when the MAC is learned (stale after
+     * a QoS change until the UE sends UL again), or, preferred, store the UL
+     * TEID there and look the session up in eth_session_mapping_map: TEID,
+     * gNB IP and QFI are then always current, and MACs learned on a deleted
+     * session (never removed from mac_pdu_session_map) fall back to
+     * flooding. */
     __u32 ret = create_outer_header_gtpu_ethernet(
         ctx, pdu_sess->teid, pdu_sess->ipv4_address, 1);
 
@@ -348,6 +358,7 @@ int xdp_n6_eth_entry(struct xdp_md* ctx) {
   /* ---------------------------------------------------------- */
   bpf_debug("N6 ETH: unknown dest MAC — flooding via TC");
 
+  /* QFI 1 is a placeholder: the TC fan-out sets each clone's QFI. */
   __u32 ret = create_outer_header_gtpu_ethernet(ctx, 0, 0, 1);
 
   if (ret != XDP_PASS) return xdp_stats_record_action(ctx, ret);

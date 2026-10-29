@@ -169,6 +169,8 @@ class SessionProgramManager {
    * @param teid_ul Uplink TEID (key in eth_session_mapping_map)
    * @param teid_dl Downlink TEID (for GTP-U encap toward gNB)
    * @param gnb_ip gNodeB IPv4 address (for DL outer header creation)
+   * @param qfi_dl DL QFI for broadcast clones; 0 if unknown (they keep the
+   *        frame's QFI)
    * @param seid Session Endpoint Identifier
    * @return true if the map entry was written
    *
@@ -177,7 +179,7 @@ class SessionProgramManager {
    */
   bool StoreEthPduSessionInMap(
       std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t teid_ul,
-      uint32_t teid_dl, uint32_t gnb_ip, uint64_t seid);
+      uint32_t teid_dl, uint32_t gnb_ip, uint8_t qfi_dl, uint64_t seid);
 
   // ==========================================================================
   // Pipeline Management
@@ -643,6 +645,21 @@ class SessionProgramManager {
   uint32_t RetrieveGnbIp(std::shared_ptr<pfcp::pfcp_session> session) const;
 
   /**
+   * @brief Retrieve the DL QFI of an Ethernet PDU session
+   *
+   * DL QoS flow marking comes from the QER of a DL PDR (TS 29.244 §5.4.2).
+   * Takes the QFI of the QER on the DL PDR with Ethernet PDU Session
+   * Information, which matches all the session's DL Ethernet frames
+   * (TS 29.244 §5.13.1); else of the first DL PDR whose QER has one.
+   * A DL QFI belongs to a QoS flow, not a session: this is the catch-all
+   * flow's, which suits broadcast and flooded frames.
+   *
+   * @param session PFCP session to scan
+   * @return DL QFI, or 0 if no DL PDR has a QER with a QFI
+   */
+  uint8_t RetrieveEthDlQfi(std::shared_ptr<pfcp::pfcp_session> session) const;
+
+  /**
    * @brief Retrieve UE IP address from session's PDRs
    *
    * Scans all PDRs for one with a UE IP Address IE in its PDI.
@@ -839,12 +856,14 @@ class SessionProgramManager {
    * @param teid_ul Uplink TEID (map key, host byte order)
    * @param teid_dl Downlink TEID (for GTP-U encap toward gNB)
    * @param gnb_ip gNodeB IPv4 address (for DL outer header creation)
+   * @param qfi_dl DL QFI for broadcast clones; 0 if unknown (they keep the
+   *        frame's QFI)
    * @param seid Session Endpoint Identifier
    * @return true if the entry was written and its key tracked
    */
   bool StoreEthPduSessionInMapUnlocked(
       std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t teid_ul,
-      uint32_t teid_dl, uint32_t gnb_ip, uint64_t seid);
+      uint32_t teid_dl, uint32_t gnb_ip, uint8_t qfi_dl, uint64_t seid);
 
   // ==========================================================================
   // Member Variables

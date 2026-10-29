@@ -21,6 +21,7 @@ struct eth_session_id {
   u32 teid_ul;       ///< Uplink TEID   — UPF listens on N3 (TS 29.281 §5.1)
   u32 teid_dl;       ///< Downlink TEID — GTP-U encapsulation toward gNB
   u32 ipv4_address;  ///< gNB outer IP  — outer header creation destination
+  u8 qfi_dl;         ///< DL QFI        — from the DL PDR's QER; 0 = unknown
   u64 seid;          ///< PFCP SEID     — Session Endpoint Identifier (§8.2.37)
 };
 

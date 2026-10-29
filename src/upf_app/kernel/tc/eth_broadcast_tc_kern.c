@@ -172,7 +172,7 @@ int handle_broadcast(struct __sk_buff* skb) {
   /* ---------------------------------------------------------- */
   /*  Fan-out via bpf_for_each_map_elem                         */
   /* ---------------------------------------------------------- */
-  struct callback_ctx cb_ctx = {.skb = skb, .ifindex = ifindex, .size = 0};
+  struct callback_ctx cb_ctx = {.skb = skb, .ifindex = *ifindex, .size = 0};
 
   /* UL detection: packet arrived on the DL egress device (== N3).
    * Use skb->ifindex (the device this TC hook is attached to);
@@ -225,7 +225,7 @@ int handle_broadcast(struct __sk_buff* skb) {
 
     /* The clones go DL: turn the UL PDU Session Container into a DL one
      * (TS 38.415 §5.5.2.1: PDU Type 0, no optional fields; octet 2 is
-     * PPP | RQI | QFI). */
+     * PPP | RQI | QFI). broadcast_callback_fn sets each clone's QFI. */
     data     = (void*) (long) skb->data;
     data_end = (void*) (long) skb->data_end;
     struct gtpu_extn_pdu_session_container* ext =
@@ -244,6 +244,7 @@ int handle_broadcast(struct __sk_buff* skb) {
     __builtin_memcpy(&old_ext, ext, sizeof(old_ext));
     ext->pdu_type = GTP_EXT_PDU_TYPE;
     ext->qfi &= 0x3F;
+    cb_ctx.qfi = ext->qfi; /* the frame's QFI, see below */
     __builtin_memcpy(&new_ext, ext, sizeof(new_ext));
     if (bpf_l4_csum_replace(
             skb, UDP_CSUM_OFFSET, old_ext, new_ext,
@@ -252,6 +253,18 @@ int handle_broadcast(struct __sk_buff* skb) {
       action = TC_ACT_SHOT;
       goto out;
     }
+  }
+
+  /* Save the frame's QFI for clones of sessions with no known DL QFI: each
+   * clone's QFI rewrite changes the skb. UL saved it above. Re-reading data
+   * keeps it from being held across the UL block, which would push the
+   * debug build past the verifier's 512-byte stack limit. */
+  if (!is_uplink) {
+    data     = (void*) (long) skb->data;
+    data_end = (void*) (long) skb->data_end;
+    struct gtpu_extn_pdu_session_container* frame_ext =
+        fanout_container(data, data_end);
+    cb_ctx.qfi = frame_ext ? frame_ext->qfi : 0;
   }
 
   bpf_for_each_map_elem(
