@@ -101,9 +101,8 @@ class SessionProgramManager {
    * - bar_config_map, bar_state_map (buffering state)
    * - mar_rules_map (ATSSS steering)
    * - QER TC-BPF program (if instantiated)
-   * - rules_match_pdr_map / eth_rules_match_pdr_map, sdf_filters_map, and
-   *   the per-session PDR array (pdrs_per_session_map / eth_session_pdrs_map)
-   * - session_by_ue_ip_map (only if this SEID still owns the entry)
+   * - rules_match_pdr_map, sdf_filters_map, and the per-session PDR array
+   *   (pdrs_per_session_map)
    * - ARP caches for N3/N6 endpoints
    *
    * @param seid Session Endpoint Identifier
@@ -170,14 +169,17 @@ class SessionProgramManager {
    * @param teid_ul Uplink TEID (key in eth_session_mapping_map)
    * @param teid_dl Downlink TEID (for GTP-U encap toward gNB)
    * @param gnb_ip gNodeB IPv4 address (for DL outer header creation)
+   * @param qfi_dl DL QFI for broadcast clones; 0 if unknown (they keep the
+   *        frame's QFI)
    * @param seid Session Endpoint Identifier
+   * @return true if the map entry was written
    *
    * @see 3GPP TS 23.501 Section 5.6.10.3 - Ethernet PDU Session Type
    * @see 3GPP TS 29.281 - GTPv1-U
    */
-  void StoreEthPduSessionInMap(
+  bool StoreEthPduSessionInMap(
       std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t teid_ul,
-      uint32_t teid_dl, uint32_t gnb_ip, uint64_t seid);
+      uint32_t teid_dl, uint32_t gnb_ip, uint8_t qfi_dl, uint64_t seid);
 
   // ==========================================================================
   // Pipeline Management
@@ -261,8 +263,8 @@ class SessionProgramManager {
    *
    * For each PDR:
    * - Converts all associated rules (FAR/QER/URR/BAR/MAR) to BPF structs
-   * - Stores complete rule set in rules_match_pdr_map or
-   *   eth_rules_match_pdr_map
+   * - Stores complete rule set in rules_match_pdr_map (shared by IP and
+   *   ETH PDU sessions, both keyed by SEID)
    * - Populates dedicated config maps (urr_config_map, bar_config_map,
    *   mar_rules_map) and initializes runtime state maps
    * - Launches async ARP resolution for N3/N6 endpoints
@@ -643,6 +645,21 @@ class SessionProgramManager {
   uint32_t RetrieveGnbIp(std::shared_ptr<pfcp::pfcp_session> session) const;
 
   /**
+   * @brief Retrieve the DL QFI of an Ethernet PDU session
+   *
+   * DL QoS flow marking comes from the QER of a DL PDR (TS 29.244 §5.4.2).
+   * Takes the QFI of the QER on the DL PDR with Ethernet PDU Session
+   * Information, which matches all the session's DL Ethernet frames
+   * (TS 29.244 §5.13.1); else of the first DL PDR whose QER has one.
+   * A DL QFI belongs to a QoS flow, not a session: this is the catch-all
+   * flow's, which suits broadcast and flooded frames.
+   *
+   * @param session PFCP session to scan
+   * @return DL QFI, or 0 if no DL PDR has a QER with a QFI
+   */
+  uint8_t RetrieveEthDlQfi(std::shared_ptr<pfcp::pfcp_session> session) const;
+
+  /**
    * @brief Retrieve UE IP address from session's PDRs
    *
    * Scans all PDRs for one with a UE IP Address IE in its PDI.
@@ -762,7 +779,7 @@ class SessionProgramManager {
 
   /**
    * @brief Read the PDR IDs (and their QFIs) currently recorded for a
-   *        session in pdrs_per_session_map / eth_session_pdrs_map
+   *        session in pdrs_per_session_map
    *
    * Used as the "before" snapshot so ModifyPipeline() and RemoveSession()
    * can detect which PDRs are no longer present and prune their
@@ -772,33 +789,30 @@ class SessionProgramManager {
    *
    * @param upf_xdp_program XDP program owning the per-session PDR map
    * @param seid Session Endpoint Identifier
-   * @param is_eth_pdu Selects eth_session_pdrs_map vs pdrs_per_session_map
    * @return Map of pdr_id -> qfi for every PDR currently recorded (empty if
    *         the map has no entry for this seid)
    */
   std::map<uint16_t, uint32_t> GetTrackedPdrQfis(
-      std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
-      bool is_eth_pdu) const;
+      std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid) const;
 
   /**
    * @brief Remove rules_match_pdr_map entries for stale PDR IDs and
    *        sdf_filters_map entries for stale QFIs
    *
    * The two maps are keyed differently, so the caller diffs them
-   * separately: rules_match_pdr_map (or eth_rules_match_pdr_map) by
-   * (pdr_id, seid), sdf_filters_map by (seid, qfi). A PDR that survives
+   * separately: rules_match_pdr_map by (pdr_id, seid),
+   * sdf_filters_map by (seid, qfi). A PDR that survives
    * but changes QFI leaves its PDR ID out of stale_pdr_ids while its old
    * QFI can still be in stale_qfis.
    *
    * @param upf_xdp_program XDP program owning the maps
    * @param seid Session Endpoint Identifier
-   * @param is_eth_pdu Selects the ETH or IP variant of rules_match_pdr_map
    * @param stale_pdr_ids PDR IDs no longer in the session
    * @param stale_qfis Non-zero QFIs no surviving PDR uses
    */
   void PruneStaleRuleEntries(
       std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
-      bool is_eth_pdu, const std::set<uint16_t>& stale_pdr_ids,
+      const std::set<uint16_t>& stale_pdr_ids,
       const std::set<uint32_t>& stale_qfis);
 
   /**
@@ -831,6 +845,25 @@ class SessionProgramManager {
   bool StorePduSessionInMapUnlocked(
       std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t ue_ip,
       uint32_t teid_ul, uint32_t teid_dl, uint64_t seid);
+
+  /**
+   * @brief StoreEthPduSessionInMap() without locking mutex_
+   *
+   * The caller must hold mutex_. Lets ModifyPipeline() store the new UL TEID
+   * and drop the replaced one in a single critical section.
+   *
+   * @param upf_xdp_program XDP program owning eth_session_mapping_map
+   * @param teid_ul Uplink TEID (map key, host byte order)
+   * @param teid_dl Downlink TEID (for GTP-U encap toward gNB)
+   * @param gnb_ip gNodeB IPv4 address (for DL outer header creation)
+   * @param qfi_dl DL QFI for broadcast clones; 0 if unknown (they keep the
+   *        frame's QFI)
+   * @param seid Session Endpoint Identifier
+   * @return true if the entry was written and its key tracked
+   */
+  bool StoreEthPduSessionInMapUnlocked(
+      std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t teid_ul,
+      uint32_t teid_dl, uint32_t gnb_ip, uint8_t qfi_dl, uint64_t seid);
 
   // ==========================================================================
   // Member Variables
@@ -869,6 +902,9 @@ class SessionProgramManager {
   /// SEID, so ModifyPipeline() can drop a replaced IP and RemoveSession()
   /// can clear them all (issue #12).
   std::map<uint64_t, std::set<uint32_t>> session_ue_ip_key_map_;
+  /// Track the eth_session_mapping_map keys (UL TEID) per SEID, so
+  /// RemoveSession() can clear them.
+  std::map<uint64_t, std::set<uint32_t>> session_eth_teid_key_map_;
 };
 
 #endif  // SESSION_PROGRAM_MANAGER_H_

@@ -84,6 +84,7 @@ QERTCProgram::QERTCProgram()
 
     // Configure map sizes and .rodata constants
     this->ConfigureQerMaps(skel);
+    skeleton_ = skel;
     return skel;
   };
 
@@ -461,6 +462,7 @@ std::shared_ptr<BPFMaps> QERTCProgram::GetMaps() {
 void QERTCProgram::TearDown() {
   DeleteTcClasses();
   lifecycle_->tearDown();
+  skeleton_ = nullptr;
 }
 
 //------------------------------------------------------------------------------

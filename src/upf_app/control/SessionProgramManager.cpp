@@ -100,9 +100,9 @@ void SessionProgramManager::CreateSession(uint64_t seid) {
  * - bar_config_map, bar_state_map (buffering state)
  * - mar_rules_map (ATSSS steering)
  * - QER TC-BPF program (if instantiated)
- * - rules_match_pdr_map / eth_rules_match_pdr_map, sdf_filters_map, and the
- *   per-session PDR array (pdrs_per_session_map / eth_session_pdrs_map)
  * - session_by_ue_ip_map (only if this SEID still owns the entry)
+ * - rules_match_pdr_map, sdf_filters_map, and the per-session PDR array
+ *   (pdrs_per_session_map)
  * - ARP caches for N3/N6 endpoints
  *
  * @param seid Session Endpoint Identifier
@@ -156,22 +156,18 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
     auto mar_map = upf_xdp_program->GetMapByName("mar_rules_map");
     if (mar_map) mar_map->Remove(seid);
 
-    // Prune rules_match_pdr_map / eth_rules_match_pdr_map, sdf_filters_map,
-    // and the per-session PDR array itself. Every recorded PDR and QFI is
+    // Prune rules_match_pdr_map, sdf_filters_map, and the per-session PDR
+    // array itself. Every recorded PDR and QFI is
     // stale.
     std::set<uint16_t> stale_pdr_ids;
     std::set<uint32_t> stale_qfis;
-    for (const auto& [pdr_id, qfi] :
-         GetTrackedPdrQfis(upf_xdp_program, seid, is_eth_pdu)) {
+    for (const auto& [pdr_id, qfi] : GetTrackedPdrQfis(upf_xdp_program, seid)) {
       stale_pdr_ids.insert(pdr_id);
       if (qfi != 0) stale_qfis.insert(qfi);
     }
-    PruneStaleRuleEntries(
-        upf_xdp_program, seid, is_eth_pdu, stale_pdr_ids, stale_qfis);
+    PruneStaleRuleEntries(upf_xdp_program, seid, stale_pdr_ids, stale_qfis);
 
-    const char* pdrs_map_name =
-        is_eth_pdu ? "eth_session_pdrs_map" : "pdrs_per_session_map";
-    auto pdrs_map = upf_xdp_program->GetMapByName(pdrs_map_name);
+    auto pdrs_map = upf_xdp_program->GetMapByName("pdrs_per_session_map");
     if (pdrs_map) pdrs_map->Remove(seid);
     // Clean up session_by_ue_ip_map so a UE that re-attaches with the same
     // static IP isn't attributed to this now-deleted session.
@@ -181,6 +177,23 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
         RemoveUeIpMappingIfOwned(upf_xdp_program, ue_ip_key, seid);
       }
       session_ue_ip_key_map_.erase(ue_ip_it);
+    }
+    // Clean up eth_session_mapping_map so the TC broadcast fan-out stops
+    // cloning to this session's gNB / DL TEID.
+    auto eth_teid_it = session_eth_teid_key_map_.find(seid);
+    if (eth_teid_it != session_eth_teid_key_map_.end()) {
+      auto eth_session_map =
+          upf_xdp_program->GetMapByName("eth_session_mapping_map");
+      if (eth_session_map) {
+        for (uint32_t teid_key : eth_teid_it->second) {
+          struct eth_session_id existing = {0};
+          if (eth_session_map->Lookup(teid_key, &existing) == 0 &&
+              existing.seid == seid) {
+            eth_session_map->Remove(teid_key);
+          }
+        }
+      }
+      session_eth_teid_key_map_.erase(eth_teid_it);
     }
   }
 
@@ -229,6 +242,7 @@ void SessionProgramManager::RemoveAllSessions() {
   // Clear PDU session type and UE-IP key tracking
   session_pdu_type_map_.clear();
   session_ue_ip_key_map_.clear();
+  session_eth_teid_key_map_.clear();
 
   // Remove session programs
   session_programs_map_.clear();
@@ -400,20 +414,36 @@ void SessionProgramManager::RemoveUeIpMappingIfOwned(
  * have no UE IP address.
  *
  * @param upf_xdp_program XDP program containing the maps
- * @param teid_ul Uplink TEID (map key, converted to network byte order)
+ * @param teid_ul Uplink TEID (map key, used directly in host byte order
+ *                matches pctx->pkt_teid as read by the XDP datapath)
  * @param teid_dl Downlink TEID (for GTP-U encap toward gNB)
  * @param gnb_ip gNodeB IPv4 address (for DL outer header creation)
+ * @param qfi_dl DL QFI for broadcast clones; 0 if unknown
  * @param seid Session Endpoint Identifier
+ * @return true if the map entry was written
  *
  * @see 3GPP TS 23.501 Section 5.6.10.3 - Ethernet PDU Session Type
  * @see 3GPP TS 29.281 - GTPv1-U
  */
-void SessionProgramManager::StoreEthPduSessionInMap(
+bool SessionProgramManager::StoreEthPduSessionInMap(
     std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t teid_ul,
-    uint32_t teid_dl, uint32_t gnb_ip, uint64_t seid) {
+    uint32_t teid_dl, uint32_t gnb_ip, uint8_t qfi_dl, uint64_t seid) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return StoreEthPduSessionInMapUnlocked(
+      upf_xdp_program, teid_ul, teid_dl, gnb_ip, qfi_dl, seid);
+}
+
+//------------------------------------------------------------------------------
+/**
+ * @brief StoreEthPduSessionInMap() without locking mutex_
+ * @see SessionProgramManager::StoreEthPduSessionInMapUnlocked (header)
+ */
+bool SessionProgramManager::StoreEthPduSessionInMapUnlocked(
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t teid_ul,
+    uint32_t teid_dl, uint32_t gnb_ip, uint8_t qfi_dl, uint64_t seid) {
   if (!upf_xdp_program) {
     Logger::upf_app().error("StoreEthPduSessionInMap: null XDP program");
-    return;
+    return false;
   }
 
   try {
@@ -422,15 +452,17 @@ void SessionProgramManager::StoreEthPduSessionInMap(
     if (!eth_session_map) {
       Logger::upf_app().error(
           "eth_session_mapping_map not found - ETH PDU not supported");
-      return;
+      return false;
     }
 
-    uint32_t key = likely(IsLittleEndian()) ? htonl(teid_ul) : teid_ul;
+    // Map key is host byte order matching pctx->pkt_teid on the XDP
+    uint32_t key = teid_ul;
 
     struct eth_session_id eth_session = {0};
     eth_session.teid_ul = likely(IsLittleEndian()) ? htonl(teid_ul) : teid_ul;
     eth_session.teid_dl = likely(IsLittleEndian()) ? htonl(teid_dl) : teid_dl;
     eth_session.ipv4_address = gnb_ip;
+    eth_session.qfi_dl       = qfi_dl;
     eth_session.seid         = seid;
 
     int ret = eth_session_map->Update(key, eth_session, BPF_ANY);
@@ -438,14 +470,28 @@ void SessionProgramManager::StoreEthPduSessionInMap(
       Logger::upf_app().error(
           "Failed to update eth_session_mapping_map TEID=0x%x (ret=%d)",
           teid_ul, ret);
-      return;
+      return false;
+    }
+    // Track this session's map key so RemoveSession() can clear it later.
+    session_eth_teid_key_map_[seid].insert(key);
+
+    // Clones only go to entries with a DL tunnel (eth_broadcast.h).
+    if (teid_dl != 0 && gnb_ip != 0 && qfi_dl == 0) {
+      Logger::upf_app().warn(
+          "ETH PDU session " SEID_FMT
+          ": no DL QFI (no QER with a QFI on a DL PDR), broadcast clones to "
+          "it keep the QFI of the frame they copy",
+          seid);
     }
 
     Logger::upf_app().debug(
-        "Stored ETH PDU session: TEID_UL=0x%x TEID_DL=0x%x SEID=" SEID_FMT,
-        teid_ul, teid_dl, seid);
+        "Stored ETH PDU session: TEID_UL=0x%x TEID_DL=0x%x QFI_DL=%u "
+        "SEID=" SEID_FMT,
+        teid_ul, teid_dl, qfi_dl, seid);
+    return true;
   } catch (const std::exception& e) {
     Logger::upf_app().error("StoreEthPduSessionInMap failed: %s", e.what());
+    return false;
   }
 }
 
@@ -576,8 +622,10 @@ void SessionProgramManager::UpdateRulesEnabledMap(
  *
  * Determines BPF map routing based on PDU session type:
  * - IP PDU: session_by_ue_ip_map, pdrs_per_session_map, rules_match_pdr_map
- * - ETH PDU: eth_session_mapping_map, eth_session_pdrs_map,
- *            eth_rules_match_pdr_map
+ * - ETH PDU: eth_session_mapping_map, plus the same pdrs_per_session_map /
+ *            rules_match_pdr_map as IP PDU (both session types share these
+ *            two maps, keyed by SEID -- unique per PFCP session, so they
+ *            cannot collide)
  *
  * Detection heuristic:
  *   1. If any PDR contains a UE IP Address IE -> IP PDU
@@ -746,14 +794,11 @@ void SessionProgramManager::ParseAndStoreSdfFilter(
  * @see SessionProgramManager::GetTrackedPdrQfis (header)
  */
 std::map<uint16_t, uint32_t> SessionProgramManager::GetTrackedPdrQfis(
-    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
-    bool is_eth_pdu) const {
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid) const {
   std::map<uint16_t, uint32_t> pdr_qfis;
   if (!upf_xdp_program) return pdr_qfis;
 
-  const char* pdrs_map_name =
-      is_eth_pdu ? "eth_session_pdrs_map" : "pdrs_per_session_map";
-  auto pdrs_map = upf_xdp_program->GetMapByName(pdrs_map_name);
+  auto pdrs_map = upf_xdp_program->GetMapByName("pdrs_per_session_map");
   if (!pdrs_map) return pdr_qfis;
 
   struct pfcp_pdr recorded_pdrs[MAX_PDRS_PER_PDU_SESSION_LIMIT] = {0};
@@ -775,13 +820,11 @@ std::map<uint16_t, uint32_t> SessionProgramManager::GetTrackedPdrQfis(
  */
 void SessionProgramManager::PruneStaleRuleEntries(
     std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
-    bool is_eth_pdu, const std::set<uint16_t>& stale_pdr_ids,
+    const std::set<uint16_t>& stale_pdr_ids,
     const std::set<uint32_t>& stale_qfis) {
   if (!upf_xdp_program || (stale_pdr_ids.empty() && stale_qfis.empty())) return;
 
-  const char* rules_map_name =
-      is_eth_pdu ? "eth_rules_match_pdr_map" : "rules_match_pdr_map";
-  auto rules_map = upf_xdp_program->GetMapByName(rules_map_name);
+  auto rules_map = upf_xdp_program->GetMapByName("rules_match_pdr_map");
   if (rules_map) {
     for (const uint16_t stale_pdr_id : stale_pdr_ids) {
       struct pdrs_per_session pdr_key = {0};
@@ -823,8 +866,8 @@ void SessionProgramManager::PruneStaleRuleEntries(
  *   - URR (Usage Reporting Rules, Section 8.2.5)
  *   - BAR (Buffering Action Rules, Section 8.2.6, via FAR -> bar_id)
  *   - MAR (Multi-Access Rules, Section 8.2.7, ATSSS only)
- * - Storing complete rule set in rules_match_pdr_map (IP PDU) or
- *   eth_rules_match_pdr_map (ETH PDU)
+ * - Storing complete rule set in rules_match_pdr_map (shared by IP and
+ *   ETH PDU sessions -- both keyed by SEID)
  * - Populating dedicated config maps (urr_config_map, bar_config_map,
  *   mar_rules_map) and initializing runtime state (urr_volume_counters_map,
  *   bar_state_map) with BPF_NOEXIST to avoid overwriting active state
@@ -946,7 +989,14 @@ void SessionProgramManager::CreatePipeline(
 
       // Store session mapping (IP or ETH PDU)
       if (is_eth_pdu) {
-        StoreEthPduSessionInMap(upf_xdp_program, fteid.teid, 0, 0, seid);
+        // DL PDRs carry no F-TEID: skip them, or they would all share key 0.
+        // A missing entry sends this tunnel's G-PDUs down the IP path, so a
+        // failed store must fail the session.
+        if (fteid.teid != 0 && !StoreEthPduSessionInMap(
+                                   upf_xdp_program, fteid.teid, 0, 0, 0, seid))
+          throw std::runtime_error(
+              "eth_session_mapping_map update failed for PDR " +
+              std::to_string(pdr_id));
       } else {
         StorePduSessionInMap(
             upf_xdp_program, ue_ip_address.ipv4_address.s_addr, fteid.teid, 0,
@@ -1019,9 +1069,11 @@ void SessionProgramManager::CreatePipeline(
       pdr_key.pdr_id                  = pdr_id;
       pdr_key.seid                    = seid;
 
-      const char* rules_map_name =
-          is_eth_pdu ? "eth_rules_match_pdr_map" : "rules_match_pdr_map";
-      auto rules_map = upf_xdp_program->GetMapByName(rules_map_name);
+      /* rules_match_pdr_map is shared by IP and ETH PDU sessions -- both
+       * keyed by SEID, which PFCP guarantees unique, so there is no
+       * collision risk. eth_rules_match_pdr_map used to be a byte-for-byte
+       * identical mirror of this map; it has been merged away. */
+      auto rules_map = upf_xdp_program->GetMapByName("rules_match_pdr_map");
       if (rules_map) {
         rules_map->Update(pdr_key, rules, BPF_ANY);
       }
@@ -1089,15 +1141,21 @@ void SessionProgramManager::CreatePipeline(
     // For ETH PDU: now that we have both UL TEID (from uplink PDR) and
     // DL TEID + gNB IP (from downlink FAR), populate the session map once.
     // (TS 23.501 Section 5.6.10.3 - ETH sessions keyed by TEID, not UE IP)
-    if (is_eth_pdu && eth_ul_teid != 0) {
-      StoreEthPduSessionInMap(
-          upf_xdp_program, eth_ul_teid, eth_dl_teid, eth_gnb_ip, seid);
+    if (is_eth_pdu && eth_ul_teid != 0 &&
+        !StoreEthPduSessionInMap(
+            upf_xdp_program, eth_ul_teid, eth_dl_teid, eth_gnb_ip,
+            RetrieveEthDlQfi(session), seid)) {
+      throw std::runtime_error(
+          "eth_session_mapping_map update failed for UL TEID " +
+          std::to_string(eth_ul_teid));
     }
 
     // Store all PDRs in correct session PDR map
-    const char* pdrs_map_name =
-        is_eth_pdu ? "eth_session_pdrs_map" : "pdrs_per_session_map";
-    auto session_pdrs_map = upf_xdp_program->GetMapByName(pdrs_map_name);
+    // shared by IP and ETH PDU sessions -- both keyed by SEID (unique per
+    // PFCP session, so no collision risk). eth_session_pdrs_map used to be
+    // a byte-for-byte identical mirror of this map; merged away.
+    auto session_pdrs_map =
+        upf_xdp_program->GetMapByName("pdrs_per_session_map");
     if (session_pdrs_map) {
       session_pdrs_map->Update(seid, pdrs, BPF_ANY);
     }
@@ -1207,7 +1265,7 @@ void SessionProgramManager::ModifyPipeline(
     // call's writes overwrite it, so PDRs withdrawn by this modification can
     // be pruned from rules_match_pdr_map / sdf_filters_map below
     const std::map<uint16_t, uint32_t> old_pdr_qfis =
-        GetTrackedPdrQfis(upf_xdp_program, seid, is_eth_pdu);
+        GetTrackedPdrQfis(upf_xdp_program, seid);
 
     // Get network configuration for ARP updates
     const uint32_t dn_ip     = upf::GetDnIp();
@@ -1286,9 +1344,39 @@ void SessionProgramManager::ModifyPipeline(
       uint32_t primary_teid_dl = downlink_teids.empty() ? 0 : downlink_teids[0];
 
       if (is_eth_pdu) {
-        // ETH PDU: TEID-keyed mapping with gNB IP for DL encap
-        StoreEthPduSessionInMap(
-            upf_xdp_program, primary_teid_ul, primary_teid_dl, gnb_ip, seid);
+        // ETH PDU: TEID-keyed mapping with gNB IP for DL encap. Every UL
+        // F-TEID stays a live key (the XDP entry classifies ETH vs IP by
+        // it), so store all of them and drop only TEIDs that are gone,
+        // under one lock, as for IP.
+        const uint8_t qfi_dl = RetrieveEthDlQfi(session);
+        std::lock_guard<std::mutex> lock(mutex_);
+        bool all_stored = !uplink_teids.empty();
+        for (const uint32_t teid_ul : uplink_teids) {
+          if (!StoreEthPduSessionInMapUnlocked(
+                  upf_xdp_program, teid_ul, primary_teid_dl, gnb_ip, qfi_dl,
+                  seid))
+            all_stored = false;
+        }
+        if (all_stored) {
+          auto eth_session_map =
+              upf_xdp_program->GetMapByName("eth_session_mapping_map");
+          auto& tracked_keys = session_eth_teid_key_map_[seid];
+          for (auto it = tracked_keys.begin(); it != tracked_keys.end();) {
+            const uint32_t old_key = *it;
+            if (std::find(uplink_teids.begin(), uplink_teids.end(), old_key) !=
+                uplink_teids.end()) {
+              ++it;
+              continue;
+            }
+            struct eth_session_id existing = {0};
+            if (eth_session_map &&
+                eth_session_map->Lookup(old_key, &existing) == 0 &&
+                existing.seid == seid) {
+              eth_session_map->Remove(old_key);
+            }
+            it = tracked_keys.erase(it);
+          }
+        }
       } else {
         // IP PDU: UE IP-keyed mapping. Store the new key and drop replaced
         // ones under one lock, so RemoveSession() can't interleave.
@@ -1311,7 +1399,7 @@ void SessionProgramManager::ModifyPipeline(
       }
 
       // Log if there are multiple TEIDs (warning about BPF map limitation)
-      if (uplink_teids.size() > 1) {
+      if (!is_eth_pdu && uplink_teids.size() > 1) {
         logger.warn(
             "Session " SEID_FMT
             " has %zu uplink TEIDs, but PDU session map "
@@ -1414,10 +1502,11 @@ void SessionProgramManager::ModifyPipeline(
       pdr_key.pdr_id                  = pdr_id;
       pdr_key.seid                    = seid;
 
-      // Use correct rules_match_pdr map based on session type
-      const char* rules_map_name =
-          is_eth_pdu ? "eth_rules_match_pdr_map" : "rules_match_pdr_map";
-      auto rules_map = upf_xdp_program->GetMapByName(rules_map_name);
+      // rules_match_pdr_map is shared by IP and ETH PDU sessions -- both
+      // keyed by SEID (unique per PFCP session, so no collision risk).
+      // eth_rules_match_pdr_map used to be a byte-for-byte identical
+      // mirror of this map; it has been merged away.
+      auto rules_map = upf_xdp_program->GetMapByName("rules_match_pdr_map");
       if (rules_map) {
         rules_map->Update(pdr_key, rules, BPF_ANY);
       }
@@ -1486,9 +1575,11 @@ void SessionProgramManager::ModifyPipeline(
 
     // Store all PDRs in session map (batch update)
     // Store all PDRs in correct session PDR map
-    const char* pdrs_map_name =
-        is_eth_pdu ? "eth_session_pdrs_map" : "pdrs_per_session_map";
-    auto session_pdrs_map = upf_xdp_program->GetMapByName(pdrs_map_name);
+    // shared by IP and ETH PDU sessions -- both keyed by SEID (unique per
+    // PFCP session, so no collision risk). eth_session_pdrs_map used to be
+    // a byte-for-byte identical mirror of this map; merged away.
+    auto session_pdrs_map =
+        upf_xdp_program->GetMapByName("pdrs_per_session_map");
     if (session_pdrs_map) {
       session_pdrs_map->Update(seid, pdrs, BPF_ANY);
     }
@@ -1503,8 +1594,7 @@ void SessionProgramManager::ModifyPipeline(
         stale_qfis.insert(old_qfi);
       }
     }
-    PruneStaleRuleEntries(
-        upf_xdp_program, seid, is_eth_pdu, stale_pdr_ids, stale_qfis);
+    PruneStaleRuleEntries(upf_xdp_program, seid, stale_pdr_ids, stale_qfis);
 
     logger.info(
         "[eBPF] Modify Pipeline - Pipeline modified for session " SEID_FMT
@@ -2553,6 +2643,33 @@ uint32_t SessionProgramManager::RetrieveGnbIp(
 
   // Return 0 if no matching FAR was found
   return 0;
+}
+
+//------------------------------------------------------------------------------
+/**
+ * @brief Retrieve the DL QFI of an Ethernet PDU session
+ * @see SessionProgramManager::RetrieveEthDlQfi (header)
+ */
+uint8_t SessionProgramManager::RetrieveEthDlQfi(
+    std::shared_ptr<pfcp::pfcp_session> session) const {
+  if (!session) return 0;
+
+  uint8_t first_qfi = 0;
+  pfcp::pdi pdi;
+  pfcp::ethernet_pdu_session_information_t eth_info;
+
+  for (const auto& pdr : session->pdrs_downlink) {
+    std::shared_ptr<pfcp::pfcp_qer> qer;
+    if (!GetQerForPdr(session, pdr, qer) || !qer->qos_flow_id.first ||
+        qer->qos_flow_id.second.qfi == 0)
+      continue;
+
+    const uint8_t qfi = qer->qos_flow_id.second.qfi;
+    if (pdr->get(pdi) && pdi.get(eth_info) && eth_info.ethi) return qfi;
+    if (first_qfi == 0) first_qfi = qfi;
+  }
+
+  return first_qfi;
 }
 
 //------------------------------------------------------------------------------

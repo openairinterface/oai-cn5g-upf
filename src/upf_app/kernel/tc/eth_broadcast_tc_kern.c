@@ -50,7 +50,8 @@
  *        - If it's not broadcast / multicast → TC_ACT_RECLASSIFY so the
  *          next TC program in the chain (typically QoS) can handle it.
  *        - Otherwise: clone the packet to every active ETH PDU session
- *          via bpf_for_each_map_elem(eth_session_mapping_map).
+ *          (except, for UL, the source one) via
+ *          bpf_for_each_map_elem(eth_session_mapping_map).
  *   4. For UL packets (skb came in on the DL egress ifindex == N3), also
  *      strip the outer GTP-U/UDP/IP/ETH stack and bpf_redirect() the
  *      original up to N6 so it reaches the data network.
@@ -125,10 +126,17 @@ int handle_broadcast(struct __sk_buff* skb) {
   }
 
   /* ---------------------------------------------------------- */
-  /*  Inner Ethernet (immediately after the GTP-U stack)        */
+  /*  Inner Ethernet (after the GTP-U extension headers)        */
+  /*                                                            */
+  /*  Non-G-PDU GTP-U (Echo, Error Indication, ...) is          */
+  /*  XDP_PASSed and reaches this hook too: leave it alone.     */
   /* ---------------------------------------------------------- */
-  eth = (struct ethhdr*) ((void*) data + sizeof(struct ethhdr) +
-                          GTP_ENCAPSULATED_SIZE);
+  int inner_off = gtpu_inner_offset(data, data_end);
+  if (inner_off < 0) {
+    bpf_debug("eth_broadcast_tc: not an N3 G-PDU this UPF parses -- skip");
+    goto out;
+  }
+  eth = (struct ethhdr*) ((void*) data + inner_off);
   if ((void*) (eth + 1) > data_end) {
     bpf_debug("eth_broadcast_tc: malformed inner Ethernet");
     goto out;
@@ -164,7 +172,7 @@ int handle_broadcast(struct __sk_buff* skb) {
   /* ---------------------------------------------------------- */
   /*  Fan-out via bpf_for_each_map_elem                         */
   /* ---------------------------------------------------------- */
-  struct callback_ctx cb_ctx = {.skb = skb, .ifindex = ifindex, .size = 0};
+  struct callback_ctx cb_ctx = {.skb = skb, .ifindex = *ifindex, .size = 0};
 
   /* UL detection: packet arrived on the DL egress device (== N3).
    * Use skb->ifindex (the device this TC hook is attached to);
@@ -176,18 +184,105 @@ int handle_broadcast(struct __sk_buff* skb) {
       skb->ifindex, skb->ingress_ifindex, *ifindex);
   bool is_uplink = (*ifindex == skb->ifindex);
   if (is_uplink) {
-    /* Skip the source PDU session — record its TEID up front */
-    cb_ctx.pdu_sessions[0] = gtpuh->teid;
+    /* The DL clones reuse the UL container, rewritten in place, so they need
+     * it alone and 4 octets. Other layouts (QoS monitoring fields, extra
+     * extension headers) still go to N6 below, without clones. */
+    if (inner_off != (int) (sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE) ||
+        gtpuh->next_ext_type != GTP_NEXT_EXT_TYPE) {
+      bpf_debug(
+          "eth_broadcast_tc: UL extension headers not 4 octets -- N6 only");
+      action = TC_ACT_SHOT;
+      goto n6;
+    }
+
+    /* Skip the source session: pre-seed its SEID in the dedup array. A UL
+     * TEID with no session is dropped. */
+    __u32 src_teid = bpf_ntohl(gtpuh->teid);
+    struct eth_session_id* src =
+        bpf_map_lookup_elem(&eth_session_mapping_map, &src_teid);
+    if (!src) {
+      bpf_debug("eth_broadcast_tc: no session for UL TEID=0x%x", src_teid);
+      action = TC_ACT_SHOT;
+      goto out;
+    }
+    cb_ctx.pdu_sessions[0] = (__u32) src->seid;
     cb_ctx.size            = 1;
+
+    /* Clones come from the UPF: its N3 IP is this frame's dst IP. Done in
+     * TC, not XDP, as the UDP checksum may be CHECKSUM_PARTIAL. */
+    __u32 old_saddr = iph->saddr;
+    __u32 new_saddr = iph->daddr;
+    iph->saddr      = new_saddr;
+    if (bpf_l3_csum_replace(
+            skb, IP_CSUM_OFFSET, old_saddr, new_saddr, sizeof(new_saddr)) ||
+        bpf_l4_csum_replace(
+            skb, UDP_CSUM_OFFSET, old_saddr, new_saddr,
+            BPF_F_MARK_MANGLED_0 | BPF_F_PSEUDO_HDR | sizeof(new_saddr))) {
+      bpf_debug("eth_broadcast_tc: UL src IP checksum update failed");
+      action = TC_ACT_SHOT;
+      goto out;
+    }
+
+    /* The clones go DL: turn the UL PDU Session Container into a DL one
+     * (TS 38.415 §5.5.2.1: PDU Type 0, no optional fields; octet 2 is
+     * PPP | RQI | QFI). broadcast_callback_fn sets each clone's QFI. */
+    data     = (void*) (long) skb->data;
+    data_end = (void*) (long) skb->data_end;
+    struct gtpu_extn_pdu_session_container* ext =
+        (struct gtpu_extn_pdu_session_container*) ((void*) data +
+                                                   sizeof(struct ethhdr) +
+                                                   sizeof(struct iphdr) +
+                                                   sizeof(struct udphdr) +
+                                                   sizeof(struct gtpuhdr));
+    if ((void*) (ext + 1) > data_end ||
+        ext->message_length != GTP_EXT_MSG_LEN) {
+      bpf_debug("eth_broadcast_tc: unexpected UL PDU Session Container");
+      action = TC_ACT_SHOT;
+      goto out;
+    }
+    __u32 old_ext, new_ext;
+    __builtin_memcpy(&old_ext, ext, sizeof(old_ext));
+    ext->pdu_type = GTP_EXT_PDU_TYPE;
+    ext->qfi &= 0x3F;
+    cb_ctx.qfi = ext->qfi; /* the frame's QFI, see below */
+    __builtin_memcpy(&new_ext, ext, sizeof(new_ext));
+    if (bpf_l4_csum_replace(
+            skb, UDP_CSUM_OFFSET, old_ext, new_ext,
+            BPF_F_MARK_MANGLED_0 | sizeof(new_ext))) {
+      bpf_debug("eth_broadcast_tc: UL container checksum update failed");
+      action = TC_ACT_SHOT;
+      goto out;
+    }
+  }
+
+  /* Save the frame's QFI for clones of sessions with no known DL QFI: each
+   * clone's QFI rewrite changes the skb. UL saved it above. Re-reading data
+   * keeps it from being held across the UL block, which would push the
+   * debug build past the verifier's 512-byte stack limit. */
+  if (!is_uplink) {
+    data     = (void*) (long) skb->data;
+    data_end = (void*) (long) skb->data_end;
+    struct gtpu_extn_pdu_session_container* frame_ext =
+        fanout_container(data, data_end);
+    cb_ctx.qfi = frame_ext ? frame_ext->qfi : 0;
   }
 
   bpf_for_each_map_elem(
       &eth_session_mapping_map, broadcast_callback_fn, &cb_ctx, 0);
   action = TC_ACT_SHOT;
 
+  /* size counts visited sessions (UL starts at 1: the source), not clones. */
+  if (cb_ctx.size == (is_uplink ? 1 : 0)) {
+    bpf_debug(
+        "eth_broadcast_tc: %s fan-out found no other session -- "
+        "eth_session_mapping_map may be empty or unshared",
+        is_uplink ? "UL" : "DL");
+  }
+
   /* ---------------------------------------------------------- */
   /*  UL: also forward the original up to N6 (DN-side)          */
   /* ---------------------------------------------------------- */
+n6:
   if (is_uplink) {
     key = UPLINK; /* N6 (DN-facing) egress — redirect UL broadcast to the DN */
     ifindex = bpf_map_lookup_elem(&eth_egress_ifindex_map, &key);
@@ -196,7 +291,9 @@ int handle_broadcast(struct __sk_buff* skb) {
       goto out;
     }
 
-    int roomlen = sizeof(struct ethhdr) + GTP_ENCAPSULATED_SIZE;
+    int roomlen = inner_off;
+    data        = (void*) (long) skb->data;
+    data_end    = (void*) (long) skb->data_end;
     if (data + roomlen > data_end) {
       bpf_debug("eth_broadcast_tc: data + roomlen > data_end");
       goto out;
