@@ -170,11 +170,12 @@ class SessionProgramManager {
    * @param teid_dl Downlink TEID (for GTP-U encap toward gNB)
    * @param gnb_ip gNodeB IPv4 address (for DL outer header creation)
    * @param seid Session Endpoint Identifier
+   * @return true if the map entry was written
    *
    * @see 3GPP TS 23.501 Section 5.6.10.3 - Ethernet PDU Session Type
    * @see 3GPP TS 29.281 - GTPv1-U
    */
-  void StoreEthPduSessionInMap(
+  bool StoreEthPduSessionInMap(
       std::shared_ptr<UPF_XDPProgram> xdp_program, uint32_t teid_ul,
       uint32_t teid_dl, uint32_t gnb_ip, uint64_t seid);
 
@@ -815,6 +816,22 @@ class SessionProgramManager {
       uint64_t seid);
 
   /**
+   * @brief Remove the session's tracked eth_session_mapping_map entries
+   *
+   * Removes every tracked key except keep_teid_ul, and only while its entry
+   * still names this SEID: one a newer session has taken over is left alone.
+   * The session then tracks keep_teid_ul alone, or nothing if it is 0. Does
+   * not lock mutex_; the caller must hold it.
+   *
+   * @param upf_xdp_program XDP program owning eth_session_mapping_map
+   * @param seid Session Endpoint Identifier expected to own the entries
+   * @param keep_teid_ul UL TEID (map key) to keep; 0 removes them all
+   */
+  void RemoveEthMappingsIfOwned(
+      std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
+      uint32_t keep_teid_ul);
+
+  /**
    * @brief StorePduSessionInMap() without locking mutex_
    *
    * The caller must hold mutex_. Lets ModifyPipeline() store the new UE IP
@@ -886,7 +903,8 @@ class SessionProgramManager {
   /// can clear them all (issue #12).
   std::map<uint64_t, std::set<uint32_t>> session_ue_ip_key_map_;
   /// Track the eth_session_mapping_map keys (UL TEID) per SEID, so
-  /// RemoveSession() can clear them.
+  /// ModifyPipeline() can drop a replaced or removed UL F-TEID and
+  /// RemoveSession() can clear them all.
   std::map<uint64_t, std::set<uint32_t>> session_eth_teid_key_map_;
 };
 
