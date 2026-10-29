@@ -79,7 +79,7 @@ uint32_t NicInformationGetter::retrieveCBurst(std::string interface) {
 
 /*---------------------------------------------------------------------------------------------------------------*/
 bool NicInformationGetter::retrieveMac(
-    const std::string& interface, uint8_t mac[6]) {
+    const std::string& interface, uint8_t (&mac)[6]) {
   std::string address =
       readValueFromFile("/sys/class/net/" + interface + "/address");
 

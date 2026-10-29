@@ -419,15 +419,16 @@ void SessionProgramManager::RemoveUeIpMappingIfOwned(
  * @param teid_dl Downlink TEID (for GTP-U encap toward gNB)
  * @param gnb_ip gNodeB IPv4 address (for DL outer header creation)
  * @param seid Session Endpoint Identifier
+ * @return true if the map entry was written
  *
  * @see 3GPP TS 23.501 Section 5.6.10.3 - Ethernet PDU Session Type
  * @see 3GPP TS 29.281 - GTPv1-U
  */
-void SessionProgramManager::StoreEthPduSessionInMap(
+bool SessionProgramManager::StoreEthPduSessionInMap(
     std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint32_t teid_ul,
     uint32_t teid_dl, uint32_t gnb_ip, uint64_t seid) {
   std::lock_guard<std::mutex> lock(mutex_);
-  StoreEthPduSessionInMapUnlocked(
+  return StoreEthPduSessionInMapUnlocked(
       upf_xdp_program, teid_ul, teid_dl, gnb_ip, seid);
 }
 
@@ -977,8 +978,13 @@ void SessionProgramManager::CreatePipeline(
       // Store session mapping (IP or ETH PDU)
       if (is_eth_pdu) {
         // DL PDRs carry no F-TEID: skip them, or they would all share key 0.
-        if (fteid.teid != 0)
-          StoreEthPduSessionInMap(upf_xdp_program, fteid.teid, 0, 0, seid);
+        // A missing entry sends this tunnel's G-PDUs down the IP path, so a
+        // failed store must fail the session.
+        if (fteid.teid != 0 &&
+            !StoreEthPduSessionInMap(upf_xdp_program, fteid.teid, 0, 0, seid))
+          throw std::runtime_error(
+              "eth_session_mapping_map update failed for PDR " +
+              std::to_string(pdr_id));
       } else {
         StorePduSessionInMap(
             upf_xdp_program, ue_ip_address.ipv4_address.s_addr, fteid.teid, 0,
@@ -1123,9 +1129,12 @@ void SessionProgramManager::CreatePipeline(
     // For ETH PDU: now that we have both UL TEID (from uplink PDR) and
     // DL TEID + gNB IP (from downlink FAR), populate the session map once.
     // (TS 23.501 Section 5.6.10.3 - ETH sessions keyed by TEID, not UE IP)
-    if (is_eth_pdu && eth_ul_teid != 0) {
-      StoreEthPduSessionInMap(
-          upf_xdp_program, eth_ul_teid, eth_dl_teid, eth_gnb_ip, seid);
+    if (is_eth_pdu && eth_ul_teid != 0 &&
+        !StoreEthPduSessionInMap(
+            upf_xdp_program, eth_ul_teid, eth_dl_teid, eth_gnb_ip, seid)) {
+      throw std::runtime_error(
+          "eth_session_mapping_map update failed for UL TEID " +
+          std::to_string(eth_ul_teid));
     }
 
     // Store all PDRs in correct session PDR map
@@ -1322,25 +1331,36 @@ void SessionProgramManager::ModifyPipeline(
       uint32_t primary_teid_dl = downlink_teids.empty() ? 0 : downlink_teids[0];
 
       if (is_eth_pdu) {
-        // ETH PDU: TEID-keyed mapping with gNB IP for DL encap. Store the
-        // new key and drop replaced UL TEIDs under one lock, as for IP.
+        // ETH PDU: TEID-keyed mapping with gNB IP for DL encap. Every UL
+        // F-TEID stays a live key (the XDP entry classifies ETH vs IP by
+        // it), so store all of them and drop only TEIDs that are gone,
+        // under one lock, as for IP.
         std::lock_guard<std::mutex> lock(mutex_);
-        if (StoreEthPduSessionInMapUnlocked(
-                upf_xdp_program, primary_teid_ul, primary_teid_dl, gnb_ip,
-                seid) &&
-            primary_teid_ul != 0) {
+        bool all_stored = !uplink_teids.empty();
+        for (const uint32_t teid_ul : uplink_teids) {
+          if (!StoreEthPduSessionInMapUnlocked(
+                  upf_xdp_program, teid_ul, primary_teid_dl, gnb_ip, seid))
+            all_stored = false;
+        }
+        if (all_stored) {
           auto eth_session_map =
               upf_xdp_program->GetMapByName("eth_session_mapping_map");
           auto& tracked_keys = session_eth_teid_key_map_[seid];
-          for (const uint32_t old_key : tracked_keys) {
+          for (auto it = tracked_keys.begin(); it != tracked_keys.end();) {
+            const uint32_t old_key = *it;
+            if (std::find(uplink_teids.begin(), uplink_teids.end(), old_key) !=
+                uplink_teids.end()) {
+              ++it;
+              continue;
+            }
             struct eth_session_id existing = {0};
-            if (old_key != primary_teid_ul && eth_session_map &&
+            if (eth_session_map &&
                 eth_session_map->Lookup(old_key, &existing) == 0 &&
                 existing.seid == seid) {
               eth_session_map->Remove(old_key);
             }
+            it = tracked_keys.erase(it);
           }
-          tracked_keys = {primary_teid_ul};
         }
       } else {
         // IP PDU: UE IP-keyed mapping. Store the new key and drop replaced
@@ -1364,7 +1384,7 @@ void SessionProgramManager::ModifyPipeline(
       }
 
       // Log if there are multiple TEIDs (warning about BPF map limitation)
-      if (uplink_teids.size() > 1) {
+      if (!is_eth_pdu && uplink_teids.size() > 1) {
         logger.warn(
             "Session " SEID_FMT
             " has %zu uplink TEIDs, but PDU session map "

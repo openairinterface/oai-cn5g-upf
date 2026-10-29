@@ -60,7 +60,7 @@ class NicInformationGetter {
    * @param mac       Output: 6-byte MAC address, untouched on failure
    * @return true on success, false if the file is missing or unparsable
    */
-  static bool retrieveMac(const std::string& interface, uint8_t mac[6]);
+  static bool retrieveMac(const std::string& interface, uint8_t (&mac)[6]);
 
   /*---------------------------------------------------------------------------------------------------------------*/
 
