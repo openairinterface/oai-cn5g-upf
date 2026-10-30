@@ -488,6 +488,14 @@ upf:
     n3_rx_threads: 1
     dl_rx_queues: 1
 
+    # Set IFF_BACKPRESSURE on tun0 (Linux 7.3 and later): the kernel stops the
+    # tun queue instead of dropping downlink packets when the DL threads fall
+    # behind, so the qdisc on tun0 holds them. This can reduce throughput with
+    # many parallel senders.
+    #
+    # Default: no
+    tun_backpressure: no
+
     # Maximum interfaces for traffic redirection (egress interfaces)
     # Used in FARs for forwarding packets to specific destinations
     # 
