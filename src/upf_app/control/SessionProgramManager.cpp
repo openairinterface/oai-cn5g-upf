@@ -119,17 +119,38 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
   if (qer_it != qer_programs_map_.end()) {
     Logger::upf_app().debug(
         "Tearing down QER program for seid " SEID_FMT, seid);
-    qer_it->second->TearDown();
+    try {
+      qer_it->second->TearDown();
+    } catch (const std::exception& e) {
+      Logger::upf_app().error(
+          "QER program teardown failed for seid " SEID_FMT
+          ": %s — continuing with BPF map cleanup",
+          seid, e.what());
+    } catch (...) {
+      Logger::upf_app().error(
+          "QER program teardown failed for seid " SEID_FMT
+          ": unknown exception — continuing with BPF map cleanup",
+          seid);
+    }
     qer_programs_map_.erase(qer_it);
   }
 
   // Clean up rules_enabled entry from BPF map
   auto upf_xdp_program = UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
   if (upf_xdp_program) {
+    /*
+     * TryRemove(), not Remove(): teardown deletes per-session entries from
+     * maps this session may never have used (a session with no URR has no
+     * urr_config_map entry, one with no BAR has no bar_state entry), so an
+     * absent entry is normal here. Remove() throws on -ENOENT, which would
+     * skip the rest of this cleanup, including the bar_state_map erase, and
+     * leave a bar_state entry, with its notification latch, that nothing
+     * deletes.
+     */
     auto rules_en_map =
         upf_xdp_program->GetMapByName("session_rules_enabled_map");
     if (rules_en_map) {
-      rules_en_map->Remove(seid);
+      rules_en_map->TryRemove(seid);
     }
 
     // Determine PDU session type before erasing the tracking entry
@@ -140,21 +161,25 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
       if (is_eth_pdu) {
         Logger::upf_app().debug(
             "Cleaning up ETH PDU maps for seid " SEID_FMT, seid);
+        auto eth_pdrs = upf_xdp_program->GetMapByName("eth_session_pdrs_map");
+        if (eth_pdrs) eth_pdrs->TryRemove(seid);
       }
       session_pdu_type_map_.erase(pdu_type_it);
     }
 
-    // Clean up URR/BAR/MAR dedicated config + runtime state maps
+    // Clean up URR/BAR/MAR dedicated config + runtime state maps.
+    auto bar_prog = upf_xdp_program->GetBarProgram();
+    if (bar_prog) {
+      /* Owns both BAR maps; non-throwing (BARProgram::Remove). */
+      bar_prog->Remove(seid);
+    }
     auto urr_cfg_map = upf_xdp_program->GetMapByName("urr_config_map");
-    if (urr_cfg_map) urr_cfg_map->Remove(seid);
+    if (urr_cfg_map) urr_cfg_map->TryRemove(seid);
     auto urr_vol_map = upf_xdp_program->GetMapByName("urr_volume_counters_map");
-    if (urr_vol_map) urr_vol_map->Remove(seid);
-    auto bar_cfg_map = upf_xdp_program->GetMapByName("bar_config_map");
-    if (bar_cfg_map) bar_cfg_map->Remove(seid);
-    auto bar_st_map = upf_xdp_program->GetMapByName("bar_state_map");
-    if (bar_st_map) bar_st_map->Remove(seid);
+    if (urr_vol_map) urr_vol_map->TryRemove(seid);
     auto mar_map = upf_xdp_program->GetMapByName("mar_rules_map");
-    if (mar_map) mar_map->Remove(seid);
+
+    if (mar_map) mar_map->TryRemove(seid);
 
     // Prune rules_match_pdr_map / eth_rules_match_pdr_map, sdf_filters_map,
     // and the per-session PDR array itself. Every recorded PDR and QFI is
@@ -172,7 +197,7 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
     const char* pdrs_map_name =
         is_eth_pdu ? "eth_session_pdrs_map" : "pdrs_per_session_map";
     auto pdrs_map = upf_xdp_program->GetMapByName(pdrs_map_name);
-    if (pdrs_map) pdrs_map->Remove(seid);
+    if (pdrs_map) pdrs_map->TryRemove(seid);
     // Clean up session_by_ue_ip_map so a UE that re-attaches with the same
     // static IP isn't attributed to this now-deleted session.
     auto ue_ip_it = session_ue_ip_key_map_.find(seid);
@@ -200,6 +225,24 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
           pfcp_programs->begin(), pfcp_programs->end(),
           [seid](const PfcpProgramInfo& info) { return info.seid == seid; }),
       pfcp_programs->end());
+}
+
+//------------------------------------------------------------------------------
+/**
+ * @brief Re-arm the notification latch of a session.
+ *
+ * @return true if its bar_state entry was zeroed; false if no XDP program or
+ *         no BAR program is loaded, or if BARProgram::ResetBarState() returns
+ *         false (no bar_state map, no entry for the SEID, or a failed write).
+ *
+ * @see BARProgram::ResetBarState
+ */
+bool SessionProgramManager::ResetBarState(uint64_t seid) {
+  auto upf_xdp_program = UserPlaneComponent::GetInstance().GetUPF_XDPProgram();
+  if (!upf_xdp_program) return false;
+  auto bar_prog = upf_xdp_program->GetBarProgram();
+  if (!bar_prog) return false;
+  return bar_prog->ResetBarState(seid);
 }
 
 //------------------------------------------------------------------------------
@@ -460,7 +503,7 @@ void SessionProgramManager::StoreEthPduSessionInMap(
  * downstream tail call programs should be active for this session:
  *   - QER referenced by any PDR -> RULE_QER_ENABLED
  *   - URR referenced by any PDR -> RULE_URR_ENABLED
- *   - BAR associated with any FAR -> RULE_BAR_ENABLED
+ *   - BAR associated with any FAR, or any BUFF FAR -> RULE_BAR_ENABLED
  *   - MAR referenced by any PDR -> RULE_MAR_ENABLED
  *
  * The bitmask is stored in session_rules_enabled_map and cached in
@@ -472,7 +515,7 @@ void SessionProgramManager::StoreEthPduSessionInMap(
  *
  * @see rules_enabled_flags.h for flag definitions
  * @see tail_call_dispatch.h for skip-chain implementation
- * @see 3GPP TS 29.244 Section 7.2.2 - PFCP Session Establishment
+ * @see 3GPP TS 29.244 Section 7.5.2 - PFCP Session Establishment
  */
 uint32_t SessionProgramManager::ComputeRulesEnabledFlags(
     std::shared_ptr<pfcp::pfcp_session> session) const {
@@ -493,8 +536,11 @@ uint32_t SessionProgramManager::ComputeRulesEnabledFlags(
       break;
     }
   }
+  // A BUFF FAR needs the BAR stage even when the session has no BAR: the SMF
+  // may send BUFF|NOCP (buffer, notify the CP) with no Create BAR, and
+  // BARProgram::SetupWithoutBar() then writes a default bar_config.
   for (const auto& far : session->fars) {
-    if (far->bar_id.first) {
+    if (far->bar_id.first || far->apply_action.buff) {
       flags |= RULE_BAR_ENABLED;
       break;
     }
@@ -672,11 +718,19 @@ void SessionProgramManager::SetupSessionEnforcementPrograms(
   }
 
   // BAR: populate bar_config_map + initialise bar_state_map.
-  if ((rules_flags & RULE_BAR_ENABLED) && !session->bars.empty()) {
+  // session->fars is passed because the BAR IE carries no Apply Action:
+  // bar_config.notify_cp, which gates DDN emission in the XDP BAR program,
+  // is derived from the FARs that reference the BAR ID and have
+  // apply_action.nocp set (NOCP, TS 29.244 Section 8.2.26).
+  // A session with a BUFF FAR but no BAR gets a default bar_config instead.
+  if (rules_flags & RULE_BAR_ENABLED) {
     auto bar = upf_xdp_program->GetBarProgram();
     if (bar) {
       logger.debug("Setup BARProgram for SEID=" SEID_FMT, seid);
-      bar->Setup(seid, session->bars);
+      if (!session->bars.empty())
+        bar->Setup(seid, session->bars, session->fars);
+      else
+        bar->SetupWithoutBar(seid, session->fars);
     }
   }
 
@@ -821,7 +875,7 @@ void SessionProgramManager::PruneStaleRuleEntries(
  *   - FAR (Forwarding Action Rules, Section 8.2.3)
  *   - QER (QoS Enforcement Rules, Section 8.2.4)
  *   - URR (Usage Reporting Rules, Section 8.2.5)
- *   - BAR (Buffering Action Rules, Section 8.2.6, via FAR -> bar_id)
+ *   - BAR (Buffering Action Rules, Table 7.5.2.6-1, via FAR -> bar_id)
  *   - MAR (Multi-Access Rules, Section 8.2.7, ATSSS only)
  * - Storing complete rule set in rules_match_pdr_map (IP PDU) or
  *   eth_rules_match_pdr_map (ETH PDU)
@@ -1904,13 +1958,14 @@ struct pfcp_urr SessionProgramManager::ConvertUrr(
 /**
  * @brief Convert PFCP BAR to BPF BAR structure
  *
- * Translates Buffering Action Rule IE (3GPP TS 29.244 Section 8.2.6)
+ * Translates a Create BAR IE (3GPP TS 29.244 Table 7.5.2.6-1)
  * into BPF-compatible structure for DL buffering and DDN generation.
  *
  * Key fields converted:
- * - BAR ID (3GPP TS 29.244 Section 8.2.49)
- * - Suggested Buffering Packets Count (3GPP TS 29.244 Section 8.2.50)
- * - DL Data Notification Delay (3GPP TS 29.244 Section 8.2.28)
+ * - BAR ID (3GPP TS 29.244 Section 8.2.57)
+ * - Suggested Buffering Packets Count (3GPP TS 29.244 Section 8.2.100)
+ * - Downlink Data Notification Delay (3GPP TS 29.244 Section 8.2.28),
+ *   in units of 50 ms
  *
  * BAR is referenced from FAR (via bar_id) when apply_action.buff=1,
  * not directly from PDR.
@@ -1918,7 +1973,7 @@ struct pfcp_urr SessionProgramManager::ConvertUrr(
  * @param bar PFCP BAR object (nullptr returns zeroed struct)
  * @return BPF BAR structure
  *
- * @see 3GPP TS 29.244 Section 8.2.6 - Create BAR IE
+ * @see 3GPP TS 29.244 Table 7.5.2.6-1 - Create BAR IE
  */
 struct pfcp_bar SessionProgramManager::ConvertBar(
     std::shared_ptr<pfcp::pfcp_bar> bar) const {
@@ -1928,13 +1983,13 @@ struct pfcp_bar SessionProgramManager::ConvertBar(
 
   bpf_bar.bar_id = bar->bar_id.second.bar_id;
 
-  // Suggested Buffering Packets Count (Section 8.2.50)
+  // Suggested Buffering Packets Count (Section 8.2.100)
   if (bar->suggested_buffering_packets_count.first) {
     bpf_bar.suggested_buffering_packets_count.packet_count =
         bar->suggested_buffering_packets_count.second.packet_count;
   }
 
-  // DL Data Notification Delay (Section 8.2.28) — in seconds
+  // Downlink Data Notification Delay (Section 8.2.28), in units of 50 ms
   if (bar->downlink_data_notification_delay.first) {
     bpf_bar.dl_data_notification_delay.delay_value =
         bar->downlink_data_notification_delay.second.delay_value;
@@ -2149,8 +2204,8 @@ void SessionProgramManager::PopulateUrrConfigMap(
  * @param seid Session Endpoint Identifier (map key)
  * @param bar_config Converted BAR configuration to store
  *
- * @see 3GPP TS 29.244 Section 8.2.49-50 - BAR IEs
- * @see 3GPP TS 29.244 Section 8.2.28 - DL Data Notification Delay
+ * @see 3GPP TS 29.244 Sections 8.2.57, 8.2.100, 8.2.28 - BAR IEs
+ * @see 3GPP TS 29.244 Section 8.2.28 - Downlink Data Notification Delay
  */
 void SessionProgramManager::PopulateBarConfigMap(
     std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,

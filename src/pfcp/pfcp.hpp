@@ -8,6 +8,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -57,6 +58,12 @@ class pfcp_procedure {
 
 enum pfcp_transaction_action { DELETE_TX = 0, CONTINUE_TX };
 
+// PFCP transaction timers use arg1 values far above the task-local TIME_OUT
+// values (TASK_UPF_N4_* = 0..2), so upf_n4_task() can tell them apart.
+#define PFCP_TIMER_ARG1_BASE (0x50464350ULL) /* 'P' 'F' 'C' 'P' */
+#define PFCP_TIMER_ARG1_MSG_RETRY (PFCP_TIMER_ARG1_BASE + 1)
+#define PFCP_TIMER_ARG1_PROC_CLEANUP (PFCP_TIMER_ARG1_BASE + 2)
+
 class pfcp_l4_stack : public udp_application {
 #define PFCP_T1_RESPONSE_MS 1000
 #define PFCP_N1_REQUESTS 3
@@ -68,7 +75,10 @@ class pfcp_l4_stack : public udp_application {
   udp_server udp_s_8805;
   udp_server udp_s_allocated;
 
-  // seems no need for std::atomic_uint32_t
+  // Guards seq_num and the four transaction maps, which TASK_UPF_N4 and the
+  // UDP receive threads share. The public entry points lock it. The
+  // protected helpers expect it held. notify_ul_error() runs without it.
+  std::mutex trx_mutex_;
   uint32_t seq_num;
   uint32_t restart_counter;
 
@@ -97,7 +107,11 @@ class pfcp_l4_stack : public udp_application {
   void stop_msg_retry_timer(pfcp_procedure& p);
   void stop_msg_retry_timer(timer_id_t& t);
   void stop_proc_cleanup_timer(pfcp_procedure& p);
-  void notify_ul_error(const pfcp_procedure& p, const ::cause_value_e cause);
+  /// A request this node sent was given up on (e.g. no response after
+  /// PFCP_N1_REQUESTS retransmissions). Called with trx_mutex_ released, so
+  /// an override may send PFCP again.
+  virtual void notify_ul_error(
+      const pfcp_procedure& p, const ::cause_value_e cause);
 
  public:
   static const uint8_t version = 2;
@@ -107,6 +121,9 @@ class pfcp_l4_stack : public udp_application {
   virtual void handle_receive(
       char* recv_buffer, const std::size_t bytes_transferred,
       endpoint& remote_endpoint);
+  /// Locks trx_mutex_ itself and releases it on return, so the caller can call
+  /// another entry point (for example send_response()) afterwards without
+  /// nesting the lock.
   void handle_receive_message_cb(
       const pfcp_msg& msg, const endpoint& remote_endpoint,
       const task_id_t& task_id, bool& error, uint64_t& trxn_id);

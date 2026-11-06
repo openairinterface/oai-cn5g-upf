@@ -32,7 +32,19 @@ SessionPrograms::~SessionPrograms() {
   if (qer_program_) {
     Logger::upf_app().debug(
         "  Tearing down QER TC-BPF program for SEID=0x%016lx", seid_);
-    qer_program_->TearDown();
+    try {
+      qer_program_->TearDown();
+    } catch (const std::exception& e) {
+      Logger::upf_app().error(
+          "  QER TC-BPF teardown failed for SEID=0x%016lx: %s — continuing "
+          "with BPF map cleanup",
+          seid_, e.what());
+    } catch (...) {
+      Logger::upf_app().error(
+          "  QER TC-BPF teardown failed for SEID=0x%016lx: unknown exception "
+          "— continuing with BPF map cleanup",
+          seid_);
+    }
     qer_program_.reset();
   }
 

@@ -220,6 +220,16 @@ class SessionManager {
       itti_n4_session_modification_request* mod_req  = nullptr,
       itti_n4_session_deletion_request* del_req      = nullptr);
 
+  /**
+   * @brief Re-arm the notification latch of a session (eBPF).
+   *
+   * Public so that pfcp_switch can call it without the XDP skeleton headers.
+   *
+   * @note Takes no lock: safe to call while holding sessions_mutex_.
+   * @see BARProgram::ResetBarState
+   */
+  bool ResetBarState(uint64_t seid);
+
   // ==========================================================================
   // PDR Management
   // Reference: 3GPP TS 29.244 §5.2.1 — Packet Detection Rule

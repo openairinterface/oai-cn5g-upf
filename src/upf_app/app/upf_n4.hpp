@@ -5,12 +5,16 @@
 #ifndef FILE_SGWU_SX_HPP_SEEN
 #define FILE_SGWU_SX_HPP_SEEN
 
+#include "dl_data_report.hpp"
 #include "endpoint.hpp"
 #include "pfcp.hpp"
 #include "itti_msg_n4.hpp"
 #include "msg_pfcp.hpp"
 #include "upf_pfcp_association.hpp"
 
+#include <map>
+#include <mutex>
+#include <optional>
 #include <thread>
 
 namespace oai {
@@ -20,6 +24,19 @@ namespace app {
 #define TASK_UPF_N4_TRIGGER_HEARTBEAT_REQUEST (0)
 #define TASK_UPF_N4_TIMEOUT_HEARTBEAT_REQUEST (1)
 #define TASK_UPF_N4_TIMEOUT_ASSOCIATION_REQUEST (2)
+
+// List every TASK_UPF_N4_* timer value here.
+static_assert(
+    PFCP_TIMER_ARG1_MSG_RETRY != PFCP_TIMER_ARG1_PROC_CLEANUP &&
+        PFCP_TIMER_ARG1_MSG_RETRY != TASK_UPF_N4_TRIGGER_HEARTBEAT_REQUEST &&
+        PFCP_TIMER_ARG1_MSG_RETRY != TASK_UPF_N4_TIMEOUT_HEARTBEAT_REQUEST &&
+        PFCP_TIMER_ARG1_MSG_RETRY != TASK_UPF_N4_TIMEOUT_ASSOCIATION_REQUEST &&
+        PFCP_TIMER_ARG1_PROC_CLEANUP != TASK_UPF_N4_TRIGGER_HEARTBEAT_REQUEST &&
+        PFCP_TIMER_ARG1_PROC_CLEANUP != TASK_UPF_N4_TIMEOUT_HEARTBEAT_REQUEST &&
+        PFCP_TIMER_ARG1_PROC_CLEANUP != TASK_UPF_N4_TIMEOUT_ASSOCIATION_REQUEST,
+    "an arg1_user value is claimed by both a TASK_UPF_N4 trigger and the PFCP "
+    "transaction layer; upf_n4_task()'s TIME_OUT dispatch cannot tell them "
+    "apart and one handler becomes dead code");
 
 class upf_n4 : public pfcp::pfcp_l4_stack {
  private:
@@ -31,6 +48,19 @@ class upf_n4 : public pfcp::pfcp_l4_stack {
   pfcp::enterprise_specific_s enterprise_specific;
 
   void start_association(const pfcp::node_id_t& node_id);
+
+  // The Downlink Data Reports still waiting for their response: trxn_id ->
+  // origin. Filled on TASK_UPF_N4 before the send, emptied by the response
+  // (receive thread) or by the give-up (TASK_UPF_N4). dldr_mutex_ is a leaf
+  // lock, never held together with trx_mutex_.
+  std::mutex dldr_mutex_;
+  std::map<uint64_t, dl_data_report_origin> dldr_trxn_;
+
+ protected:
+  // When a Downlink Data Report is given up on, asks TASK_UPF_APP to re-arm
+  // the PDR's notification latch. Overrides pfcp_l4_stack's.
+  void notify_ul_error(
+      const pfcp::pfcp_procedure& p, const ::cause_value_e cause) override;
 
  public:
   upf_n4();
@@ -51,6 +81,7 @@ class upf_n4 : public pfcp::pfcp_l4_stack {
   void handle_itti_msg(itti_n4_session_establishment_response& s);
   void handle_itti_msg(itti_n4_session_modification_response& s);
   void handle_itti_msg(itti_n4_session_deletion_response& s);
+  void handle_itti_msg(itti_n4_session_report_request& s);
   void handle_itti_msg(itti_n4_session_report_response& s) {};
 
   void send_n4_msg(itti_n4_heartbeat_request& s) {};
@@ -69,9 +100,15 @@ class upf_n4 : public pfcp::pfcp_l4_stack {
   void send_n4_msg(itti_n4_session_deletion_response& s);
   void send_n4_msg(itti_n4_session_report_request& s);
 
-  void send_n4_msg(
-      const pfcp::fseid_t& cp_fseid,
-      const pfcp::pfcp_session_report_request& s);
+  // Static, so it does not dereference upf_n4_inst, which ~upf_app() deletes
+  // without setting it to null. It is called from several threads (the DL
+  // datapath threads, the DDN ring-buffer consumer, the usage-report loop,
+  // TASK_UPF_APP during a replay or a session removal, and TASK_UPF_N4 during
+  // a session removal), so it only hands the request to TASK_UPF_N4, which
+  // sends it.
+  static session_report_enqueue_result enqueue_session_report_request(
+      const pfcp::fseid_t& cp_fseid, const pfcp::pfcp_session_report_request& s,
+      std::optional<dl_data_report_origin> dl_report_origin);
 
   void send_heartbeat_request(std::shared_ptr<pfcp_association>& a);
   void send_heartbeat_response(
@@ -81,7 +118,7 @@ class upf_n4 : public pfcp::pfcp_l4_stack {
       pfcp::pfcp_msg& msg, const endpoint& remote_endpoint);
   void handle_receive(
       char* recv_buffer, const std::size_t bytes_transferred,
-      const endpoint& remote_endpoint);
+      const endpoint& remote_endpoint) override;
   // node related
   void handle_receive_heartbeat_request(
       pfcp::pfcp_msg& msg, const endpoint& remote_endpoint);
