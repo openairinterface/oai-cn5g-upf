@@ -33,21 +33,11 @@ inline pfcp::pfcp_session_report_request make_dldr_report(
     ddsi.qfi                                       = static_cast<uint8_t>(qfi);
     dl_data_report.set(ddsi);
   }
-  inline pfcp::pfcp_session_report_request make_dldr_report(
-      const pfcp::pdr_id_t& pdr_id) {
-    pfcp::pfcp_session_report_request h;
+  h.set(report_type);
+  h.set(dl_data_report);
 
-    pfcp::report_type_t report_type = {};
-    report_type.dldr                = 1;
-
-    pfcp::downlink_data_report dl_data_report;
-    dl_data_report.set(pdr_id);
-
-    h.set(report_type);
-    h.set(dl_data_report);
-
-    return h;
-  }
+  return h;
+}
 
 }  // namespace app
 }  // namespace upf
