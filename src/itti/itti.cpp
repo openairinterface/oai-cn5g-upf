@@ -101,15 +101,16 @@ itti_mw::itti_mw()
 //------------------------------------------------------------------------------
 itti_mw::~itti_mw() {
   logger_common::common().info("~itti()");
-  // Making sure the timer thread has finished.
-  // detach is not good since we don't control when the thread will end.
-  // we also start a dummy timer for the loop to exit
-  if (terminate) {
+  // Join, never detach: a detached thread ends at a time nobody controls.
+  //
+  // The timer thread clears `terminate` when it exits early, so `joinable()`,
+  // which stays true until join() even after the thread has exited, is the
+  // test for 'not joined yet'. Set the flag again and start a dummy timer to
+  // wake the loop so that it exits.
+  if (timer_thread.joinable()) {
+    terminate           = true;
     timer_id_t stopping = itti_inst->timer_setup(1, 0, TASK_GTPV1_U, 0, 0);
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     timer_thread.join();
-
     itti_inst->timer_remove(stopping);
   }
 
