@@ -248,6 +248,8 @@ void UPF_XDPProgram::Setup(const PipelineFeatureFlags& flags) {
   if (urr_) ShareMapsOwned(far_obj, urr_->GetBpfObject(), far_owned);
   if (bar_) ShareMapsOwned(far_obj, bar_->GetBpfObject(), far_owned);
   if (mar_) ShareMapsOwned(far_obj, mar_->GetBpfObject(), far_owned);
+  if (eth_broadcast_tc_)
+    ShareMapsOwned(far_obj, eth_broadcast_tc_->GetBpfObject(), far_owned);
   /* n3_ is already loaded by Step 2, so reuse_fd against it is no longer
    * possible. That is harmless here: xdp_n3_entry_kern.c does not include
    * interfaces_maps.h or arp_maps.h and therefore declares none of
