@@ -78,14 +78,6 @@ void N6EthEntryProgram::ConfigureMaps(struct xdp_n6_eth_entry_kern_c* skel) {
       upf::GetMaxPduSessions());
 
   ok &= ConfigureMapMaxEntries(
-      skel->maps.eth_session_pdrs_map, "eth_session_pdrs_map",
-      upf::GetMaxPduSessions());
-
-  ok &= ConfigureMapMaxEntries(
-      skel->maps.eth_rules_match_pdr_map, "eth_rules_match_pdr_map",
-      upf::GetMaxPduSessions() * upf::GetMaxPdrsPerSession());
-
-  ok &= ConfigureMapMaxEntries(
       skel->maps.eth_egress_ifindex_map, "eth_egress_ifindex_map",
       upf::GetMaxUpfInterfaces());
 
@@ -181,8 +173,6 @@ void N6EthEntryProgram::InitializeMaps() {
   /* eth_pdu_maps.h */
   session_by_mac_map_      = get("session_by_mac_map");
   eth_session_mapping_map_ = get("eth_session_mapping_map");
-  eth_session_pdrs_map_    = get("eth_session_pdrs_map");
-  eth_rules_match_pdr_map_ = get("eth_rules_match_pdr_map");
   eth_egress_ifindex_map_  = get("eth_egress_ifindex_map");
   mac_pdu_session_map_     = get("mac_pdu_session_map");
   /* stats_maps.h */
@@ -196,8 +186,6 @@ std::shared_ptr<BPFMap> N6EthEntryProgram::GetMapByName(
   if (map_name == "redirect_interfaces_map") return redirect_interfaces_map_;
   if (map_name == "session_by_mac_map") return session_by_mac_map_;
   if (map_name == "eth_session_mapping_map") return eth_session_mapping_map_;
-  if (map_name == "eth_session_pdrs_map") return eth_session_pdrs_map_;
-  if (map_name == "eth_rules_match_pdr_map") return eth_rules_match_pdr_map_;
   if (map_name == "eth_egress_ifindex_map") return eth_egress_ifindex_map_;
   if (map_name == "mac_pdu_session_map") return mac_pdu_session_map_;
   if (map_name == "mc_stats_map") return mc_stats_map_;
@@ -221,12 +209,6 @@ std::shared_ptr<BPFMap> N6EthEntryProgram::GetSessionByMacMap() const {
 }
 std::shared_ptr<BPFMap> N6EthEntryProgram::GetEthSessionMappingMap() const {
   return eth_session_mapping_map_;
-}
-std::shared_ptr<BPFMap> N6EthEntryProgram::GetEthSessionPdrsMap() const {
-  return eth_session_pdrs_map_;
-}
-std::shared_ptr<BPFMap> N6EthEntryProgram::GetEthRulesMatchPdrMap() const {
-  return eth_rules_match_pdr_map_;
 }
 std::shared_ptr<BPFMap> N6EthEntryProgram::GetEthEgressIfindexMap() const {
   return eth_egress_ifindex_map_;

@@ -34,7 +34,6 @@
 #include "pipeline_maps.h"
 #include "interfaces_types.h"
 #include "sdf_maps.h"
-#include "eth_pdu_maps.h"
 #include "tail_call_dispatcher.h"
 #include "stats_maps.h"
 
@@ -469,8 +468,7 @@ static __always_inline struct pfcp_pdr* match_pdr_n6(
  *   3. QFI match if present (§8.2.89)
  *
  * No SDF filter evaluation -- Ethernet frames don't carry IP 5-tuples
- * at the PDU session level. Uses eth_session_pdrs_map (separate from
- * IP PDU session PDRs).
+ * at the PDU session level.
  *
  * @param seid     PFCP Session Endpoint Identifier
  * @param pkt_teid TEID from incoming GTP-U header
@@ -480,7 +478,7 @@ static __always_inline struct pfcp_pdr* match_pdr_n6(
 static __always_inline struct pfcp_pdr* match_pdr_eth_n3(
     u64 seid, u32 pkt_teid, u8 pkt_qfi) {
   struct pfcp_pdr(*pdrs)[MAX_PDRS_PER_PDU_SESSION] =
-      bpf_map_lookup_elem(&eth_session_pdrs_map, &seid);
+      bpf_map_lookup_elem(&pdrs_per_session_map, &seid);
 
   if (!pdrs) {
     bpf_debug("ETH PDR Lookup: No PDRs for SEID = %llu", seid);
