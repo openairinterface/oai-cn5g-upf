@@ -44,7 +44,8 @@ struct {
 /**
  * @brief Uplink TEID -> ETH session context.
  *
- * Key:   u32                     uplink GTP-U TEID (network byte order)
+ * Key:   u32                     uplink GTP-U TEID (host byte order
+ *                                 matches pctx->pkt_teid on the IP PDU path)
  * Value: struct eth_session_id  {teid_ul, teid_dl, ipv4_address, seid}
  * Size:  MAX_PDU_SESSIONS
  *
