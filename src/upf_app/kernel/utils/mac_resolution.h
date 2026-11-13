@@ -20,6 +20,92 @@
 #define AF_INET 2
 #endif
 
+/* ========================================================================== */
+/*                    FIB LOOKUP SCRATCH (STACK RELIEF)                       */
+/* ========================================================================== */
+
+/**
+ * @brief Per-CPU scratch slot for resolve_mac_via_fib()'s bpf_fib_lookup().
+ *
+ * Keeps the 64-byte struct off the stack so bpf_for_each_map_elem()
+ * callbacks (e.g. broadcast_callback_fn()) stay within the verifier's
+ * 512-byte combined stack limit. Per-CPU, so no locking is needed.
+ * Private to each BPF object by design (not shared; skipped by
+ * VerifySharedMapIdentity()).
+ */
+struct {
+  __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+  __uint(max_entries, 1);
+  __type(key, __u32);
+  __type(value, struct bpf_fib_lookup);
+} fib_lookup_scratch_map SEC(".maps");
+
+/* ========================================================================== */
+/*                      MAC RESOLUTION PRIMITIVES                             */
+/* ========================================================================== */
+
+/**
+ * @brief Look up dst_ip in arp_table_map; on hit, copy its MAC into dst_mac.
+ *
+ * @param dst_ip  IPv4 address to look up (network byte order).
+ * @param dst_mac Output: MAC on hit, untouched on miss.
+ * @return true on hit, false on miss.
+ */
+static __always_inline bool resolve_mac_via_arp(
+    __u32 dst_ip, __u8 dst_mac[ETH_ALEN]) {
+  struct arp_entry* arp = bpf_map_lookup_elem(&arp_table_map, &dst_ip);
+  if (!arp) return false;
+  __builtin_memcpy(dst_mac, arp->mac_address, ETH_ALEN);
+  return true;
+}
+
+/**
+ * @brief FIB lookup for dst_ip, writing dmac (and smac if src_mac is
+ *        non-NULL) on success. Uses fib_lookup_scratch_map, not the stack.
+ *
+ * @param ctx         xdp_md* (XDP) or __sk_buff* (TC).
+ * @param iph         Bounds-checked IPv4 header supplying saddr, tos,
+ *                    protocol and tot_len; NULL leaves them zero.
+ * @param dst_ip      Destination IPv4 to resolve (network byte order).
+ * @param ifindex     Ingress device, or egress device with
+ *                    BPF_FIB_LOOKUP_OUTPUT.
+ * @param flags       bpf_fib_lookup() flags (0 or BPF_FIB_LOOKUP_OUTPUT).
+ * @param dst_mac     Output: next-hop MAC on success.
+ * @param src_mac     Output: egress MAC on success; NULL to skip.
+ * @param out_gw_ip   Output: fib->ipv4_dst, written regardless of rc (may
+ *                    hold the next-hop gateway IP on a miss); NULL to skip.
+ * @return bpf_fib_lookup()'s return code; MACs written only on SUCCESS.
+ */
+static __always_inline int resolve_mac_via_fib(
+    void* ctx, const struct iphdr* iph, __u32 dst_ip, __u32 ifindex,
+    __u32 flags, __u8 dst_mac[ETH_ALEN], __u8* src_mac, __u32* out_gw_ip) {
+  __u32 scratch_key = 0;
+  struct bpf_fib_lookup* fib =
+      bpf_map_lookup_elem(&fib_lookup_scratch_map, &scratch_key);
+  if (!fib) {
+    bpf_debug("resolve_mac_via_fib: fib_lookup_scratch_map lookup failed");
+    return -1;
+  }
+  __builtin_memset(fib, 0, sizeof(*fib));
+  fib->family   = AF_INET;
+  fib->ipv4_dst = dst_ip;
+  fib->ifindex  = ifindex;
+  if (iph) {
+    fib->tos         = iph->tos;
+    fib->l4_protocol = iph->protocol;
+    fib->tot_len     = bpf_ntohs(iph->tot_len);
+    fib->ipv4_src    = iph->saddr;
+  }
+
+  int rc = bpf_fib_lookup(ctx, fib, sizeof(*fib), flags);
+  if (rc == BPF_FIB_LKUP_RET_SUCCESS) {
+    __builtin_memcpy(dst_mac, fib->dmac, ETH_ALEN);
+    if (src_mac) __builtin_memcpy(src_mac, fib->smac, ETH_ALEN);
+  }
+  if (out_gw_ip) *out_gw_ip = fib->ipv4_dst;
+  return rc;
+}
+
 /**
  * @brief Resolve and write the next-hop MAC addresses via kernel FIB lookup.
  *
@@ -48,67 +134,41 @@ static __always_inline int update_mac_address(
     reference_point_t direction) {
   void* data_end = (void*) (long) ctx->data_end;
 
-  struct bpf_fib_lookup fib_params = {};
+  struct iphdr* fib_iph = NULL;
+  __u32 dst_ip          = 0;
 
   if (ethh->h_proto == bpf_htons(ETH_P_IP)) {
     if ((void*) (iph + 1) > data_end) return -1;
-
-    fib_params.family      = AF_INET;
-    fib_params.tos         = iph->tos;
-    fib_params.l4_protocol = iph->protocol;
-    fib_params.sport       = 0;
-    fib_params.dport       = 0;
-    fib_params.tot_len     = bpf_ntohs(iph->tot_len);
-    fib_params.ipv4_src    = iph->saddr;
-    fib_params.ipv4_dst    = iph->daddr;
+    fib_iph = iph;
+    dst_ip  = iph->daddr;
   }
 
-  fib_params.ifindex = ctx->ingress_ifindex;
+  int rc = resolve_mac_via_fib(
+      ctx, fib_iph, dst_ip, ctx->ingress_ifindex, 0, ethh->h_dest,
+      ethh->h_source, NULL);
 
-  int rc = bpf_fib_lookup(ctx, &fib_params, sizeof(fib_params), 0);
+  if (rc == BPF_FIB_LKUP_RET_SUCCESS) {
+    bpf_debug("update_mac_address: FIB hit");
+    return rc;
+  }
 
-  switch (rc) {
-    case BPF_FIB_LKUP_RET_SUCCESS: /* lookup successful */
-      bpf_debug("update_mac_address: FIB hit");
-      __builtin_memcpy(ethh->h_dest, fib_params.dmac, ETH_ALEN);
-      __builtin_memcpy(ethh->h_source, fib_params.smac, ETH_ALEN);
-      break;
+  /* FIB miss -- fall back to UPF ARP table, keyed by the UPF's own
+   * interface IP for `direction` (not the packet's destination). */
+  bpf_debug("update_mac_address: FIB miss (rc=%d), trying arp_table_map", rc);
 
-    case BPF_FIB_LKUP_RET_BLACKHOLE:   /* dest is blackholed; can be dropped */
-    case BPF_FIB_LKUP_RET_UNREACHABLE: /* dest is unreachable; can be dropped */
-    case BPF_FIB_LKUP_RET_PROHIBIT:    /* dest not allowed; can be dropped */
-    case BPF_FIB_LKUP_RET_NOT_FWDED:   /* packet is not forwarded */
-    case BPF_FIB_LKUP_RET_FWD_DISABLED: /* fwding is not enabled on ingress */
-    case BPF_FIB_LKUP_RET_UNSUPP_LWT:   /* fwd requires encapsulation */
-    case BPF_FIB_LKUP_RET_NO_NEIGH:     /* no neighbor entry for nh */
-    case BPF_FIB_LKUP_RET_FRAG_NEEDED:  /* fragmentation required to fwd */
-    default:
-      /* FIB miss -- fall back to UPF ARP table */
-      bpf_debug(
-          "update_mac_address: FIB miss (rc=%d), trying arp_table_map", rc);
+  reference_point_t nx_key = direction;
+  struct interface_config* iface =
+      bpf_map_lookup_elem(&upf_interface_map, &nx_key);
 
-      /* Step 1: resolve interface IP from upf_interface_map */
-      reference_point_t nx_key = direction;
-      struct interface_config* iface =
-          bpf_map_lookup_elem(&upf_interface_map, &nx_key);
+  if (!iface) {
+    bpf_debug("update_mac_address: interface not in upf_interface_map");
+    return rc;
+  }
 
-      if (!iface) {
-        bpf_debug("update_mac_address: interface not in upf_interface_map");
-        break;
-      }
-
-      /* Step 2: resolve next-hop MAC from arp_table_map */
-      struct arp_entry* arp =
-          bpf_map_lookup_elem(&arp_table_map, &iface->ipv4_address);
-
-      if (!arp) {
-        bpf_debug("update_mac_address: no ARP entry for next-hop");
-        break;
-      }
-
-      __builtin_memcpy(ethh->h_dest, arp->mac_address, ETH_ALEN);
-      bpf_debug("update_mac_address: ARP fallback MAC resolved");
-      break;
+  if (resolve_mac_via_arp(iface->ipv4_address, ethh->h_dest)) {
+    bpf_debug("update_mac_address: ARP fallback MAC resolved");
+  } else {
+    bpf_debug("update_mac_address: no ARP entry for next-hop");
   }
 
   return rc;
