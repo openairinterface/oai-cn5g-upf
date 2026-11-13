@@ -41,20 +41,22 @@ struct {
 /**
  * @brief Per-CPU packet context -- cross-stage state.
  *
- * Key:   u32                   CPU ID (bpf_get_smp_processor_id())
+ * Key:   u32                   0 (GET_PACKET_CONTEXT)
  * Value: struct packet_context {seid, teid_ul, teid_dl, pdr_id, qfi ...}
- * Size:  MAX_CPUS (256)
+ * Size:  1, one copy per CPU
  *
  * Written by session_lookup_{ip,eth}.c and pdr_match.c.
  * Read by xdp_far_apply.c and all subsequent tail-call stages.
  *
- * Using a plain ARRAY keyed by CPU ID avoids atomic operations since
- * each CPU exclusively owns its slot and XDP runs under softirq
- * (no preemption, no concurrent access to the same slot).
+ * A PERCPU_ARRAY gives each CPU its own copy of the single entry, so no
+ * atomic operations are needed: XDP runs under softirq (no preemption),
+ * and a packet's tail calls all run on the CPU that received it. With a
+ * plain ARRAY, the CPUs serving the NIC's receive queues would share the
+ * entry and overwrite each other's context between tail calls.
  */
 struct {
-  __uint(type, BPF_MAP_TYPE_ARRAY);
-  __uint(max_entries, MAX_CPUS);
+  __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+  __uint(max_entries, 1);
   __type(key, u32);
   __type(value, struct packet_context);
 } packet_context_map SEC(".maps");
