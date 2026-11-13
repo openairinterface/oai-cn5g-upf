@@ -5,6 +5,8 @@
 #ifndef ITTI_MSG_N4_HPP_INCLUDED_
 #define ITTI_MSG_N4_HPP_INCLUDED_
 
+#include <set>
+
 #include "3gpp_29.244.hpp"
 #include "endpoint.hpp"
 #include "itti_msg.hpp"
@@ -368,6 +370,20 @@ class itti_n4_session_set_deletion_request : public itti_n4_msg {
   };
 
   pfcp::pfcp_session_set_deletion_request pfcp_ies;
+};
+//-----------------------------------------------------------------------------
+// The PFCP sessions of an association that a new Association Setup replaces,
+// for TASK_UPF_APP to delete.
+class itti_n4_association_sessions_deletion : public itti_n4_msg {
+ public:
+  itti_n4_association_sessions_deletion(
+      const task_id_t origin, const task_id_t destination)
+      : itti_n4_msg(N4_ASSOCIATION_SESSIONS_DELETION, origin, destination) {}
+  const char* get_msg_name() {
+    return typeid(itti_n4_association_sessions_deletion).name();
+  };
+
+  std::set<pfcp::fseid_t> cp_fseids;
 };
 //-----------------------------------------------------------------------------
 class itti_n4_session_set_deletion_response : public itti_n4_msg {

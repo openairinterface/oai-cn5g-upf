@@ -89,6 +89,8 @@ class pfcp_association {
   void notify_add_session(const pfcp::fseid_t& cp_fseid);
   bool has_session(const pfcp::fseid_t& cp_fseid) const;
   void notify_del_session(const pfcp::fseid_t& cp_fseid);
+  // Empties the session set and returns what it held.
+  std::set<pfcp::fseid_t> take_sessions();
   void del_sessions();
   void set(const pfcp::cp_function_features_s& ff) {
     function_features.first  = true;

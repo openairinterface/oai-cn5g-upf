@@ -60,6 +60,8 @@ class upf_app {
   //  void handle_itti_msg (itti_n4_session_deletion_response& m);
   //  void handle_itti_msg (itti_n4_session_report_request& m);
   void handle_itti_msg(std::shared_ptr<itti_n4_session_report_response> m);
+  void handle_itti_msg(
+      std::shared_ptr<itti_n4_association_sessions_deletion> m);
 };
 }  // namespace app
 }  // namespace upf

@@ -340,6 +340,29 @@ void upf_n4::handle_receive_association_setup_request(
           "IE!, ignore message");
       return;
     }
+    // A Setup for an already associated CP function overwrites the existing
+    // association, and its PFCP sessions are deleted (TS 29.244 §6.2.6.2.2).
+    // PFCP Session Retention Information is not supported, so none is kept.
+    std::shared_ptr<pfcp_association> existing = {};
+    if (pfcp_associations::get_instance().get_association(
+            msg_ies_container.node_id.second, existing)) {
+      Logger::upf_n4().info(
+          "PFCP association with %s already exists, deleting its PFCP "
+          "sessions",
+          msg_ies_container.node_id.second.toString().c_str());
+      // pfcp_switch changes its session tables only on TASK_UPF_APP, and this
+      // runs on the N4 receive thread. The deletion is queued before the Setup
+      // Response is sent, so TASK_UPF_APP runs it before any session request
+      // of the new association.
+      auto d = std::make_shared<itti_n4_association_sessions_deletion>(
+          TASK_UPF_N4, TASK_UPF_APP);
+      d->cp_fseids = existing->take_sessions();
+      if (itti_inst->send_msg(d) != RETURNok) {
+        Logger::upf_n4().error(
+            "Could not send ITTI message %s to task TASK_UPF_APP",
+            d->get_msg_name());
+      }
+    }
     // bool restore_n4_sessions = false;
     if (msg_ies_container.cp_function_features.first) {
       // Should be detected by lower layers
