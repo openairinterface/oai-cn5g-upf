@@ -122,6 +122,7 @@ class upf_config {
   u_int16_t max_upf_interfaces;
   u_int16_t n3_rx_threads;  ///< UL GTP-U receive threads (SO_REUSEPORT)
   u_int16_t dl_rx_queues;   ///< DL tun receive queues (IFF_MULTI_QUEUE)
+  bool tun_backpressure;    ///< set IFF_BACKPRESSURE on tun0
   u_int16_t qos_burst_ms;   ///< QER policer burst, in ms of its rate
   /// 0 polices the downlink, dropping whatever is over rate. Above 0 shapes it
   /// instead: a packet over rate waits for its slot, for at most this long,
@@ -219,6 +220,7 @@ class upf_config {
     max_upf_interfaces                            = 4;
     n3_rx_threads                                 = 1;
     dl_rx_queues                                  = 1;
+    tun_backpressure                              = false;
     qos_burst_ms                                  = 400;
     qos_shape_ms                                  = 0;
     qos_shape_ul_ms                               = 0;

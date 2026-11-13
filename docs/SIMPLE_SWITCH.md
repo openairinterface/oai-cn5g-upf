@@ -120,6 +120,7 @@ deletion.
 | `enable_bpf_datapath` | `no` selects the simple switch | — |
 | `n3_rx_threads` | uplink threads, one N3 socket each | 1 |
 | `dl_rx_queues` | `tun0` queues, one downlink thread each | 1 |
+| `tun_backpressure` | set `IFF_BACKPRESSURE` on `tun0` (Linux 7.3+): stop the queue instead of dropping downlink packets; can reduce throughput with many parallel senders | no |
 | `enable_qos` | enforce QER Maximum Bitrate | — |
 | `enable_urr` | measure volume and send usage reports | — |
 | `qos_burst_ms` | burst forgiven before the policer drops, in ms of rate | 400 |
