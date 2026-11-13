@@ -130,6 +130,7 @@ void itti_mw::start(const oai::utils::thread_sched_params& sched_params) {
 }
 //------------------------------------------------------------------------------
 timer_id_t itti_mw::increment_timer_id() {
+  std::lock_guard<std::mutex> lock(m_timer_id);
   return ++timer_id;
 }
 
