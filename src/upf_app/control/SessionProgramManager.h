@@ -737,6 +737,9 @@ class SessionProgramManager {
    *        QER-TC, and urrs/bars/mars for the corresponding stage programs)
    * @param upf_xdp_program XDP program owning the URR/BAR/MAR stage programs
    * @param rules_flags Bitmask from ComputeRulesEnabledFlags()
+   *
+   * @throws RuleApplyError if a QER could not be applied to the datapath,
+   *         once URR/BAR/MAR have been set up regardless
    */
   void SetupSessionEnforcementPrograms(
       std::shared_ptr<pfcp::pfcp_session> session,
