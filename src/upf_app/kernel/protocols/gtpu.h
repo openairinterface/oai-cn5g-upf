@@ -6,6 +6,8 @@
 #define PROTOCOLS_GTP_H
 
 #include <linux/bpf.h>
+#include <linux/if_ether.h>
+#include <linux/ip.h>
 #include <linux/udp.h>
 #include <stdint.h>
 #include "custom_types.h"
@@ -15,7 +17,8 @@
  * Constants and macros (baseline — unchanged)
  * ========================================================================== */
 
-/** Total size of the GTP-U encapsulation headers added before the payload. */
+/** Size of the GTP-U encapsulation this UPF adds (one 4-octet PDU Session
+ *  Container). Received G-PDUs vary: see gtpu_inner_offset(). */
 #define GTP_ENCAPSULATED_SIZE                                                  \
   (sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct gtpuhdr) +     \
    sizeof(struct gtpu_extn_pdu_session_container))
@@ -82,13 +85,13 @@ struct gtpuhdr {
  * ========================================================================== */
 
 /**
- * @brief GTP-U PDU Session Container extension header (TS 29.281 §5.5.3.3).
+ * @brief GTP-U PDU Session Container extension header (TS 29.281 §5.2.2.7).
  *
  * Carries the QoS Flow Identifier (QFI) for 5G NR user-plane packets.
  */
 struct gtpu_extn_pdu_session_container {
   uint8_t message_length; /**< Extension header length in 4-octet units   */
-  uint8_t pdu_type;       /**< PDU Type (0 = UL, 1 = DL)                  */
+  uint8_t pdu_type;       /**< PDU Type, high nibble: 0 = DL, 1 = UL      */
   uint8_t qfi;            /**< QoS Flow Identifier (§8.2.89)              */
   uint8_t next_ext_type;  /**< Next Extension Header Type (0x00 = none)   */
 };
@@ -136,34 +139,108 @@ static __always_inline bool parse_gtpu_hdr(
 }
 
 /* ==========================================================================
- * parse_gtpu_ext_hdr — validate PDU Session Container, extract QFI
+ * GTP-U extension header chain (TS 29.281 §5.2.1)
+ * ========================================================================== */
+
+/** Most extension headers walked per G-PDU; a longer chain is dropped. */
+#define GTPU_MAX_EXT_HDRS 4
+
+/** Cap on the GTP-U header with its extension headers, in bytes. A UL PDU
+ *  Session Container with every optional field is 48 (TS 38.415 §5.5.2.2). */
+#define GTPU_MAX_HDR_LEN 128
+
+/**
+ * @brief Length of a G-PDU's GTP-U header including its extension headers,
+ *        and the QFI from its PDU Session Container.
+ *
+ * Walks the chain by each header's length (TS 29.281 §5.2.1). Unknown types
+ * marked "comprehension not required" (bit 8 clear, e.g. the Rel-18 PDU Set
+ * Information Container) are skipped; other unknown types are rejected. The
+ * PDU Session Container may be anywhere in the chain and any length.
+ *
+ * @param gtpu     G-PDU header, bounds-checked by parse_gtpu_hdr().
+ * @param data_end BPF bounds sentinel.
+ * @param qfi      Output: QFI (§8.2.89); 0xFF if no container was found.
+ * @return Header length in bytes; -1 if malformed, too long, an unknown
+ *         comprehension-required type, or without a PDU Session Container.
+ */
+static __always_inline int gtpu_hdr_len(
+    struct gtpuhdr* gtpu, void* data_end, u8* qfi) {
+  u32 len = sizeof(*gtpu); /* mandatory + optional fields (present if E) */
+  u8 type = gtpu->e ? gtpu->next_ext_type : 0;
+  *qfi    = 0xFF;
+
+#pragma clang loop unroll(full)
+  for (int i = 0; i < GTPU_MAX_EXT_HDRS; i++) {
+    if (!type) break;
+
+    u8* ext = (u8*) gtpu + len;
+    if ((void*) (ext + 4) > data_end || !ext[0]) return -1;
+
+    len += ext[0] * 4; /* Extension Header Length, 4-octet units */
+    if (len > GTPU_MAX_HDR_LEN) return -1;
+
+    u8* next = (u8*) gtpu + len - 1; /* Next Extension Header Type */
+    if ((void*) (next + 1) > data_end) return -1;
+
+    if (type == GTP_NEXT_EXT_TYPE)
+      *qfi = ext[2] & 0x3F; /* octet 2, UL and DL (TS 38.415 §5.5.2) */
+    else if (type & 0x80)
+      return -1; /* unknown, comprehension required */
+    type = *next;
+  }
+
+  return (type || *qfi == 0xFF) ? -1 : (int) len;
+}
+
+/* ==========================================================================
+ * parse_gtpu_ext_hdr — walk the extension headers, extract QFI
  * ========================================================================== */
 
 /**
- * @brief Validate the PDU Session Container extension header and extract QFI.
- *
- * The PDU Session Container immediately follows the GTP-U header for
- * 5G NR packets (TS 29.281 §5.5.3.3).  Returns a pointer to the first
- * byte of the inner payload (Ethernet or IPv4 frame).
+ * @brief Walk a G-PDU's extension headers and return its inner payload.
  *
  * @param gtpu     Pointer to a previously validated GTP-U header.
  * @param data_end BPF bounds sentinel.
- * @param gtpu_ext_out  Output: pointer to the PDU Session Container.
- * @param qfi      Output: QFI value from the extension header (§8.2.89).
- * @return Pointer to the inner payload on success; NULL on bounds error.
+ * @param qfi      Output: QFI from the PDU Session Container (§8.2.89).
+ * @return Pointer to the inner payload (Ethernet frame or IP packet), not
+ *         bounds-checked; NULL to drop (see gtpu_hdr_len()).
  */
 static __always_inline void* parse_gtpu_ext_hdr(
-    struct gtpuhdr* gtpu, void* data_end,
-    struct gtpu_extn_pdu_session_container** gtpu_ext_out, u8* qfi) {
-  *gtpu_ext_out = (void*) (gtpu + 1);
-
-  if ((void*) (*gtpu_ext_out + 1) > data_end) {
-    bpf_debug("GTP-U: malformed PDU Session Container");
+    struct gtpuhdr* gtpu, void* data_end, u8* qfi) {
+  int len = gtpu_hdr_len(gtpu, data_end, qfi);
+  if (len < 0) {
+    bpf_debug("GTP-U: unsupported or malformed extension headers");
     return NULL;
   }
+  return (void*) gtpu + len;
+}
 
-  *qfi = (*gtpu_ext_out)->qfi;
-  return (void*) (*gtpu_ext_out + 1);
+/**
+ * @brief Offset of an N3 G-PDU's inner payload from the start of its frame.
+ *
+ * For stages after the N3 entry programs: they re-walk the headers instead
+ * of carrying the offset along.
+ *
+ * @param data     Start of the frame (outer Ethernet header).
+ * @param data_end BPF bounds sentinel.
+ * @return Offset in bytes; -1 unless a G-PDU with a 20-byte outer IPv4 header
+ *         that parse_gtpu_ext_hdr() accepts.
+ */
+static __always_inline int gtpu_inner_offset(void* data, void* data_end) {
+  struct iphdr* iph    = data + sizeof(struct ethhdr);
+  struct gtpuhdr* gtpu = (void*) (iph + 1) + sizeof(struct udphdr);
+  u8 qfi;
+
+  if ((void*) (gtpu + 1) > data_end || iph->ihl != 5 ||
+      gtpu->message_type != GTPU_G_PDU)
+    return -1;
+
+  int len = gtpu_hdr_len(gtpu, data_end, &qfi);
+  if (len < 0) return -1;
+  return (int) (sizeof(struct ethhdr) + sizeof(struct iphdr) +
+                sizeof(struct udphdr)) +
+         len;
 }
 
 #endif /* PROTOCOLS_GTP_H */

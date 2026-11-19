@@ -41,11 +41,13 @@ typedef enum {
  */
 
 #define IF_NAME_MAX_LEN 16 /* IFNAMSIZ = 16, fits all Linux interface names */
+#define IF_MAC_LEN 6       /* ETH_ALEN */
 
 struct interface_config {
   u32 ipv4_address;              /**< IPv4 address (network byte order)       */
   u32 port;                      /**< Port (PFCP/N4); 0 for data-plane ifaces */
   char if_name[IF_NAME_MAX_LEN]; /**< Linux netdev name, NUL-terminated       */
+  u8 mac_address[IF_MAC_LEN];    /**< Netdev MAC; all-zero if unreadable      */
 };
 
 #endif /* __INTERFACES_TYPES_H__ */

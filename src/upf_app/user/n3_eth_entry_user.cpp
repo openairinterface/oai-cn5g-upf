@@ -8,21 +8,29 @@
 #include <wrappers/BPFMap.hpp>
 #include <wrappers/BPFMaps.h>
 #include "logger.hpp"
+#include "upf_network_config.h"
+#include "utils/bpf_utils.hpp"
 #include "xdp_hook_section.h"
+
+using namespace oai::utils::bpf;
 
 //------------------------------------------------------------------------------
 void N3EthEntryProgram::ConfigureMaps(struct xdp_n3_eth_entry_kern_c* skel) {
-  (void) skel;
   /*
-   * All maps in xdp_n3_eth_entry_kern.c have fixed max_entries or are sized
-   * by the owning program:
+   * n3_eth_entry loads first, so it creates eth_session_mapping_map (it
+   * classifies G-PDUs by F-TEID) and UPF_XDPProgram::Setup() shares it to
+   * sl_eth_. The other maps have fixed max_entries or are sized by their
+   * owner:
    *   stats_maps.h           -> mc_stats_map             (fixed)
    *   tail_call_dispatcher.h -> tail_call_progs_map       (fixed = 16)
    *                          -> packet_context_map        (fixed = 1)
    *                          -> session_rules_enabled_map (placeholder = 1,
    *                             sized by the program that owns it)
-   * No runtime configuration needed here.
    */
+  if (!ConfigureMapMaxEntries(
+          skel->maps.eth_session_mapping_map, "eth_session_mapping_map",
+          upf::GetMaxPduSessions()))
+    throw std::runtime_error("N3EthEntryProgram map configuration failed");
 }
 
 //------------------------------------------------------------------------------
