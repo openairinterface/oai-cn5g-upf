@@ -78,6 +78,12 @@ void upf_app_task(void* args_p) {
                 shared_msg));
         break;
 
+      case N4_ASSOCIATION_SESSIONS_DELETION:
+        upf_app_inst->handle_itti_msg(
+            std::static_pointer_cast<itti_n4_association_sessions_deletion>(
+                shared_msg));
+        break;
+
       case TIME_OUT:
         if (itti_msg_timeout* to = dynamic_cast<itti_msg_timeout*>(msg)) {
           switch (to->arg1_user) {
@@ -276,6 +282,16 @@ void upf_app::handle_itti_msg(
     Logger::upf_app().error(
         "Could not send ITTI message %s to task TASK_UPF_N4",
         n4_resp->get_msg_name());
+  }
+}
+//------------------------------------------------------------------------------
+void upf_app::handle_itti_msg(
+    std::shared_ptr<itti_n4_association_sessions_deletion> m) {
+  Logger::upf_app().info(
+      "Deleting %lu PFCP sessions of a replaced association",
+      m->cp_fseids.size());
+  for (const auto& cp_fseid : m->cp_fseids) {
+    pfcp_switch_inst->remove_pfcp_session(cp_fseid);
   }
 }
 //------------------------------------------------------------------------------
