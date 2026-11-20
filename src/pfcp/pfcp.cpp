@@ -150,6 +150,7 @@ void pfcp_l4_stack::stop_proc_cleanup_timer(pfcp_procedure& p) {
 void pfcp_l4_stack::handle_receive_message_cb(
     const pfcp_msg& msg, const endpoint& remote_endpoint,
     const task_id_t& task_id, bool& error, uint64_t& trxn_id) {
+  std::lock_guard<std::mutex> lock(m_stack);
   trxn_id = 0;
   error   = true;
   std::map<uint32_t, pfcp_procedure>::iterator it;
@@ -236,6 +237,7 @@ void pfcp_l4_stack::handle_receive_message_cb(
 uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const pfcp_heartbeat_request& pfcp_ies,
     const task_id_t& task_id, const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(m_stack);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_sequence_number(get_next_seq_num());
@@ -269,6 +271,7 @@ uint32_t pfcp_l4_stack::send_request(
 uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const pfcp_association_setup_request& pfcp_ies,
     const task_id_t& task_id, const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(m_stack);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_sequence_number(get_next_seq_num());
@@ -302,6 +305,7 @@ uint32_t pfcp_l4_stack::send_request(
 uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const pfcp_association_release_request& pfcp_ies,
     const task_id_t& task_id, const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(m_stack);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_sequence_number(get_next_seq_num());
@@ -398,6 +402,7 @@ uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const uint64_t seid,
     const pfcp_node_report_request& pfcp_ies, const task_id_t& task_id,
     const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(m_stack);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_sequence_number(get_next_seq_num());
@@ -432,6 +437,7 @@ uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_establishment_request& pfcp_ies,
     const task_id_t& task_id, const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(m_stack);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_seid(seid);
@@ -468,6 +474,7 @@ uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_modification_request& pfcp_ies, const task_id_t& task_id,
     const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(m_stack);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_seid(seid);
@@ -535,6 +542,7 @@ uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_deletion_request& pfcp_ies, const task_id_t& task_id,
     const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(m_stack);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_seid(seid);
@@ -571,6 +579,7 @@ uint32_t pfcp_l4_stack::send_request(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_report_request& pfcp_ies, const task_id_t& task_id,
     const uint64_t trxn_id) {
+  std::lock_guard<std::mutex> lock(m_stack);
   std::ostringstream oss(std::ostringstream::binary);
   pfcp_msg msg(pfcp_ies);
   msg.set_seid(seid);
@@ -606,6 +615,7 @@ uint32_t pfcp_l4_stack::send_request(
 void pfcp_l4_stack::send_response(
     const endpoint& dest, const pfcp_heartbeat_response& pfcp_ies,
     const uint64_t trxn_id, const pfcp_transaction_action& a) {
+  std::lock_guard<std::mutex> lock(m_stack);
   std::map<uint64_t, uint32_t>::iterator it;
   it = trxn_id2seq_num.find(trxn_id);
   if (it != trxn_id2seq_num.end()) {
@@ -639,6 +649,7 @@ void pfcp_l4_stack::send_response(
 void pfcp_l4_stack::send_response(
     const endpoint& dest, const pfcp_association_setup_response& pfcp_ies,
     const uint64_t trxn_id, const pfcp_transaction_action& a) {
+  std::lock_guard<std::mutex> lock(m_stack);
   std::map<uint64_t, uint32_t>::iterator it;
   it = trxn_id2seq_num.find(trxn_id);
   if (it != trxn_id2seq_num.end()) {
@@ -673,6 +684,7 @@ void pfcp_l4_stack::send_response(
 void pfcp_l4_stack::send_response(
     const endpoint& dest, const pfcp_association_release_response& pfcp_ies,
     const uint64_t trxn_id, const pfcp_transaction_action& a) {
+  std::lock_guard<std::mutex> lock(m_stack);
   std::map<uint64_t, uint32_t>::iterator it;
   it = trxn_id2seq_num.find(trxn_id);
   if (it != trxn_id2seq_num.end()) {
@@ -708,6 +720,7 @@ void pfcp_l4_stack::send_response(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_establishment_response& pfcp_ies, const uint64_t trxn_id,
     const pfcp_transaction_action& a) {
+  std::lock_guard<std::mutex> lock(m_stack);
   std::map<uint64_t, uint32_t>::iterator it;
   it = trxn_id2seq_num.find(trxn_id);
   if (it != trxn_id2seq_num.end()) {
@@ -743,6 +756,7 @@ void pfcp_l4_stack::send_response(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_modification_response& pfcp_ies, const uint64_t trxn_id,
     const pfcp_transaction_action& a) {
+  std::lock_guard<std::mutex> lock(m_stack);
   std::map<uint64_t, uint32_t>::iterator it;
   it = trxn_id2seq_num.find(trxn_id);
   if (it != trxn_id2seq_num.end()) {
@@ -778,6 +792,7 @@ void pfcp_l4_stack::send_response(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_deletion_response& pfcp_ies, const uint64_t trxn_id,
     const pfcp_transaction_action& a) {
+  std::lock_guard<std::mutex> lock(m_stack);
   std::map<uint64_t, uint32_t>::iterator it;
   it = trxn_id2seq_num.find(trxn_id);
   if (it != trxn_id2seq_num.end()) {
@@ -813,6 +828,7 @@ void pfcp_l4_stack::send_response(
     const endpoint& dest, const uint64_t seid,
     const pfcp_session_report_response& pfcp_ies, const uint64_t trxn_id,
     const pfcp_transaction_action& a) {
+  std::lock_guard<std::mutex> lock(m_stack);
   std::map<uint64_t, uint32_t>::iterator it;
   it = trxn_id2seq_num.find(trxn_id);
   if (it != trxn_id2seq_num.end()) {
@@ -853,6 +869,7 @@ void pfcp_l4_stack::notify_ul_error(
 //------------------------------------------------------------------------------
 void pfcp_l4_stack::time_out_event(
     const uint32_t timer_id, const task_id_t& task_id, bool& handled) {
+  std::lock_guard<std::mutex> lock(m_stack);
   handled = false;
   std::map<timer_id_t, uint32_t>::iterator it =
       msg_out_retry_timers.find(timer_id);
