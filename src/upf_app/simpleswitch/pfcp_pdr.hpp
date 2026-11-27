@@ -322,20 +322,30 @@ class pfcp_pdr {
    *  @param num_bytes  Payload length in bytes.
    *  @param r_endpoint Remote endpoint (gNB address).
    *  @param tunnel_id  GTP-U TEID received on N3.
+   *  @param framed_owner  When the source is a Framed-Route address (TS 29.244
+   *                    §8.2.109), the UE IP that owns it, network byte order;
+   *                    0 otherwise. The PDI UE IP is then checked against the
+   *                    owner, and "assigned" in the SDF filter is the framed
+   *                    source address.
    *  @return true if the packet matches.
    */
   bool look_up_pack_in_access(
       struct iphdr* const iph, const std::size_t num_bytes,
-      const endpoint& r_endpoint, const uint32_t tunnel_id);
+      const endpoint& r_endpoint, const uint32_t tunnel_id,
+      const uint32_t framed_owner = 0);
 
   //------------------------------------------------------------------------------
   /** @brief Match a downlink packet against this PDR's PDI.
    *  @param iph        IPv4 header of the packet from the core network.
    *  @param num_bytes  Packet length in bytes.
+   *  @param framed_owner  When the destination is a Framed-Route address, the
+   *                    UE IP that owns it, network byte order; 0 otherwise.
+   *                    Same meaning as for look_up_pack_in_access().
    *  @return true if the packet matches.
    */
   bool look_up_pack_in_core(
-      struct iphdr* const iph, const std::size_t num_bytes);
+      struct iphdr* const iph, const std::size_t num_bytes,
+      const uint32_t framed_owner = 0);
 
   //------------------------------------------------------------------------------
   /** @brief Buffer a downlink packet while waiting for paging to complete. */

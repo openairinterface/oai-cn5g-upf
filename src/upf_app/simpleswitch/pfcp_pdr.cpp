@@ -25,7 +25,8 @@ extern oai::config::upf_config upf_cfg;
 //------------------------------------------------------------------------------
 bool pfcp_pdr::look_up_pack_in_access(
     struct iphdr* const iph, const std::size_t num_bytes,
-    const endpoint& r_endpoint, const uint32_t tunnel_id) {
+    const endpoint& r_endpoint, const uint32_t tunnel_id,
+    const uint32_t framed_owner) {
   // Outer Header Removal must be present and of type GTP-U/UDP/IPv4 (§8.2.64)
   if (outer_header_removal.first) {
     if (outer_header_removal.second.outer_header_removal_description !=
@@ -50,19 +51,23 @@ bool pfcp_pdr::look_up_pack_in_access(
         return false;
       }
     }
-    // UE IP Address (§8.2.62) — source address check for uplink
+    // UE IP Address (§8.2.62) — source address check for uplink. A source
+    // behind the UE (Framed-Route) is checked through the UE that owns it.
     if (pdi.second.ue_ip_address.first) {
       if (!pdi.second.ue_ip_address.second.v4) {
         return false;
       }
-      if (pdi.second.ue_ip_address.second.ipv4_address.s_addr != iph->saddr) {
+      const uint32_t src_ue = framed_owner ? framed_owner : iph->saddr;
+      if (pdi.second.ue_ip_address.second.ipv4_address.s_addr != src_ue) {
         return false;
       }
     }
     // SDF Filter (§8.2.5). Without this every PDR of the session matched
     // every packet, so per-flow rules -- the whole point of a packet filter --
-    // could not be told apart.
-    return oai::upf::sdf_match(sdf, iph, num_bytes, true, pdi_ue_ipv4());
+    // could not be told apart. "assigned" covers the session's framed routes
+    // too: for a framed source it is that source address.
+    return oai::upf::sdf_match(
+        sdf, iph, num_bytes, true, framed_owner ? iph->saddr : pdi_ue_ipv4());
   } else {
     return false;  // PDI is mandatory per spec
   }
@@ -75,7 +80,8 @@ bool pfcp_pdr::look_up_pack_in_access(
 
 //------------------------------------------------------------------------------
 bool pfcp_pdr::look_up_pack_in_core(
-    struct iphdr* const iph, const std::size_t num_bytes) {
+    struct iphdr* const iph, const std::size_t num_bytes,
+    const uint32_t framed_owner) {
   // implicit packet arrives from CORE interface
   if (outer_header_removal.first) {
     // TODO: handle split-U scenario — not needed for current topology
@@ -88,8 +94,11 @@ bool pfcp_pdr::look_up_pack_in_core(
       // cause ue_ip_address not present ", pdr_id.rule_id);
       return false;
     }
-    if (!upf_cfg.enable_fr &&
-        pdi.second.ue_ip_address.second.ipv4_address.s_addr != iph->daddr) {
+    // A destination behind the UE (Framed-Route) is checked through the UE
+    // that owns it. (This used to skip the check for every packet whenever
+    // enable_fr was set.)
+    const uint32_t dst_ue = framed_owner ? framed_owner : iph->daddr;
+    if (pdi.second.ue_ip_address.second.ipv4_address.s_addr != dst_ue) {
       // Logger::pfcp_switch().info( "look_up_pack_in_core failed PDR id %4x,
       // cause PDR ue_ip_address %8X do not match IP dest %8X of packet ",
       //    pdr_id.rule_id, pdi.second.ue_ip_address.second.ipv4_address.s_addr,
@@ -98,7 +107,11 @@ bool pfcp_pdr::look_up_pack_in_core(
     }
   }
   // SDF Filter (§8.2.5), same as the uplink but travelling the other way.
-  return oai::upf::sdf_match(sdf, iph, num_bytes, false, pdi_ue_ipv4());
+  // "assigned" covers the session's framed routes: for a framed destination
+  // it is that destination, else "permit out ip from any to assigned" drops
+  // all downlink to the framed subnet.
+  return oai::upf::sdf_match(
+      sdf, iph, num_bytes, false, framed_owner ? iph->daddr : pdi_ue_ipv4());
 }
 
 //------------------------------------------------------------------------------

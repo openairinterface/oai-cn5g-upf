@@ -159,6 +159,25 @@ class SessionProgramManager {
       uint32_t teid_dl, uint32_t teid_ul, uint64_t seid);
 
   /**
+   * @brief Reconcile a session's Framed-Routes with the BPF datapath.
+   *
+   * Walks every downlink (CORE) PDR of `session`, derives the BPF key of each
+   * Framed-Route carried by its PDI, and makes m_framed_route_mapping match
+   * that set exactly: prefixes that appeared are added, prefixes that are no
+   * longer advertised are removed. The installed set is tracked under `seid`
+   * so RemoveSession() can tear it down.
+   *
+   * Declarative rather than incremental because it is called from BOTH
+   * CreatePipeline() and ModifyPipeline(), and OAI's SMF delivers the CORE PDR
+   * that carries the Framed-Route in the Session Modification, not the
+   * Establishment. Running it repeatedly is therefore normal and must be
+   * idempotent. (RFC 2865 Framed-Route / TS 29.061 / TS 29.244 Sec 8.2.109.)
+   */
+  void SyncFramedRoutes(
+      std::shared_ptr<UPF_XDPProgram> xdp_program, uint64_t seid,
+      std::shared_ptr<pfcp::pfcp_session> session);
+
+  /**
    * @brief Store ETH PDU session information in BPF map
    *
    * Updates eth_session_mapping_map with TEID -> eth_session_id mapping.
@@ -925,6 +944,11 @@ class SessionProgramManager {
   /// ModifyPipeline() can drop a replaced or removed UL F-TEID and
   /// RemoveSession() can clear them all.
   std::map<uint64_t, std::set<uint32_t>> session_eth_teid_key_map_;
+  /// Framed-Route (RFC 2865) prefixes installed per SEID, as
+  /// {network address, subnet mask} host-order numeric pairs. Used to diff
+  /// against the advertised set on modification and to tear down on release.
+  std::map<uint64_t, std::set<std::pair<uint32_t, uint32_t>>>
+      session_framed_keys_;
 };
 
 #endif  // SESSION_PROGRAM_MANAGER_H_

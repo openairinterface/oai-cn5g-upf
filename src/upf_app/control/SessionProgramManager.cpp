@@ -32,12 +32,14 @@
 #include "pfcp_urr.hpp"
 #include "pfcp_bar.hpp"
 #include "pfcp_mar.hpp"
-#include <pfcp_pdr.h>  // BPF PDR structure
-#include <pfcp_far.h>  // BPF FAR structure
-#include <pfcp_qer.h>  // BPF QER structure
-#include <pfcp_urr.h>  // BPF URR structure
-#include <pfcp_bar.h>  // BPF BAR structure
-#include <pfcp_mar.h>  // BPF MAR structure
+#include "FramedRouting.hpp"  // fr::FramedRouting::toBpfKeys (framed routing)
+#include "framed_routing_bpf.h"  // FramedRoutingKeyBPF
+#include <pfcp_pdr.h>            // BPF PDR structure
+#include <pfcp_far.h>            // BPF FAR structure
+#include <pfcp_qer.h>            // BPF QER structure
+#include <pfcp_urr.h>            // BPF URR structure
+#include <pfcp_bar.h>            // BPF BAR structure
+#include <pfcp_mar.h>            // BPF MAR structure
 #include <sdf_filter.h>
 #include <eth_session_id.h>
 #include <rules_enabled_flags.h>
@@ -179,6 +181,18 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
       }
       session_ue_ip_key_map_.erase(ue_ip_it);
     }
+
+    // Clean up Framed-Route (RFC 2865) entries installed for this session.
+    // Deliberately NOT nested in the session_ue_ip_key_map_ block above: a
+    // session can advertise framed routes without ever having had a UE-IP key
+    // tracked, and those entries must still be withdrawn.
+    auto fr_it = session_framed_keys_.find(seid);
+    if (fr_it != session_framed_keys_.end()) {
+      for (const auto& k : fr_it->second) {
+        FramedRoutingKeyBPF key = {k.first, k.second};
+        upf_xdp_program->RemoveFramedRoute(key);
+      }
+    }
     // Clean up eth_session_mapping_map so the TC broadcast fan-out stops
     // cloning to this session's gNB / DL TEID.
     RemoveEthMappingsIfOwned(upf_xdp_program, seid, 0);
@@ -187,6 +201,10 @@ void SessionProgramManager::RemoveSession(uint64_t seid) {
   // Clean up ARP caches
   session_n6_arp_cache_.erase(seid);
   session_n3_arp_cache_.erase(seid);
+
+  // Drop the Framed-Route bookkeeping even when the XDP program is already
+  // gone (shutdown ordering), so the entry cannot outlive the session.
+  session_framed_keys_.erase(seid);
 
   // Remove from session programs map
   auto it = session_programs_map_.find(seid);
@@ -421,6 +439,84 @@ void SessionProgramManager::RemoveEthMappingsIfOwned(
 }
 
 //------------------------------------------------------------------------------
+void SessionProgramManager::SyncFramedRoutes(
+    std::shared_ptr<UPF_XDPProgram> upf_xdp_program, uint64_t seid,
+    std::shared_ptr<pfcp::pfcp_session> session) {
+  if (!upf_xdp_program || !session) return;
+
+  // --- Collect the prefixes this session currently advertises -------------
+  // key = {network address, subnet mask}, host-order numeric throughout:
+  // the byte order the XDP fallback (pctx->ue_ip = bpf_ntohl(daddr)) expects.
+  std::map<std::pair<uint32_t, uint32_t>, uint32_t> advertised;
+
+  for (const auto& pdr : session->pdrs) {
+    if (!pdr) continue;
+
+    pfcp::pdi pdi;
+    if (!pdr->get(pdi)) continue;
+
+    // Framed-Routes describe subnets reachable *behind* the UE, so only the
+    // downlink (CORE) PDR's PDI is meaningful here.
+    pfcp::source_interface_t source_interface = {};
+    if (!pdi.get(source_interface)) continue;
+    if (source_interface.interface_value != INTERFACE_VALUE_CORE) continue;
+
+    std::vector<pfcp::framed_route_t> routes;
+    if (!pdi.get(routes) || routes.empty()) continue;
+
+    // A framed route resolves to the owning UE's session via
+    // session_by_ue_ip; without a UE IP there is nothing to map it to
+    // (TS 29.244 §5.16 NOTE 3).
+    pfcp::ue_ip_address_t ue_ip_address = {};
+    if (!pdi.get(ue_ip_address)) continue;
+    if (ue_ip_address.ipv4_address.s_addr == 0) continue;
+
+    // Same normalization StorePduSessionInMap applies to the
+    // session_by_ue_ip_map key, so both maps agree on the UE IP.
+    const uint32_t ue_ip = likely(IsLittleEndian()) ?
+                               htonl(ue_ip_address.ipv4_address.s_addr) :
+                               ue_ip_address.ipv4_address.s_addr;
+
+    for (const auto& route : routes) {
+      for (const auto& key : fr::FramedRouting::toBpfKeys(route)) {
+        advertised[{key.networkAddress, key.subnet}] = ue_ip;
+      }
+    }
+  }
+
+  auto& installed = session_framed_keys_[seid];
+
+  // --- Withdraw prefixes this session no longer advertises ----------------
+  for (auto it = installed.begin(); it != installed.end();) {
+    if (advertised.find(*it) != advertised.end()) {
+      ++it;
+      continue;
+    }
+    FramedRoutingKeyBPF key = {it->first, it->second};
+    upf_xdp_program->RemoveFramedRoute(key);
+    Logger::upf_app().debug(
+        "[eBPF] Framed route 0x%x/0x%x withdrawn (SEID " SEID_FMT ")",
+        it->first, it->second, seid);
+    it = installed.erase(it);
+  }
+
+  // --- Install prefixes that are new --------------------------------------
+  for (const auto& entry : advertised) {
+    if (installed.find(entry.first) != installed.end()) continue;
+
+    FramedRoutingKeyBPF key = {entry.first.first, entry.first.second};
+    upf_xdp_program->UpdateFramedRouteMappingMap(entry.second, key);
+    installed.insert(entry.first);
+    Logger::upf_app().info(
+        "[eBPF] Framed route 0x%x/0x%x -> UE 0x%x installed (SEID " SEID_FMT
+        ")",
+        entry.first.first, entry.first.second, entry.second, seid);
+  }
+
+  if (installed.empty()) session_framed_keys_.erase(seid);
+}
+
+//------------------------------------------------------------------------------
 /**
  * @brief Store ETH PDU session information in BPF map
  *
@@ -570,12 +666,12 @@ uint32_t SessionProgramManager::ComputeRulesEnabledFlags(
     }
   }
 
-  // Respect the UPF feature config: even if the SMF links a QER/URR/BAR/MAR to
-  // a PDR/FAR, do NOT enable that tail-call stage when the feature is disabled
-  // in config. The corresponding eBPF program is not loaded and the rule object
-  // is not created (see pfcp_switch gating), so leaving the bit set would
-  // dispatch into an absent stage and drop the packet. Clearing it lets the
-  // pipeline skip the stage and forward normally.
+  // Respect the UPF feature config: even if the SMF links a QER/URR/BAR/MAR
+  // to a PDR/FAR, do NOT enable that tail-call stage when the feature is
+  // disabled in config. The corresponding eBPF program is not loaded and the
+  // rule object is not created (see pfcp_switch gating), so leaving the bit
+  // set would dispatch into an absent stage and drop the packet. Clearing it
+  // lets the pipeline skip the stage and forward normally.
   if (!upf::IsQosEnabled()) flags &= ~RULE_QER_ENABLED;
   if (!upf::IsUrrEnabled()) flags &= ~RULE_URR_ENABLED;
   if (!upf::IsBarEnabled()) flags &= ~RULE_BAR_ENABLED;
@@ -733,7 +829,8 @@ void SessionProgramManager::SetupSessionEnforcementPrograms(
     }
   } else if (qer_program) {
     // The session has no downlink QER left (or QoS is off): release its
-    // classes. Any other modification keeps the program, through Setup() above.
+    // classes. Any other modification keeps the program, through Setup()
+    // above.
     logger.debug("Tearing down QERTCProgram for SEID=" SEID_FMT, seid);
     std::lock_guard<std::mutex> lock(mutex_);
     qer_program->TearDown();
@@ -1052,7 +1149,8 @@ void SessionProgramManager::CreatePipeline(
       std::shared_ptr<pfcp::pfcp_urr> urr = nullptr;
       GetUrrForPdr(session, pdr, urr);
 
-      // Retrieve and convert BAR (optional, via FAR, TS 29.244 Section 8.2.49)
+      // Retrieve and convert BAR (optional, via FAR, TS 29.244
+      // Section 8.2.49)
       std::shared_ptr<pfcp::pfcp_bar> bar = nullptr;
       GetBarForFar(session, far, bar);
 
@@ -1200,6 +1298,15 @@ void SessionProgramManager::CreatePipeline(
       }
     }
 
+    // Framed routing (RFC 2865): reconcile the session's Framed-Routes with
+    // m_framed_route_mapping so the XDP session-lookup fallback can resolve
+    // traffic addressed to subnets behind the UE. Done here rather than in
+    // the PDR loop because the CORE PDR carrying the IE may arrive in a later
+    // Session Modification, and because re-running it must be idempotent.
+    if (upf::IsFramedRoutingEnabled() && !is_eth_pdu) {
+      SyncFramedRoutes(upf_xdp_program, seid, session);
+    }
+
     // Compute and store rules_enabled flags for tail call skip-chain
     uint32_t rules_flags = ComputeRulesEnabledFlags(session);
     UpdateRulesEnabledMap(upf_xdp_program, seid, rules_flags);
@@ -1212,7 +1319,6 @@ void SessionProgramManager::CreatePipeline(
         " with %d PDRs "
         "[type = %s, rules = 0x%x]",
         seid, pdr_index, is_eth_pdu ? "ETH" : "IP", rules_flags);
-
   } catch (const std::exception& e) {
     logger.error(
         "CreatePipeline failed for session " SEID_FMT ": %s", seid, e.what());
@@ -1292,8 +1398,8 @@ void SessionProgramManager::ModifyPipeline(
     int pdr_index                                        = 0;
 
     // PDU session type (IP vs Ethernet): keep the one recorded at
-    // establishment, since it cannot change and re-detecting it could move the
-    // session's rules to the other maps. Detect only if none is recorded.
+    // establishment, since it cannot change and re-detecting it could move
+    // the session's rules to the other maps. Detect only if none is recorded.
     auto type_it                = session_pdu_type_map_.find(seid);
     PduSessionType pdu_type     = (type_it != session_pdu_type_map_.end()) ?
                                       type_it->second :
@@ -1341,16 +1447,18 @@ void SessionProgramManager::ModifyPipeline(
     uint32_t rules_flags = ComputeRulesEnabledFlags(session);
     UpdateRulesEnabledMap(upf_xdp_program, seid, rules_flags);
 
-    // ── Per-session stage program Setup() calls ─────────────────────────────
-    // rules_flags was computed and written to session_rules_enabled_map above.
-    // SetupSessionEnforcementPrograms uses it (no redundant IsQosEnabled() /
-    // IsBpfDatapathEnabled() calls) to decide which per-session maps and TC
-    // programs need to be (re)initialised. This mirrors the pipeline-level
-    // Setup() in UPF_XDPProgram which only loads the XDP programs;
-    // per-session map population is done here.
+    // ── Per-session stage program Setup() calls
+    // ───────────────────────────── rules_flags was computed and written to
+    // session_rules_enabled_map above. SetupSessionEnforcementPrograms uses
+    // it (no redundant IsQosEnabled() / IsBpfDatapathEnabled() calls) to
+    // decide which per-session maps and TC programs need to be
+    // (re)initialised. This mirrors the pipeline-level Setup() in
+    // UPF_XDPProgram which only loads the XDP programs; per-session map
+    // population is done here.
     //
     // A rule that could not be applied is re-raised once the rest of the
-    // pipeline is programmed, rather than leaving the session's PDRs unwritten.
+    // pipeline is programmed, rather than leaving the session's PDRs
+    // unwritten.
     // ─────────────────────────────────────────────────────────────────────────
     std::exception_ptr enforcement_error;
     try {
@@ -1383,8 +1491,8 @@ void SessionProgramManager::ModifyPipeline(
     }
 
     // Update PDU session mapping for each TEID
-    // Note: If your BPF map supports only one TEID per session, you'll need to
-    // pick the primary TEID or update your BPF map structure
+    // Note: If your BPF map supports only one TEID per session, you'll need
+    // to pick the primary TEID or update your BPF map structure
     if (!uplink_teids.empty() || !downlink_teids.empty()) {
       // Use first TEID of each direction for PDU session mapping
       // (This maintains backward compatibility with single-TEID maps)
@@ -1621,6 +1729,15 @@ void SessionProgramManager::ModifyPipeline(
       session_pdrs_map->Update(seid, pdrs, BPF_ANY);
     }
 
+    // Framed routing (RFC 2865): reconcile the session's Framed-Routes with
+    // m_framed_route_mapping so the XDP session-lookup fallback can resolve
+    // traffic addressed to subnets behind the UE. Done here rather than in
+    // the PDR loop because the CORE PDR carrying the IE may arrive in a later
+    // Session Modification, and because re-running it must be idempotent.
+    if (upf::IsFramedRoutingEnabled() && !is_eth_pdu) {
+      SyncFramedRoutes(upf_xdp_program, seid, session);
+    }
+
     // Prune rules_match_pdr_map by withdrawn PDR ID, and sdf_filters_map by
     // QFIs no surviving PDR uses -- including a surviving PDR's old QFI
     std::set<uint16_t> stale_pdr_ids;
@@ -1844,8 +1961,9 @@ struct pfcp_pdr SessionProgramManager::ConvertPdr(
 
   // if (pdr->activate_predefined_rules.first) {
   //   memcpy(
-  //       &bpf_pdr.activate_predefined_rules, &pdr->activate_predefined_rules,
-  //       sizeof(struct activate_predefined_rules));
+  //       &bpf_pdr.activate_predefined_rules,
+  //       &pdr->activate_predefined_rules, sizeof(struct
+  //       activate_predefined_rules));
   // }
 
   if (pdr->outer_header_removal.first) {
