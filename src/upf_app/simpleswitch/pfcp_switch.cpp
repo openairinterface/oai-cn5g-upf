@@ -2431,15 +2431,14 @@ void pfcp_switch::pfcp_session_look_up_pack_in_access(
             iph, num_bytes, r_endpoint, tunnel_id);
         if (!isInAccess && upf_cfg.enable_fr &&
             it_pdr->get()->pdi.second.framed_route.first) {
-          // A stack copy of the real header: the framed-route retry only
-          // substitutes the source address and every other field must still be
-          // the packet's own. This used to malloc() an iphdr that was never
-          // freed -- a leak on the per-packet path -- and left all the fields
-          // except saddr uninitialised.
-          struct iphdr fr_ue_ip = *iph;
-          fr_ue_ip.saddr = be32toh(fr->retrieveUEIp(be32toh(iph->saddr)));
-          isInAccess     = (*it_pdr)->look_up_pack_in_access(
-              &fr_ue_ip, num_bytes, r_endpoint, tunnel_id);
+          // Source behind the UE (Framed-Route): match it through the UE that
+          // owns it. The PDR is given the owner rather than a copy of the
+          // header with the source rewritten: a copy is only the 20-byte
+          // iphdr, and an SDF rule with ports reads the L4 header after it.
+          const uint32_t owner = fr->retrieveUEIp(be32toh(iph->saddr));
+          if (owner)
+            isInAccess = (*it_pdr)->look_up_pack_in_access(
+                iph, num_bytes, r_endpoint, tunnel_id, htobe32(owner));
         }
         if (isInAccess) {
           // NOTE: no logging on the per-packet fast path.  These were info()
@@ -2535,19 +2534,23 @@ void pfcp_switch::pfcp_session_look_up_pack_in_core(
   oai::upf::rcu_guard rg(rcu_);
 
   if (iph->version == 4) {
-    uint32_t ue_ip     = be32toh(iph->daddr);
-    const auto* pdrs_p = find_dl_pdrs(ue_ip);
+    uint32_t ue_ip        = be32toh(iph->daddr);
+    uint32_t framed_owner = 0;  // network order; set for a framed destination
+    const auto* pdrs_p    = find_dl_pdrs(ue_ip);
     if (!pdrs_p && upf_cfg.enable_fr) {
       const uint32_t fr_ip = fr->retrieveUEIp(ue_ip);
-      ue_ip                = fr_ip != 0 ? fr_ip : ue_ip;
-      pdrs_p               = find_dl_pdrs(ue_ip);
+      if (fr_ip != 0) {
+        ue_ip        = fr_ip;
+        framed_owner = htobe32(fr_ip);
+        pdrs_p       = find_dl_pdrs(ue_ip);
+      }
     }
     if (pdrs_p) {
       const auto* pdrs = pdrs_p->get();
       bool nocp        = false;
       bool buff        = false;
       for (auto it = pdrs->begin(); it < pdrs->end(); ++it) {
-        if ((*it)->look_up_pack_in_core(iph, num_bytes)) {
+        if ((*it)->look_up_pack_in_core(iph, num_bytes, framed_owner)) {
           uint64_t lseid = 0;
           if ((*it)->get(lseid)) {
             const auto* sess_p = find_session(lseid);

@@ -11,6 +11,7 @@ include_directories(${SRC_TOP_DIR}/upf_app)
 include_directories(${SRC_TOP_DIR}/upf_app/app)
 include_directories(${SRC_TOP_DIR}/upf_app/control)
 include_directories(${SRC_TOP_DIR}/upf_app/kernel)
+include_directories(${SRC_TOP_DIR}/upf_app/kernel/include)  # framed_routing_bpf.h
 include_directories(${SRC_TOP_DIR}/upf_app/simpleswitch)
 include_directories(${SRC_TOP_DIR}/udp)
 include_directories(${SRC_TOP_DIR}/${MOUNTED_COMMON}/3gpp)

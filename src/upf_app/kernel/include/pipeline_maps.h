@@ -13,6 +13,7 @@
 #include "pfcp/pfcp_pdr.h"
 #include "pfcp/pfcp_far.h"
 #include "upf_map_limits.h"
+#include "framed_routing_bpf.h"
 
 /* ==========================================================================
  * session_by_ue_ip_map
@@ -110,11 +111,18 @@ struct {
  * ========================================================================== */
 
 /**
- * @brief Framed route hash -> UE IP mapping.
+ * @brief Framed route prefix -> UE IP mapping.
  *
- * Key:   u32   hash of framed routing key (prefix + metric)
- * Value: u32   UE IPv4 address
+ * Key:   struct FramedRoutingKeyBPF  {network address, subnet mask}
+ * Value: u32                         UE IPv4 address
  * Size:  MAX_PDU_SESSIONS
+ *
+ * Both key fields and the value are host-order numeric, matching
+ * pctx->ue_ip = bpf_ntohl(daddr) and the userspace insert path.
+ *
+ * The mask MUST be part of the key: it is what distinguishes
+ * 10.0.0.0/8 from 10.0.0.0/24, and what stops the /23 probe of a
+ * destination outside a /24 route from matching that route.
  *
  * Used when framed_routing_flag is set to route packets destined for
  * UE-assigned prefixes (RFC 2865 Framed-Route attribute).
@@ -122,7 +130,7 @@ struct {
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, 1); /* Runtime: MAX_PDU_SESSIONS */
-  __type(key, u32);
+  __type(key, struct FramedRoutingKeyBPF);
   __type(value, u32);
 } m_framed_route_mapping SEC(".maps");
 
